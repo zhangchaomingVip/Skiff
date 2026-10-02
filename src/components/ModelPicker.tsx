@@ -7,10 +7,12 @@ export function ModelPicker({
 	models,
 	current,
 	onSelect,
+	disabled = false,
 }: {
 	models: ModelInfo[];
 	current?: ModelInfo;
 	onSelect: (model: ModelInfo) => void;
+	disabled?: boolean;
 }) {
 	const groups = new Map<string, ModelInfo[]>();
 	for (const model of models) {
@@ -25,14 +27,16 @@ export function ModelPicker({
 	return (
 		<select
 			className="model-picker"
+			disabled={disabled || !models.length}
 			value={currentKey}
 			onChange={(event) => {
 				const found = models.find((m) => keyOf(m) === event.target.value);
 				if (found) onSelect(found);
 			}}
-			title="Select model"
+			title="使用 pi 中已配置的模型"
+			aria-label="选择模型"
 		>
-			{!current && <option value="">select model…</option>}
+			{!current && <option value="">{models.length ? "选择模型" : "暂无可用模型"}</option>}
 			{current && !currentListed && <option value={currentKey}>{current.name ?? current.id}</option>}
 			{[...groups.entries()].map(([provider, list]) => (
 				<optgroup key={provider} label={provider}>

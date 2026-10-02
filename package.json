@@ -8,6 +8,7 @@
 	"scripts": {
 		"dev": "vite",
 		"build": "tsc && vite build",
+		"test": "node --import ./tests/register.mjs --test tests/*.test.ts",
 		"preview": "vite preview",
 		"tauri": "tauri"
 	},

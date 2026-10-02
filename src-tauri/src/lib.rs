@@ -5,7 +5,9 @@ use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::{Arc, Mutex};
 
 use serde::Deserialize;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
+
+mod providers;
 
 /// One spawned `pi --mode rpc` session. `child` is kept only so we can kill it
 /// on stop; `stdin` is shared with the reader threads so we can write lines.
@@ -22,6 +24,7 @@ struct AppState {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct RpcStartOptions {
+	instance_id: Option<String>,
 	pi_path: Option<String>,
 	cwd: Option<String>,
 	env: Option<HashMap<String, String>>,
@@ -107,7 +110,12 @@ fn find_on_path(name: &str) -> Option<PathBuf> {
 
 #[tauri::command]
 fn rpc_start(app: AppHandle, state: State<AppState>, options: RpcStartOptions) -> Result<(), String> {
-	let instance_id = "main".to_string();
+	let instance_id = options.instance_id.unwrap_or_else(|| "main".to_string());
+	if let Some(cwd) = &options.cwd {
+		if !PathBuf::from(cwd).is_dir() {
+			return Err("项目目录不存在或不是文件夹".to_string());
+		}
+	}
 
 	// Replace any existing session for this id. Dev reloads / StrictMode
 	// remounts would otherwise orphan the previous `pi` process tree.
@@ -129,6 +137,11 @@ fn rpc_start(app: AppHandle, state: State<AppState>, options: RpcStartOptions) -
 	let (program, prefix_args) = resolve_pi(options.pi_path.as_deref());
 
 	let mut cmd = Command::new(&program);
+	#[cfg(windows)]
+	{
+		use std::os::windows::process::CommandExt;
+		cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+	}
 	for arg in &prefix_args {
 		cmd.arg(arg);
 	}
@@ -162,6 +175,10 @@ fn rpc_start(app: AppHandle, state: State<AppState>, options: RpcStartOptions) -
 		for line in reader.lines().flatten() {
 			let _ = app_out.emit(&format!("rpc://{id_out}"), line);
 		}
+		let _ = app_out.emit(&format!("rpc://{id_out}"), serde_json::json!({
+			"type": "bridge_exit",
+			"message": "pi 进程已退出，请检查 pi 安装与配置后重新连接。"
+		}).to_string());
 	});
 
 	// stderr -> `rpc-stderr://<id>` events (surfaced for debugging)
@@ -214,13 +231,52 @@ fn rpc_stop(state: State<AppState>, instance_id: String) -> Result<(), String> {
 		{
 			// Kill the whole tree: `pi` may be a `cmd /C` wrapper around node.
 			let pid = child.id().to_string();
-			let _ = Command::new("taskkill")
-				.args(["/F", "/T", "/PID", &pid])
-				.output();
+			let mut kill = Command::new("taskkill");
+			use std::os::windows::process::CommandExt;
+			kill.creation_flags(0x08000000);
+			let _ = kill.args(["/F", "/T", "/PID", &pid]).output();
 		}
 		let _ = child.kill();
+		let _ = child.wait();
 	}
 	Ok(())
+}
+
+#[derive(serde::Serialize)]
+struct ProjectDirectory {
+	name: String,
+	path: String,
+}
+
+#[tauri::command]
+fn validate_project_directory(path: String) -> Result<ProjectDirectory, String> {
+	let directory = PathBuf::from(path.trim());
+	if !directory.is_absolute() || !directory.is_dir() {
+		return Err("请输入存在的文件夹的绝对路径".to_string());
+	}
+	let canonical = std::fs::canonicalize(directory).map_err(|e| e.to_string())?;
+	let mut path = canonical.to_string_lossy().to_string();
+	#[cfg(windows)]
+	{
+		if let Some(unc) = path.strip_prefix("\\\\?\\UNC\\") {
+			path = format!("\\\\{unc}");
+		} else if let Some(local) = path.strip_prefix("\\\\?\\") {
+			path = local.to_string();
+		}
+	}
+	Ok(ProjectDirectory {
+		name: canonical.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| path.clone()),
+		path,
+	})
+}
+
+#[tauri::command]
+fn get_workspace_directory() -> Result<ProjectDirectory, String> {
+	let mut directory = std::env::current_dir().map_err(|e| e.to_string())?;
+	if directory.file_name().is_some_and(|n| n == "src-tauri") && directory.join("tauri.conf.json").is_file() {
+		directory.pop();
+	}
+	validate_project_directory(directory.to_string_lossy().to_string())
 }
 
 // --- auth.json reader (mirrors pi-desktop) ---------------------------------
@@ -242,8 +298,17 @@ struct AuthStatus {
 
 /// `~/.pi/agent` on every platform (HOME on *nix, USERPROFILE on Windows).
 fn get_pi_agent_dir() -> Option<PathBuf> {
-	let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
-	Some(PathBuf::from(home).join(".pi").join("agent"))
+	#[cfg(windows)]
+	let home = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME"));
+	#[cfg(not(windows))]
+	let home = std::env::var_os("HOME");
+	if let Some(path) = std::env::var_os("PI_CODING_AGENT_DIR") {
+		let text = path.to_string_lossy();
+		if text == "~" { return home.map(PathBuf::from); }
+		if text.starts_with("~/") || text.starts_with("~\\") { return home.map(|home| PathBuf::from(home).join(&text[2..])); }
+		return Some(PathBuf::from(path));
+	}
+	Some(PathBuf::from(home?).join(".pi").join("agent"))
 }
 
 #[tauri::command]
@@ -300,8 +365,41 @@ pub fn run() {
 			rpc_start,
 			rpc_send,
 			rpc_stop,
-			get_pi_auth_status
+			get_pi_auth_status,
+			validate_project_directory,
+			get_workspace_directory
+			, providers::list_openai_providers, providers::discover_openai_models, providers::save_openai_provider
 		])
+		.on_window_event(|window, event| {
+			if matches!(event, tauri::WindowEvent::Destroyed) {
+				let state = window.state::<AppState>();
+				let ids = state.sessions.lock().map(|s| s.keys().cloned().collect::<Vec<_>>()).unwrap_or_default();
+				for id in ids { let _ = rpc_stop(window.state::<AppState>(), id); }
+			}
+		})
 		.run(tauri::generate_context!())
 		.expect("error while running Skiff");
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn rejects_relative_and_file_project_paths() {
+		assert!(validate_project_directory("src".into()).is_err());
+		assert!(validate_project_directory("".into()).is_err());
+		let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml");
+		assert!(validate_project_directory(manifest.to_string_lossy().into()).is_err());
+	}
+
+	#[test]
+	fn project_paths_are_canonical_and_have_a_display_name() {
+		let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..");
+		let project = validate_project_directory(root.to_string_lossy().into()).unwrap();
+		assert!(PathBuf::from(&project.path).is_absolute());
+		assert!(PathBuf::from(&project.path).is_dir());
+		assert!(!project.name.is_empty());
+		assert!(!project.path.starts_with("\\\\?\\"));
+	}
 }

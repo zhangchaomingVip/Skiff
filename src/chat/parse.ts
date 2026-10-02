@@ -1,4 +1,4 @@
-import type { ContentBlock, ModelInfo } from "./types";
+import type { ChatMessage, ContentBlock, ModelInfo } from "./types";
 
 function safeJson(value: unknown): string {
 	try {
@@ -43,6 +43,8 @@ export function parseBlocks(content: unknown): ContentBlock[] {
 		if (type === "text") {
 			const text = String(block.text ?? "");
 			if (text) blocks.push({ kind: "text", text });
+		} else if (type === "image" && typeof block.data === "string" && typeof block.mimeType === "string" && /^image\/(png|jpeg|webp|gif)$/.test(block.mimeType)) {
+			blocks.push({ kind: "image", data: block.data, mimeType: block.mimeType });
 		} else if (type === "thinking" || type === "reasoning") {
 			const text = String(block.thinking ?? block.text ?? "");
 			if (text) blocks.push({ kind: "thinking", text });
@@ -78,6 +80,29 @@ export function parseModels(raw: unknown): ModelInfo[] {
 			name: typeof m.name === "string" ? m.name : undefined,
 			contextWindow: typeof m.contextWindow === "number" ? m.contextWindow : undefined,
 			reasoning: typeof m.reasoning === "boolean" ? m.reasoning : undefined,
+			input: Array.isArray(m.input) ? m.input.filter((value): value is string => typeof value === "string") : undefined,
 		}))
 		.filter((m) => m.provider && m.id);
+}
+
+/** Restore the active pi branch, attaching tool results to their assistant turn. */
+export function parseMessages(raw: unknown): ChatMessage[] {
+	if (!Array.isArray(raw)) return [];
+	const messages: ChatMessage[] = [];
+	for (const [index, value] of raw.entries()) {
+		if (!value || typeof value !== "object") continue;
+		const message = value as Record<string, unknown>;
+		if (message.role === "toolResult") {
+			const assistant = [...messages].reverse().find((m) => m.role === "assistant");
+			assistant?.blocks.push({ kind: "toolResult", name: String(message.toolName ?? "工具"), text: extractResultText(message), isError: Boolean(message.isError) });
+		} else if (message.role === "user" || message.role === "assistant") {
+			messages.push({
+				id: `history_${index}`, role: message.role, blocks: parseBlocks(message.content),
+				provider: typeof message.provider === "string" ? message.provider : undefined,
+				model: typeof message.model === "string" ? message.model : undefined,
+				usage: message.usage as ChatMessage["usage"],
+			});
+		}
+	}
+	return messages;
 }

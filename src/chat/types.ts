@@ -5,6 +5,7 @@ export interface ModelInfo {
 	name?: string;
 	contextWindow?: number;
 	reasoning?: boolean;
+	input?: string[];
 }
 
 export interface Usage {
@@ -13,11 +14,13 @@ export interface Usage {
 	cacheRead: number;
 	cacheWrite: number;
 	totalTokens: number;
+	reasoning?: number;
 	cost?: { total?: number };
 }
 
 export type ContentBlock =
 	| { kind: "text"; text: string }
+	| { kind: "image"; data: string; mimeType: string }
 	| { kind: "thinking"; text: string }
 	| { kind: "tool"; id: string; name: string; argsText: string; done: boolean }
 	| { kind: "toolResult"; name: string; text: string; isError: boolean };
@@ -44,6 +47,7 @@ export interface SessionState {
 	model?: ModelInfo;
 	availableModels: ModelInfo[];
 	thinkingLevel?: string;
+	thinkingLevels?: string[];
 	notices: Notice[];
 	lastError?: string;
 }
@@ -54,3 +58,11 @@ export const initialSessionState: SessionState = {
 	availableModels: [],
 	notices: [],
 };
+
+export interface ImageAttachment {
+	id: string;
+	name: string;
+	type: "image";
+	data: string;
+	mimeType: string;
+}

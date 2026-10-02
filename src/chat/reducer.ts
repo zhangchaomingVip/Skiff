@@ -126,6 +126,16 @@ export function reduce(state: SessionState, event: RpcEvent): SessionState {
 		case "message_end": {
 			const message = event.message as Record<string, unknown> | undefined;
 			const role = message?.role;
+			if (role === "toolResult") {
+				const index = lastAssistantIndex(state.messages);
+				if (index < 0) return state;
+				const messages = [...state.messages];
+				messages[index] = {
+					...messages[index],
+					blocks: [...messages[index].blocks, ...parseBlocks([{ ...message, type: "toolResult" }])],
+				};
+				return { ...state, messages };
+			}
 			if (role !== "user" && role !== "assistant") return state;
 
 			const index = lastIndexOfRole(state.messages, role);
@@ -142,7 +152,7 @@ export function reduce(state: SessionState, event: RpcEvent): SessionState {
 			if (index < 0) return { ...state, messages: [...state.messages, finalised] };
 			const messages = [...state.messages];
 			messages[index] = finalised;
-			return { ...state, messages };
+			return { ...state, messages, ...(typeof message?.errorMessage === "string" ? { lastError: message.errorMessage } : {}) };
 		}
 
 		case "thinking_level_changed":

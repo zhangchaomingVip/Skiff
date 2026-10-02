@@ -11,7 +11,7 @@ export function RawDrawer({ lines }: { lines: string[] }) {
 	return (
 		<aside className="raw">
 			<div className="raw-head">
-				raw pi stdout <span className="muted">{lines.length} lines</span>
+				诊断日志 <span className="muted">· {lines.length} 行</span>
 			</div>
 			<div className="raw-body">
 				<pre>{lines.join("\n")}</pre>

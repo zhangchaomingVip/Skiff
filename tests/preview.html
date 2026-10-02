@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="zh-CN">
+	<head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>Skiff · 测试预览</title></head>
+	<body>
+		<div id="root"></div>
+		<script type="module">
+			import { installMockPi } from "./mockPi.mjs";
+			installMockPi(window, localStorage);
+			await import("/src/main.tsx");
+			// Reuse the production theme tokens for deterministic visual QA.
+			const theme = new URLSearchParams(location.search).get("theme");
+			if (theme) {
+				for (const sheet of document.styleSheets) {
+					for (const rule of sheet.cssRules) {
+						const selected = theme === "dark" ? rule instanceof CSSMediaRule && rule.conditionText.includes("prefers-color-scheme: dark") ? rule.cssRules[0] : null : rule.selectorText === ":root" ? rule : null;
+						if (selected) document.documentElement.style.cssText = selected.style.cssText;
+					}
+				}
+			}
+		</script>
+	</body>
+</html>

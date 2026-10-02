@@ -42,14 +42,21 @@ export class PiRpc {
 	}
 
 	async start(opts: RpcStartOptions = {}): Promise<void> {
-		await invoke("rpc_start", {
-			options: {
-				piPath: opts.piPath ?? "pi",
-				cwd: opts.cwd ?? null,
-				env: opts.env ?? null,
-			},
-		});
 		this.unlisten = await listen<string>(`rpc://${this.instanceId}`, (e) => this.handleLine(e.payload));
+		try {
+			await invoke("rpc_start", {
+				options: {
+					instanceId: this.instanceId,
+					piPath: opts.piPath ?? null,
+					cwd: opts.cwd ?? null,
+					env: opts.env ?? null,
+				},
+			});
+		} catch (error) {
+			this.unlisten?.();
+			this.unlisten = null;
+			throw error;
+		}
 	}
 
 	/** Subscribe to streaming events (everything that is not a response). */
@@ -77,9 +84,17 @@ export class PiRpc {
 			}, timeoutMs);
 			this.pending.set(id, { resolve, reject, timer });
 		});
-		await invoke("rpc_send", {
+		// The timeout must still work if the native write itself stalls.
+		void invoke("rpc_send", {
 			instanceId: this.instanceId,
 			message: JSON.stringify({ ...command, id }),
+		}).catch((error: unknown) => {
+			const pending = this.pending.get(id);
+			if (pending) {
+				window.clearTimeout(pending.timer);
+				this.pending.delete(id);
+				pending.reject(error instanceof Error ? error : new Error(String(error)));
+			}
 		});
 		return promise as Promise<T>;
 	}
@@ -117,6 +132,13 @@ export class PiRpc {
 				pending.resolve(data.data ?? data);
 			}
 			return;
+		}
+		if (data.type === "bridge_exit") {
+			for (const pending of this.pending.values()) {
+				window.clearTimeout(pending.timer);
+				pending.reject(new Error(String(data.message ?? "pi process exited")));
+			}
+			this.pending.clear();
 		}
 
 		this.eventHandlers.forEach((h) => h(data));

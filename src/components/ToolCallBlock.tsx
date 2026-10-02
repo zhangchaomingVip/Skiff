@@ -22,9 +22,9 @@ export function ToolCallBlock({
 		<details className="tool">
 			<summary>
 				<span className="tool-name">{name}</span>
-				<span className={`tool-state ${done ? "done" : "running"}`}>{done ? "done" : "running…"}</span>
+				<span className={`tool-state ${done ? "done" : "running"}`}>{done ? "已完成" : "执行中…"}</span>
 			</summary>
-			{args ? <pre className="tool-args">{args}</pre> : <div className="muted">no arguments</div>}
+			{args ? <pre className="tool-args">{args}</pre> : <div className="muted">无参数</div>}
 		</details>
 	);
 }
