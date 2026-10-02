@@ -1,0 +1,7 @@
+{
+  "name": "skiff-agent",
+  "version": "0.0.1",
+  "description": "A lightweight desktop shell for AI coding agents. Any API key. Every token visible.",
+  "main": "index.js",
+  "license": "MIT"
+}
