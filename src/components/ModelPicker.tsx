@@ -1,0 +1,48 @@
+import type { ModelInfo } from "../chat/types";
+
+const keyOf = (model: ModelInfo): string => `${model.provider}/${model.id}`;
+
+/** Native grouped `<select>` of pi's available models, grouped by provider. */
+export function ModelPicker({
+	models,
+	current,
+	onSelect,
+}: {
+	models: ModelInfo[];
+	current?: ModelInfo;
+	onSelect: (model: ModelInfo) => void;
+}) {
+	const groups = new Map<string, ModelInfo[]>();
+	for (const model of models) {
+		const list = groups.get(model.provider) ?? [];
+		list.push(model);
+		groups.set(model.provider, list);
+	}
+
+	const currentKey = current ? keyOf(current) : "";
+	const currentListed = current ? models.some((m) => keyOf(m) === currentKey) : true;
+
+	return (
+		<select
+			className="model-picker"
+			value={currentKey}
+			onChange={(event) => {
+				const found = models.find((m) => keyOf(m) === event.target.value);
+				if (found) onSelect(found);
+			}}
+			title="Select model"
+		>
+			{!current && <option value="">select model…</option>}
+			{current && !currentListed && <option value={currentKey}>{current.name ?? current.id}</option>}
+			{[...groups.entries()].map(([provider, list]) => (
+				<optgroup key={provider} label={provider}>
+					{list.map((model) => (
+						<option key={keyOf(model)} value={keyOf(model)}>
+							{model.name ?? model.id}
+						</option>
+					))}
+				</optgroup>
+			))}
+		</select>
+	);
+}

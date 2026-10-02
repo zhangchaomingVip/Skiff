@@ -1,0 +1,19 @@
+# dependencies
+/node_modules
+
+# frontend build output
+/dist
+
+# Tauri (Rust)
+/src-tauri/target
+/src-tauri/gen
+
+# logs
+*.log
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea
+.vscode/*
+!.vscode/extensions.json

@@ -1,0 +1,18 @@
+[package]
+name = "skiff-desktop"
+version = "0.0.1"
+description = "A lightweight desktop shell for AI coding agents."
+authors = ["Skiff contributors"]
+edition = "2021"
+
+[lib]
+name = "skiff_desktop_lib"
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
