@@ -6,6 +6,7 @@ import { RawDrawer } from "./components/RawDrawer";
 import { Sidebar } from "./components/Sidebar";
 import { ProjectDialog } from "./components/ProjectDialog";
 import { Icon } from "./components/Icon";
+import { ThemeToggle } from "./components/ThemeToggle";
 import type { ImageAttachment } from "./chat/types";
 import { ProviderDialog, type ProviderInfo } from "./components/ProviderDialog";
 
@@ -64,7 +65,7 @@ export default function App() {
 				<header className="chat-header">
 					{!sidebarOpen && <button className="icon-btn" onClick={() => setSidebarOpen(true)} title="展开侧栏" aria-label="展开侧栏"><Icon name="panel" /></button>}
 					<div className="header-title"><span>{activeChat?.title ?? "新聊天"}</span>{activeProject && <span className="header-project" title={activeProject.path}><Icon name="folder" size={14} />{activeProject.name}</span>}</div>
-					<div className="header-actions">{busy && <span className="working"><span className="dot busy" />正在处理</span>}<button className="icon-btn" onClick={() => setProviderDialogOpen(true)} disabled={busy} title="配置提供商" aria-label="配置提供商"><Icon name="settings" /></button><button className={`icon-btn ${rawOpen ? "active" : ""}`} onClick={() => setRawOpen((open) => !open)} title="诊断日志" aria-label="诊断日志" aria-pressed={rawOpen}><Icon name="code" /></button></div>
+					<div className="header-actions">{busy && <span className="working"><span className="dot busy" />正在处理</span>}<ThemeToggle /><button className="icon-btn" onClick={() => setProviderDialogOpen(true)} disabled={busy} title="配置提供商" aria-label="配置提供商"><Icon name="settings" /></button><button className={`icon-btn ${rawOpen ? "active" : ""}`} onClick={() => setRawOpen((open) => !open)} title="诊断日志" aria-label="诊断日志" aria-pressed={rawOpen}><Icon name="code" /></button></div>
 				</header>
 				{library.error && <div className="workspace-alert" role="alert"><span>{library.error}</span><button className="btn ghost" onClick={library.workspace ? library.clearError : () => void library.initialize()} disabled={library.loading}>{library.workspace ? "关闭" : "重试"}</button></div>}
 				<div className="body">
