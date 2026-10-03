@@ -4,10 +4,10 @@ import { Icon } from "./Icon";
 
 export interface ProviderInfo {
 	name: string; baseUrl: string; hasKey: boolean; modelIds: string[];
-	reasoning: boolean; vision: boolean; maxThinking: string; contextWindow: number; maxTokens: number;
+	reasoning: boolean; vision: boolean; maxThinking: string; contextWindow: number; maxTokens: number | null;
 }
 
-const blank = (): ProviderInfo => ({ name: "", baseUrl: "", hasKey: false, modelIds: [], reasoning: false, vision: false, maxThinking: "high", contextWindow: 128000, maxTokens: 8192 });
+const blank = (): ProviderInfo => ({ name: "", baseUrl: "", hasKey: false, modelIds: [], reasoning: false, vision: false, maxThinking: "high", contextWindow: 128000, maxTokens: null });
 
 export function ProviderDialog({ onSaved, onClose }: { onSaved: (provider: ProviderInfo) => void; onClose: () => void }) {
 	const dialogRef = useRef<HTMLDialogElement>(null);
@@ -46,7 +46,7 @@ export function ProviderDialog({ onSaved, onClose }: { onSaved: (provider: Provi
 			<div className="provider-field"><label htmlFor="provider-key">API Key</label><input id="provider-key" type="password" autoComplete="off" required={!form.hasKey} placeholder={form.hasKey ? "已保存，留空保留原密钥" : "sk-…"} value={apiKey} onChange={(e) => setApiKey(e.target.value)} disabled={pending} /></div>
 			<div className="provider-field"><div className="field-heading"><label htmlFor="provider-models">模型 ID</label><button type="button" className="btn ghost compact" onClick={() => void discover()} disabled={pending || !form.baseUrl || !apiKey.trim()}>获取模型</button></div><textarea id="provider-models" rows={3} placeholder="可留空自动获取，或填写模型 ID，每行一个" value={modelText} onChange={(e) => setModelText(e.target.value)} disabled={pending} /></div>
 			<div className="provider-capabilities"><label><input type="checkbox" checked={form.reasoning} onChange={(e) => patch({ reasoning: e.target.checked })} disabled={pending} />支持推理等级</label><label><input type="checkbox" checked={form.vision} onChange={(e) => patch({ vision: e.target.checked })} disabled={pending} />支持图片输入</label></div>
-			<details className="provider-advanced"><summary>模型能力与限制</summary><p className="muted">按服务商声明填写，应用于以上模型；能力勾选不会让纯文本模型具备看图能力。</p><label htmlFor="provider-thinking">推理上限</label><select id="provider-thinking" value={form.maxThinking} onChange={(e) => patch({ maxThinking: e.target.value })} disabled={pending || !form.reasoning}><option value="high">high</option><option value="xhigh">xhigh</option><option value="max">max</option></select><div className="provider-limits"><label>上下文窗口<input type="number" min={1024} required value={form.contextWindow} onChange={(e) => patch({ contextWindow: Number(e.target.value) })} disabled={pending} /></label><label>最大输出 Token<input type="number" min={1} max={form.contextWindow} required value={form.maxTokens} onChange={(e) => patch({ maxTokens: Number(e.target.value) })} disabled={pending} /></label></div></details>
+			<details className="provider-advanced"><summary>模型能力与限制</summary><p className="muted">按服务商声明填写，应用于以上模型；能力勾选不会让纯文本模型具备看图能力。</p><label htmlFor="provider-thinking">推理上限</label><select id="provider-thinking" value={form.maxThinking} onChange={(e) => patch({ maxThinking: e.target.value })} disabled={pending || !form.reasoning}><option value="high">high</option><option value="xhigh">xhigh</option><option value="max">max</option></select><div className="provider-limits"><label>上下文窗口<input type="number" min={1024} required value={form.contextWindow} onChange={(e) => patch({ contextWindow: Number(e.target.value) })} disabled={pending} /></label><label>最大输出 Token<input type="number" min={1} max={form.contextWindow} placeholder="默认" value={form.maxTokens ?? ""} onChange={(e) => patch({ maxTokens: e.target.value === "" ? null : Number(e.target.value) })} disabled={pending} /></label></div></details>
 			{error && <p className="form-error" role="alert">{error}</p>}
 			<div className="dialog-actions"><button type="button" className="btn ghost" onClick={onClose} disabled={pending}>取消</button><button className="btn primary" disabled={pending || loading}>{pending ? "正在连接…" : "保存并使用"}</button></div>
 		</form>

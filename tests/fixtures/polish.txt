@@ -1,0 +1,2 @@
+INFO: attachment preview fixture
+ERROR: example diagnostic output

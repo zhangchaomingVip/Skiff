@@ -368,7 +368,7 @@ pub fn run() {
 			get_pi_auth_status,
 			validate_project_directory,
 			get_workspace_directory
-			, providers::list_openai_providers, providers::discover_openai_models, providers::save_openai_provider
+			, providers::list_openai_providers, providers::discover_openai_models, providers::save_openai_provider, providers::set_model_max_tokens
 		])
 		.on_window_event(|window, event| {
 			if matches!(event, tauri::WindowEvent::Destroyed) {

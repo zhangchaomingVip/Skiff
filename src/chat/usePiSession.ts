@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { PiRpc, type RpcEvent } from "../rpc/RpcClient";
 import { parseMessages, parseModels } from "./parse";
 import { reduce } from "./reducer";
+import { forkTurn } from "./turns";
 import { initialSessionState, type ImageAttachment, type ModelInfo, type SessionState } from "./types";
 
 export interface SessionTarget {
@@ -12,10 +14,13 @@ export interface SessionTarget {
 }
 
 export interface PiSessionActions {
+	rewind: (id: string) => Promise<boolean>;
+	getCommands: () => Promise<{ name: string; description?: string }[]>;
 	prompt: (text: string, images?: ImageAttachment[]) => Promise<boolean>;
 	abort: () => Promise<void>;
 	setModel: (model: ModelInfo) => Promise<void>;
 	setThinkingLevel: (level: string) => Promise<void>;
+	setMaxTokens: (maxTokens: number | null) => Promise<boolean>;
 	clearError: () => void;
 }
 
@@ -28,6 +33,8 @@ export function usePiSession(target?: SessionTarget) {
 	const busyRef = useRef(false);
 	const streamingRef = useRef(false);
 	const [state, setState] = useState<SessionState>(initialSessionState);
+	const stateRef = useRef(state);
+	stateRef.current = state;
 	const [readyId, setReadyId] = useState<string>();
 	const [loadedId, setLoadedId] = useState<string>();
 	const [sessionFile, setSessionFile] = useState<string>();
@@ -35,7 +42,6 @@ export function usePiSession(target?: SessionTarget) {
 	const [revision, setRevision] = useState(0);
 	const [pending, setPending] = useState(false);
 	const [elapsedMs, setElapsedMs] = useState(0);
-	const [liveElapsedMs, setLiveElapsedMs] = useState(0);
 	const runStarted = useRef<number>();
 	const preferredModel = useRef<ModelInfo>();
 	// Saving a newly assigned pi file must not restart the running session.
@@ -66,9 +72,10 @@ export function usePiSession(target?: SessionTarget) {
 		const offEvent = rpc.onEvent((event: RpcEvent) => {
 			if (cancelled) return;
 			if (event.type === "agent_start" && runStarted.current === undefined) runStarted.current = Date.now();
+			let duration: number | undefined;
 			if (["agent_end", "agent_settled", "bridge_exit"].includes(String(event.type)) && runStarted.current !== undefined) {
-				const duration = Date.now() - runStarted.current;
-				setElapsedMs((ms) => ms + Math.max(0, duration));
+				duration = Math.max(0, Date.now() - runStarted.current);
+				setElapsedMs((ms) => ms + (duration ?? 0));
 				runStarted.current = undefined;
 			}
 			if (event.type === "bridge_exit") {
@@ -80,7 +87,8 @@ export function usePiSession(target?: SessionTarget) {
 			}
 			if (event.type === "agent_start") streamingRef.current = true;
 			if (event.type === "agent_end" || event.type === "agent_settled") streamingRef.current = false;
-			setState((s) => reduce(s, event));
+			const settled = duration;
+			setState((s) => settled === undefined ? reduce(s, event) : reduce(reduce(s, event), { type: "turn_duration", durationMs: settled, completedAt: Date.now() }));
 		});
 		const offLine = rpc.onLine((line) => {
 			if (!cancelled) setRawLines((prev) => [...prev.slice(-499), line]);
@@ -133,15 +141,34 @@ export function usePiSession(target?: SessionTarget) {
 		};
 	}, [target?.id, target?.cwd, revision, fail]);
 
-	useEffect(() => {
-		const update = () => setLiveElapsedMs(elapsedMs + (runStarted.current === undefined ? 0 : Math.max(0, Date.now() - runStarted.current)));
-		update();
-		if (!state.isStreaming) return;
-		const timer = window.setInterval(update, 250);
-		return () => window.clearInterval(timer);
-	}, [elapsedMs, state.isStreaming]);
-
 	const actions = useMemo<PiSessionActions>(() => ({
+		getCommands: async () => {
+			const result = await rpcRef.current?.request<{ commands: { name: string; description?: string }[] }>({ type: "get_commands" });
+			return result?.commands ?? [];
+		},
+		rewind: async (id) => {
+			const rpc = rpcRef.current;
+			if (!connected || !rpc || busyRef.current || streamingRef.current) return false;
+			busyRef.current = true; setPending(true);
+			let forked = false;
+			try {
+				if (!await forkTurn(rpc, stateRef.current.messages, id)) { fail("pi 扩展取消了消息操作。"); return false; }
+				forked = true;
+				const [transcript, data] = await Promise.all([rpc.request<{ messages: unknown }>({ type: "get_messages" }), rpc.request<Record<string, unknown>>({ type: "get_state" })]);
+				if (rpcRef.current !== rpc) return false;
+				setState((s) => ({ ...s, messages: parseMessages(transcript.messages), lastError: undefined }));
+				setSessionFile(typeof data.sessionFile === "string" ? data.sessionFile : undefined);
+				return true;
+			} catch (error) {
+				if (rpcRef.current === rpc) {
+					fail(error);
+					// If refresh failed after forking, reload the indexed original session.
+					if (forked) { setReadyId(undefined); setRevision((value) => value + 1); }
+				}
+				return false;
+			}
+			finally { if (rpcRef.current === rpc) { busyRef.current = false; setPending(false); } }
+		},
 		prompt: async (text, images = []) => {
 			const rpc = rpcRef.current;
 			if (!connected || !rpc || busyRef.current || streamingRef.current || (!text.trim() && !images.length)) return false;
@@ -191,8 +218,22 @@ export function usePiSession(target?: SessionTarget) {
 				setState((s) => ({ ...s, thinkingLevel: String(data.thinkingLevel ?? "off") }));
 			} catch (error) { if (rpcRef.current === rpc) fail(error); } finally { if (rpcRef.current === rpc) { busyRef.current = false; setPending(false); } }
 		},
+		setMaxTokens: async (maxTokens) => {
+			const current = stateRef.current.model;
+			const rpc = rpcRef.current;
+			if (!connected || !current || !rpc || busyRef.current || streamingRef.current) return false;
+			busyRef.current = true; setPending(true);
+			try {
+				await invoke<number | null>("set_model_max_tokens", { provider: current.provider, modelId: current.id, maxTokens });
+				// pi reads models.json at startup, so restart the session with the same model.
+				preferredModel.current = current;
+				setRevision((value) => value + 1);
+				return true;
+			} catch (error) { if (rpcRef.current === rpc) fail(error); return false; }
+			finally { if (rpcRef.current === rpc) { busyRef.current = false; setPending(false); } }
+		},
 		clearError: () => setState((s) => ({ ...s, lastError: undefined })),
 	}), [connected, fail]);
 
-	return { state, connected, rawLines, actions, sessionFile, loadedId, pending, elapsedMs, liveElapsedMs, reconnect: (model?: ModelInfo) => { preferredModel.current = model; setRevision((r) => r + 1); } };
+	return { state, connected, rawLines, actions, sessionFile, loadedId, pending, elapsedMs, reconnect: (model?: ModelInfo) => { preferredModel.current = model; setRevision((r) => r + 1); } };
 }

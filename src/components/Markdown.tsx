@@ -1,98 +1,40 @@
-import type { ReactNode } from "react";
+import { isValidElement, memo, useMemo, useState, type ReactNode } from "react";
+import ReactMarkdown, { type Components } from "react-markdown";
+import remarkGfm from "remark-gfm";
+import remarkBreaks from "remark-breaks";
+import { highlightCode } from "../chat/highlight";
+import { CopyButton } from "./CopyButton";
+import { ImagePreview } from "./ImagePreview";
 
-type Part = { kind: "text"; text: string } | { kind: "code"; lang: string; code: string };
-
-/** Split text into prose and fenced code blocks. */
-function splitFences(text: string): Part[] {
-	const parts: Part[] = [];
-	let prose: string[] = [];
-	let code: string[] = [];
-	let lang = "";
-	let inCode = false;
-
-	for (const line of text.split("\n")) {
-		const fence = /^```(\w*)\s*$/.exec(line);
-		if (fence) {
-			if (inCode) {
-				parts.push({ kind: "code", lang, code: code.join("\n") });
-				code = [];
-				inCode = false;
-			} else {
-				if (prose.length) {
-					parts.push({ kind: "text", text: prose.join("\n") });
-					prose = [];
-				}
-				lang = fence[1] ?? "";
-				inCode = true;
-			}
-			continue;
-		}
-		if (inCode) code.push(line);
-		else prose.push(line);
-	}
-
-	if (inCode) parts.push({ kind: "code", lang, code: code.join("\n") });
-	if (prose.length) parts.push({ kind: "text", text: prose.join("\n") });
-	return parts;
+function CodeBlock({ children, streaming }: { children?: ReactNode; streaming: boolean }) {
+	const [expanded, setExpanded] = useState(false);
+	const [wrap, setWrap] = useState(false);
+	const props = isValidElement<{ children?: string; className?: string }>(children) ? children.props : undefined;
+	const code = String(props?.children ?? "").replace(/\n$/, "");
+	const language = props?.className?.replace("language-", "") || "text";
+	const long = code.split("\n").length > 20;
+	// Highlight once the message settles; per-token highlighting would re-tokenize the whole block.
+	const highlighted = useMemo(() => (streaming ? undefined : highlightCode(code, language)), [streaming, code, language]);
+	return <div className="code-block">
+		<div className="code-header"><span>{language}</span><div>
+			<button aria-label="切换代码自动换行" aria-pressed={wrap} onClick={() => setWrap(!wrap)}>换行</button>
+			{long && <button aria-label={expanded ? "折叠代码" : "展开代码"} aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>{expanded ? "折叠" : "展开"}</button>}
+			<CopyButton text={code} label="复制代码" />
+		</div></div>
+		<pre className={`${wrap ? "wrap" : ""} ${long && !expanded ? "collapsed" : ""}`}>{highlighted === undefined ? <code>{code}</code> : <code className="hljs" dangerouslySetInnerHTML={{ __html: highlighted }} />}</pre>
+		{long && !expanded && <button className="code-expand" onClick={() => setExpanded(true)} aria-label="展开完整代码">展开完整代码 · {code.split("\n").length} 行</button>}
+	</div>;
 }
 
-const INLINE = /(`[^`\n]+`)|(\*\*[^*\n]+\*\*)|(\[[^\]\n]+\]\([^)\n]+\))/g;
+const plugins = [remarkGfm, remarkBreaks];
 
-function renderInline(text: string): ReactNode[] {
-	const nodes: ReactNode[] = [];
-	let cursor = 0;
-	let key = 0;
-	let match: RegExpExecArray | null;
-
-	INLINE.lastIndex = 0;
-	while ((match = INLINE.exec(text)) !== null) {
-		if (match.index > cursor) nodes.push(text.slice(cursor, match.index));
-		const token = match[0];
-		if (token.startsWith("`")) {
-			nodes.push(
-				<code key={key++} className="inline-code">
-					{token.slice(1, -1)}
-				</code>,
-			);
-		} else if (token.startsWith("**")) {
-			nodes.push(<strong key={key++}>{token.slice(2, -2)}</strong>);
-		} else {
-			const link = /\[([^\]]+)\]\(([^)]+)\)/.exec(token);
-			if (link) {
-				nodes.push(
-					<a key={key++} href={link[2]} target="_blank" rel="noreferrer">
-						{link[1]}
-					</a>,
-				);
-			} else {
-				nodes.push(token);
-			}
-		}
-		cursor = match.index + token.length;
-	}
-	if (cursor < text.length) nodes.push(text.slice(cursor));
-	return nodes;
-}
-
-/**
- * Dependency-free Markdown: fenced code blocks, inline code, bold and links.
- * Everything else is rendered as pre-wrapped plain text — enough for chat
- * replies without pulling in a parser, and easy to swap later.
- */
-export function Markdown({ text }: { text: string }) {
-	return (
-		<div className="md">
-			{splitFences(text).map((part, index) =>
-				part.kind === "code" ? (
-					<pre key={index} className="code-block" data-lang={part.lang || undefined}>
-						<code>{part.code}</code>
-					</pre>
-				) : (
-					<p key={index} className="md-text">
-						{renderInline(part.text)}
-					</p>
-				),
-			)}
-		</div>
-	);
-}
+export const Markdown = memo(function Markdown({ text, streaming = false }: { text: string; streaming?: boolean }) {
+	const components = useMemo<Components>(() => ({
+		pre: ({ children }) => <CodeBlock streaming={streaming}>{children}</CodeBlock>,
+		code: ({ children, className }) => <code className={className ?? "inline-code"}>{children}</code>,
+		a: ({ children, href }) => <a href={href} target="_blank" rel="noreferrer">{children}</a>,
+		img: ({ src, alt }) => src ? <ImagePreview src={src} alt={alt || "回复中的图片"} /> : null,
+		table: ({ children }) => <div className="table-scroll"><table>{children}</table></div>,
+	}), [streaming]);
+	return <div className="md"><ReactMarkdown remarkPlugins={plugins} components={components}>{text}</ReactMarkdown></div>;
+});

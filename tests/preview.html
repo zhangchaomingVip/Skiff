@@ -5,6 +5,8 @@
 		<div id="root"></div>
 		<script type="module">
 			import { installMockPi } from "./mockPi.mjs";
+			const fixture = new URLSearchParams(location.search).get("fixture");
+			if (fixture) { const { seedPolishPreview } = await import("./polishFixture.mjs"); seedPolishPreview(localStorage, fixture === "long"); }
 			installMockPi(window, localStorage);
 			await import("/src/main.tsx");
 			// Reuse the production theme tokens for deterministic visual QA.
@@ -16,6 +18,7 @@
 						if (selected) document.documentElement.style.cssText = selected.style.cssText;
 					}
 				}
+				document.documentElement.style.colorScheme = theme;
 			}
 		</script>
 	</body>

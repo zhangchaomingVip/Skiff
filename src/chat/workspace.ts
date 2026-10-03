@@ -11,6 +11,7 @@ export interface Conversation {
 	id: string;
 	projectId: string;
 	title: string;
+	customTitle?: boolean;
 	sessionFile?: string;
 	updatedAt: number;
 	hasMessages: boolean;
@@ -111,5 +112,24 @@ export function useWorkspace() {
 		workspace, activeChat, activeProject, error, loading, initialize, addProject, createChat, selectProject, updateChat,
 		selectChat: (id: string) => setWorkspace((w) => w ? { ...w, activeId: id } : w),
 		clearError: () => setError(undefined),
+		renameChat: (id: string, title: string) => { if (title.trim()) updateChat(id, { title: title.trim().slice(0, 100), customTitle: true }); },
+		renameProject: (id: string, name: string) => setWorkspace((w) => w && name.trim() ? { ...w, projects: w.projects.map((p) => p.id === id ? { ...p, name: name.trim().slice(0, 100) } : p) } : w),
+		deleteChat: (id: string) => setWorkspace((w) => {
+			if (!w) return w;
+			const removed = w.chats.find((chat) => chat.id === id);
+			if (!removed) return w;
+			const chats = w.chats.filter((chat) => chat.id !== id);
+			if (w.activeId !== id) return { ...w, chats };
+			const next = chats.filter((chat) => chat.projectId === removed.projectId).sort((a, b) => b.updatedAt - a.updatedAt)[0] ?? newChat(removed.projectId);
+			return { ...w, chats: chats.includes(next) ? chats : [...chats, next], activeId: next.id };
+		}),
+		deleteProject: (id: string) => setWorkspace((w) => {
+			if (!w || w.projects.length <= 1) return w;
+			const projects = w.projects.filter((project) => project.id !== id);
+			const chats = w.chats.filter((chat) => chat.projectId !== id);
+			if (chats.some((chat) => chat.id === w.activeId)) return { ...w, projects, chats };
+			const next = [...chats].sort((a, b) => b.updatedAt - a.updatedAt)[0] ?? newChat(projects[0].id);
+			return { ...w, projects, chats: chats.includes(next) ? chats : [...chats, next], activeId: next.id };
+		}),
 	};
 }

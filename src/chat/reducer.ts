@@ -5,6 +5,9 @@ import type { RpcEvent } from "../rpc/RpcClient";
 let seq = 0;
 const nextId = (prefix: string): string => `${prefix}_${++seq}_${Date.now().toString(36)}`;
 
+/** pi sends `timestamp` in ms; keep only finite values. */
+const timestamp = (value: unknown): number | undefined => typeof value === "number" && Number.isFinite(value) ? value : undefined;
+
 function lastAssistantIndex(messages: ChatMessage[]): number {
 	for (let i = messages.length - 1; i >= 0; i--) {
 		if (messages[i].role === "assistant") return i;
@@ -54,6 +57,8 @@ export function reduce(state: SessionState, event: RpcEvent): SessionState {
 				provider: typeof message?.provider === "string" ? message.provider : undefined,
 				model: typeof message?.model === "string" ? message.model : undefined,
 				usage: message?.usage as ChatMessage["usage"],
+				stopReason: typeof message?.stopReason === "string" ? message.stopReason : undefined,
+				timestamp: timestamp(message?.timestamp),
 			};
 			return { ...state, messages: [...state.messages, chat] };
 		}
@@ -127,7 +132,8 @@ export function reduce(state: SessionState, event: RpcEvent): SessionState {
 			const message = event.message as Record<string, unknown> | undefined;
 			const role = message?.role;
 			if (role === "toolResult") {
-				const index = lastAssistantIndex(state.messages);
+				const paired = state.messages.findIndex((m) => m.blocks.some((b) => b.kind === "tool" && b.id === message?.toolCallId));
+				const index = paired >= 0 ? paired : lastAssistantIndex(state.messages);
 				if (index < 0) return state;
 				const messages = [...state.messages];
 				messages[index] = {
@@ -147,12 +153,25 @@ export function reduce(state: SessionState, event: RpcEvent): SessionState {
 				provider: typeof message?.provider === "string" ? message.provider : undefined,
 				model: typeof message?.model === "string" ? message.model : undefined,
 				usage: message?.usage as ChatMessage["usage"],
+				stopReason: typeof message?.stopReason === "string" ? message.stopReason : undefined,
+				durationMs: index >= 0 ? state.messages[index].durationMs : undefined,
+				timestamp: index >= 0 ? state.messages[index].timestamp : timestamp(message?.timestamp),
 			};
 
 			if (index < 0) return { ...state, messages: [...state.messages, finalised] };
 			const messages = [...state.messages];
 			messages[index] = finalised;
 			return { ...state, messages, ...(typeof message?.errorMessage === "string" ? { lastError: message.errorMessage } : {}) };
+		}
+
+		case "turn_duration": {
+			const durationMs = typeof event.durationMs === "number" ? Math.max(0, event.durationMs) : 0;
+			const index = lastAssistantIndex(state.messages);
+			if (index < 0) return state;
+			const messages = [...state.messages];
+			const completedAt = typeof event.completedAt === "number" ? event.completedAt : messages[index].timestamp;
+			messages[index] = { ...messages[index], durationMs, timestamp: completedAt };
+			return { ...state, messages };
 		}
 
 		case "thinking_level_changed":

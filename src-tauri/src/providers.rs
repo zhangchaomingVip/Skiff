@@ -17,7 +17,7 @@ pub struct ProviderInput {
 	vision: bool,
 	max_thinking: String,
 	context_window: u64,
-	max_tokens: u64,
+	max_tokens: Option<u64>,
 }
 
 #[derive(Serialize)]
@@ -31,7 +31,7 @@ pub struct ProviderInfo {
 	vision: bool,
 	max_thinking: String,
 	context_window: u64,
-	max_tokens: u64,
+	max_tokens: Option<u64>,
 }
 
 fn read_config(path: &Path) -> Result<Value, String> {
@@ -92,7 +92,7 @@ fn info(name: &str, provider: &Value, auth: &Value) -> ProviderInfo {
 		vision: first["input"].as_array().is_some_and(|a| a.iter().any(|v| v == "image")),
 		max_thinking: if first["thinkingLevelMap"]["max"].is_string() { "max" } else if first["thinkingLevelMap"]["xhigh"].is_string() { "xhigh" } else { "high" }.into(),
 		context_window: first["contextWindow"].as_u64().unwrap_or(128000),
-		max_tokens: first["maxTokens"].as_u64().unwrap_or(8192),
+		max_tokens: first["maxTokens"].as_u64(),
 	}
 }
 
@@ -112,7 +112,7 @@ fn merge(config: &mut Value, auth: &mut Value, input: &ProviderInput) -> Result<
 	}
 	let base = base_url(&input.base_url)?;
 	validate_key(&input.api_key)?;
-	if !["high", "xhigh", "max"].contains(&input.max_thinking.as_str()) || input.context_window < 1024 || input.max_tokens == 0 || input.max_tokens > input.context_window {
+	if !["high", "xhigh", "max"].contains(&input.max_thinking.as_str()) || input.context_window < 1024 || input.max_tokens.is_some_and(|value| value == 0 || value > input.context_window) {
 		return Err("请检查推理上限、上下文窗口与最大输出 Token".into());
 	}
 	if input.model_ids.is_empty() || input.model_ids.len() > 500 || input.model_ids.iter().any(|id| id.trim().is_empty() || id.len() > 256 || id.chars().any(char::is_control)) {
@@ -130,7 +130,12 @@ fn merge(config: &mut Value, auth: &mut Value, input: &ProviderInput) -> Result<
 		let mut model = previous.iter().find(|m| m["id"] == id).cloned().unwrap_or(json!({ "id": id, "name": id }));
 		model["reasoning"] = json!(input.reasoning);
 		model["input"] = if input.vision { json!(["text", "image"]) } else { json!(["text"]) };
-		model["contextWindow"] = json!(input.context_window); model["maxTokens"] = json!(input.max_tokens);
+		model["contextWindow"] = json!(input.context_window);
+		match input.max_tokens {
+			Some(value) => model["maxTokens"] = json!(value),
+			// Empty means "use the adapter/model default": drop any previous override.
+			None => { if let Some(object) = model.as_object_mut() { object.remove("maxTokens"); } }
+		}
 		if input.reasoning {
 			let mut levels = model["thinkingLevelMap"].as_object().cloned().unwrap_or_default();
 			levels.insert("xhigh".into(), if input.max_thinking == "high" { Value::Null } else { levels.get("xhigh").filter(|v| v.is_string()).cloned().unwrap_or(json!("xhigh")) });
@@ -187,10 +192,39 @@ pub async fn save_openai_provider(mut input: ProviderInput) -> Result<ProviderIn
 	tauri::async_runtime::spawn_blocking(move || save_in(&dir, &input)).await.map_err(|_| "保存配置失败")?
 }
 
+fn set_max_tokens_in(dir: &Path, provider: &str, model_id: &str, max_tokens: Option<u64>) -> Result<Option<u64>, String> {
+	if max_tokens == Some(0) { return Err("最大输出 Token 必须大于 0".into()); }
+	let _guard = CONFIG_LOCK.lock().map_err(|_| "配置锁异常")?;
+	let path = dir.join("models.json");
+	if !path.exists() { return Err("pi 尚未生成 models.json，请先在 pi 中配置该模型".into()); }
+	let mut config = read_config(&path)?;
+	let providers = config["providers"].as_object_mut().ok_or("pi 配置缺少 providers")?;
+	let entry = providers.get_mut(provider).ok_or_else(|| format!("pi 配置中没有提供商 {provider}"))?;
+	let models = entry["models"].as_array_mut().ok_or("该提供商没有模型列表")?;
+	let model = models.iter_mut().find(|m| m["id"].as_str() == Some(model_id)).ok_or_else(|| format!("没有找到模型 {model_id}"))?;
+	let context = model["contextWindow"].as_u64().unwrap_or(0);
+	match max_tokens {
+		Some(value) => {
+			if context > 0 && value > context { return Err("最大输出 Token 不能超过上下文窗口".into()); }
+			model["maxTokens"] = json!(value);
+		}
+		// Clearing the field restores the adapter/model default.
+		None => { if let Some(object) = model.as_object_mut() { object.remove("maxTokens"); } }
+	}
+	atomic_write(&path, &config)?;
+	Ok(max_tokens)
+}
+
+#[tauri::command]
+pub fn set_model_max_tokens(provider: String, model_id: String, max_tokens: Option<u64>) -> Result<Option<u64>, String> {
+	let dir: PathBuf = super::get_pi_agent_dir().ok_or("无法确定 pi 配置目录")?;
+	set_max_tokens_in(&dir, &provider, &model_id, max_tokens)
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
-	fn input() -> ProviderInput { ProviderInput { name: "gateway".into(), base_url: "http://localhost:1234/v1/".into(), api_key: "test-key".into(), model_ids: vec!["vision-test".into()], reasoning: true, vision: true, max_thinking: "max".into(), context_window: 128000, max_tokens: 8192 } }
+	fn input() -> ProviderInput { ProviderInput { name: "gateway".into(), base_url: "http://localhost:1234/v1/".into(), api_key: "test-key".into(), model_ids: vec!["vision-test".into()], reasoning: true, vision: true, max_thinking: "max".into(), context_window: 128000, max_tokens: Some(8192) } }
 	#[test]
 	fn merges_without_exposing_keys_or_removing_other_config() {
 		let mut config = json!({ "custom": 42, "providers": { "other": { "baseUrl": "existing" }, "gateway": { "api": "openai-completions", "headers": { "x-custom": "keep" }, "models": [{ "id": "vision-test", "cost": { "input": 2 } }] } } });
@@ -204,6 +238,22 @@ mod tests {
 		let public = serde_json::to_string(&info("gateway", &config["providers"]["gateway"], &auth)).unwrap();
 		assert!(!public.contains("test-key"));
 		let mut update = input(); update.api_key.clear(); merge(&mut config, &mut auth, &update).unwrap(); assert_eq!(auth["gateway"]["key"], "test-key");
+	}
+	#[test]
+	fn updates_max_tokens_without_touching_other_fields() {
+		let dir = std::env::temp_dir().join(format!("skiff-limits-test-{}-{}", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+		std::fs::create_dir_all(&dir).unwrap();
+		atomic_write(&dir.join("models.json"), &json!({ "providers": { "deepseek": { "api": "openai", "models": [{ "id": "deepseek-chat", "contextWindow": 64000, "maxTokens": 8192, "cost": { "input": 1 } }] } } })).unwrap();
+		assert_eq!(set_max_tokens_in(&dir, "deepseek", "deepseek-chat", Some(32768)).unwrap(), Some(32768));
+		let config = read_config(&dir.join("models.json")).unwrap();
+		assert_eq!(config["providers"]["deepseek"]["models"][0]["maxTokens"], 32768);
+		assert_eq!(config["providers"]["deepseek"]["models"][0]["cost"]["input"], 1);
+		assert!(set_max_tokens_in(&dir, "deepseek", "deepseek-chat", Some(100000)).is_err());
+		assert_eq!(set_max_tokens_in(&dir, "deepseek", "deepseek-chat", None).unwrap(), None);
+		let config = read_config(&dir.join("models.json")).unwrap();
+		assert!(config["providers"]["deepseek"]["models"][0].get("maxTokens").is_none());
+		assert_eq!(config["providers"]["deepseek"]["models"][0]["contextWindow"], 64000);
+		let _ = std::fs::remove_dir_all(dir);
 	}
 	#[test]
 	fn rejects_unsafe_or_invalid_input() {

@@ -34,6 +34,7 @@ test("streamed assistant text finalizes once and retains subsequent tool results
 
 test("models come from pi, including custom providers; invalid descriptors are excluded", () => {
 	assert.deepEqual(parseModels([{ provider: "custom", id: "local-model" }, { id: "missing-provider" }, null]).map((m) => m.id), ["local-model"]);
+	assert.equal(parseModels([{ provider: "custom", id: "local-model", contextWindow: 64000, maxTokens: 32768 }])[0].maxTokens, 32768);
 });
 
 test("RPC listeners precede startup; sessions restore and transport failures reject promptly", async () => {

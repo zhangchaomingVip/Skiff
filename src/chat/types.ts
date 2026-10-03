@@ -4,8 +4,10 @@ export interface ModelInfo {
 	id: string;
 	name?: string;
 	contextWindow?: number;
+	maxTokens?: number;
 	reasoning?: boolean;
 	input?: string[];
+	cost?: { input?: number; output?: number };
 }
 
 export interface Usage {
@@ -23,7 +25,7 @@ export type ContentBlock =
 	| { kind: "image"; data: string; mimeType: string }
 	| { kind: "thinking"; text: string }
 	| { kind: "tool"; id: string; name: string; argsText: string; done: boolean }
-	| { kind: "toolResult"; name: string; text: string; isError: boolean };
+	| { kind: "toolResult"; id?: string; name: string; text: string; isError: boolean; diff?: string };
 
 export interface ChatMessage {
 	id: string;
@@ -33,6 +35,12 @@ export interface ChatMessage {
 	provider?: string;
 	model?: string;
 	usage?: Usage;
+	/** pi finish reason, e.g. `stop`, `length`, `toolUse`, `aborted`. */
+	stopReason?: string;
+	/** Wall-clock duration of the turn, attached when the agent run settles. */
+	durationMs?: number;
+	/** pi message time in ms; for the settling assistant message it is the turn's completion time. */
+	timestamp?: number;
 }
 
 export interface Notice {

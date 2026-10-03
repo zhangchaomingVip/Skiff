@@ -1,16 +1,30 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChatMessage } from "../chat/types";
-import { MessageItem } from "./MessageItem";
+import { groupTurns } from "../chat/turns";
+import { MessageItem, type MessageAction } from "./MessageItem";
 import { Icon } from "./Icon";
 
 /** Scrolling transcript with an auto-follow anchor at the bottom. */
-export function MessageList({ messages, projectName, onSuggestion }: { messages: ChatMessage[]; projectName?: string; onSuggestion: (text: string) => void }) {
-	const endRef = useRef<HTMLDivElement>(null);
+export function MessageList({ messages, projectName, onSuggestion, followSignal, disabled, onContinue, onEdit, onRegenerate, onDelete }: { messages: ChatMessage[]; projectName?: string; onSuggestion: (text: string) => void; followSignal: number; disabled: boolean; onContinue: () => void; onEdit: MessageAction; onRegenerate: MessageAction; onDelete: MessageAction }) {
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const followingRef = useRef(true);
+	const [away, setAway] = useState(false);
+	const [unread, setUnread] = useState(false);
+	const [collapsedTurns, setCollapsedTurns] = useState<string[]>([]);
+	const turns = useMemo(() => groupTurns(messages), [messages]);
+	const toggleTurn = useCallback((turnId: string) => setCollapsedTurns((list) => list.includes(turnId) ? list.filter((id) => id !== turnId) : [...list, turnId]), []);
+	const scrollBottom = () => {
+		followingRef.current = true; setAway(false); setUnread(false);
+		const el = scrollRef.current;
+		el?.scrollTo({ top: el.scrollHeight, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
+	};
+	useEffect(() => { scrollBottom(); }, [followSignal]);
 
 	useEffect(() => {
-		if (followingRef.current) endRef.current?.scrollIntoView({ block: "end" });
+		if (!followingRef.current) { setUnread(true); return; }
+		// One update per frame; smooth animation is reserved for explicit jumps.
+		const frame = requestAnimationFrame(() => { const el = scrollRef.current; if (el) el.scrollTo({ top: el.scrollHeight, behavior: "instant" }); });
+		return () => cancelAnimationFrame(frame);
 	}, [messages]);
 
 	if (messages.length === 0) {
@@ -27,17 +41,21 @@ export function MessageList({ messages, projectName, onSuggestion }: { messages:
 						<button onClick={() => onSuggestion("帮我检查项目中的潜在问题，并给出改进建议。") }><Icon name="search" /><strong>检查代码</strong><span>发现问题，改进实现</span></button>
 						<button onClick={() => onSuggestion("帮我实现一个新功能：") }><Icon name="code" /><strong>实现功能</strong><span>从想法到可运行的代码</span></button>
 					</div>
+					<p className="empty-tip">点击建议填入草稿，补充后按 Enter 发送</p>
 				</div>
 			</div>
 		);
 	}
 
 	return (
-		<div className="messages" ref={scrollRef} onScroll={() => { const el = scrollRef.current; if (el) followingRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 100; }}>
-			{messages.map((message) => (
-				<MessageItem key={message.id} message={message} />
+		<div className="transcript">
+		<div className="messages" ref={scrollRef} onScroll={() => { const el = scrollRef.current; if (el) { followingRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80; setAway(!followingRef.current); if (followingRef.current) setUnread(false); } }}>
+			{messages.map((message, index) => (
+				<MessageItem key={message.id} message={message} showRole={index === 0 || messages[index - 1].role !== message.role} turnId={turns[index].turnId} turnHead={turns[index].head} turnSteps={turns[index].stepCount} turnDuration={turns[index].durationMs} turnOpen={!collapsedTurns.includes(turns[index].turnId)} onToggleTurn={toggleTurn} disabled={disabled} isLast={index === messages.length - 1} onContinue={onContinue} onEdit={onEdit} onRegenerate={onRegenerate} onDelete={onDelete} />
 			))}
-			<div ref={endRef} />
+		</div>
+		{away && <button className="back-bottom" aria-label="回到底部" onClick={scrollBottom}><Icon name="down" size={15} />{unread ? "有新内容 · 回到底部" : "回到底部"}</button>}
+		<span className="sr-only" role="status">{messages.some((m) => m.streaming) ? "Skiff 正在生成回复" : "回复已就绪"}</span>
 		</div>
 	);
 }

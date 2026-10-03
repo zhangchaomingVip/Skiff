@@ -1,9 +1,12 @@
-import { useState } from "react";
-import type { ImageAttachment, SessionState } from "../chat/types";
-import { UsageDetails } from "./UsageDetails";
+import { useCallback, useRef, useState } from "react";
+import type { ChatMessage, ImageAttachment, SessionState } from "../chat/types";
+import { turnDraft, userForTurn } from "../chat/turns";
+import { appendTextFiles, type TextAttachment } from "../chat/textAttachments";
 import type { PiSessionActions } from "../chat/usePiSession";
 import { Composer } from "./Composer";
+import { ContextUsage } from "./ContextUsage";
 import { MessageList } from "./MessageList";
+import { ConfirmDialog } from "./ConfirmDialog";
 
 /** Transcript + notices + composer. */
 export function ChatView({
@@ -14,7 +17,6 @@ export function ChatView({
 	projectName,
 	onSend,
 	onReconnect,
-	elapsedMs,
 }: {
 	state: SessionState;
 	connected: boolean;
@@ -23,14 +25,47 @@ export function ChatView({
 	projectName?: string;
 	onSend: (text: string, images?: ImageAttachment[]) => Promise<boolean>;
 	onReconnect: () => void;
-	elapsedMs: number;
 }) {
 	const [draft, setDraft] = useState("");
+	const [editing, setEditing] = useState<ChatMessage>();
+	const [deleting, setDeleting] = useState<ChatMessage>();
+	const [restoredImages, setRestoredImages] = useState<ImageAttachment[]>([]);
+	const [restoredFiles, setRestoredFiles] = useState<TextAttachment[]>([]);
+	const [focusSignal, setFocusSignal] = useState(0);
+	const [followSignal, setFollowSignal] = useState(0);
+	const latest = useRef({ messages: state.messages, model: state.model, onSend });
+	latest.current = { messages: state.messages, model: state.model, onSend };
+	const disabled = !connected || pending || state.isStreaming;
+	const edit = useCallback((message: ChatMessage) => {
+		const content = turnDraft(message);
+		setEditing(message); setDraft(content.text); setRestoredImages(content.images); setRestoredFiles(content.files); setFocusSignal((n) => n + 1);
+	}, []);
+	const cancelEdit = () => { setEditing(undefined); setDraft(""); setRestoredImages([]); setRestoredFiles([]); };
+	const regenerate = useCallback(async (message: ChatMessage) => {
+		const user = userForTurn(latest.current.messages, message.id);
+		if (!user) return;
+		const content = turnDraft(user);
+		if (content.images.length && !latest.current.model?.input?.includes("image")) { edit(user); return; }
+		if (!await actions.rewind(message.id)) return;
+		if (await latest.current.onSend(appendTextFiles(content.text, content.files), content.images)) setFollowSignal((n) => n + 1);
+		else { setDraft(content.text); setRestoredImages(content.images); setRestoredFiles(content.files); }
+	}, [actions, edit]);
+	const remove = useCallback(async (message: ChatMessage) => {
+		if (await actions.rewind(message.id)) { setEditing(undefined); setDraft(""); setRestoredImages([]); setRestoredFiles([]); }
+	}, [actions]);
+	const send = async (text: string, images?: ImageAttachment[]) => {
+		if (editing) { if (!await actions.rewind(editing.id)) return false; setEditing(undefined); }
+		const accepted = await onSend(text, images);
+		if (accepted) setFollowSignal((n) => n + 1);
+		return accepted;
+	};
+	const continueTurn = useCallback(async () => { if (await onSend("继续")) setFollowSignal((n) => n + 1); }, [onSend]);
 	const alerts = state.notices.filter((notice) => notice.kind !== "info");
 
 	return (
 		<section className="chat">
-			<MessageList messages={state.messages} projectName={projectName} onSuggestion={setDraft} />
+			<MessageList messages={state.messages} projectName={projectName} onSuggestion={(text) => { setDraft(text); setFocusSignal((n) => n + 1); }} followSignal={followSignal} disabled={disabled} onContinue={continueTurn} onEdit={edit} onRegenerate={regenerate} onDelete={setDeleting} />
+			{deleting && <ConfirmDialog title="删除本轮及后续消息" description="本轮提问及之后的所有消息将从当前聊天移除，原 pi 会话文件会保留。" onConfirm={() => void remove(deleting)} onClose={() => setDeleting(undefined)} />}
 			{alerts.length > 0 && (
 				<div className="notices">
 					{alerts.slice(-3).map((notice) => (
@@ -47,7 +82,7 @@ export function ChatView({
 			<Composer
 				disabled={!connected || pending || !state.model || !state.availableModels.length}
 				streaming={state.isStreaming}
-				onSend={onSend}
+				onSend={send}
 				onAbort={actions.abort}
 				text={draft}
 				onTextChange={setDraft}
@@ -59,8 +94,15 @@ export function ChatView({
 				thinkingLevel={state.thinkingLevel}
 				thinkingLevels={state.thinkingLevels ?? []}
 				onThinkingLevel={actions.setThinkingLevel}
+				onSetMaxTokens={actions.setMaxTokens}
+				focusSignal={focusSignal}
+				restoredImages={restoredImages}
+				restoredFiles={restoredFiles}
+				editing={!!editing}
+				onCancelEdit={cancelEdit}
+				getCommands={actions.getCommands}
 			/>
-			<UsageDetails messages={state.messages} elapsedMs={elapsedMs} />
+			<ContextUsage messages={state.messages} model={state.model} />
 		</section>
 	);
 }

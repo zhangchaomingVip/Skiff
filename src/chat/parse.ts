@@ -29,6 +29,13 @@ function extractResultText(block: Record<string, unknown>): string {
 	return safeJson(block);
 }
 
+/** pi stores `timestamp` in ms; tolerate seconds and ISO strings from other sources. */
+function parseTimestamp(value: unknown): number | undefined {
+	if (typeof value === "number" && Number.isFinite(value)) return value > 1e12 ? value : value * 1000;
+	if (typeof value === "string") { const parsed = Date.parse(value); return Number.isNaN(parsed) ? undefined : parsed; }
+	return undefined;
+}
+
 /** Map a pi message `content` (string or content-block array) to render blocks. */
 export function parseBlocks(content: unknown): ContentBlock[] {
 	if (typeof content === "string") return content ? [{ kind: "text", text: content }] : [];
@@ -60,9 +67,11 @@ export function parseBlocks(content: unknown): ContentBlock[] {
 		} else if (type === "toolResult" || type === "tool_result") {
 			blocks.push({
 				kind: "toolResult",
+				id: typeof block.toolCallId === "string" ? block.toolCallId : typeof block.id === "string" ? block.id : undefined,
 				name: String(block.name ?? block.toolName ?? "result"),
 				text: extractResultText(block),
 				isError: Boolean(block.isError),
+				diff: typeof (block.details as Record<string, unknown> | undefined)?.diff === "string" ? String((block.details as Record<string, unknown>).diff) : undefined,
 			});
 		}
 	}
@@ -79,8 +88,10 @@ export function parseModels(raw: unknown): ModelInfo[] {
 			id: String(m.id ?? ""),
 			name: typeof m.name === "string" ? m.name : undefined,
 			contextWindow: typeof m.contextWindow === "number" ? m.contextWindow : undefined,
+			maxTokens: typeof m.maxTokens === "number" ? m.maxTokens : undefined,
 			reasoning: typeof m.reasoning === "boolean" ? m.reasoning : undefined,
 			input: Array.isArray(m.input) ? m.input.filter((value): value is string => typeof value === "string") : undefined,
+			cost: m.cost && typeof m.cost === "object" ? m.cost as ModelInfo["cost"] : undefined,
 		}))
 		.filter((m) => m.provider && m.id);
 }
@@ -93,14 +104,17 @@ export function parseMessages(raw: unknown): ChatMessage[] {
 		if (!value || typeof value !== "object") continue;
 		const message = value as Record<string, unknown>;
 		if (message.role === "toolResult") {
-			const assistant = [...messages].reverse().find((m) => m.role === "assistant");
-			assistant?.blocks.push({ kind: "toolResult", name: String(message.toolName ?? "工具"), text: extractResultText(message), isError: Boolean(message.isError) });
+			const assistant = [...messages].reverse().find((m) => m.blocks.some((b) => b.kind === "tool" && b.id === message.toolCallId)) ?? [...messages].reverse().find((m) => m.role === "assistant");
+			assistant?.blocks.push(...parseBlocks([{ ...message, type: "toolResult" }]));
 		} else if (message.role === "user" || message.role === "assistant") {
 			messages.push({
 				id: `history_${index}`, role: message.role, blocks: parseBlocks(message.content),
 				provider: typeof message.provider === "string" ? message.provider : undefined,
 				model: typeof message.model === "string" ? message.model : undefined,
 				usage: message.usage as ChatMessage["usage"],
+				stopReason: typeof message.stopReason === "string" ? message.stopReason : undefined,
+				durationMs: typeof message.durationMs === "number" ? message.durationMs : undefined,
+				timestamp: parseTimestamp(message.timestamp),
 			});
 		}
 	}

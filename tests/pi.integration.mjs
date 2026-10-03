@@ -8,6 +8,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { once } from "node:events";
 import { testImage } from "./imageFixture.mjs";
+await import("./register.mjs");
+const { forkEntry } = await import("../src/chat/turns.ts");
+const { parseMessages } = await import("../src/chat/parse.ts");
 
 const cli = process.argv[2];
 if (!cli) throw new Error("Usage: node tests/pi.integration.mjs <absolute path to pi cli.js>");
@@ -86,13 +89,19 @@ try {
 	assert.equal(requests.length, 2); assert.equal(requests[1].reasoning_effort, "low");
 	assert.ok(requests[1].messages.some((message) => Array.isArray(message.content) && message.content.some((part) => part.type === "image_url")));
 	const file = (await rpc({ type: "get_state" })).sessionFile; assert.ok(file);
+	const entries = await rpc({ type: "get_entries" });
+	const visible = parseMessages((await rpc({ type: "get_messages" })).messages);
+	assert.equal((await rpc({ type: "fork", entryId: forkEntry(visible, visible.at(-1).id, entries.entries, entries.leafId) })).cancelled, false);
+	assert.notEqual((await rpc({ type: "get_state" })).sessionFile, file);
+	assert.equal((await rpc({ type: "get_messages" })).messages.filter((m) => m.role === "user").length, 1);
+	assert.ok(Array.isArray((await rpc({ type: "get_commands" })).commands));
 	await rpc({ type: "new_session" });
 	await rpc({ type: "switch_session", sessionPath: file });
 	const history = await rpc({ type: "get_messages" });
 	assert.ok(history.messages.some((message) => message.role === "user" && Array.isArray(message.content) && message.content.some((block) => block.type === "image")));
 	assert.equal(history.messages.findLast((message) => message.role === "assistant").usage.reasoning, 12);
 	assert.equal((await rpc({ type: "get_state" })).thinkingLevel, "low");
-	console.log("PASS: real pi reasoning=max/low, multimodal and image-only prompts, cache/reasoning usage and restored history (local only).");
+	console.log("PASS: real pi reasoning, images, usage, fork-before-turn, command discovery and original history restoration (local only).");
 } finally {
 	if (child && child.exitCode === null) { const exited = once(child, "exit"); child.kill(); await exited; }
 	await new Promise((resolve) => server.close(resolve));

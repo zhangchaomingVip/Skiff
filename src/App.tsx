@@ -15,7 +15,8 @@ export default function App() {
 	const session = usePiSession(activeChat && activeProject ? { id: activeChat.id, cwd: activeProject.path, sessionFile: activeChat.hasMessages ? activeChat.sessionFile : undefined, elapsedMs: activeChat.elapsedMs } : undefined);
 	const { state, connected, rawLines, actions } = session;
 	const [rawOpen, setRawOpen] = useState(false);
-	const [sidebarOpen, setSidebarOpen] = useState(true);
+	const [sidebarOpen, setSidebarOpen] = useState(() => { try { return localStorage.getItem("skiff.sidebar.open") !== "false"; } catch { return true; } });
+	useEffect(() => { try { localStorage.setItem("skiff.sidebar.open", String(sidebarOpen)); } catch { /* Layout can still be used without storage. */ } }, [sidebarOpen]);
 	const [projectDialogOpen, setProjectDialogOpen] = useState(false);
 	const [providerDialogOpen, setProviderDialogOpen] = useState(false);
 	const busy = state.isStreaming || session.pending;
@@ -26,8 +27,9 @@ export default function App() {
 		const firstUser = state.messages.find((m) => m.role === "user");
 		const title = firstUser?.blocks.filter((b) => b.kind === "text").map((b) => b.kind === "text" ? b.text : "").join(" ").replace(/\s+/g, " ").trim() || (firstUser ? "图片聊天" : "");
 		library.updateChat(activeChat.id, {
-			...(session.sessionFile && firstUser ? { sessionFile: session.sessionFile } : {}),
-			...(title ? { title: title.slice(0, 48), hasMessages: true } : {}),
+			...(session.sessionFile ? { sessionFile: session.sessionFile } : {}),
+			hasMessages: !!firstUser,
+			...(!activeChat.customTitle ? { title: title ? title.slice(0, 48) : "新聊天" } : {}),
 			elapsedMs: session.elapsedMs,
 		});
 	}, [activeChat?.id, session.loadedId, session.sessionFile, state.messages, session.elapsedMs]);
@@ -57,7 +59,7 @@ export default function App() {
 
 	return (
 		<div className={`app ${sidebarOpen ? "with-sidebar" : ""}`}>
-			{sidebarOpen && <Sidebar projects={library.workspace?.projects ?? []} chats={library.workspace?.chats ?? []} activeId={activeChat?.id} activeProjectId={activeProject?.id} disabled={locked || !library.workspace} connected={connected} onNewChat={createChat} onSelectChat={library.selectChat} onSelectProject={library.selectProject} onAddProject={() => setProjectDialogOpen(true)} onClose={() => setSidebarOpen(false)} />}
+			{sidebarOpen && <Sidebar projects={library.workspace?.projects ?? []} chats={library.workspace?.chats ?? []} activeId={activeChat?.id} activeProjectId={activeProject?.id} disabled={locked || !library.workspace} connected={connected} onNewChat={createChat} onSelectChat={library.selectChat} onSelectProject={library.selectProject} onAddProject={() => setProjectDialogOpen(true)} onClose={() => setSidebarOpen(false)} onRenameChat={library.renameChat} onRenameProject={library.renameProject} onDeleteChat={library.deleteChat} onDeleteProject={library.deleteProject} />}
 			<main className="workspace">
 				<header className="chat-header">
 					{!sidebarOpen && <button className="icon-btn" onClick={() => setSidebarOpen(true)} title="展开侧栏" aria-label="展开侧栏"><Icon name="panel" /></button>}
@@ -66,7 +68,7 @@ export default function App() {
 				</header>
 				{library.error && <div className="workspace-alert" role="alert"><span>{library.error}</span><button className="btn ghost" onClick={library.workspace ? library.clearError : () => void library.initialize()} disabled={library.loading}>{library.workspace ? "关闭" : "重试"}</button></div>}
 				<div className="body">
-					<ChatView key={activeChat?.id ?? "loading"} state={state} connected={connected} pending={session.pending} actions={actions} onSend={send} onReconnect={session.reconnect} projectName={activeProject?.name} elapsedMs={session.liveElapsedMs} />
+					<ChatView key={activeChat?.id ?? "loading"} state={state} connected={connected} pending={session.pending} actions={actions} onSend={send} onReconnect={session.reconnect} projectName={activeProject?.name} />
 					{rawOpen && <div className="raw-panel"><button className="icon-btn raw-close" onClick={() => setRawOpen(false)} aria-label="关闭诊断日志"><Icon name="close" /></button><RawDrawer lines={rawLines} /></div>}
 				</div>
 			</main>
