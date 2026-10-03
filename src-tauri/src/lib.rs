@@ -28,6 +28,9 @@ struct RpcStartOptions {
 	pi_path: Option<String>,
 	cwd: Option<String>,
 	env: Option<HashMap<String, String>>,
+	/// Forwarded to pi as `--append-system-prompt`; this is the user's editable
+	/// instructions plus Skiff's built-in narration hint.
+	append_system_prompt: Option<String>,
 }
 
 /// Locate the `pi` launcher. Returns the program to run plus any prefix
@@ -146,6 +149,11 @@ fn rpc_start(app: AppHandle, state: State<AppState>, options: RpcStartOptions) -
 		cmd.arg(arg);
 	}
 	cmd.arg("--mode").arg("rpc");
+	if let Some(prompt) = options.append_system_prompt.as_deref() {
+		if !prompt.trim().is_empty() {
+			cmd.arg("--append-system-prompt").arg(prompt);
+		}
+	}
 	if let Some(cwd) = &options.cwd {
 		cmd.current_dir(cwd);
 	}
@@ -357,6 +365,31 @@ fn get_pi_auth_status() -> Result<AuthStatus, String> {
 	})
 }
 
+#[derive(serde::Serialize)]
+struct SystemPromptSection {
+	name: String,
+	text: String,
+}
+
+/// Read the newest system-prompt snapshot from a pi session file (`.jsonl`).
+/// pi stores the assembled prompt as `message.sections`; this is read-only.
+#[tauri::command]
+fn read_system_prompt(session_path: String) -> Result<Vec<SystemPromptSection>, String> {
+	let text = std::fs::read_to_string(&session_path).map_err(|e| format!("读取会话文件失败：{e}"))?;
+	for line in text.lines().rev() {
+		let Ok(value) = serde_json::from_str::<serde_json::Value>(line) else { continue };
+		let Some(message) = value.get("message") else { continue };
+		if message.get("role").and_then(|role| role.as_str()) != Some("system") { continue; }
+		if let Some(sections) = message.get("sections").and_then(|sections| sections.as_object()) {
+			return Ok(sections
+				.iter()
+				.filter_map(|(name, value)| value.as_str().map(|prompt| SystemPromptSection { name: name.clone(), text: prompt.to_string() }))
+				.collect());
+		}
+	}
+	Err("该会话还没有系统提示词快照".to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
 	tauri::Builder::default()
@@ -367,8 +400,9 @@ pub fn run() {
 			rpc_stop,
 			get_pi_auth_status,
 			validate_project_directory,
-			get_workspace_directory
-			, providers::list_openai_providers, providers::discover_openai_models, providers::save_openai_provider, providers::set_model_max_tokens
+			get_workspace_directory,
+			read_system_prompt,
+			providers::list_openai_providers, providers::discover_openai_models, providers::save_openai_provider, providers::set_model_max_tokens
 		])
 		.on_window_event(|window, event| {
 			if matches!(event, tauri::WindowEvent::Destroyed) {
@@ -391,6 +425,24 @@ mod tests {
 		assert!(validate_project_directory("".into()).is_err());
 		let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml");
 		assert!(validate_project_directory(manifest.to_string_lossy().into()).is_err());
+	}
+
+	#[test]
+	fn reads_the_latest_system_prompt_snapshot() {
+		let mut path = std::env::temp_dir();
+		path.push(format!("skiff-system-prompt-{}.jsonl", std::process::id()));
+		let lines = [
+			serde_json::json!({"message": {"role": "user", "content": "hi"}}).to_string(),
+			serde_json::json!({"message": {"role": "system", "sections": {"preamble": "first"}}}).to_string(),
+			serde_json::json!({"message": {"role": "system", "sections": {"preamble": "second", "cwd": "D:/x"}}}).to_string(),
+		];
+		std::fs::write(&path, lines.join("\n")).unwrap();
+		let sections = read_system_prompt(path.to_string_lossy().into()).unwrap();
+		let map: std::collections::HashMap<_, _> = sections.into_iter().map(|s| (s.name, s.text)).collect();
+		assert_eq!(map.get("preamble").map(String::as_str), Some("second"));
+		assert_eq!(map.get("cwd").map(String::as_str), Some("D:/x"));
+		assert!(read_system_prompt(path.with_extension("missing").to_string_lossy().into()).is_err());
+		let _ = std::fs::remove_file(&path);
 	}
 
 	#[test]

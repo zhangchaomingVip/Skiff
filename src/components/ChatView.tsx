@@ -4,7 +4,6 @@ import { turnDraft, userForTurn } from "../chat/turns";
 import { appendTextFiles, type TextAttachment } from "../chat/textAttachments";
 import type { PiSessionActions } from "../chat/usePiSession";
 import { Composer } from "./Composer";
-import { ContextUsage } from "./ContextUsage";
 import { MessageList } from "./MessageList";
 import { ConfirmDialog } from "./ConfirmDialog";
 
@@ -64,7 +63,7 @@ export function ChatView({
 
 	return (
 		<section className="chat">
-			<MessageList messages={state.messages} projectName={projectName} onSuggestion={(text) => { setDraft(text); setFocusSignal((n) => n + 1); }} followSignal={followSignal} disabled={disabled} onContinue={continueTurn} onEdit={edit} onRegenerate={regenerate} onDelete={setDeleting} />
+			<MessageList messages={state.messages} projectName={projectName} running={state.isStreaming} models={state.availableModels} model={state.model} onSuggestion={(text) => { setDraft(text); setFocusSignal((n) => n + 1); }} followSignal={followSignal} disabled={disabled} onContinue={continueTurn} onEdit={edit} onRegenerate={regenerate} onDelete={setDeleting} />
 			{deleting && <ConfirmDialog title="删除本轮及后续消息" description="本轮提问及之后的所有消息将从当前聊天移除，原 pi 会话文件会保留。" onConfirm={() => void remove(deleting)} onClose={() => setDeleting(undefined)} />}
 			{alerts.length > 0 && (
 				<div className="notices">
@@ -102,7 +101,6 @@ export function ChatView({
 				onCancelEdit={cancelEdit}
 				getCommands={actions.getCommands}
 			/>
-			<ContextUsage messages={state.messages} model={state.model} />
 		</section>
 	);
 }

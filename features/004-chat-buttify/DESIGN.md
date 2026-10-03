@@ -173,12 +173,27 @@
 - 每一轮在首个助手消息顶部加入一个折叠按钮（下箭头 + 「耗时X N步」），点击收起**该轮**的推理与工具调用，只保留回复正文，再次点击展开；收起/展开只靠箭头方向区分，文案不变。按钮在该轮存在推理或工具时出现，横向分隔线与正文分开。
 - 每轮耗时优先用实时挂上的 `durationMs`，历史恢复时回退为用户提问与最后一条回复的 `timestamp` 差值。`ChatMessage` 新增 `timestamp`（pi 消息时间；settle 的助手消息为完成时间），reducer 在 `turn_duration` 用 `Date.now()` 覆盖。
 - 会话底部原来的「耗时: X」改为 pi 完成时间的系统时间，格式为「星期XHH:MM」（如 `星期五23:15`），只保留星期几与时钟；`formatCompletedAt` 位于 `src/chat/usage.ts`。
+- 同一轮内相邻的助手消息加 `compact` 类，底部间距从 28px 收到 6px，让思考 / 工具行读起来像一整块；用户提问到首条回复、以及一轮结束到下一条提问仍保留 28px。
+- 复制 / 重新生成 / 删除只在整个会话**最新一条消息**上出现：中间的助手消息（无论是否带文本）都不再渲染操作条，纯推理 / 工具调用更不会留空位；用户提问保留复制 / 编辑 / 删除以便改写提问，每条消息内部的工具输出复制保持不变。整个 `.message-actions` 在既无操作也不需显示用量时完全不渲染。
 - pi 一次运行会连续产生多条助手消息（各自带推理与工具调用），因此按「用户消息到下一条用户消息之间」把连续助手消息归为一轮（`groupTurns`），步数为整轮推理 + 工具调用合计，共享同一个折叠按钮，避免出现多个「1 段」多头。折叠时只留下有正文的消息，纯过程消息不再渲染，不会留下空白间隔。折叠状态按轮保存在 `MessageList` 的局部 state，不写入存储。
 - 图标新增 `file` / `terminal` / `wrench`，并用 `src/components/toolIcons.ts` 集中类别到图标的映射。
 
+### 系统提示词与逐步旁白（后续迭代 5）
+
+Codex 之所以是「文字 + 工具 + 文字 + 工具」，是因为它的模型会在每次动作前输出一段可见 commentary 文本，而思维链走单独的隐藏通道；DeepSeek 这类推理模型把内容全放在 `reasoning_content`，几乎没有可见文本，所以 Skiff 里看到的是「思考 + 工具」。
+
+- Skiff 现在会在启动 pi 时追加一段系统提示词，要求模型调用工具前先说一句简短旁白，从而得到 Codex 式的「文字 + 工具」。实现方式是 pi 的 `--append-system-prompt`：`RpcStartOptions` 新增 `appendSystemPrompt`，Rust 在 `rpc_start` 里把它作为启动参数传给 pi（本地校验过 `pi --mode rpc --append-system-prompt` 可用）。
+- 该提示词可被用户编辑：新增 `src/chat/prompt.ts` 保存默认旁白指令（`DEFAULT_APPEND_PROMPT`）与用户在 `localStorage` 的编辑（`skiff.prompt.append`）；默认值会在顶栏的「系统提示词」弹窗（`PromptDialog`）里预填。保存后调用 `session.reconnect()` 重启会话使其生效。
+- 未保存过时使用默认旁白指令；保存默认文本会清除覆盖，回到内置默认。
+- 弹窗内新增只读的「查看 pi 当前系统提示词」：Rust 新增 `read_system_prompt`，从会话 `.jsonl` 最后一条 `role: "system"` 的 `sections` 读取并按 `preamble / tools / rules / docs / project_context / skills / cwd / addendum` 排序展示，每条可展开。pid 不自带 `get/set system prompt` RPC，所以走会话文件快照。
+
+### 底部用量条的闪动修正
+
+底部「Tokens / 费用 / 完成时间」原来按**单条消息**的 `streaming` 判断：一轮内模型调完工具、当前助手消息结束时它会出现，下一步开始流式时又隐藏，模型快时就会一闪一闪。改为按**整个运行**判断：`usePiSession` 的 `state.isStreaming`（`agent_start` 到 `agent_end`/`agent_settled` 之间保持 true）经 `ChatView → MessageList → MessageItem` 以 `running` 传入，只有 `!running` 时才展示用量条与「继续」按钮，工具执行期间保持隐藏。
+
 ### 验证
 
-- `npm run build`、`npm test`（22 项）、`cargo check --manifest-path src-tauri/Cargo.toml` 与 `cargo test --manifest-path src-tauri/Cargo.toml --lib`（7 项）通过。
+- `npm run build`、`npm test`（25 项）、`cargo check --manifest-path src-tauri/Cargo.toml` 与 `cargo test --manifest-path src-tauri/Cargo.toml --lib`（7 项）通过。
 - `node tests/pi.integration.mjs <pi-cli.js>` 通过：仅本地回环服务与临时配置，验证纯图片提问处分支、命令发现及原会话恢复，同时保留推理 / 图片 / 用量验证。
 - 模拟桥增加连续 text_delta 与 `get_entries` / `fork` / `get_commands`，模型带 `maxTokens` 并处理 `set_model_max_tokens`。`tests/polish.test.ts` 覆盖乱序工具 ID 与 diff、已完成消息对象稳定、文本文件边界与附件还原、语法高亮转义、`stopReason`、`turn_duration`、重复 / 纯图片提问及压缩 / 非当前分支定位，以及新增的工具归类 / 行摘要 / 推理可见性规则；`session.test.ts` 覆盖 `maxTokens` 解析；Rust 单测覆盖 `set_model_max_tokens` 只改目标字段、校验上下文窗口及留空删除覆盖。
 - 浏览器预览检查 1280×900 浅色 / 深色、520×780 窄窗口，确认 Markdown、代码复制反馈 / 换行、工具 diff / 错误、模型键盘搜索、编辑图片回填与重发、图片放大 / Esc、命令 / 路径引用、上下文提示及文本附件独立发送。重新生成保留图片；页面内删除确认支持取消（保留历史）与确认（回到空态），默认聚焦取消。

@@ -205,6 +205,18 @@ details[open] > summary .disclosure { transform: rotate(90deg); }
 .project-dialog p { font-size: var(--font-size-sm); margin: var(--space-2) 0 var(--space-5); }
 .project-dialog label { display: block; font-size: var(--font-size-sm); margin-bottom: var(--space-2); }
 .project-dialog input { width: 100%; border: 1px solid var(--border); border-radius: var(--radius-md); padding: var(--space-2) var(--space-3); color: var(--text); background: var(--panel-2); }
+.prompt-dialog { width: min(560px, calc(100vw - 32px)); }
+.prompt-input { display: block; width: 100%; resize: vertical; min-height: 160px; border: 1px solid var(--border); border-radius: var(--radius-md); padding: var(--space-3); color: var(--text); background: var(--panel-2); font: inherit; font-size: var(--font-size-sm); line-height: 1.7; }
+.prompt-input:focus { outline: none; border-color: var(--accent); }
+.prompt-hint { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-top: var(--space-2); color: var(--muted); font-size: var(--font-size-sm); }
+.prompt-system { margin-top: var(--space-4); padding-top: var(--space-3); border-top: 1px solid var(--border); }
+.prompt-system > summary { display: flex; align-items: center; gap: 6px; cursor: pointer; color: var(--secondary); font-size: var(--font-size-sm); list-style: none; }
+.prompt-system > summary::-webkit-details-marker { display: none; }
+.prompt-section { margin-top: var(--space-2); border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--panel-2); }
+.prompt-section > summary { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: 6px 10px; cursor: pointer; font-size: var(--font-size-sm); color: var(--secondary); }
+.prompt-section-name { font-family: ui-monospace, Consolas, monospace; }
+.prompt-section-size { color: var(--muted); font-variant-numeric: tabular-nums; }
+.prompt-section > pre { margin: 0; padding: 10px; border-top: 1px solid var(--border); max-height: 220px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: var(--space-2); margin-top: var(--space-6); }
 @media (max-width: 1100px) { .raw-panel { position: absolute; right: 0; top: 0; bottom: 0; width: min(380px, 85%); z-index: 3; box-shadow: -10px 0 30px #0001; } .header-project { display: none; } }
 @media (max-width: 760px) {
@@ -325,7 +337,10 @@ details[open] > summary .disclosure { transform: rotate(90deg); }
 .transcript .messages { height: 100%; overflow-anchor: none; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .msg { position: relative; margin-bottom: 28px; }
-.msg-role { font-weight: 500; letter-spacing: .02em; }
+/* Consecutive assistant steps of one turn read as a single block. */
+.msg.compact { margin-bottom: 6px; }
+.msg-role { font-weight: 500; letter-spacing: .02em; display: flex; align-items: center; gap: 5px; }
+.msg-role svg { flex: none; }
 .message-actions { position: absolute; left: 0; right: 0; bottom: -28px; display: flex; align-items: center; gap: 10px; height: 28px; color: var(--muted); }
 .msg.user .message-actions { justify-content: flex-end; }
 .message-buttons { display: flex; align-items: center; gap: 8px; opacity: 0; pointer-events: none; transition: opacity .12s; }
@@ -448,6 +463,8 @@ details[open] > summary .disclosure { transform: rotate(90deg); }
 .chat-row:hover { background: var(--hover); }
 .chat-link { flex: 1; min-width: 0; padding: 8px 4px 8px 28px; margin: 0; flex-direction: column; align-items: flex-start; gap: 1px; }
 .chat-link > span { max-width: 100%; }
+.chat-title { display: flex; align-items: center; gap: 6px; }
+.chat-title svg { flex: none; color: var(--muted); }
 .chat-link time { color: var(--muted); font-size: 12px; }
 .sidebar-row-actions { display: flex; flex-shrink: 0; opacity: 0; }
 .sidebar-row-actions .icon-btn { width: 24px; height: 25px; }

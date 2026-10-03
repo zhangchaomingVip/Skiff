@@ -5,6 +5,8 @@ export interface RpcStartOptions {
 	piPath?: string;
 	cwd?: string;
 	env?: Record<string, string>;
+	/** Appended to pi's system prompt as `--append-system-prompt`. */
+	appendSystemPrompt?: string;
 }
 
 /** A single JSON line emitted by `pi --mode rpc` on stdout. */
@@ -50,6 +52,7 @@ export class PiRpc {
 					piPath: opts.piPath ?? null,
 					cwd: opts.cwd ?? null,
 					env: opts.env ?? null,
+					appendSystemPrompt: opts.appendSystemPrompt ?? null,
 				},
 			});
 		} catch (error) {

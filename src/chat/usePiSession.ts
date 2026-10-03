@@ -4,6 +4,7 @@ import { PiRpc, type RpcEvent } from "../rpc/RpcClient";
 import { parseMessages, parseModels } from "./parse";
 import { reduce } from "./reducer";
 import { forkTurn } from "./turns";
+import { loadAppendPrompt } from "./prompt";
 import { initialSessionState, type ImageAttachment, type ModelInfo, type SessionState } from "./types";
 
 export interface SessionTarget {
@@ -98,7 +99,7 @@ export function usePiSession(target?: SessionTarget) {
 			try {
 				await preceding;
 				if (cancelled) return;
-				await rpc.start({ cwd: selected.cwd });
+				await rpc.start({ cwd: selected.cwd, appendSystemPrompt: loadAppendPrompt() });
 				if (cancelled) return;
 				if (selected.sessionFile) {
 					const result = await rpc.request<{ cancelled?: boolean }>({ type: "switch_session", sessionPath: selected.sessionFile });

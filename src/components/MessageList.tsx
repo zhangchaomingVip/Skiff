@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ChatMessage } from "../chat/types";
+import type { ChatMessage, ModelInfo } from "../chat/types";
 import { groupTurns } from "../chat/turns";
+import { modelDisplay } from "../chat/modelDisplay";
 import { MessageItem, type MessageAction } from "./MessageItem";
 import { Icon } from "./Icon";
 
 /** Scrolling transcript with an auto-follow anchor at the bottom. */
-export function MessageList({ messages, projectName, onSuggestion, followSignal, disabled, onContinue, onEdit, onRegenerate, onDelete }: { messages: ChatMessage[]; projectName?: string; onSuggestion: (text: string) => void; followSignal: number; disabled: boolean; onContinue: () => void; onEdit: MessageAction; onRegenerate: MessageAction; onDelete: MessageAction }) {
+export function MessageList({ messages, projectName, running, models, model, onSuggestion, followSignal, disabled, onContinue, onEdit, onRegenerate, onDelete }: { messages: ChatMessage[]; projectName?: string; running: boolean; models: ModelInfo[]; model?: ModelInfo; onSuggestion: (text: string) => void; followSignal: number; disabled: boolean; onContinue: () => void; onEdit: MessageAction; onRegenerate: MessageAction; onDelete: MessageAction }) {
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const followingRef = useRef(true);
 	const [away, setAway] = useState(false);
@@ -51,7 +52,7 @@ export function MessageList({ messages, projectName, onSuggestion, followSignal,
 		<div className="transcript">
 		<div className="messages" ref={scrollRef} onScroll={() => { const el = scrollRef.current; if (el) { followingRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80; setAway(!followingRef.current); if (followingRef.current) setUnread(false); } }}>
 			{messages.map((message, index) => (
-				<MessageItem key={message.id} message={message} showRole={index === 0 || messages[index - 1].role !== message.role} turnId={turns[index].turnId} turnHead={turns[index].head} turnSteps={turns[index].stepCount} turnDuration={turns[index].durationMs} turnOpen={!collapsedTurns.includes(turns[index].turnId)} onToggleTurn={toggleTurn} disabled={disabled} isLast={index === messages.length - 1} onContinue={onContinue} onEdit={onEdit} onRegenerate={onRegenerate} onDelete={onDelete} />
+				<MessageItem key={message.id} message={message} showRole={index === 0 || messages[index - 1].role !== message.role} roleDisplay={message.role === "user" ? { label: "你" } : modelDisplay(message, models, model)} compact={message.role === "assistant" && messages[index + 1]?.role === "assistant"} running={running} turnId={turns[index].turnId} turnHead={turns[index].head} turnSteps={turns[index].stepCount} turnDuration={turns[index].durationMs} turnOpen={!collapsedTurns.includes(turns[index].turnId)} onToggleTurn={toggleTurn} disabled={disabled} isLast={index === messages.length - 1} onContinue={onContinue} onEdit={onEdit} onRegenerate={onRegenerate} onDelete={onDelete} />
 			))}
 		</div>
 		{away && <button className="back-bottom" aria-label="回到底部" onClick={scrollBottom}><Icon name="down" size={15} />{unread ? "有新内容 · 回到底部" : "回到底部"}</button>}

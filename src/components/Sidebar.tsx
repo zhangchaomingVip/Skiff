@@ -55,7 +55,7 @@ export function Sidebar({ projects, chats, activeId, activeProjectId, disabled, 
 							</div>
 							{(!isCollapsed || !!search) && <div className="project-chats">
 								{history.map((chat) => <div key={chat.id} className={`chat-row ${chat.id === activeId ? "selected" : ""}`}>
-									{editing?.id === chat.id ? renameInput() : <button className="chat-link" disabled={disabled} onClick={() => onSelectChat(chat.id)} title={chat.title} aria-current={chat.id === activeId ? "page" : undefined}><span>{chat.title}</span><time dateTime={new Date(chat.updatedAt).toISOString()}>{new Date(chat.updatedAt).toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" })}</time></button>}
+									{editing?.id === chat.id ? renameInput() : <button className="chat-link" disabled={disabled} onClick={() => onSelectChat(chat.id)} title={chat.title} aria-current={chat.id === activeId ? "page" : undefined}><span className="chat-title"><Icon name="message" size={13} />{chat.title}</span><time dateTime={new Date(chat.updatedAt).toISOString()}>{new Date(chat.updatedAt).toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" })}</time></button>}
 									<div className="sidebar-row-actions"><button className="icon-btn" disabled={disabled} aria-label={`重命名聊天 ${chat.title}`} title="重命名聊天（Enter 或失焦保存）" onClick={() => startEdit({ id: chat.id, kind: "chat", text: chat.title })}><Icon name="edit" size={13} /></button><button className="icon-btn" disabled={disabled} aria-label={`删除聊天 ${chat.title}`} title="从侧栏删除聊天" onClick={() => setDeleting({ id: chat.id, kind: "chat", name: chat.title })}><Icon name="trash" size={13} /></button></div>
 								</div>)}
 								{!history.length && <span className="no-chats">还没有聊天</span>}

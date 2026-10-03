@@ -7,6 +7,7 @@ import { forkEntry, forkTurn, groupTurns, turnDraft, userForTurn } from "../src/
 import { readTextFiles, appendTextFiles, splitAttachments } from "../src/chat/textAttachments.ts";
 import { highlightCode } from "../src/chat/highlight.ts";
 import { formatCompletedAt, formatDuration } from "../src/chat/usage.ts";
+import { DEFAULT_APPEND_PROMPT, loadAppendPrompt, saveAppendPrompt } from "../src/chat/prompt.ts";
 import { isNotableThinking, shouldShowThinking } from "../src/chat/thinking.ts";
 import { toolKind, toolKindLabel, toolRunSummary, toolTarget, type ToolRunItem } from "../src/chat/toolRuns.ts";
 import { PiRpc } from "../src/rpc/RpcClient.ts";
@@ -109,6 +110,22 @@ test("consecutive assistant messages between user prompts fold as one turn", () 
 	assert.deepEqual(infos.map((info) => info.head), [false, true, false, false, true]);
 	assert.equal(infos[1].turnId, infos[2].turnId);
 	assert.notEqual(infos[2].turnId, infos[4].turnId);
+});
+
+test("the editable append prompt defaults to the narration hint and round-trips through storage", () => {
+	const store = new Map<string, string>();
+	const previous = (globalThis as { localStorage?: unknown }).localStorage;
+	(globalThis as { localStorage?: unknown }).localStorage = { getItem: (key: string) => store.get(key) ?? null, setItem: (key: string, value: string) => void store.set(key, value), removeItem: (key: string) => void store.delete(key) };
+	try {
+		assert.equal(loadAppendPrompt(), DEFAULT_APPEND_PROMPT);
+		saveAppendPrompt("自定义旁白指令");
+		assert.equal(loadAppendPrompt(), "自定义旁白指令");
+		saveAppendPrompt(DEFAULT_APPEND_PROMPT);
+		assert.equal(loadAppendPrompt(), DEFAULT_APPEND_PROMPT);
+		assert.equal(store.size, 0);
+	} finally {
+		(globalThis as { localStorage?: unknown }).localStorage = previous;
+	}
 });
 
 test("turn header shows duration + steps and the footer shows the completion clock", () => {

@@ -3,6 +3,7 @@ import type { ChatMessage, ContentBlock } from "../chat/types";
 import { splitAttachments } from "../chat/textAttachments";
 import { formatDuration } from "../chat/usage";
 import { shouldShowThinking } from "../chat/thinking";
+import type { ModelDisplay } from "../chat/modelDisplay";
 import type { ToolRunItem } from "../chat/toolRuns";
 import { Markdown } from "./Markdown";
 import { ToolCallBlock } from "./ToolCallBlock";
@@ -12,13 +13,14 @@ import { CopyButton } from "./CopyButton";
 import { TurnUsage } from "./TurnUsage";
 import { Icon } from "./Icon";
 import { ImagePreview } from "./ImagePreview";
+import { BrandIcon } from "./BrandIcon";
 
 export type MessageAction = (message: ChatMessage) => void;
 type Tool = Extract<ContentBlock, { kind: "tool" }>;
 type Result = Extract<ContentBlock, { kind: "toolResult" }>;
 
-export const MessageItem = memo(function MessageItem({ message, showRole, turnId, turnHead, turnSteps, turnDuration, turnOpen, onToggleTurn, disabled, isLast, onContinue, onEdit, onRegenerate, onDelete }: {
-	message: ChatMessage; showRole: boolean; turnId: string; turnHead: boolean; turnSteps: number; turnDuration?: number; turnOpen: boolean; onToggleTurn: (turnId: string) => void; disabled: boolean; isLast: boolean; onContinue: () => void; onEdit: MessageAction; onRegenerate: MessageAction; onDelete: MessageAction;
+export const MessageItem = memo(function MessageItem({ message, showRole, roleDisplay, compact, running, turnId, turnHead, turnSteps, turnDuration, turnOpen, onToggleTurn, disabled, isLast, onContinue, onEdit, onRegenerate, onDelete }: {
+	message: ChatMessage; showRole: boolean; roleDisplay: ModelDisplay; compact: boolean; running: boolean; turnId: string; turnHead: boolean; turnSteps: number; turnDuration?: number; turnOpen: boolean; onToggleTurn: (turnId: string) => void; disabled: boolean; isLast: boolean; onContinue: () => void; onEdit: MessageAction; onRegenerate: MessageAction; onDelete: MessageAction;
 }) {
 	const isUser = message.role === "user";
 	const text = message.blocks.filter((b) => b.kind === "text").map((b) => b.text).join("\n\n");
@@ -58,11 +60,13 @@ export const MessageItem = memo(function MessageItem({ message, showRole, turnId
 		}
 		else nodes.push(<details key={entry.key} className={`tool-result ${block.isError ? "err" : ""}`}><summary>{block.name} · 执行结果</summary><pre>{block.text}</pre></details>);
 	}
+	// Copy / regenerate / delete only sit on the newest message; earlier assistant steps stay clean.
+	const showActions = isUser || isLast;
 	const showHeader = !isUser && turnHead && turnSteps > 0;
 	// Intermediate process-only messages vanish when the turn is collapsed.
 	if (!nodes.length && !showHeader && !message.streaming) return null;
-	return <article className={`msg ${isUser ? "user" : "assistant"}`} aria-label={isUser ? "你的消息" : "Skiff 的消息"}>
-		{showRole && <div className="msg-role">{isUser ? "你" : "Skiff"}</div>}
+	return <article className={`msg ${isUser ? "user" : "assistant"}${compact ? " compact" : ""}`} aria-label={isUser ? "你的消息" : "Skiff 的消息"}>
+		{showRole && <div className="msg-role">{roleDisplay.brand && <BrandIcon name={roleDisplay.brand} size={14} />}{roleDisplay.label}</div>}
 		<div className="msg-body">
 			{showHeader && <div className="turn-header">
 				<button className="thinking-toggle" onClick={() => onToggleTurn(turnId)} aria-expanded={turnOpen} aria-label={turnOpen ? "收起本轮执行过程" : "展开本轮执行过程"} title={turnOpen ? "收起本轮执行过程" : "展开本轮执行过程"}>
@@ -72,14 +76,14 @@ export const MessageItem = memo(function MessageItem({ message, showRole, turnId
 			</div>}
 			{!nodes.length && message.streaming ? <span className="typing">正在思考…</span> : nodes}
 		</div>
-		<div className="message-actions">
-			{!isUser && isLast && !message.streaming && message.usage && <TurnUsage message={message} />}
-			{!isUser && isLast && !message.streaming && <button className={`continue-btn ${message.stopReason === "length" ? "truncated" : ""}`} disabled={disabled} onClick={onContinue} aria-label="继续生成" title="发送「继续」，让模型接着写下去">{message.stopReason === "length" ? "输出被截断 · 继续" : "继续"}</button>}
-			<div className="message-buttons">
+		{(showActions || (!isUser && isLast && !running)) && <div className="message-actions">
+			{!isUser && isLast && !running && message.usage && <TurnUsage message={message} />}
+			{!isUser && isLast && !running && <button className={`continue-btn ${message.stopReason === "length" ? "truncated" : ""}`} disabled={disabled} onClick={onContinue} aria-label="继续生成" title="发送「继续」，让模型接着写下去">{message.stopReason === "length" ? "输出被截断 · 继续" : "继续"}</button>}
+			{showActions && <div className="message-buttons">
 				<CopyButton text={text} label="复制消息" />
 				{isUser ? <button disabled={disabled} onClick={() => onEdit(message)} aria-label="编辑并重发" title="编辑并重发"><Icon name="edit" size={14} /></button> : <button disabled={disabled} onClick={() => onRegenerate(message)} aria-label="重新生成" title="从上一条提问重新生成"><Icon name="refresh" size={14} /></button>}
 				<button disabled={disabled} onClick={() => onDelete(message)} aria-label="删除本轮及后续消息" title="删除本轮及后续消息（保留原会话文件）"><Icon name="trash" size={14} /></button>
-			</div>
-		</div>
+			</div>}
+		</div>}
 	</article>;
 });
