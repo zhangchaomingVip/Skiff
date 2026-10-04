@@ -5,6 +5,7 @@ export interface ModelInfo {
 	provider: string;
 	id: string;
 	name?: string;
+	providerName?: string;
 	contextWindow?: number;
 	maxTokens?: number;
 	reasoning?: boolean;

@@ -16,6 +16,7 @@ export interface Conversation {
 	updatedAt: number;
 	hasMessages: boolean;
 	elapsedMs?: number;
+	selectedModel?: { provider: string; id: string };
 }
 
 interface Workspace {
@@ -37,6 +38,9 @@ function readWorkspace(): Workspace | null {
 		if (!value.projects.length || !value.projects.every((p) => p && typeof p.id === "string" && typeof p.name === "string" && typeof p.path === "string")) return null;
 		if (!value.chats.every((c) => c && typeof c.id === "string" && typeof c.title === "string" && typeof c.updatedAt === "number" && typeof c.hasMessages === "boolean" && (c.sessionFile === undefined || typeof c.sessionFile === "string") && value.projects.some((p) => p.id === c.projectId))) return null;
 		if (!value.chats.some((c) => c.id === value.activeId)) return null;
+		for (const chat of value.chats) {
+			if (chat.selectedModel && (typeof chat.selectedModel.provider !== "string" || typeof chat.selectedModel.id !== "string")) delete chat.selectedModel;
+		}
 		return value;
 	} catch {
 		return null;

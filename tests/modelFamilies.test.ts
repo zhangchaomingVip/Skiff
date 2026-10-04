@@ -1,14 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { channelId, modelsFromOffers, reconcile, needsFallback, nextProvider, isProviderFailure, type RuntimeOffer } from "../src/chat/modelFamilies.ts";
-import { maskBaseUrl, maskKey, blankProvider, FAMILY_LABELS } from "../src/chat/useModelFamilies.ts";
+import { channelId, modelsFromOffers, reconcile, needsFallback, nextProvider, isProviderFailure, resolveSelection, type RuntimeOffer } from "../src/chat/modelFamilies.ts";
+import { maskBaseUrl, maskKey, blankProvider, blankModel, validateModels, FAMILY_LABELS } from "../src/chat/useModelFamilies.ts";
 import { familyFromProvider, modelBrand } from "../src/chat/modelDisplay.ts";
 
 const offer = (familyId: string, providerId: string, overrides: Partial<RuntimeOffer> = {}): RuntimeOffer => ({
 	familyId, familyName: FAMILY_LABELS[familyId], providerId,
 	displayName: providerId === "low" ? "硅基低价" : "官方直连",
 	providerKey: `skiff-${familyId}-${providerId}`, modelId: "deepseek-chat",
-	inputCost: 0.3, outputCost: 1.2, currency: "CNY", maxTokens: null, ...overrides,
+	inputCost: 0.3, outputCost: 1.2, currency: "CNY", maxTokens: 8192, contextWindow: 64000, ...overrides,
 });
 
 test("provider keys resolve back to their channel and family", () => {
@@ -24,7 +24,7 @@ test("provider keys resolve back to their channel and family", () => {
 
 test("offers become picker entries labelled with the user's channel name", () => {
 	const models = modelsFromOffers([offer("deepseek", "low"), offer("deepseek", "official")]);
-	assert.deepEqual(models.map((model) => [model.provider, model.id, model.name]), [
+	assert.deepEqual(models.map((model) => [model.provider, model.id, model.providerName]), [
 		["skiff-deepseek-low", "deepseek-chat", "硅基低价"],
 		["skiff-deepseek-official", "deepseek-chat", "官方直连"],
 	]);
@@ -34,7 +34,7 @@ test("offers become picker entries labelled with the user's channel name", () =>
 test("the live model keeps pi's capabilities but gains the channel name and price", () => {
 	const current = { provider: "skiff-deepseek-low", id: "deepseek-chat", name: "deepseek-chat", contextWindow: 64000, reasoning: true };
 	const models = reconcile(current, [offer("deepseek", "low"), offer("deepseek", "official")]);
-	assert.equal(models[0].name, "硅基低价");
+	assert.equal(models[0].providerName, "硅基低价");
 	assert.equal(models[0].contextWindow, 64000);
 	assert.equal(models[0].reasoning, true);
 	assert.equal(models[0].cost?.input, 0.3);
@@ -83,4 +83,40 @@ test("picker order stays stable when a later channel is selected or disabled", (
 	assert.deepEqual(models.map((model) => model.provider), ["skiff-deepseek-a", "skiff-deepseek-b"]);
 	assert.equal(models[1].contextWindow, 64000);
 	assert.equal(reconcile(current, [offer("deepseek", "a")]).length, 1);
+});
+
+test("three models share a channel while keeping their own limits, prices and selection", () => {
+	const offers = [offer("deepseek", "relay", { modelId: "deepseek-flash", inputCost: 1, contextWindow: 32000 }), offer("deepseek", "relay"), offer("deepseek", "relay", { modelId: "deepseek-reasoner", inputCost: 4, maxTokens: 16384, contextWindow: 256000 })];
+	const current = { provider: offers[2].providerKey, id: offers[2].modelId, contextWindow: 42 };
+	assert.equal(resolveSelection(current, offers, "deepseek").offer, offers[2]);
+	assert.equal(resolveSelection(current, offers, "deepseek").invalidated, false);
+	const models = reconcile(current, offers);
+	assert.deepEqual(models.map((model) => model.id), offers.map((offer) => offer.modelId));
+	assert.equal(models[2].contextWindow, 256000);
+	assert.equal(models[2].maxTokens, 16384);
+	assert.equal(models[2].cost?.input, 4);
+	assert.equal(nextProvider(models[0], offers)?.id, "deepseek-chat");
+	assert.equal(nextProvider(models[2], offers)?.id, "deepseek-flash");
+});
+
+test("deleted models/channels fall back to the first available model in the same family", () => {
+	const current = { provider: "skiff-deepseek-deleted", id: "deepseek-reasoner" };
+	const offers = [offer("kimi", "first", { modelId: "kimi-k2" }), offer("deepseek", "relay", { modelId: "deepseek-flash" }), offer("deepseek", "relay")];
+	const fallback = resolveSelection(current, offers, "deepseek");
+	assert.equal(fallback.offer, offers[1]); assert.equal(fallback.invalidated, true);
+	assert.equal(resolveSelection(current, [], "deepseek").offer, undefined);
+	assert.equal(resolveSelection({ provider: offers[2].providerKey, id: offers[2].modelId }, offers.slice(0, 2), "deepseek").offer, offers[1]);
+});
+
+test("model rows validate IDs and integer limits independently", () => {
+	const first = { ...blankModel(), modelId: "deepseek-chat" };
+	assert.equal(validateModels([first]), undefined);
+	for (const rows of [[], [blankModel()], [first, { ...first, modelId: " deepseek-chat " }], [{ ...first, contextWindow: 0 }], [{ ...first, maxTokens: 1.5 }], [{ ...first, maxTokens: 128001 }]]) assert.ok(validateModels(rows));
+});
+
+test("initial selection honors the default channel, while invalid selections fall back by order", () => {
+	const offers = [offer("deepseek", "first"), offer("deepseek", "default")];
+	const defaults = [{ id: "deepseek", defaultProviderId: "default" }];
+	assert.equal(resolveSelection(undefined, offers, "deepseek", defaults).offer, offers[1]);
+	assert.equal(resolveSelection({ provider: "skiff-deepseek-gone", id: "removed" }, offers, "deepseek", defaults).offer, offers[0]);
 });

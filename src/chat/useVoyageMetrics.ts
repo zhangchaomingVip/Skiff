@@ -67,7 +67,6 @@ export function useVoyageMetrics(messages: ChatMessage[], model: ModelInfo | und
 		const last = assistants[assistants.length - 1];
 		const limit = model?.contextWindow;
 		if (!last?.usage || !limit || limit <= 0) return undefined;
-		if ((last.model && last.model !== model?.id) || (last.provider && last.provider !== model?.provider)) return undefined;
 		const context = summarizeUsage([last]).total;
 		const first = assistants[0];
 		const firstUser = messages.find((message) => message.role === "user");

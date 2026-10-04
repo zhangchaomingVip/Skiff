@@ -47,5 +47,5 @@ export function formatCosts(summary?: CostSummary): string {
 
 export function costTooltip(summary?: CostSummary): string {
 	if (summary?.unconfigured) return "未配置单价";
-	return summary && Object.keys(summary.totals).length ? "按提供商单价本地计算；不同币种分别累计，不做汇率换算" : "暂无费用数据";
+	return summary && Object.keys(summary.totals).length ? "按模型单价本地计算；不同币种分别累计，不做汇率换算" : "暂无费用数据";
 }

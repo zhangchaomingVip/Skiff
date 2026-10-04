@@ -6,17 +6,39 @@ import type { Currency } from "./types";
 const FAMILY_IDS = ["deepseek", "kimi", "glm"] as const;
 export type FamilyId = (typeof FAMILY_IDS)[number];
 
-/** A provider channel: one endpoint, key, model and price inside a family. */
+export interface ModelSpec {
+	modelId: string;
+	inputCost: number;
+	outputCost: number;
+	currency: Currency;
+	maxTokens: number;
+	contextWindow: number;
+}
+
+export const blankModel = (): ModelSpec => ({ modelId: "", inputCost: 0, outputCost: 0, currency: "CNY", maxTokens: 8192, contextWindow: 128000 });
+
+export function validateModels(models: ModelSpec[]): string | undefined {
+	if (!models.length) return "请至少添加一个模型，补全提供商配置";
+	const ids = new Set<string>();
+	for (const model of models) {
+		const id = model.modelId.trim();
+		if (!id) return "模型 ID 不能为空";
+		if (ids.has(id)) return "同提供商内模型 ID 不能重复";
+		ids.add(id);
+		if (!Number.isSafeInteger(model.contextWindow) || model.contextWindow <= 0 || !Number.isSafeInteger(model.maxTokens) || model.maxTokens <= 0) return "上下文窗口和默认最大输出必须为正整数";
+		if (model.maxTokens > model.contextWindow) return "默认最大输出不能超过上下文窗口";
+		if (![model.inputCost, model.outputCost].every((cost) => Number.isFinite(cost) && cost >= 0)) return "模型单价必须为非负数";
+	}
+	return undefined;
+}
+
+/** A provider channel shares its endpoint, key and capabilities across models. */
 export interface ProviderSpec {
 	id: string;
 	displayName: string;
 	baseUrl: string;
 	apiKey: string;
-	modelId: string;
-	inputCost: number;
-	outputCost: number;
-	currency: Currency;
-	maxTokens: number | null;
+	models: ModelSpec[];
 	legacyProvider?: string | null;
 	streaming: boolean;
 	tools: boolean;
@@ -50,8 +72,7 @@ export const FAMILY_LABELS: Record<string, string> = { deepseek: "DeepSeek", kim
 
 export function blankProvider(): ProviderSpec {
 	return {
-		id: "", displayName: "", baseUrl: "", apiKey: "", modelId: "",
-		inputCost: 0, outputCost: 0, currency: "CNY", maxTokens: null, streaming: true, tools: true, vision: false, reasoning: false,
+		id: "", displayName: "", baseUrl: "", apiKey: "", models: [blankModel()], streaming: true, tools: true, vision: false, reasoning: false,
 		timeoutSeconds: 60, enabled: true,
 	};
 }

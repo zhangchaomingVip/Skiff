@@ -1,6 +1,6 @@
 import type { Currency, ModelInfo } from "./types";
 
-/** One selectable (family, channel) pair as returned by the Rust layer. */
+/** One selectable (family, channel, model) entry as returned by the Rust layer. */
 export interface RuntimeOffer {
 	familyId: string;
 	familyName: string;
@@ -12,7 +12,8 @@ export interface RuntimeOffer {
 	inputCost: number;
 	outputCost: number;
 	currency: Currency;
-	maxTokens: number | null;
+	maxTokens: number;
+	contextWindow: number;
 	legacyProvider?: string | null;
 }
 
@@ -35,18 +36,20 @@ export function modelsFromOffers(offers: RuntimeOffer[]): ModelInfo[] {
 	return offers.map((offer) => ({
 		provider: offer.providerKey,
 		id: offer.modelId,
-		// The UI combines this channel name with its family label.
-		name: offer.displayName,
+		// Keep the model label separate from the provider grouping label.
+		name: offer.modelId,
+		providerName: offer.displayName,
 		cost: { input: offer.inputCost, output: offer.outputCost },
 		currency: offer.currency,
-		maxTokens: offer.maxTokens ?? 8192,
+		maxTokens: offer.maxTokens,
+		contextWindow: offer.contextWindow,
 	}));
 }
 
 /**
  * Reconciles the live model reported by pi with the family list. The live entry
- * carries capabilities pi resolved from models.json (context window, vision,
- * reasoning); matching it by provider key keeps the picture honest.
+ * carries capabilities pi resolved from models.json (vision and reasoning). Prices and
+ * limits come from the configured model, matched by provider key and model ID.
  */
 export function reconcile(current: ModelInfo | undefined, offers: RuntimeOffer[], available: ModelInfo[] = []): ModelInfo[] {
 	if (!offers.length) return available.length ? available : current ? [current] : [];
@@ -56,11 +59,25 @@ export function reconcile(current: ModelInfo | undefined, offers: RuntimeOffer[]
 	});
 }
 
+/** Resolve by both channel and model, then fall back in configured order. */
+export function resolveSelection(current: ModelInfo | undefined, offers: RuntimeOffer[], familyId?: string, defaults: { id: string; defaultProviderId: string | null }[] = []): { offer?: RuntimeOffer; invalidated: boolean } {
+	const exact = offers.find((offer) => offer.providerKey === current?.provider && offer.modelId === current?.id);
+	const legacy = offers.find((offer) => offer.legacyProvider === current?.provider && offer.modelId === current?.id);
+	if (exact || legacy) return { offer: exact ?? legacy, invalidated: false };
+	const invalidated = !!current?.provider.startsWith("skiff-");
+	const sameFamily = offers.find((offer) => offer.familyId === familyId);
+	if (invalidated) return { offer: sameFamily ?? offers[0], invalidated: true };
+	const isDefault = (offer: RuntimeOffer) => defaults.some((family) => family.id === offer.familyId && family.defaultProviderId === offer.providerId);
+	return { offer: offers.find((offer) => offer.familyId === familyId && isDefault(offer))
+		?? sameFamily ?? offers.find((offer) => offer.modelId === current?.id)
+		?? offers.find(isDefault) ?? offers[0], invalidated: false };
+}
+
 export function nextProvider(current: ModelInfo, offers: RuntimeOffer[]): ModelInfo | undefined {
 	const family = offers.find((offer) => offer.providerKey === current.provider)?.familyId;
 	if (!family) return undefined;
 	const siblings = offers.filter((offer) => offer.familyId === family);
-	const index = siblings.findIndex((offer) => offer.providerKey === current.provider);
+	const index = siblings.findIndex((offer) => offer.providerKey === current.provider && offer.modelId === current.id);
 	return siblings.length > 1 ? modelsFromOffers([siblings[(index + 1) % siblings.length]])[0] : undefined;
 }
 

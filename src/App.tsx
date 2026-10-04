@@ -4,7 +4,7 @@ import { useWorkspace } from "./chat/workspace";
 import { useModelFamilies } from "./chat/useModelFamilies";
 import { ModelFamilyContext } from "./chat/familyContext";
 import { familyFromProvider, modelBrand } from "./chat/modelDisplay";
-import { isProviderFailure, nextProvider, reconcile } from "./chat/modelFamilies";
+import { isProviderFailure, nextProvider, reconcile, resolveSelection } from "./chat/modelFamilies";
 import type { ModelInfo } from "./chat/types";
 import { VoyageWorkspace } from "./components/VoyageWorkspace";
 import { RawDrawer } from "./components/RawDrawer";
@@ -21,9 +21,15 @@ import { useWebSearch } from "./chat/webSearch";
 export default function App() {
 	const library = useWorkspace();
 	const { activeChat, activeProject } = library;
-	const session = usePiSession(activeChat && activeProject ? { id: activeChat.id, cwd: activeProject.path, sessionFile: activeChat.hasMessages ? activeChat.sessionFile : undefined, elapsedMs: activeChat.elapsedMs } : undefined);
+	const session = usePiSession(activeChat && activeProject ? { id: activeChat.id, cwd: activeProject.path, sessionFile: activeChat.hasMessages ? activeChat.sessionFile : undefined, elapsedMs: activeChat.elapsedMs, model: activeChat.selectedModel } : undefined);
 	const { state, connected, rawLines, actions } = session;
 	const modelFamilies = useModelFamilies();
+	const [modelNotice, setModelNotice] = useState<string>();
+	useEffect(() => {
+		if (!modelNotice) return;
+		const timer = window.setTimeout(() => setModelNotice(undefined), 8000);
+		return () => window.clearTimeout(timer);
+	}, [modelNotice]);
 	const [rawOpen, setRawOpen] = useState(false);
 	const [sidebarOpen, setSidebarOpen] = useState(() => { try { return localStorage.getItem("skiff.sidebar.open") !== "false"; } catch { return true; } });
 	useEffect(() => { try { localStorage.setItem("skiff.sidebar.open", String(sidebarOpen)); } catch { /* Layout can still be used without storage. */ } }, [sidebarOpen]);
@@ -44,36 +50,35 @@ export default function App() {
 			hasMessages: !!firstUser,
 			...(!activeChat.customTitle ? { title: title ? title.slice(0, 48) : "新聊天" } : {}),
 			elapsedMs: session.elapsedMs,
+			...(state.model && (activeChat.selectedModel?.provider !== state.model.provider || activeChat.selectedModel?.id !== state.model.id) ? { selectedModel: { provider: state.model.provider, id: state.model.id } } : {}),
 		});
-	}, [activeChat?.id, session.loadedId, session.sessionFile, state.messages, session.elapsedMs]);
+	}, [activeChat?.id, session.loadedId, session.sessionFile, state.messages, state.model, session.elapsedMs]);
 
 	// pi reads channel configuration at startup. Refresh idle sessions after
 	// migration or edits, preserving the current transcript and selected channel.
-	const appliedConfig = useRef(modelFamilies.config);
+	const appliedConfig = useRef<{ config: typeof modelFamilies.config; chatId?: string }>();
 	useEffect(() => {
-		if (!connected || busy || modelFamilies.loading || !modelFamilies.config || appliedConfig.current === modelFamilies.config) return;
-		appliedConfig.current = modelFamilies.config;
+		if (!connected || busy || modelFamilies.loading || !modelFamilies.config || (appliedConfig.current?.config === modelFamilies.config && appliedConfig.current?.chatId === activeChat?.id)) return;
+		appliedConfig.current = { config: modelFamilies.config, chatId: activeChat?.id };
 		const offers = modelFamilies.offers;
 		const currentFamily = familyFromProvider(state.model?.provider)?.id ?? modelBrand(state.model?.id, state.model?.provider);
-		const selected = offers.find((offer) => offer.providerKey === state.model?.provider)
-			?? offers.find((offer) => offer.legacyProvider === state.model?.provider && offer.modelId === state.model?.id)
-			?? offers.find((offer) => offer.familyId === currentFamily && modelFamilies.families.some((family) => family.id === currentFamily && family.defaultProviderId === offer.providerId))
-			?? offers.find((offer) => offer.modelId === state.model?.id)
-			?? offers.find((offer) => modelFamilies.families.some((family) => family.defaultProviderId === offer.providerId && family.id === offer.familyId));
+		const resolved = resolveSelection(state.model, offers, currentFamily, modelFamilies.families);
+		const selected = resolved.offer;
+		if (resolved.invalidated) setModelNotice(selected ? `当前模型已失效，已切换到 ${selected.familyName} · ${selected.displayName} · ${selected.modelId}` : "当前模型已失效，请补全并启用提供商的模型配置");
 		session.reconnect(selected ? { provider: selected.providerKey, id: selected.modelId } : state.model && !familyFromProvider(state.model.provider) ? state.model : undefined);
-	}, [connected, busy, modelFamilies.loading, modelFamilies.config, modelFamilies.offers, modelFamilies.families, state.model, session.reconnect]);
+	}, [activeChat?.id, connected, busy, modelFamilies.loading, modelFamilies.config, modelFamilies.offers, modelFamilies.families, state.model, session.reconnect]);
 
 	const displayModels = useMemo(() => modelFamilies.fallback ? state.availableModels : modelFamilies.offers.length ? reconcile(state.model, modelFamilies.offers, state.availableModels) : [], [state.model, state.availableModels, modelFamilies.offers, modelFamilies.fallback]);
-	const displayModel = displayModels.find((model) => model.provider === state.model?.provider && model.id === state.model?.id) ?? state.model;
+	const displayModel = displayModels.find((model) => model.provider === state.model?.provider && model.id === state.model?.id) ?? (modelFamilies.fallback ? state.model : undefined);
 	const pricingModels = useMemo(() => {
 		if (modelFamilies.fallback) return state.availableModels;
-		return modelFamilies.families.flatMap((family) => family.providers.flatMap((provider) => {
+		return modelFamilies.families.flatMap((family) => family.providers.flatMap((provider) => provider.models.flatMap((item) => {
 			const model: ModelInfo = {
-				provider: `skiff-${family.id}-${provider.id}`, id: provider.modelId, name: provider.displayName,
-				cost: { input: provider.inputCost, output: provider.outputCost }, currency: provider.currency,
+				provider: `skiff-${family.id}-${provider.id}`, id: item.modelId, name: item.modelId, providerName: provider.displayName,
+				cost: { input: item.inputCost, output: item.outputCost }, currency: item.currency,
 			};
 			return provider.legacyProvider ? [model, { ...model, provider: provider.legacyProvider }] : [model];
-		}));
+		})));
 	}, [modelFamilies.config, modelFamilies.fallback, state.availableModels]);
 	const selectModel = useCallback((model: ModelInfo) => void actions.setModel(model), [actions]);
 	const displayState = { ...state, model: displayModel, availableModels: displayModels };
@@ -92,6 +97,7 @@ export default function App() {
 
 	const send = async (text: string, images?: ImageAttachment[]) => {
 		if (!activeChat) return false;
+		if (!modelFamilies.fallback && !displayModel) { setModelNotice("请补全并启用提供商的模型配置后再发送消息"); return false; }
 		const accepted = await actions.prompt(text, images);
 		if (accepted) library.updateChat(activeChat.id, { updatedAt: Date.now() });
 		return accepted;
@@ -101,6 +107,8 @@ export default function App() {
 	// only needs to close, because changing the configuration must never restart
 	// a running conversation.
 	const familyContext = useMemo(() => ({
+		configurationHint: modelFamilies.families.some((family) => family.providers.some((provider) => !provider.models.length))
+			? `请补全以下提供商的模型配置：${modelFamilies.families.flatMap((family) => family.providers.filter((provider) => !provider.models.length).map((provider) => `${family.displayName} · ${provider.displayName}`)).join("、")}` : undefined,
 		models: displayModels,
 		pricingModels,
 		current: displayModel,
@@ -120,7 +128,7 @@ export default function App() {
 		if (!state.lastError || !state.model || !isProviderFailure(state.lastError)) return undefined;
 		const next = nextProvider(state.model, modelFamilies.offers);
 		if (!next) return undefined;
-		return { label: next.name ?? next.id, switch: () => void actions.setModel(next) };
+		return { label: `${next.providerName ?? next.provider} · ${next.id}`, switch: () => void actions.setModel(next) };
 	}, [state.lastError, state.model, modelFamilies.offers, actions]);
 	const autoSwitchRef = useRef("");
 	useEffect(() => {
@@ -140,13 +148,13 @@ export default function App() {
 					{!sidebarOpen && <button className="icon-btn" onClick={() => setSidebarOpen(true)} title="展开侧栏" aria-label="展开侧栏"><Icon name="panel" /></button>}
 					<div className="header-title">
 						<div className="header-title-row"><span>{activeChat?.title ?? "新聊天"}</span>{activeProject && <span className="header-project" title={activeProject.path}><Icon name="folder" size={14} />{activeProject.name}</span>}</div>
-						{displayModel && <span className="header-model" title={`${familyContext.familyOf(displayModel)?.name ?? displayModel.provider} · ${displayModel.name ?? displayModel.id}`}><span>{familyContext.familyOf(displayModel)?.name ?? displayModel.provider}</span><span className="header-model-sep">·</span><span>{displayModel.name ?? displayModel.id}</span></span>}
+						{displayModel && <span className="header-model" title={`${familyContext.familyOf(displayModel)?.name ?? displayModel.provider} · ${displayModel.providerName ?? displayModel.provider} · ${displayModel.id}`}><span>{familyContext.familyOf(displayModel)?.name ?? displayModel.provider}</span><span className="header-model-sep">·</span><span>{displayModel.id}</span></span>}
 					</div>
 					<div className="header-actions">{busy && <span className="working"><span className="dot busy" />正在处理</span>}<ThemeToggle /><button className="icon-btn" onClick={() => setPromptDialogOpen(true)} disabled={busy} title="系统提示词" aria-label="系统提示词"><Icon name="message" /></button><button className="icon-btn" onClick={() => setProviderDialogOpen(true)} disabled={busy} title="配置提供商" aria-label="配置提供商"><Icon name="settings" /></button><button className={`icon-btn ${rawOpen ? "active" : ""}`} onClick={() => setRawOpen((open) => !open)} title="诊断日志" aria-label="诊断日志" aria-pressed={rawOpen}><Icon name="code" /></button></div>
 				</header>
 				{library.error && <div className="workspace-alert" role="alert"><span>{library.error}</span><button className="btn ghost" onClick={library.workspace ? library.clearError : () => void library.initialize()} disabled={library.loading}>{library.workspace ? "关闭" : "重试"}</button></div>}
 				<div className="body">
-					<VoyageWorkspace key={activeChat?.id ?? "loading"} state={displayState} connected={connected} pending={session.pending} actions={actions} onSend={send} onReconnect={session.reconnect} projectName={activeProject?.name} search={search} onConfigureSearch={() => setSearchDialogOpen(true)} failover={failover} />
+					<VoyageWorkspace modelNotice={modelNotice} key={activeChat?.id ?? "loading"} state={displayState} connected={connected} pending={session.pending} actions={actions} onSend={send} onReconnect={session.reconnect} projectName={activeProject?.name} search={search} onConfigureSearch={() => setSearchDialogOpen(true)} failover={failover} />
 					{rawOpen && <div className="raw-panel"><button className="icon-btn raw-close" onClick={() => setRawOpen(false)} aria-label="关闭诊断日志"><Icon name="close" /></button><RawDrawer lines={rawLines} /></div>}
 				</div>
 			</main>

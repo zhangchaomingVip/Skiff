@@ -9,14 +9,14 @@ import { Icon } from "./Icon";
 const BRANDABLE = ["deepseek", "kimi", "glm"] as const;
 const brand = (familyId?: string): BrandName | undefined => BRANDABLE.find((name) => name === familyId);
 
-/** Model pill (family · channel) and provider management. */
+/** Model pill (family · model) and provider management. */
 export function ModelMenu({ models, model, disabled, onModel }: {
 	models: ModelInfo[];
 	model?: ModelInfo;
 	disabled: boolean;
 	onModel: (model: ModelInfo) => void;
 }) {
-	const { familyOf, manage: onManage, models: familyModels, current, select } = useModelFamily();
+	const { familyOf, manage: onManage, models: familyModels, current, select, configurationHint } = useModelFamily();
 	models = familyModels ?? models;
 	model = current ?? model;
 	onModel = select ?? onModel;
@@ -51,13 +51,13 @@ export function ModelMenu({ models, model, disabled, onModel }: {
 	}, [open]);
 
 	return <div className="model-chip-wrap" ref={root}>
-		<button className="model-trigger" ref={trigger} disabled={disabled} onClick={() => setOpen((value) => !value)} aria-expanded={open} aria-haspopup="dialog" aria-label="选择模型">
+		<button className="model-trigger" ref={trigger} disabled={disabled} onClick={() => setOpen((value) => !value)} aria-expanded={open} aria-haspopup="dialog" aria-label="选择模型" title={model ? `${family ? `${FAMILY_LABELS[family.id] ?? family.name} · ` : ""}${model.providerName ?? model.provider} · ${model.id}` : "选择模型"}>
 			{mark && <BrandIcon name={mark} size={14} />}
-			<span className="model-trigger-label">{family ? `${FAMILY_LABELS[family.id] ?? family.name} · ${model?.name ?? model?.id}` : model?.name ?? model?.id ?? "选择模型"}</span>
+			<span className="model-trigger-label">{family ? `${FAMILY_LABELS[family.id] ?? family.name} · ${model?.id}` : model?.name ?? model?.id ?? "选择模型"}</span>
 			<span className="chev-caret"><Icon name="chevron" size={12} /></span>
 		</button>
 		{open && <div className="model-popover" style={position ? { position: "fixed", right: "auto", ...position } : undefined} role="dialog" aria-label="选择模型">
-			<ModelPicker models={models} familyOf={familyOf} current={model} onManage={() => { setOpen(false); onManage(); }} onSelect={(next) => { onModel(next); setOpen(false); trigger.current?.focus(); }} disabled={disabled} />
+			<ModelPicker configurationHint={configurationHint} models={models} familyOf={familyOf} current={model} onManage={() => { setOpen(false); onManage(); }} onSelect={(next) => { onModel(next); setOpen(false); trigger.current?.focus(); }} disabled={disabled} />
 		</div>}
 	</div>;
 }

@@ -11,22 +11,24 @@ export function installMockPi(target, storage) {
 	// Families ship with two DeepSeek channels so QA can exercise the switcher.
 	const families = [
 		{ id: "deepseek", displayName: "DeepSeek", defaultProviderId: "p1", providers: [
-			{ id: "p1", displayName: "官方直连", baseUrl: "https://api.deepseek.com/v1", apiKey: "sk-mock-0000abcd", modelId: "deepseek-chat", inputCost: 0.3, outputCost: 1.2, currency: "CNY", maxTokens: null, streaming: true, tools: true, vision: false, reasoning: true, timeoutSeconds: 60, enabled: true },
-			{ id: "p2", displayName: "硅基低价", baseUrl: "https://api.siliconflow.cn/v1", apiKey: "sk-mock-1111efgh", modelId: "deepseek-ai/DeepSeek-V3", inputCost: 0.14, outputCost: 0.28, currency: "CNY", maxTokens: null, streaming: true, tools: true, vision: false, reasoning: false, timeoutSeconds: 60, enabled: true },
+			{ id: "p1", displayName: "官方直连", baseUrl: "https://api.deepseek.com/v1", apiKey: "sk-mock-0000abcd", models: [{ modelId: "deepseek-chat", inputCost: 0.3, outputCost: 1.2, currency: "CNY", maxTokens: 8192, contextWindow: 128000 }], streaming: true, tools: true, vision: false, reasoning: true, timeoutSeconds: 60, enabled: true },
+			{ id: "p2", displayName: "硅基低价", baseUrl: "https://api.siliconflow.cn/v1", apiKey: "sk-mock-1111efgh", models: [{ modelId: "deepseek-ai/DeepSeek-V3", inputCost: 0.14, outputCost: 0.28, currency: "CNY", maxTokens: 8192, contextWindow: 128000 }], streaming: true, tools: true, vision: false, reasoning: false, timeoutSeconds: 60, enabled: true },
 		] },
 		{ id: "kimi", displayName: "Kimi", defaultProviderId: "k1", providers: [
-			{ id: "k1", displayName: "官方", baseUrl: "https://api.moonshot.cn/v1", apiKey: "sk-mock-2222ijkl", modelId: "kimi-k2", inputCost: 0.6, outputCost: 2.4, currency: "CNY", maxTokens: null, streaming: true, tools: true, vision: false, reasoning: true, timeoutSeconds: 60, enabled: true },
+			{ id: "k1", displayName: "官方", baseUrl: "https://api.moonshot.cn/v1", apiKey: "sk-mock-2222ijkl", models: [{ modelId: "kimi-k2", inputCost: 0.6, outputCost: 2.4, currency: "CNY", maxTokens: 8192, contextWindow: 128000 }], streaming: true, tools: true, vision: false, reasoning: true, timeoutSeconds: 60, enabled: true },
 		] },
 		{ id: "glm", displayName: "GLM", defaultProviderId: null, providers: [] },
 	];
-	const familyModels = () => families.flatMap((family) => family.providers.filter((provider) => provider.enabled).map((provider) => ({
-		provider: providerKey(family.id, provider.id), id: provider.modelId, name: provider.displayName,
-		contextWindow: 128000, maxTokens: provider.maxTokens ?? 8192, currency: provider.currency, cost: { input: provider.inputCost, output: provider.outputCost },
+	families[0].providers[0].models.unshift({ modelId: "deepseek-flash", inputCost: 1, outputCost: 4, currency: "CNY", maxTokens: 4096, contextWindow: 32000 });
+	families[0].providers[0].models.push({ modelId: "deepseek-reasoner", inputCost: 5, outputCost: 20, currency: "USD", maxTokens: 16384, contextWindow: 256000 });
+	const familyModels = () => families.flatMap((family) => family.providers.filter((provider) => provider.enabled).flatMap((provider) => provider.models.map((model) => ({
+		provider: providerKey(family.id, provider.id), id: model.modelId, name: model.modelId,
+		contextWindow: model.contextWindow, maxTokens: model.maxTokens, currency: model.currency, cost: { input: model.inputCost, output: model.outputCost },
 		reasoning: provider.reasoning, input: provider.vision ? ["text", "image"] : ["text"],
-	})));
+	}))));
 	const models = familyModels();
 	let autoFailover = false;
-	const familiesConfig = () => ({ version: 1, autoFailover, families: structuredClone(families) });
+	const familiesConfig = () => ({ version: 2, autoFailover, families: structuredClone(families) });
 	const providers = [];
 	const persist = () => storage?.setItem("skiff.test.sessions", JSON.stringify(saved));
 	const emit = (instanceId, event) => {
@@ -46,7 +48,7 @@ export function installMockPi(target, storage) {
 			if (command === "list_openai_providers") return structuredClone(providers);
 			if (command === "migrate_provider_config") return false;
 			if (command === "list_model_families") return familiesConfig();
-			if (command === "list_model_runtime") return families.flatMap((family) => family.providers.filter((provider) => provider.enabled).map((provider) => ({ familyId: family.id, familyName: family.displayName, providerId: provider.id, displayName: provider.displayName, providerKey: providerKey(family.id, provider.id), modelId: provider.modelId, inputCost: provider.inputCost, outputCost: provider.outputCost, currency: provider.currency, maxTokens: provider.maxTokens })));
+			if (command === "list_model_runtime") return families.flatMap((family) => family.providers.filter((provider) => provider.enabled).flatMap((provider) => provider.models.map((model) => ({ familyId: family.id, familyName: family.displayName, providerId: provider.id, displayName: provider.displayName, providerKey: providerKey(family.id, provider.id), ...model }))));
 			if (command === "test_provider_connection") {
 				if (String(args.baseUrl).includes("fail")) return { ok: false, latencyMs: 42, status: 401, error: "Invalid API key" };
 				return { ok: true, latencyMs: 137, status: 200, error: null };
@@ -82,7 +84,7 @@ export function installMockPi(target, storage) {
 				const incoming = args.provider;
 				if (!incoming.displayName?.trim()) throw new Error("显示名需为 1–32 个字符");
 				if (!/^https?:\/\//.test(incoming.baseUrl ?? "")) throw new Error("Base URL 必须以 http:// 或 https:// 开头");
-				if (!incoming.modelId?.trim()) throw new Error("模型 ID 不能为空");
+				if (incoming.models.some((model) => !model.modelId?.trim())) throw new Error("模型 ID 不能为空");
 				const duplicate = family.providers.some((provider) => provider.id !== incoming.id && provider.displayName === incoming.displayName.trim());
 				if (duplicate) throw new Error("同家族内显示名不能重复");
 				if (!incoming.id) incoming.id = `p${family.providers.length + 1}`;
@@ -104,7 +106,7 @@ export function installMockPi(target, storage) {
 				await new Promise((resolve) => target.setTimeout(resolve, 350));
 				if (args.apiKey === "invalid") throw new Error("密钥无效或未授权");
 				if (String(args.baseUrl).includes("missing")) throw new Error("该地址不支持 /models 接口，请手动填写");
-				return ["deepseek-chat", "deepseek-reasoner", "Kimi-K2", "moonshot-v1", "glm-4.6", "chatglm-6b", ...Array.from({ length: 22 }, (_, i) => `a-model-${String(i).padStart(2, "0")}`)];
+				return ["deepseek-chat", "deepseek-flash", "deepseek-reasoner", "Kimi-K2", "moonshot-v1", "glm-4.6", "chatglm-6b", ...Array.from({ length: 22 }, (_, i) => `a-model-${String(i).padStart(2, "0")}`)];
 			}
 			if (command === "save_openai_provider") {
 				const { apiKey, ...provider } = args.input;

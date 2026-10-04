@@ -11,6 +11,7 @@ export interface ModelFamilyContextValue {
 	/** Includes disabled channels and legacy aliases for historical pricing. */
 	pricingModels?: ModelInfo[];
 	current?: ModelInfo;
+	configurationHint?: string;
 	select?: (model: ModelInfo) => void;
 	/** Maps a model (pi provider key) to its family, when it belongs to one. */
 	familyOf: (model: ModelInfo) => FamilyLookup | undefined;

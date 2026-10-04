@@ -12,6 +12,7 @@ export interface SessionTarget {
 	cwd: string;
 	sessionFile?: string;
 	elapsedMs?: number;
+	model?: ModelInfo;
 }
 
 export interface PiCommand {
@@ -132,9 +133,13 @@ export function usePiSession(target?: SessionTarget) {
 					const result = await rpc.request<{ cancelled?: boolean }>({ type: "switch_session", sessionPath: selected.sessionFile });
 					if (result.cancelled) throw new Error("pi 扩展取消了聊天切换，未载入该聊天。");
 				}
-				if (preferredModel.current) {
-					await rpc.request({ type: "set_model", provider: preferredModel.current.provider, modelId: preferredModel.current.id });
-					preferredModel.current = undefined;
+				const preferred = preferredModel.current ?? selected.model;
+				preferredModel.current = undefined;
+				let unavailableModel: ModelInfo | undefined;
+				let selectionError: unknown;
+				if (preferred) {
+					try { await rpc.request({ type: "set_model", provider: preferred.provider, modelId: preferred.id }); }
+					catch (error) { unavailableModel = preferred; selectionError = error; } // The app resolves removed/disabled models after loading configuration.
 				}
 				const [data, models, transcript, levels] = await Promise.all([
 					rpc.request<Record<string, unknown>>({ type: "get_state" }),
@@ -143,11 +148,13 @@ export function usePiSession(target?: SessionTarget) {
 					rpc.request<{ levels?: string[] }>({ type: "get_available_thinking_levels" }).catch(() => ({ levels: [] })),
 				]);
 				if (cancelled) return;
+				const availableModels = parseModels(models.models);
+				if (unavailableModel && availableModels.some((model) => model.provider === unavailableModel.provider && model.id === unavailableModel.id)) throw selectionError;
 				setState({
-					...initialSessionState, model: parseModels([data.model])[0],
+					...initialSessionState, model: unavailableModel ?? parseModels([data.model])[0],
 					thinkingLevel: typeof data.thinkingLevel === "string" ? data.thinkingLevel : undefined,
 					thinkingLevels: levels.levels ?? [],
-					availableModels: parseModels(models.models), messages: parseMessages(transcript.messages),
+					availableModels, messages: parseMessages(transcript.messages),
 					isStreaming: Boolean(data.isStreaming),
 				});
 				streamingRef.current = Boolean(data.isStreaming);

@@ -70,7 +70,7 @@ export default function modelFamilies(pi) {
 	for (const route of routes) {
 		pi.registerProvider(route.providerKey, {
 			baseUrl: route.baseUrl, api: "skiff-openai-completions", apiKey: `$${route.keyEnv}`,
-			models: [{ ...route.model, api: "skiff-openai-completions" }], streamSimple,
+			models: route.models.map((model) => ({ ...model, api: "skiff-openai-completions" })), streamSimple,
 		});
 	}
 }

@@ -10,7 +10,8 @@ import { useModelFamily } from "../chat/familyContext";
 
 const StableChatView = memo(ChatView);
 
-export function VoyageWorkspace({ state, connected, pending, actions, onSend, onReconnect, projectName, search, onConfigureSearch, failover }: {
+export function VoyageWorkspace({ state, connected, pending, actions, onSend, onReconnect, projectName, search, onConfigureSearch, failover, modelNotice }: {
+	modelNotice?: string;
 	state: SessionState;
 	connected: boolean;
 	pending: boolean;
@@ -36,7 +37,7 @@ export function VoyageWorkspace({ state, connected, pending, actions, onSend, on
 	return <div className={`chat-and-rail ${expanded ? "rail-expanded" : "rail-collapsed"}`}>
 		<div className="chat-column">
 			<StableChatView state={state} connected={connected} pending={pending} actions={actions} onSend={onSend} onReconnect={onReconnect} projectName={projectName} search={search} onConfigureSearch={onConfigureSearch} failover={failover} />
-			<ContextUsage metrics={metrics} expanded={expanded} onToggle={toggle} />
+			<ContextUsage notice={modelNotice} metrics={metrics} expanded={expanded} onToggle={toggle} />
 		</div>
 		<VoyageRail metrics={metrics} expanded={expanded} onToggle={toggle} />
 	</div>;

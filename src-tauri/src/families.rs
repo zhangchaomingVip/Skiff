@@ -2,8 +2,9 @@
 //!
 //! Skiff fixes three model families (DeepSeek, Kimi, GLM). A family holds any
 //! number of provider channels — official endpoints, SiliconFlow, OpenRouter,
-//! relay stations — each with its own display name, base URL, key, model id and
-//! pricing. Selection happens on (family, channel); the request still runs
+//! relay stations — each sharing an endpoint and key across a list of models.
+//! Models have independent prices and limits. Selection happens on (channel, model);
+//! the request still runs
 //! through pi, so this module projects every channel into pi's own
 //! \`models.json\` / \`auth.json\` as a distinct provider named
 //! \`skiff-<family>-<id>\`.
@@ -40,7 +41,7 @@ fn default_timeout() -> u64 {
 }
 
 fn default_schema_version() -> u64 {
-	1
+	2
 }
 
 #[derive(Clone, Copy, Default, Serialize, Deserialize)]
@@ -54,13 +55,7 @@ pub enum Currency {
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ProviderSpec {
-	pub id: String,
-	pub display_name: String,
-	pub base_url: String,
-	/// Plain text in memory and on the IPC boundary; sealed on disk.
-	#[serde(default)]
-	pub api_key: String,
+pub struct ModelSpec {
 	pub model_id: String,
 	#[serde(default)]
 	pub input_cost: f64,
@@ -69,7 +64,24 @@ pub struct ProviderSpec {
 	#[serde(default)]
 	pub currency: Currency,
 	#[serde(default)]
-	pub max_tokens: Option<u64>,
+	pub max_tokens: u64,
+	pub context_window: u64,
+	/// Compatibility fields imported from pi; provider capabilities take precedence.
+	#[serde(default)]
+	pub model_config: Value,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderSpec {
+	pub id: String,
+	pub display_name: String,
+	pub base_url: String,
+	/// Plain text in memory and on the IPC boundary; sealed on disk.
+	#[serde(default)]
+	pub api_key: String,
+	#[serde(default)]
+	pub models: Vec<ModelSpec>,
 	#[serde(default = "default_true")]
 	pub streaming: bool,
 	#[serde(default)]
@@ -83,9 +95,6 @@ pub struct ProviderSpec {
 	pub timeout_seconds: u64,
 	#[serde(default = "default_true")]
 	pub enabled: bool,
-	/// Preserve migrated context limits and provider compatibility options.
-	#[serde(default)]
-	pub model_config: Value,
 	#[serde(default)]
 	pub legacy_provider: Option<String>,
 }
@@ -130,7 +139,7 @@ impl Default for FamiliesConfig {
 	}
 }
 
-/// One selectable (family, channel) pair, resolved for the picker and router.
+/// One selectable (family, channel, model) entry, resolved for the picker and router.
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RuntimeOffer {
@@ -143,7 +152,8 @@ pub struct RuntimeOffer {
 	pub input_cost: f64,
 	pub output_cost: f64,
 	pub currency: Currency,
-	pub max_tokens: Option<u64>,
+	pub max_tokens: u64,
+	pub context_window: u64,
 	pub legacy_provider: Option<String>,
 }
 
@@ -169,18 +179,14 @@ pub fn load(dir: &Path) -> Result<FamiliesConfig, String> {
 		return Ok(Default::default());
 	}
 	let bytes = std::fs::read(&path).map_err(|_| "无法读取家族配置".to_string())?;
-	let value: Value = serde_json::from_slice(&bytes)
+	let mut value: Value = serde_json::from_slice(&bytes)
 		.map_err(|_| "家族配置不是有效 JSON，请修复或删除 skiff-families.json".to_string())?;
+	// Only the versioned migration reads legacy provider-level model fields.
+	let migrated = value["version"].as_u64().unwrap_or(1) < 2;
+	if migrated { migrate_single_models(&mut value); }
 	let mut config: FamiliesConfig = serde_json::from_value(value.clone())
 		.map_err(|_| "家族配置不是有效 JSON，请修复或删除 skiff-families.json".to_string())?;
-	// Import older saved model limits once; an explicit null restores defaults.
-	for (family_index, family) in config.families.iter_mut().enumerate() {
-		for (provider_index, provider) in family.providers.iter_mut().enumerate() {
-			if value["families"][family_index]["providers"][provider_index].get("maxTokens").is_none() {
-				provider.max_tokens = provider.model_config["maxTokens"].as_u64();
-			}
-		}
-	}
+	if migrated { providers::atomic_write(&path, &value)?; }
 	// Older files may predate a family; reinstate it empty rather than dropping it.
 	for id in FAMILY_IDS {
 		if !config.families.iter().any(|family| family.id == id) {
@@ -194,6 +200,24 @@ pub fn load(dir: &Path) -> Result<FamiliesConfig, String> {
 	}
 	config.families.sort_by_key(|family| FAMILY_IDS.iter().position(|id| *id == family.id).unwrap_or(usize::MAX));
 	Ok(config)
+}
+
+/// One-time v1 → v2 rewrite, preserving sealed credentials verbatim.
+fn migrate_single_models(value: &mut Value) {
+	for family in value["families"].as_array_mut().into_iter().flatten() {
+		for provider in family["providers"].as_array_mut().into_iter().flatten() {
+			let context = provider["modelConfig"]["contextWindow"].as_u64().filter(|v| *v > 0).unwrap_or(128_000);
+			let limit = provider.get("maxTokens").unwrap_or(&provider["modelConfig"]["maxTokens"]).as_u64().filter(|v| *v > 0).unwrap_or(8192.min(context));
+			let model = json!({ "modelId": provider["modelId"], "inputCost": provider["inputCost"].as_f64().unwrap_or(0.0),
+				"outputCost": provider["outputCost"].as_f64().unwrap_or(0.0), "currency": provider.get("currency").cloned().unwrap_or(json!("CNY")),
+				"maxTokens": limit.min(context), "contextWindow": context, "modelConfig": provider["modelConfig"] });
+			if let Some(fields) = provider.as_object_mut() {
+				fields.entry("models").or_insert_with(|| json!([model]));
+				for field in ["modelId", "inputCost", "outputCost", "currency", "maxTokens", "modelConfig"] { fields.remove(field); }
+			}
+		}
+	}
+	value["version"] = json!(2);
 }
 
 /// Plaintext view for IPC and for anything that will be re-saved.
@@ -302,9 +326,16 @@ fn money(value: f64) -> f64 {
 
 /// Validates one channel, resolving display-name collisions against siblings.
 fn normalize(spec: &ProviderSpec, taken: &mut Vec<String>, fallback_id: &str) -> Result<ProviderSpec, String> {
-	let context_window = spec.model_config["contextWindow"].as_u64().unwrap_or(128_000);
-	if spec.max_tokens.is_some_and(|limit| limit == 0 || limit > context_window) {
-		return Err("默认最大输出 Token 必须大于 0，且不能超过模型上下文窗口".into());
+	let mut models = spec.models.clone();
+	let mut ids = std::collections::HashSet::new();
+	for model in &mut models {
+		model.model_id = validate_model_id(&model.model_id)?;
+		if !ids.insert(model.model_id.clone()) { return Err("同提供商内模型 ID 不能重复".into()); }
+		if model.context_window == 0 || model.max_tokens == 0 || model.max_tokens > model.context_window {
+			return Err("上下文窗口和默认最大输出必须为正整数，且最大输出不能超过上下文窗口".into());
+		}
+		model.input_cost = money(model.input_cost);
+		model.output_cost = money(model.output_cost);
 	}
 	let base_display = display_name(&spec.display_name)?;
 	let mut id: String = spec
@@ -329,18 +360,13 @@ fn normalize(spec: &ProviderSpec, taken: &mut Vec<String>, fallback_id: &str) ->
 		display_name: display,
 		base_url: validate_base_url(&spec.base_url)?,
 		api_key: validate_api_key(&spec.api_key)?,
-		model_id: validate_model_id(&spec.model_id)?,
-		input_cost: money(spec.input_cost),
-		output_cost: money(spec.output_cost),
-		currency: spec.currency,
-		max_tokens: spec.max_tokens,
+		models,
 		streaming: spec.streaming,
 		tools: spec.tools,
 		vision: spec.vision,
 		reasoning: spec.reasoning,
 		timeout_seconds: spec.timeout_seconds.clamp(5, 600),
 		enabled: spec.enabled,
-		model_config: spec.model_config.clone(),
 		legacy_provider: spec.legacy_provider.clone(),
 	})
 }
@@ -367,11 +393,11 @@ fn next_id() -> String {
 fn pick_default(family: &ModelFamily) -> Option<String> {
 	let current = family.default_provider_id.as_deref();
 	if let Some(id) = current {
-		if family.providers.iter().any(|provider| provider.id == id && provider.enabled) {
+		if family.providers.iter().any(|provider| provider.id == id && provider.enabled && !provider.models.is_empty()) {
 			return Some(id.to_string());
 		}
 	}
-	family.providers.iter().find(|provider| provider.enabled).map(|provider| provider.id.clone())
+	family.providers.iter().find(|provider| provider.enabled && !provider.models.is_empty()).map(|provider| provider.id.clone())
 }
 
 // --- projection into pi's own configuration ---------------------------------
@@ -399,16 +425,15 @@ fn key_env(key: &str) -> String {
 pub fn prepare_runtime(dir: &Path, cmd: &mut std::process::Command) -> Result<(), String> {
 	let _guard = providers::CONFIG_LOCK.lock().map_err(|_| "配置锁异常")?;
 	let config = load_plain(dir)?;
-	let models = providers::read_config(&dir.join("models.json"))?;
 	let mut routes = Vec::new();
 	for family in &config.families {
-		for spec in family.providers.iter().filter(|provider| provider.enabled) {
+		for spec in family.providers.iter().filter(|provider| provider.enabled && !provider.models.is_empty()) {
 			let key = provider_key(&family.id, &spec.id);
 			cmd.env(key_env(&key), &spec.api_key);
-			let model = models["providers"][&key]["models"][0].clone();
+			let route_models: Vec<_> = spec.models.iter().map(|model| project_model(spec, model, &key, None)).collect();
 			routes.push(json!({ "providerKey": key, "baseUrl": spec.base_url,
 				"keyEnv": key_env(&key), "streaming": spec.streaming, "tools": spec.tools,
-				"timeoutSeconds": spec.timeout_seconds, "model": model }));
+				"timeoutSeconds": spec.timeout_seconds, "models": route_models }));
 		}
 	}
 	if routes.is_empty() { return Ok(()); }
@@ -426,20 +451,20 @@ fn is_managed_key(key: &str) -> bool {
 	FAMILY_IDS.iter().any(|family| key.starts_with(&format!("{KEY_PREFIX}{family}-")))
 }
 
-fn project_model(spec: &ProviderSpec, key: &str, existing: Option<&Value>) -> Value {
-	let mut model = existing.cloned().or_else(|| spec.model_config.as_object().map(|_| spec.model_config.clone())).filter(Value::is_object).unwrap_or_else(|| json!({}));
-	model["id"] = json!(spec.model_id);
-	model["name"] = json!(spec.display_name);
+fn project_model(spec: &ProviderSpec, item: &ModelSpec, key: &str, existing: Option<&Value>) -> Value {
+	let mut model = existing.cloned().or_else(|| item.model_config.as_object().map(|_| item.model_config.clone())).filter(Value::is_object).unwrap_or_else(|| json!({}));
+	model["id"] = json!(item.model_id);
+	model["name"] = json!(item.model_id);
 	model["api"] = json!("openai-completions");
 	model["provider"] = json!(key);
 	if !model["cost"].is_object() { model["cost"] = json!({}); }
-	model["cost"]["input"] = json!(spec.input_cost);
-	model["cost"]["output"] = json!(spec.output_cost);
-	model["currency"] = json!(spec.currency);
-	model["cost"]["cacheRead"] = spec.model_config["cost"].get("cacheRead").cloned().unwrap_or_else(|| json!(spec.input_cost));
-	model["cost"]["cacheWrite"] = spec.model_config["cost"].get("cacheWrite").cloned().unwrap_or_else(|| json!(spec.input_cost));
-	if model.get("contextWindow").is_none() { model["contextWindow"] = json!(128_000); }
-	model["maxTokens"] = json!(spec.max_tokens.unwrap_or_else(|| 8192.min(model["contextWindow"].as_u64().unwrap_or(128_000))));
+	model["cost"]["input"] = json!(item.input_cost);
+	model["cost"]["output"] = json!(item.output_cost);
+	model["currency"] = json!(item.currency);
+	model["cost"]["cacheRead"] = item.model_config["cost"].get("cacheRead").cloned().unwrap_or_else(|| json!(item.input_cost));
+	model["cost"]["cacheWrite"] = item.model_config["cost"].get("cacheWrite").cloned().unwrap_or_else(|| json!(item.input_cost));
+	model["contextWindow"] = json!(item.context_window);
+	model["maxTokens"] = json!(item.max_tokens);
 	model["input"] = if spec.vision { json!(["text", "image"]) } else { json!(["text"]) };
 	model["reasoning"] = json!(spec.reasoning);
 	model
@@ -470,20 +495,16 @@ pub fn project(dir: &Path, config: &FamiliesConfig) -> Result<(), String> {
 		// Drop channels this app no longer knows about.
 		map.retain(|key, _| !is_managed_key(key) || desired.iter().any(|(wanted, _)| wanted == key));
 		for (key, spec) in &desired {
-			if !spec.enabled {
+			if !spec.enabled || spec.models.is_empty() {
 				map.remove(key);
 				continue;
 			}
-			let previous = map
-				.get(key)
-				.and_then(|entry| entry["models"].as_array())
-				.and_then(|models| models.first())
-				.cloned();
+			let previous = map.get(key).and_then(|entry| entry["models"].as_array()).cloned().unwrap_or_default();
 			let mut entry = map.get(key).cloned().filter(Value::is_object).unwrap_or_else(|| json!({}));
 			entry["api"] = json!("openai-completions");
 			if let Some(fields) = entry.as_object_mut() { fields.remove("apiKey"); }
 			entry["baseUrl"] = json!(spec.base_url);
-			entry["models"] = json!([project_model(spec, key, previous.as_ref())]);
+			entry["models"] = json!(spec.models.iter().map(|item| project_model(spec, item, key, previous.iter().find(|model| model["id"].as_str() == Some(&item.model_id)))).collect::<Vec<_>>());
 			map.insert(key.clone(), entry);
 		}
 	}
@@ -592,29 +613,35 @@ pub fn migrate(dir: &Path) -> Result<bool, String> {
 		} else if raw_key.starts_with('!') {
 			return Err("迁移不支持命令形式的密钥，请改为直接密钥或环境变量".into());
 		} else { raw_key };
-		let multi = models_list.len() > 1;
 		for model in &models_list {
 			let Some(id) = model["id"].as_str() else { continue };
 			let Some(family_id) = classify(key, id, model["name"].as_str().unwrap_or("")) else { continue };
 			let family = config.families.iter_mut().find(|family| family.id == family_id).expect("fixed family");
+			let item = ModelSpec {
+				model_id: id.to_string(), input_cost: model["cost"]["input"].as_f64().unwrap_or(0.0),
+				output_cost: model["cost"]["output"].as_f64().unwrap_or(0.0), currency: Currency::default(),
+				max_tokens: model["maxTokens"].as_u64().unwrap_or(8192.min(model["contextWindow"].as_u64().unwrap_or(128_000))),
+				context_window: model["contextWindow"].as_u64().unwrap_or(128_000), model_config: model.clone(),
+			};
+			if let Some(channel) = family.providers.iter_mut().find(|provider| provider.legacy_provider.as_deref() == Some(key)) {
+				if !channel.models.iter().any(|old| old.model_id == item.model_id) { channel.models.push(item); }
+				channel.vision |= model["input"].as_array().is_some_and(|list| list.iter().any(|value| value == "image"));
+				channel.reasoning |= model["reasoning"].as_bool().unwrap_or(false);
+				continue;
+			}
 			let taken: Vec<String> = family.providers.iter().map(|provider| provider.display_name.clone()).collect();
 			family.providers.push(ProviderSpec {
 				id: next_id(),
-				display_name: unique_display(key, id, multi, &taken),
+				display_name: unique_display(key, id, false, &taken),
 				base_url: base.to_string(),
 				api_key: raw_key.clone(),
-				model_id: id.to_string(),
-				input_cost: model["cost"]["input"].as_f64().unwrap_or(0.0),
-				output_cost: model["cost"]["output"].as_f64().unwrap_or(0.0),
-				currency: Currency::default(),
-				max_tokens: model["maxTokens"].as_u64(),
+				models: vec![item],
 				streaming: true,
 				tools: true,
 				vision: model["input"].as_array().is_some_and(|list| list.iter().any(|value| value == "image")),
 				reasoning: model["reasoning"].as_bool().unwrap_or(false),
 				timeout_seconds: default_timeout(),
 				enabled: true,
-				model_config: model.clone(),
 				legacy_provider: Some(key.clone()),
 			});
 		}
@@ -624,7 +651,7 @@ pub fn migrate(dir: &Path) -> Result<bool, String> {
 		return Ok(false);
 	}
 	for family in &mut config.families {
-		family.default_provider_id = family.providers.iter().find(|provider| provider.enabled).map(|provider| provider.id.clone());
+		family.default_provider_id = family.providers.iter().find(|provider| provider.enabled && !provider.models.is_empty()).map(|provider| provider.id.clone());
 	}
 	save(dir, &config)?;
 	Ok(true)
@@ -639,19 +666,22 @@ pub fn runtime_offers(config: &FamiliesConfig) -> Vec<RuntimeOffer> {
 			if !provider.enabled {
 				continue;
 			}
-			offers.push(RuntimeOffer {
-				family_id: family.id.clone(),
-				family_name: family.display_name.clone(),
-				provider_id: provider.id.clone(),
-				display_name: provider.display_name.clone(),
-				provider_key: provider_key(&family.id, &provider.id),
-				model_id: provider.model_id.clone(),
-				input_cost: provider.input_cost,
-				output_cost: provider.output_cost,
-				currency: provider.currency,
-				max_tokens: provider.max_tokens,
-				legacy_provider: provider.legacy_provider.clone(),
+			for model in &provider.models {
+				offers.push(RuntimeOffer {
+					family_id: family.id.clone(),
+					family_name: family.display_name.clone(),
+					provider_id: provider.id.clone(),
+					display_name: provider.display_name.clone(),
+					provider_key: provider_key(&family.id, &provider.id),
+					model_id: model.model_id.clone(),
+					input_cost: model.input_cost,
+					output_cost: model.output_cost,
+					currency: model.currency,
+					max_tokens: model.max_tokens,
+					context_window: model.context_window,
+					legacy_provider: provider.legacy_provider.clone(),
 			});
+			}
 		}
 	}
 	offers
@@ -669,7 +699,9 @@ pub fn save_provider_in(dir: &Path, family_id: &str, provider: ProviderSpec) -> 
 	let family = family_mut(&mut config, family_id)?;
 	let index = family.providers.iter().position(|existing| existing.id == spec.id);
 	if let Some(existing) = index.and_then(|index| family.providers.get(index)) {
-		spec.model_config = existing.model_config.clone();
+		for model in &mut spec.models {
+			if let Some(old) = existing.models.iter().find(|item| item.model_id == model.model_id.trim()) { model.model_config = old.model_config.clone(); }
+		}
 		spec.legacy_provider = existing.legacy_provider.clone();
 	}
 	// A blank key on an edit means "keep the stored one".
@@ -749,7 +781,7 @@ pub fn set_default_in(dir: &Path, family_id: &str, provider_id: Option<&str>) ->
 	let mut config = load_plain(dir)?;
 	let family = family_mut(&mut config, family_id)?;
 	if let Some(id) = provider_id {
-		if !family.providers.iter().any(|provider| provider.id == id && provider.enabled) {
+		if !family.providers.iter().any(|provider| provider.id == id && provider.enabled && !provider.models.is_empty()) {
 			return Err("默认提供商必须是该家族内已启用的项".into());
 		}
 	}
@@ -928,27 +960,27 @@ mod tests {
 	fn currency_and_default_output_limit_round_trip_and_update_projection() {
 		let dir = temp_dir("price-limits");
 		let mut provider = spec("渠道", "deepseek-chat");
-		provider.currency = Currency::Usd;
-		provider.max_tokens = Some(4096);
+		provider.models[0].currency = Currency::Usd;
+		provider.models[0].max_tokens = 4096;
 		save_provider_in(&dir, "deepseek", provider).unwrap();
 		let mut provider = load_plain(&dir).unwrap().families[0].providers[0].clone();
-		assert_eq!(serde_json::to_value(provider.currency).unwrap(), "USD");
-		assert_eq!(provider.max_tokens, Some(4096));
+		assert_eq!(serde_json::to_value(provider.models[0].currency).unwrap(), "USD");
+		assert_eq!(provider.models[0].max_tokens, 4096);
 		let key = provider_key("deepseek", &provider.id);
 		let projected = providers::read_config(&dir.join("models.json")).unwrap();
 		assert_eq!(projected["providers"][&key]["models"][0]["maxTokens"], 4096);
 		assert_eq!(projected["providers"][&key]["models"][0]["currency"], "USD");
-		assert_eq!(runtime_offers(&load(&dir).unwrap())[0].max_tokens, Some(4096));
-		provider.currency = Currency::Cny;
-		provider.max_tokens = Some(12345);
+		assert_eq!(runtime_offers(&load(&dir).unwrap())[0].max_tokens, 4096);
+		provider.models[0].currency = Currency::Cny;
+		provider.models[0].max_tokens = 12345;
 		save_provider_in(&dir, "deepseek", provider.clone()).unwrap();
 		let projected = providers::read_config(&dir.join("models.json")).unwrap();
 		assert_eq!(projected["providers"][&key]["models"][0]["maxTokens"], 12345);
-		provider.max_tokens = Some(0);
+		provider.models[0].max_tokens = 0;
 		assert!(save_provider_in(&dir, "deepseek", provider.clone()).is_err());
-		provider.max_tokens = Some(128001);
+		provider.models[0].max_tokens = 128001;
 		assert!(save_provider_in(&dir, "deepseek", provider.clone()).is_err());
-		provider.max_tokens = None;
+		provider.models[0].max_tokens = 8192;
 		save_provider_in(&dir, "deepseek", provider).unwrap();
 		let projected = providers::read_config(&dir.join("models.json")).unwrap();
 		assert_eq!(projected["providers"][&key]["models"][0]["maxTokens"], 8192);
@@ -961,16 +993,68 @@ mod tests {
 		let dir = temp_dir("old-price-limits");
 		let mut config = FamiliesConfig::default();
 		let mut provider = spec("旧渠道", "deepseek-chat");
-		provider.model_config = json!({ "maxTokens": 4096 });
+		provider.models[0].model_config = json!({ "maxTokens": 4096 });
 		config.families[0].providers.push(provider);
 		let mut value = serde_json::to_value(config).unwrap();
-		value["families"][0]["providers"][0].as_object_mut().unwrap().remove("currency");
-		value["families"][0]["providers"][0].as_object_mut().unwrap().remove("maxTokens");
+		value["version"] = json!(1);
+		let provider = value["families"][0]["providers"][0].as_object_mut().unwrap();
+		provider.remove("models");
+		provider.insert("modelId".into(), json!("deepseek-chat"));
+		provider.insert("modelConfig".into(), json!({ "maxTokens": 4096 }));
 		providers::atomic_write(&config_path(&dir), &value).unwrap();
 		let loaded = load(&dir).unwrap();
-		assert_eq!(serde_json::to_value(loaded.families[0].providers[0].currency).unwrap(), "CNY");
-		assert_eq!(loaded.families[0].providers[0].max_tokens, Some(4096));
+		assert_eq!(serde_json::to_value(loaded.families[0].providers[0].models[0].currency).unwrap(), "CNY");
+		assert_eq!(loaded.families[0].providers[0].models[0].max_tokens, 4096);
+		let rewritten = providers::read_config(&config_path(&dir)).unwrap();
+		assert_eq!(rewritten["version"], 2);
+		assert!(rewritten["families"][0]["providers"][0].get("modelId").is_none());
+		let before = std::fs::read(config_path(&dir)).unwrap(); load(&dir).unwrap();
+		assert_eq!(std::fs::read(config_path(&dir)).unwrap(), before);
 		std::fs::remove_dir_all(dir).unwrap();
+	}
+
+	#[test]
+	fn multiple_models_project_order_prices_limits_and_runtime_registration() {
+		let dir = temp_dir("multi-model");
+		let mut provider = spec("中转站", "deepseek-flash");
+		provider.id = "relay".into();
+		let mut second = provider.models[0].clone();
+		second.model_id = "deepseek-chat".into(); second.input_cost = 2.0; second.output_cost = 4.0;
+		second.max_tokens = 4096; second.context_window = 64000; second.currency = Currency::Usd;
+		let mut third = second.clone(); third.model_id = "deepseek-reasoner".into(); third.context_window = 256000; third.max_tokens = 16384;
+		provider.models.extend([second, third]);
+		save_provider_in(&dir, "deepseek", provider.clone()).unwrap();
+		let key = provider_key("deepseek", "relay");
+		let projected = providers::read_config(&dir.join("models.json")).unwrap();
+		let models = projected["providers"][&key]["models"].as_array().unwrap();
+		assert_eq!(models.iter().map(|model| model["id"].as_str().unwrap()).collect::<Vec<_>>(), ["deepseek-flash", "deepseek-chat", "deepseek-reasoner"]);
+		assert_eq!(models[1]["cost"]["input"], 2.0); assert_eq!(models[1]["currency"], "USD");
+		assert_eq!(models[1]["maxTokens"], 4096); assert_eq!(models[2]["contextWindow"], 256000);
+		let mut command = std::process::Command::new("unused");
+		prepare_runtime(&dir, &mut command).unwrap();
+		let routes: Value = serde_json::from_str(command.get_envs().find(|(name, _)| *name == "SKIFF_FAMILY_RUNTIME").unwrap().1.unwrap().to_str().unwrap()).unwrap();
+		assert_eq!(routes[0]["models"].as_array().unwrap().len(), 3);
+		provider.models.swap(0, 2); provider.models.remove(1);
+		save_provider_in(&dir, "deepseek", provider.clone()).unwrap();
+		let offers = runtime_offers(&load(&dir).unwrap());
+		assert_eq!(offers.iter().map(|offer| offer.model_id.as_str()).collect::<Vec<_>>(), ["deepseek-reasoner", "deepseek-flash"]);
+		provider.models.clear(); save_provider_in(&dir, "deepseek", provider).unwrap();
+		assert!(runtime_offers(&load(&dir).unwrap()).is_empty());
+		assert!(providers::read_config(&dir.join("models.json")).unwrap()["providers"].get(&key).is_none());
+		assert!(load(&dir).unwrap().families[0].default_provider_id.is_none());
+		std::fs::remove_dir_all(dir).unwrap();
+	}
+
+	#[test]
+	fn rejects_duplicate_model_ids_and_invalid_model_limits() {
+		let mut provider = spec("中转站", "deepseek-chat");
+		let mut duplicate = provider.models[0].clone(); duplicate.model_id = " deepseek-chat ".into();
+		provider.models.push(duplicate);
+		assert!(normalize(&provider, &mut Vec::new(), "relay").is_err());
+		provider.models.pop(); provider.models[0].context_window = 0;
+		assert!(normalize(&provider, &mut Vec::new(), "relay").is_err());
+		provider.models[0].context_window = 100;
+		assert!(normalize(&provider, &mut Vec::new(), "relay").is_err());
 	}
 
 	fn spec(name: &str, model: &str) -> ProviderSpec {
@@ -979,18 +1063,14 @@ mod tests {
 			display_name: name.into(),
 			base_url: "https://api.example.com/v1/".into(),
 			api_key: "sk-secret-abcd".into(),
-			model_id: model.into(),
-			input_cost: 1.25,
-			output_cost: 2.5,
-			currency: Currency::default(),
-			max_tokens: None,
+			models: vec![ModelSpec { model_id: model.into(), input_cost: 1.25, output_cost: 2.5,
+				currency: Currency::default(), max_tokens: 8192, context_window: 128_000, model_config: json!({}) }],
 			streaming: true,
 			tools: false,
 			vision: true,
 			reasoning: false,
 			timeout_seconds: 90,
 			enabled: true,
-			model_config: json!({}),
 			legacy_provider: None,
 		}
 	}
@@ -1176,9 +1256,10 @@ b".into();
 		assert!(migrate(&dir).unwrap());
 		let config = load_plain(&dir).unwrap();
 		let deepseek = config.families.iter().find(|family| family.id == "deepseek").unwrap();
-		assert_eq!(deepseek.providers.len(), 2, "one channel per model");
+		assert_eq!(deepseek.providers.len(), 1, "one channel per family and endpoint");
+		assert_eq!(deepseek.providers[0].models.len(), 2);
 		assert!(deepseek.providers.iter().all(|provider| provider.display_name.starts_with("默认")));
-		assert_eq!(deepseek.providers[0].input_cost, 0.3);
+		assert_eq!(deepseek.providers[0].models[0].input_cost, 0.3);
 		assert!(deepseek.providers[0].vision);
 		assert!(deepseek.providers[0].reasoning);
 		assert_eq!(deepseek.providers[0].api_key, "sk-relay");

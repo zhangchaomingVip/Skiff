@@ -21,11 +21,12 @@ const cost = (model: ModelInfo) => typeof model.cost?.input === "number" && type
 	: "";
 
 /**
- * Family-grouped picker: one group per family, one row per enabled channel.
+ * Family-grouped picker: one group per family, one provider group per channel, one row per model.
  * Keyboard: ↑↓ move, Enter confirm, Esc closes (handled by the caller), typing
  * filters across all families.
  */
-export function ModelPicker({ models, familyOf, current, onSelect, onManage, disabled = false }: {
+export function ModelPicker({ models, familyOf, current, onSelect, onManage, configurationHint, disabled = false }: {
+	configurationHint?: string;
 	models: ModelInfo[];
 	familyOf: (model: ModelInfo) => { id: string; name: string } | undefined;
 	current?: ModelInfo;
@@ -43,22 +44,24 @@ export function ModelPicker({ models, familyOf, current, onSelect, onManage, dis
 		const matches = models.filter((model) => {
 			if (!needle) return true;
 			const family = familyOf(model);
-			return `${model.name ?? ""} ${model.id} ${family?.name ?? ""} ${FAMILY_LABELS[family?.id ?? ""] ?? ""}`.toLowerCase().includes(needle);
+			return `${model.providerName ?? model.provider} ${model.name ?? ""} ${model.id} ${family?.name ?? ""} ${FAMILY_LABELS[family?.id ?? ""] ?? ""}`.toLowerCase().includes(needle);
 		});
-		const ordered: { familyId?: string; familyName?: string; models: ModelInfo[] }[] = [];
+		const ordered: { familyId?: string; familyName?: string; providers: { key: string; name: string; models: ModelInfo[] }[] }[] = [];
 		for (const model of matches) {
 			const family = familyOf(model);
 			const key = family?.id ?? "";
-			const existing = ordered.find((group) => (group.familyId ?? "") === key);
-			if (existing) existing.models.push(model);
-			else ordered.push({ familyId: family?.id, familyName: family?.name ?? family?.id ?? "其他模型", models: [model] });
+			let group = ordered.find((group) => (group.familyId ?? "") === key);
+			if (!group) { group = { familyId: family?.id, familyName: family?.name ?? "其他模型", providers: [] }; ordered.push(group); }
+			const provider = group.providers.find((provider) => provider.key === model.provider);
+			if (provider) provider.models.push(model);
+			else group.providers.push({ key: model.provider, name: model.providerName ?? model.provider, models: [model] });
 		}
 		return ordered;
 	}, [models, query, familyOf]);
 
 	const rows: Row[] = useMemo(() => {
 		const flat: Row[] = [];
-		for (const group of groups) for (const model of group.models) flat.push({ familyId: group.familyId, familyName: group.familyName, model, index: flat.length });
+		for (const group of groups) for (const provider of group.providers) for (const model of provider.models) flat.push({ familyId: group.familyId, familyName: group.familyName, model, index: flat.length });
 		return flat;
 	}, [groups]);
 
@@ -88,24 +91,28 @@ export function ModelPicker({ models, familyOf, current, onSelect, onManage, dis
 
 	let rendered = 0;
 	return <div className="family-picker">
-		<div className="model-search"><Icon name="search" size={15} /><input autoFocus role="combobox" aria-expanded="true" aria-controls={id} aria-autocomplete="list" aria-activedescendant={rows[active] ? `${id}-${active}` : undefined} aria-label="搜索模型或提供商" placeholder="搜索模型或提供商…" value={query} disabled={disabled} onChange={(event) => setQuery(event.target.value)} onKeyDown={onKeyDown} /></div>
+		<div className="model-search"><Icon name="search" size={15} /><input autoFocus role="combobox" aria-expanded="true" aria-controls={id} aria-autocomplete="list" aria-activedescendant={rows[active] ? `${id}-${active}` : undefined} aria-label="搜索家族、提供商或模型" placeholder="搜索家族、提供商或模型…" value={query} disabled={disabled} onChange={(event) => setQuery(event.target.value)} onKeyDown={onKeyDown} /></div>
 		<div className="family-groups" id={id} role="listbox" aria-label="可用模型" ref={listRef}>
 			{groups.map((group) => {
 				const mark = brand(group.familyId);
 				return <section className="family-group" key={group.familyId ?? "other"}>
 					<div className="family-head">{mark ? <BrandIcon name={mark} size={14} /> : <Icon name="spark" size={13} />}<span>{FAMILY_LABELS[group.familyId ?? ""] ?? group.familyName}</span></div>
-					{group.models.map((model) => {
-						const index = rendered++;
-						const selected = sameModel(model, current);
-						return <button key={`${model.provider}/${model.id}`} id={`${id}-${index}`} className={`family-option ${index === active ? "focused" : ""}`} role="option" aria-selected={selected} aria-label={`选择 ${group.familyName} ${model.name ?? model.id}`} disabled={disabled} onMouseMove={() => setActive(index)} onClick={() => onSelect(model)}>
-							<div className="family-option-main"><strong>{model.name ?? model.id}</strong>{selected && <Icon name="check" size={14} />}</div>
-							<small>{model.id}{cost(model) ? ` · ${cost(model)}` : ""}</small>
-						</button>;
-					})}
+					{group.providers.map((provider) => <div className="family-provider-group" key={provider.key}>
+						<div className="family-provider-head">{provider.name}</div>
+						{provider.models.map((model) => {
+							const index = rendered++;
+							const selected = sameModel(model, current);
+							return <button key={`${model.provider}/${model.id}`} id={`${id}-${index}`} className={`family-option ${index === active ? "focused" : ""}`} role="option" aria-selected={selected} aria-label={`选择 ${group.familyName} ${provider.name} ${model.id}`} disabled={disabled} onMouseMove={() => setActive(index)} onClick={() => onSelect(model)}>
+								<div className="family-option-main"><strong>{model.id}</strong>{selected && <Icon name="check" size={14} />}</div>
+								<small>{cost(model)}</small>
+							</button>;
+						})}
+					</div>)}
 				</section>;
 			})}
 			{!groups.length && <p className="menu-hint">没有匹配的模型</p>}
 		</div>
+		{configurationHint && <p className="menu-hint" role="status">{configurationHint}</p>}
 		<div className="family-picker-foot"><button className="btn ghost compact" onClick={onManage} disabled={disabled}><Icon name="settings" size={13} />管理提供商…</button></div>
 	</div>;
 }

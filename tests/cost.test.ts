@@ -50,3 +50,13 @@ test("session totals follow historical channels and keep currencies separate", (
 	assert.equal(formatCosts(summarizeCosts(messages, [other], other)), "—");
 	assert.equal(formatCosts(summarizeCosts([reply("ambiguous", { provider: undefined })], [model, other], other)), "—");
 });
+
+test("models on one channel use independent prices and currencies for historical messages", () => {
+	const flash: ModelInfo = { ...model, id: "deepseek-flash", cost: { input: 1, output: 4 } };
+	const reasoner: ModelInfo = { ...model, id: "deepseek-reasoner", currency: "USD", cost: { input: 5, output: 20 } };
+	const messages = [reply("flash", { model: flash.id }), reply("reasoner", { model: reasoner.id })];
+	const summary = summarizeCosts(messages, [flash, reasoner], reasoner);
+	assert.equal(summary.unconfigured, false);
+	assert.ok(Math.abs(summary.totals.CNY! - 0.00043) < 1e-12);
+	assert.ok(Math.abs(summary.totals.USD! - 0.00215) < 1e-12);
+});
