@@ -10,7 +10,8 @@
 		"build": "tsc && vite build",
 		"test": "node --import ./tests/register.mjs --test tests/*.test.ts",
 		"preview": "vite preview",
-		"tauri": "tauri"
+		"tauri": "tauri",
+		"release": "node scripts/release.mjs"
 	},
 	"dependencies": {
 		"@tauri-apps/api": "^2.0.0",

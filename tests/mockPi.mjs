@@ -7,29 +7,47 @@ export function installMockPi(target, storage) {
 	const commands = [];
 	let sequence = 0;
 	let failSend = false;
-	const providerKey = (familyId, id) => `skiff-${familyId}-${id}`;
-	// Families ship with two DeepSeek channels so QA can exercise the switcher.
-	const families = [
-		{ id: "deepseek", displayName: "DeepSeek", defaultProviderId: "p1", providers: [
-			{ id: "p1", displayName: "官方直连", baseUrl: "https://api.deepseek.com/v1", apiKey: "sk-mock-0000abcd", models: [{ modelId: "deepseek-chat", inputCost: 0.3, outputCost: 1.2, currency: "CNY", maxTokens: 8192, contextWindow: 128000 }], streaming: true, tools: true, vision: false, reasoning: true, timeoutSeconds: 60, enabled: true },
-			{ id: "p2", displayName: "硅基低价", baseUrl: "https://api.siliconflow.cn/v1", apiKey: "sk-mock-1111efgh", models: [{ modelId: "deepseek-ai/DeepSeek-V3", inputCost: 0.14, outputCost: 0.28, currency: "CNY", maxTokens: 8192, contextWindow: 128000 }], streaming: true, tools: true, vision: false, reasoning: false, timeoutSeconds: 60, enabled: true },
-		] },
-		{ id: "kimi", displayName: "Kimi", defaultProviderId: "k1", providers: [
-			{ id: "k1", displayName: "官方", baseUrl: "https://api.moonshot.cn/v1", apiKey: "sk-mock-2222ijkl", models: [{ modelId: "kimi-k2", inputCost: 0.6, outputCost: 2.4, currency: "CNY", maxTokens: 8192, contextWindow: 128000 }], streaming: true, tools: true, vision: false, reasoning: true, timeoutSeconds: 60, enabled: true },
-		] },
-		{ id: "glm", displayName: "GLM", defaultProviderId: null, providers: [] },
+	const providerKey = (familyId, relayId) => `skiff-relay-${relayId}-${familyId}`;
+	// Families ship with two DeepSeek routes (over two relays) so QA can exercise the switcher.
+	const relays = [
+		{ id: "r1", name: "官方直连", baseUrl: "https://api.deepseek.com/v1", apiKey: "sk-mock-0000abcd", timeoutSeconds: 60, enabled: true },
+		{ id: "r2", name: "硅基低价", baseUrl: "https://api.siliconflow.cn/v1", apiKey: "sk-mock-1111efgh", timeoutSeconds: 60, enabled: true },
+		{ id: "r3", name: "官方", baseUrl: "https://api.moonshot.cn/v1", apiKey: "sk-mock-2222ijkl", timeoutSeconds: 60, enabled: true },
 	];
-	families[0].providers[0].models.unshift({ modelId: "deepseek-flash", inputCost: 1, outputCost: 4, currency: "CNY", maxTokens: 4096, contextWindow: 32000 });
-	families[0].providers[0].models.push({ modelId: "deepseek-reasoner", inputCost: 5, outputCost: 20, currency: "USD", maxTokens: 16384, contextWindow: 256000 });
-	const familyModels = () => families.flatMap((family) => family.providers.filter((provider) => provider.enabled).flatMap((provider) => provider.models.map((model) => ({
-		provider: providerKey(family.id, provider.id), id: model.modelId, name: model.modelId,
-		contextWindow: model.contextWindow, maxTokens: model.maxTokens, currency: model.currency, cost: { input: model.inputCost, output: model.outputCost },
-		reasoning: provider.reasoning, input: provider.vision ? ["text", "image"] : ["text"],
-	}))));
+	const route = (relayId, models, capabilities = {}) => ({ relayId, models, streaming: true, tools: true, vision: false, reasoning: false, ...capabilities });
+	const families = [
+		{ id: "deepseek", displayName: "DeepSeek", defaultRelayId: "r1", routes: [
+			route("r1", [
+				{ modelId: "deepseek-flash", inputCost: 1, outputCost: 4, currency: "CNY", maxTokens: 4096, contextWindow: 32000 },
+				{ modelId: "deepseek-chat", inputCost: 0.3, outputCost: 1.2, currency: "CNY", maxTokens: 8192, contextWindow: 128000 },
+				{ modelId: "deepseek-reasoner", inputCost: 5, outputCost: 20, currency: "USD", maxTokens: 16384, contextWindow: 256000 },
+			], { reasoning: true }),
+			route("r2", [{ modelId: "deepseek-ai/DeepSeek-V3", inputCost: 0.14, outputCost: 0.28, currency: "CNY", maxTokens: 8192, contextWindow: 128000 }]),
+		] },
+		{ id: "kimi", displayName: "Kimi", defaultRelayId: "r3", routes: [
+			route("r3", [{ modelId: "kimi-k2", inputCost: 0.6, outputCost: 2.4, currency: "CNY", maxTokens: 8192, contextWindow: 128000 }], { reasoning: true }),
+		] },
+		{ id: "glm", displayName: "GLM", defaultRelayId: null, routes: [] },
+	];
+	const relayOf = (relayId) => relays.find((relay) => relay.id === relayId);
+	const familyRoutes = () => families.flatMap((family) => family.routes.map((route) => ({ family, route })));
+	const familyModels = () => familyRoutes().flatMap(({ family, route }) => {
+		const relay = relayOf(route.relayId);
+		if (!relay?.enabled) return [];
+		return route.models.map((model) => ({
+			provider: providerKey(family.id, relay.id), id: model.modelId, name: model.modelId,
+			contextWindow: model.contextWindow, maxTokens: model.maxTokens, currency: model.currency, cost: { input: model.inputCost, output: model.outputCost },
+			reasoning: route.reasoning, input: route.vision ? ["text", "image"] : ["text"],
+		}));
+	});
 	const models = familyModels();
 	let autoFailover = false;
-	const familiesConfig = () => ({ version: 2, autoFailover, families: structuredClone(families) });
-	const providers = [];
+	const familiesConfig = () => ({ version: 3, relays: structuredClone(relays), autoFailover, families: structuredClone(families) });
+	const offers = () => familyRoutes().flatMap(({ family, route }) => {
+		const relay = relayOf(route.relayId);
+		if (!relay?.enabled) return [];
+		return route.models.map((model) => ({ familyId: family.id, familyName: family.displayName, relayId: relay.id, relayName: relay.name, providerKey: providerKey(family.id, relay.id), modelId: model.modelId, inputCost: model.inputCost, outputCost: model.outputCost, currency: model.currency, maxTokens: model.maxTokens, contextWindow: model.contextWindow }));
+	});
 	const persist = () => storage?.setItem("skiff.test.sessions", JSON.stringify(saved));
 	const emit = (instanceId, event) => {
 		for (const listener of listeners.values()) {
@@ -41,85 +59,92 @@ export function installMockPi(target, storage) {
 		transformCallback(callback) { const id = ++sequence; callbacks.set(id, callback); return id; },
 		async invoke(command, args) {
 			// Model discovery credentials must never enter the preview command log.
-			commands.push({ command, args: command === "discover_openai_models" ? { baseUrl: args.baseUrl } : args });
+			commands.push({ command, args: command === "discover_relay_models" ? { baseUrl: args.baseUrl } : args });
 			if (command === "plugin:event|listen") { const id = ++sequence; listeners.set(id, args); return id; }
 			if (command === "plugin:event|unlisten") return;
 			if (command === "get_workspace_directory") return { name: "Skiff", path: "D:\\workspace\\Skiff" };
-			if (command === "list_openai_providers") return structuredClone(providers);
-			if (command === "migrate_provider_config") return false;
 			if (command === "list_model_families") return familiesConfig();
-			if (command === "list_model_runtime") return families.flatMap((family) => family.providers.filter((provider) => provider.enabled).flatMap((provider) => provider.models.map((model) => ({ familyId: family.id, familyName: family.displayName, providerId: provider.id, displayName: provider.displayName, providerKey: providerKey(family.id, provider.id), ...model }))));
+			if (command === "list_model_runtime") return offers();
 			if (command === "test_provider_connection") {
 				if (String(args.baseUrl).includes("fail")) return { ok: false, latencyMs: 42, status: 401, error: "Invalid API key" };
 				return { ok: true, latencyMs: 137, status: 200, error: null };
 			}
 			if (command === "set_family_auto_failover") { autoFailover = !!args.autoFailover; return familiesConfig(); }
-			if (command === "set_family_provider_enabled") {
-				const family = families.find((item) => item.id === args.familyId);
-				const provider = family.providers.find((item) => item.id === args.providerId);
-				provider.enabled = !!args.enabled;
-				if (!provider.enabled && family.defaultProviderId === provider.id) family.defaultProviderId = family.providers.find((item) => item.enabled)?.id ?? null;
-				if (provider.enabled && !family.defaultProviderId) family.defaultProviderId = provider.id;
-				return familiesConfig();
-			}
-			if (command === "set_family_default_provider") {
-				const family = families.find((item) => item.id === args.familyId);
-				family.defaultProviderId = args.providerId ?? null;
-				return familiesConfig();
-			}
-			if (command === "reorder_family_providers") {
-				const family = families.find((item) => item.id === args.familyId);
-				family.providers = args.providerIds.map((id) => family.providers.find((provider) => provider.id === id));
-				return familiesConfig();
-			}
-			if (command === "delete_family_provider") {
-				const family = families.find((item) => item.id === args.familyId);
-				if (family.providers.length <= 1) throw new Error("每个家族至少保留一个提供商");
-				family.providers = family.providers.filter((provider) => provider.id !== args.providerId);
-				if (family.defaultProviderId === args.providerId) family.defaultProviderId = family.providers.find((item) => item.enabled)?.id ?? null;
-				return familiesConfig();
-			}
-			if (command === "save_family_provider") {
-				const family = families.find((item) => item.id === args.familyId);
-				const incoming = args.provider;
-				if (!incoming.displayName?.trim()) throw new Error("显示名需为 1–32 个字符");
+			if (command === "save_relay") {
+				const incoming = args.relay;
+				if (!incoming.name?.trim() || incoming.name.trim().length > 32) throw new Error("显示名需为 1–32 个字符");
 				if (!/^https?:\/\//.test(incoming.baseUrl ?? "")) throw new Error("Base URL 必须以 http:// 或 https:// 开头");
-				if (incoming.models.some((model) => !model.modelId?.trim())) throw new Error("模型 ID 不能为空");
-				const duplicate = family.providers.some((provider) => provider.id !== incoming.id && provider.displayName === incoming.displayName.trim());
-				if (duplicate) throw new Error("同家族内显示名不能重复");
-				if (!incoming.id) incoming.id = `p${family.providers.length + 1}`;
-				if (!incoming.apiKey) incoming.apiKey = family.providers.find((provider) => provider.id === incoming.id)?.apiKey ?? "";
-				const index = family.providers.findIndex((provider) => provider.id === incoming.id);
-				if (index < 0) family.providers.push(incoming); else family.providers[index] = incoming;
-				if (!family.defaultProviderId) family.defaultProviderId = incoming.id;
+				if (relays.some((relay) => relay.id !== incoming.id && relay.name === incoming.name.trim())) throw new Error("中转名称不能重复");
+				if (!incoming.id) {
+					if (!incoming.apiKey?.trim()) throw new Error("新中转需要 API Key");
+					incoming.id = `r${relays.length + 1}`;
+				} else if (!incoming.apiKey) {
+					incoming.apiKey = relayOf(incoming.id)?.apiKey ?? "";
+				}
+				incoming.timeoutSeconds = Math.min(600, Math.max(5, incoming.timeoutSeconds ?? 60));
+				const index = relays.findIndex((relay) => relay.id === incoming.id);
+				if (index < 0) relays.push(incoming); else relays[index] = incoming;
 				return familiesConfig();
 			}
-			if (command === "set_model_max_tokens") {
-				const model = models.find((m) => m.provider === args.provider && m.id === args.modelId);
-				if (!model) throw new Error(`没有找到模型 ${args.modelId}`);
-				if (args.maxTokens == null) { delete model.maxTokens; return null; }
-				if (model.contextWindow && args.maxTokens > model.contextWindow) throw new Error("最大输出 Token 不能超过上下文窗口");
-				model.maxTokens = args.maxTokens;
-				return args.maxTokens;
+			if (command === "delete_relay") {
+				const index = relays.findIndex((relay) => relay.id === args.relayId);
+				if (index < 0) throw new Error("找不到要删除的中转");
+				relays.splice(index, 1);
+				for (const family of families) {
+					family.routes = family.routes.filter((route) => route.relayId !== args.relayId);
+					if (family.defaultRelayId === args.relayId) family.defaultRelayId = null;
+				}
+				return familiesConfig();
 			}
-			if (command === "discover_openai_models") {
+			if (command === "set_relay_enabled") {
+				const relay = relayOf(args.relayId);
+				if (!relay) throw new Error("找不到该中转");
+				relay.enabled = !!args.enabled;
+				return familiesConfig();
+			}
+			if (command === "save_route") {
+				const family = families.find((item) => item.id === args.familyId);
+				if (!family) throw new Error(`未知模型家族：${args.familyId}`);
+				const incoming = args.route;
+				if (!relayOf(incoming.relayId)) throw new Error("线路的中转不存在，请先添加中转");
+				if (!incoming.models?.length) throw new Error("请至少添加一个模型，补全线路配置");
+				const ids = new Set(incoming.models.map((model) => model.modelId?.trim()));
+				if (ids.has("")) throw new Error("模型 ID 不能为空");
+				if (ids.size !== incoming.models.length) throw new Error("同一线路内模型 ID 不能重复");
+				const index = family.routes.findIndex((route) => route.relayId === incoming.relayId);
+				if (index < 0) family.routes.push(incoming); else family.routes[index] = incoming;
+				if (!family.defaultRelayId) family.defaultRelayId = incoming.relayId;
+				return familiesConfig();
+			}
+			if (command === "delete_route") {
+				const family = families.find((item) => item.id === args.familyId);
+				const before = family?.routes.length ?? 0;
+				if (family) family.routes = family.routes.filter((route) => route.relayId !== args.relayId);
+				if (!family || family.routes.length === before) throw new Error("找不到要删除的线路");
+				if (family.defaultRelayId === args.relayId) family.defaultRelayId = null;
+				return familiesConfig();
+			}
+			if (command === "reorder_routes") {
+				const family = families.find((item) => item.id === args.familyId);
+				if (!family || args.relayIds.length !== family.routes.length) throw new Error("排序请求与现有线路数量不一致");
+				family.routes = args.relayIds.map((id) => family.routes.find((route) => route.relayId === id));
+				return familiesConfig();
+			}
+			if (command === "set_default_route") {
+				const family = families.find((item) => item.id === args.familyId);
+				if (!family) throw new Error(`未知模型家族：${args.familyId}`);
+				if (args.relayId == null) { family.defaultRelayId = null; return familiesConfig(); }
+				const route = family.routes.find((route) => route.relayId === args.relayId);
+				const relay = relayOf(args.relayId);
+				if (!route || !route.models.length || !relay?.enabled) throw new Error("默认线路必须是该家族内已启用中转上的线路");
+				family.defaultRelayId = args.relayId;
+				return familiesConfig();
+			}
+			if (command === "discover_relay_models") {
 				await new Promise((resolve) => target.setTimeout(resolve, 350));
 				if (args.apiKey === "invalid") throw new Error("密钥无效或未授权");
 				if (String(args.baseUrl).includes("missing")) throw new Error("该地址不支持 /models 接口，请手动填写");
 				return ["deepseek-chat", "deepseek-flash", "deepseek-reasoner", "Kimi-K2", "moonshot-v1", "glm-4.6", "chatglm-6b", ...Array.from({ length: 22 }, (_, i) => `a-model-${String(i).padStart(2, "0")}`)];
-			}
-			if (command === "save_openai_provider") {
-				const { apiKey, ...provider } = args.input;
-				provider.hasKey = !!apiKey || providers.some((p) => p.name === provider.name && p.hasKey);
-				if (!provider.modelIds.length) provider.modelIds = ["mock-vision", "mock-text"];
-				const index = providers.findIndex((p) => p.name === provider.name);
-				if (index < 0) providers.push(provider); else providers[index] = provider;
-				for (const id of provider.modelIds) {
-					const model = { provider: provider.name, id, reasoning: provider.reasoning, input: provider.vision ? ["text", "image"] : ["text"], maxThinking: provider.maxThinking };
-					const found = models.findIndex((m) => m.provider === provider.name && m.id === id);
-					if (found < 0) models.push(model); else models[found] = model;
-				}
-				return provider;
 			}
 			if (command === "validate_project_directory") {
 				if (!/^D:\\workspace\\[\w-]+$/.test(args.path)) throw new Error("请输入存在的文件夹的绝对路径");

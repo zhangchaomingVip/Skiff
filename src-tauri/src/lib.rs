@@ -408,11 +408,11 @@ pub fn run() {
 			validate_project_directory,
 			get_workspace_directory,
 			read_system_prompt,
-			providers::list_openai_providers, providers::discover_openai_models, providers::save_openai_provider, providers::set_model_max_tokens,
-			families::list_model_families, families::list_model_runtime, families::migrate_provider_config,
-			families::save_family_provider, families::delete_family_provider, families::reorder_family_providers,
-			families::set_family_provider_enabled, families::set_family_default_provider, families::set_family_auto_failover,
-			families::test_provider_connection, families::list_openai_providers_legacy,
+			families::list_model_families, families::list_model_runtime,
+			families::save_relay, families::delete_relay, families::set_relay_enabled,
+			families::save_route, families::delete_route, families::reorder_routes,
+			families::set_default_route, families::set_family_auto_failover,
+			families::test_provider_connection, families::discover_relay_models,
 			search::get_web_search_status, search::save_web_search_key, search::clear_web_search_key, search::install_web_search_extension
 		])
 		.on_window_event(|window, event| {

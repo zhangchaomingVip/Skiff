@@ -4,7 +4,7 @@ import { useWorkspace } from "./chat/workspace";
 import { useModelFamilies } from "./chat/useModelFamilies";
 import { ModelFamilyContext } from "./chat/familyContext";
 import { familyFromProvider, modelBrand } from "./chat/modelDisplay";
-import { isProviderFailure, nextProvider, reconcile, resolveSelection } from "./chat/modelFamilies";
+import { isProviderFailure, nextRoute, reconcile, resolveSelection } from "./chat/modelFamilies";
 import type { ModelInfo } from "./chat/types";
 import { VoyageWorkspace } from "./components/VoyageWorkspace";
 import { RawDrawer } from "./components/RawDrawer";
@@ -64,22 +64,19 @@ export default function App() {
 		const currentFamily = familyFromProvider(state.model?.provider)?.id ?? modelBrand(state.model?.id, state.model?.provider);
 		const resolved = resolveSelection(state.model, offers, currentFamily, modelFamilies.families);
 		const selected = resolved.offer;
-		if (resolved.invalidated) setModelNotice(selected ? `当前模型已失效，已切换到 ${selected.familyName} · ${selected.displayName} · ${selected.modelId}` : "当前模型已失效，请补全并启用提供商的模型配置");
+		if (resolved.invalidated) setModelNotice(selected ? `当前模型已失效，已切换到 ${selected.familyName} · ${selected.relayName} · ${selected.modelId}` : "当前模型已失效，请先在中转上配置线路");
 		session.reconnect(selected ? { provider: selected.providerKey, id: selected.modelId } : state.model && !familyFromProvider(state.model.provider) ? state.model : undefined);
 	}, [activeChat?.id, connected, busy, modelFamilies.loading, modelFamilies.config, modelFamilies.offers, modelFamilies.families, state.model, session.reconnect]);
 
-	const displayModels = useMemo(() => modelFamilies.fallback ? state.availableModels : modelFamilies.offers.length ? reconcile(state.model, modelFamilies.offers, state.availableModels) : [], [state.model, state.availableModels, modelFamilies.offers, modelFamilies.fallback]);
+	const displayModels = useMemo(() => modelFamilies.fallback ? state.availableModels : modelFamilies.offers.length ? reconcile(state.model, modelFamilies.offers, state.availableModels, modelFamilies.families) : [], [state.model, state.availableModels, modelFamilies.offers, modelFamilies.families, modelFamilies.fallback]);
 	const displayModel = displayModels.find((model) => model.provider === state.model?.provider && model.id === state.model?.id) ?? (modelFamilies.fallback ? state.model : undefined);
 	const pricingModels = useMemo(() => {
 		if (modelFamilies.fallback) return state.availableModels;
-		return modelFamilies.families.flatMap((family) => family.providers.flatMap((provider) => provider.models.flatMap((item) => {
-			const model: ModelInfo = {
-				provider: `skiff-${family.id}-${provider.id}`, id: item.modelId, name: item.modelId, providerName: provider.displayName,
-				cost: { input: item.inputCost, output: item.outputCost }, currency: item.currency,
-			};
-			return provider.legacyProvider ? [model, { ...model, provider: provider.legacyProvider }] : [model];
-		})));
-	}, [modelFamilies.config, modelFamilies.fallback, state.availableModels]);
+		return modelFamilies.offers.map((offer): ModelInfo => ({
+			provider: offer.providerKey, id: offer.modelId, name: offer.modelId, providerName: offer.relayName,
+			cost: { input: offer.inputCost, output: offer.outputCost }, currency: offer.currency,
+		}));
+	}, [modelFamilies.offers, modelFamilies.fallback, state.availableModels]);
 	const selectModel = useCallback((model: ModelInfo) => void actions.setModel(model), [actions]);
 	const displayState = { ...state, model: displayModel, availableModels: displayModels };
 
@@ -97,7 +94,7 @@ export default function App() {
 
 	const send = async (text: string, images?: ImageAttachment[]) => {
 		if (!activeChat) return false;
-		if (!modelFamilies.fallback && !displayModel) { setModelNotice("请补全并启用提供商的模型配置后再发送消息"); return false; }
+		if (!modelFamilies.fallback && !displayModel) { setModelNotice("请先在中转上配置线路并启用后再发送消息"); return false; }
 		const accepted = await actions.prompt(text, images);
 		if (accepted) library.updateChat(activeChat.id, { updatedAt: Date.now() });
 		return accepted;
@@ -107,28 +104,30 @@ export default function App() {
 	// only needs to close, because changing the configuration must never restart
 	// a running conversation.
 	const familyContext = useMemo(() => ({
-		configurationHint: modelFamilies.families.some((family) => family.providers.some((provider) => !provider.models.length))
-			? `请补全以下提供商的模型配置：${modelFamilies.families.flatMap((family) => family.providers.filter((provider) => !provider.models.length).map((provider) => `${family.displayName} · ${provider.displayName}`)).join("、")}` : undefined,
+		configurationHint: undefined,
 		models: displayModels,
 		pricingModels,
 		current: displayModel,
 		select: selectModel,
 		familyOf: (model: ModelInfo) => {
+			// Route keys are opaque: resolve the family through the offers first.
+			const offer = modelFamilies.offers.find((offer) => offer.providerKey === model.provider && offer.modelId === model.id);
+			if (offer) return { id: offer.familyId, name: offer.familyName };
 			const owner = familyFromProvider(model.provider);
 			if (!owner) return undefined;
 			const family = modelFamilies.families.find((item) => item.id === owner.id);
 			return { id: owner.id, name: family?.displayName ?? owner.label };
 		},
 		manage: () => setProviderDialogOpen(true),
-	}), [modelFamilies.families, displayModels, displayModel, selectModel, pricingModels]);
+	}), [modelFamilies.offers, modelFamilies.families, displayModels, displayModel, selectModel, pricingModels]);
 
-	// A provider error offers the next enabled channel in the same family;
-	// the setting decides whether that switch happens on its own.
+	// A provider error offers the next route of the same family that serves the
+	// same model; the setting decides whether that switch happens on its own.
 	const failover = useMemo(() => {
 		if (!state.lastError || !state.model || !isProviderFailure(state.lastError)) return undefined;
-		const next = nextProvider(state.model, modelFamilies.offers);
+		const next = nextRoute(state.model, modelFamilies.offers);
 		if (!next) return undefined;
-		return { label: `${next.providerName ?? next.provider} · ${next.id}`, switch: () => void actions.setModel(next) };
+		return { label: `${next.relayName} · ${next.modelId}`, switch: () => void actions.setModel({ provider: next.providerKey, id: next.modelId }) };
 	}, [state.lastError, state.model, modelFamilies.offers, actions]);
 	const autoSwitchRef = useRef("");
 	useEffect(() => {
@@ -159,7 +158,7 @@ export default function App() {
 				</div>
 			</main>
 			{projectDialogOpen && <ProjectDialog onAdd={library.addProject} onClose={() => setProjectDialogOpen(false)} />}
-			{providerDialogOpen && <FamiliesSettings configError={modelFamilies.error} families={modelFamilies.families} autoFailover={modelFamilies.config?.autoFailover ?? false} onSave={modelFamilies.save} onDelete={modelFamilies.remove} onReorder={modelFamilies.reorder} onToggle={modelFamilies.setEnabled} onSetDefault={modelFamilies.setDefault} onAutoFailover={modelFamilies.setAutoFailover} onTest={modelFamilies.test} onClose={() => setProviderDialogOpen(false)} />}
+			{providerDialogOpen && <FamiliesSettings configError={modelFamilies.error} families={modelFamilies.families} relays={modelFamilies.relays} autoFailover={modelFamilies.config?.autoFailover ?? false} onSaveRelay={modelFamilies.saveRelay} onDeleteRelay={modelFamilies.deleteRelay} onSetRelayEnabled={modelFamilies.setRelayEnabled} onSaveRoute={modelFamilies.saveRoute} onDeleteRoute={modelFamilies.deleteRoute} onReorderRoutes={modelFamilies.reorderRoutes} onSetDefaultRoute={modelFamilies.setDefaultRoute} onAutoFailover={modelFamilies.setAutoFailover} onTest={modelFamilies.test} onDiscover={modelFamilies.discover} onClose={() => setProviderDialogOpen(false)} />}
 			{promptDialogOpen && <PromptDialog sessionPath={session.sessionFile} onSaved={() => { setPromptDialogOpen(false); session.reconnect(); }} onClose={() => setPromptDialogOpen(false)} />}
 			{searchDialogOpen && <SearchDialog savedKeyHint={search.keyHint} search={search} onSaved={() => { search.refresh(); }} onClose={() => setSearchDialogOpen(false)} />}
 		</div>
