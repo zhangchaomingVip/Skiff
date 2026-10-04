@@ -64,6 +64,7 @@ export interface FamiliesConfig {
 	relays: RelaySpec[];
 	families: ModelFamily[];
 	autoFailover: boolean;
+	usdCnyRate: number;
 }
 
 export interface TestResult {
@@ -146,6 +147,7 @@ export function useModelFamilies() {
 	return {
 		config, families, relays: config?.relays ?? [], offers, loading, error, complete,
 		fallback: !loading && (!!error || !complete),
+		usdCnyRate: config?.usdCnyRate ?? 7.2,
 		refresh,
 		clearError: () => setError(undefined),
 		saveRelay: (relay: RelaySpec) => run("save_relay", { relay }),
@@ -156,6 +158,7 @@ export function useModelFamilies() {
 		reorderRoutes: (familyId: string, relayIds: string[]) => run("reorder_routes", { familyId, relayIds }),
 		setDefaultRoute: (familyId: string, relayId: string | null) => run("set_default_route", { familyId, relayId }),
 		setAutoFailover: (autoFailover: boolean) => run("set_family_auto_failover", { autoFailover }),
+		setUsdCnyRate: (rate: number) => run("set_usd_cny_rate", { rate }),
 		test: (baseUrl: string, apiKey: string, modelId: string, timeoutSeconds: number) =>
 			invoke<TestResult>("test_provider_connection", { baseUrl, apiKey, modelId, timeoutSeconds }),
 		discover: (baseUrl: string, apiKey: string) => invoke<string[]>("discover_relay_models", { baseUrl, apiKey }),

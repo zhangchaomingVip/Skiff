@@ -356,3 +356,199 @@ export async function importPricedModels(pageUrl: string, fetchPage: (url: strin
 	}
 	throw new Error("未能从该页面识别出模型与价格，请换个地址试试，或手动填写");
 }
+
+/**
+ * Canonical prompt for the screenshot flow: the user copies it (with their
+ * screenshot) to any AI, then pastes the TSV back. Kept next to the parser so
+ * the column spec stays in sync with `parsePricedTable`.
+ */
+export const PRICING_IMPORT_PROMPT = `请把模型价格截图转成制表符分隔的表格（TSV），输出在一个代码块中，不要输出任何解释或其他文字。
+
+表头必须恰好是：
+模型ID\t输入单价\t输出单价\t币种\t上下文窗口\t最大输出
+
+规则：
+1. 单价必须是「每百万令牌」的价格，只填数字，禁止千分位逗号；
+2. 币种只填 CNY 或 USD，认不出就留空；
+3. 模型 ID 逐字符照抄（大小写、点、横线都要保留），每个模型一行，不要遗漏、不要编造；
+4. 上下文窗口和最大输出支持 200K 这种写法，认不出就留空；
+5. 看不清的行把对应字段留空，不要猜测数字。`;
+
+export interface TableRowError {
+	/** 1-based line number in the pasted text. */
+	line: number;
+	text: string;
+	reason: string;
+}
+
+const HEADER_PATTERNS = {
+	id: /模型|^id$|model|名称/i,
+	input: /输入|input|prompt/i,
+	output: /输出|output|completion/i,
+	currency: /币种|currency/i,
+	context: /上下文|context/i,
+	maxTokens: /最大输出|max[ _-]?tokens|输出上限/i,
+};
+
+function tableCells(line: string): string[] | undefined {
+	const trimmed = line.trim();
+	if (!trimmed) return undefined;
+	if (trimmed.startsWith("|")) {
+		const cells = trimmed.split("|").slice(1, -1).map((cell) => cell.trim());
+		if (cells.every((cell) => /^:?-{2,}:?$/.test(cell))) return undefined;
+		return cells;
+	}
+	if (trimmed.includes("\t")) return trimmed.split("\t").map((cell) => cell.trim());
+	return trimmed.split(/\s{2,}/).map((cell) => cell.trim());
+}
+
+function countFromCell(text: string | undefined): number | null {
+	if (!text) return null;
+	const match = text.trim().match(/^(\d+(?:\.\d+)?)\s*([kKmM])?$/);
+	if (!match) return null;
+	const base = Number(match[1]);
+	const scale = match[2]?.toLowerCase() === "m" ? 1_000_000 : match[2]?.toLowerCase() === "k" ? 1_000 : 1;
+	const value = Math.round(base * scale);
+	return value > 0 ? value : null;
+}
+
+/**
+ * Vision-extracted "IDs" are often display names with spaces (e.g.
+ * "DeepSeek V4 Flash 0731"); real API ids are lowercase-dashed. Keep genuine
+ * ids untouched, slugify display names into an id-shaped guess, and reject
+ * whatever carries no usable characters.
+ */
+function normalizeModelId(raw: string): { modelId: string; slugged: boolean } | null {
+	const trimmed = raw.trim();
+	if (!trimmed || trimmed.length > 120) return null;
+	if (!/\s/.test(trimmed) && /[a-zA-Z0-9]/.test(trimmed)) return { modelId: trimmed, slugged: false };
+	const slug = trimmed.toLowerCase()
+		.replace(/\s+/g, "-")
+		.replace(/[^a-z0-9._/-]+/g, "")
+		.replace(/-{2,}/g, "-")
+		.replace(/^[-.]+|[-.]+$/g, "");
+	if (!slug || !/[a-z0-9]/.test(slug) || slug.length > 120) return null;
+	return { modelId: slug, slugged: true };
+}
+
+/**
+ * Parses pasted TSV / Markdown tables (from an AI or copied out of Excel).
+ * Tolerates code fences, commentary lines, Chinese or English headers, K/M
+ * suffixes and currency symbols; reports unusable rows with their line number.
+ */
+export function parsePricedTable(text: string): { models: PricedModel[]; errors: TableRowError[] } {
+	const fenced = text.match(/```[\s\S]*?```/g);
+	const body = fenced ? fenced.map((block) => block.replace(/```[a-zA-Z]*\s?/g, "")).join("\n") : text;
+	const lines = body.split(/\r?\n/);
+	const rows: { line: number; cells: string[] }[] = [];
+	lines.forEach((raw, index) => {
+		const cells = tableCells(raw);
+		if (cells?.length) rows.push({ line: index + 1, cells });
+	});
+	if (!rows.length) return { models: [], errors: [] };
+
+	const first = rows[0].cells.map((cell) => cell.toLowerCase());
+	const indexOf = (pattern: RegExp) => first.findIndex((cell) => pattern.test(cell));
+	let idIdx = indexOf(HEADER_PATTERNS.id);
+	const inIdx = indexOf(HEADER_PATTERNS.input);
+	const outIdx = indexOf(HEADER_PATTERNS.output);
+	const hasHeader = idIdx >= 0 && (inIdx >= 0 || outIdx >= 0);
+	let start = 1;
+	if (!hasHeader) {
+		idIdx = 0;
+		start = 0;
+	}
+	const currencyIdx = hasHeader ? indexOf(HEADER_PATTERNS.currency) : 3;
+	const contextIdx = hasHeader ? indexOf(HEADER_PATTERNS.context) : 4;
+	const maxIdx = hasHeader ? indexOf(HEADER_PATTERNS.maxTokens) : 5;
+
+	const models: PricedModel[] = [];
+	const errors: TableRowError[] = [];
+	const seen = new Set<string>();
+	for (const row of rows.slice(start)) {
+		const at = (index: number) => (index >= 0 ? row.cells[index] : undefined);
+		const normalized = row.cells[idIdx] ? normalizeModelId(row.cells[idIdx]) : null;
+		if (!normalized) {
+			errors.push({ line: row.line, text: row.cells.join(" | "), reason: "模型 ID 缺失或无效" });
+			continue;
+		}
+		const { modelId, slugged } = normalized;
+		const input = looseNumber(at(hasHeader ? inIdx : 1) ?? "");
+		const output = looseNumber(at(hasHeader ? outIdx : 2) ?? "");
+		if (input === undefined && output === undefined) {
+			errors.push({ line: row.line, text: modelId, reason: "缺少可识别的单价" });
+			continue;
+		}
+		const key = modelId.toLowerCase();
+		if (seen.has(key)) {
+			errors.push({ line: row.line, text: modelId, reason: "与前面行重复，已忽略" });
+			continue;
+		}
+		seen.add(key);
+		models.push({
+			modelId,
+			inputCost: input ?? output ?? 0,
+			outputCost: output ?? input ?? 0,
+			currency: normalizeCurrency(at(currencyIdx)) ?? "CNY",
+			contextWindow: countFromCell(at(contextIdx)),
+			maxTokens: countFromCell(at(maxIdx)),
+			streaming: true,
+			tools: true,
+			vision: false,
+			reasoning: false,
+			note: slugged ? "ID 已格式化" : null,
+		});
+	}
+	return { models: dedupe(models), errors };
+}
+
+/** Rough vision-token estimate per image (OpenAI-style tiling), for the pre-call cost preview. */
+export function estimateVisionTokens(width: number, height: number): number {
+	if (width <= 0 || height <= 0) return 0;
+	const tiles = Math.min(32, Math.ceil(width / 512) * Math.ceil(height / 512));
+	return 85 + 170 * tiles;
+}
+
+/** Catalog providers per family, CN variant first so dedupe keeps CN pricing context. */
+export const FAMILY_CATALOG_PROVIDERS: Record<string, string[]> = {
+	deepseek: ["deepseek"],
+	kimi: ["moonshotai", "moonshotai-cn"],
+	glm: ["zhipuai"],
+};
+
+/** Minimal catalog entry shape (mirrors the Rust-pruned JSON). */
+export interface CatalogEntryLike {
+	provider: string;
+	modelId: string;
+	inputCost: number;
+	outputCost: number;
+	contextWindow: number;
+	maxTokens: number;
+	vision: boolean;
+	tools: boolean;
+	reasoning: boolean;
+	status: string | null;
+}
+
+export function catalogForFamily<T extends CatalogEntryLike>(catalog: T[], familyId: string): T[] {
+	const providers = FAMILY_CATALOG_PROVIDERS[familyId] ?? [];
+	return providers.length ? catalog.filter((entry) => providers.includes(entry.provider)) : [];
+}
+
+/** Official USD prices converted to CNY at the user's rate for unified bookkeeping. */
+export function catalogEntryToPriced(entry: CatalogEntryLike, usdCnyRate: number): PricedModel {
+	const convert = (value: number) => Math.max(0, Number((value * usdCnyRate).toFixed(6)));
+	return {
+		modelId: entry.modelId,
+		inputCost: convert(entry.inputCost),
+		outputCost: convert(entry.outputCost),
+		currency: "CNY",
+		contextWindow: entry.contextWindow > 0 ? entry.contextWindow : null,
+		maxTokens: entry.maxTokens > 0 ? entry.maxTokens : null,
+		streaming: true,
+		tools: entry.tools,
+		vision: entry.vision,
+		reasoning: entry.reasoning,
+		note: entry.status && /deprecated|retired/i.test(entry.status) ? "已弃用" : "官方牌价",
+	};
+}

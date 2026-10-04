@@ -47,6 +47,11 @@ fn default_schema_version() -> u64 {
 	3
 }
 
+/// Fallback USD→CNY rate for the public catalog; user-adjustable, not fetched online.
+fn default_usd_cny_rate() -> f64 {
+	7.2
+}
+
 #[derive(Clone, Copy, Default, Serialize, Deserialize)]
 pub enum Currency {
 	#[default]
@@ -126,6 +131,9 @@ pub struct FamiliesConfig {
 	pub families: Vec<ModelFamily>,
 	#[serde(default)]
 	pub auto_failover: bool,
+	/// USD→CNY conversion applied when prefilling official catalog prices.
+	#[serde(default = "default_usd_cny_rate")]
+	pub usd_cny_rate: f64,
 }
 
 impl Default for FamiliesConfig {
@@ -134,6 +142,7 @@ impl Default for FamiliesConfig {
 			version: default_schema_version(),
 			relays: Vec::new(),
 			auto_failover: false,
+			usd_cny_rate: default_usd_cny_rate(),
 			families: FAMILY_IDS
 				.iter()
 				.map(|id| ModelFamily {
@@ -741,6 +750,13 @@ pub fn set_auto_failover_in(dir: &Path, auto_failover: bool) -> Result<FamiliesC
 	})
 }
 
+pub fn set_usd_cny_rate_in(dir: &Path, rate: f64) -> Result<FamiliesConfig, String> {
+	apply(dir, |config| {
+		config.usd_cny_rate = rate;
+		Ok(())
+	})
+}
+
 // --- tauri commands ----------------------------------------------------------
 
 fn agent_dir() -> Result<std::path::PathBuf, String> {
@@ -807,6 +823,21 @@ pub fn set_family_auto_failover(auto_failover: bool) -> Result<FamiliesConfig, S
 	set_auto_failover_in(&agent_dir()?, auto_failover)
 }
 
+#[tauri::command]
+pub fn set_usd_cny_rate(rate: f64) -> Result<FamiliesConfig, String> {
+	if !rate.is_finite() || !(0.01..=100.0).contains(&rate) {
+		return Err("汇率必须在 0.01 到 100 之间".into());
+	}
+	let _guard = providers::CONFIG_LOCK.lock().map_err(|_| "配置锁异常")?;
+	set_usd_cny_rate_in(&agent_dir()?, rate)
+}
+
+/// models.dev 公共模型目录（官方牌价），带 24h 磁盘缓存。
+#[tauri::command]
+pub async fn fetch_public_catalog() -> Result<providers::CatalogResponse, String> {
+	providers::public_catalog(&agent_dir()?).await
+}
+
 ///模型发现沿用 OpenAI 兼容 `/models`，供线路添加时拉取模型 ID。
 #[tauri::command]
 pub async fn discover_relay_models(base_url: String, api_key: String) -> Result<Vec<String>, String> {
@@ -817,6 +848,12 @@ pub async fn discover_relay_models(base_url: String, api_key: String) -> Result<
 #[tauri::command]
 pub async fn fetch_pricing_page(url: String) -> Result<providers::FetchedPage, String> {
 	providers::fetch_pricing_page(&url).await
+}
+
+/// 截图识别导入：把图片与识别指令发给中转的视觉模型，返回原文与用量。
+#[tauri::command]
+pub async fn extract_pricing_table(base_url: String, api_key: String, model_id: String, instruction: String, images: Vec<String>) -> Result<providers::ExtractedTable, String> {
+	providers::extract_pricing_table(&base_url, &api_key, &model_id, &instruction, &images).await
 }
 
 /// One `max_tokens=1` completion proves the relay endpoint, key and model work.

@@ -2,11 +2,13 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import type { TestResult } from "../chat/useModelFamilies";
 import { FAMILY_LABELS, blankRelay, blankRoute, blankModel, validateModels, maskBaseUrl, maskKey, type ModelFamily, type ModelSpec, type RelaySpec, type RouteSpec } from "../chat/useModelFamilies";
 import type { PricedModel } from "../chat/pricingPage";
+import { catalogEntryToPriced } from "../chat/pricingPage";
+import { fetchPublicCatalog, type CatalogEntry } from "../rpc/pricingPage";
 import { BrandIcon, type BrandName } from "./BrandIcon";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { Icon } from "./Icon";
 import { ModelIdField } from "./ModelIdField";
-import { PriceImport } from "./PriceImport";
+import { PriceImport, type ExtractorPick } from "./PriceImport";
 
 const BRANDABLE = ["deepseek", "kimi", "glm"] as const;
 const brand = (familyId: string): BrandName | undefined => BRANDABLE.find((name) => name === familyId);
@@ -18,10 +20,12 @@ type Draft = { kind: "relay"; relay: RelaySpec; isNew: boolean } | { kind: "rout
  * family cards list the routes (relay × family) with their models. Forms take
  * over the dialog body so the lists stay uncluttered.
  */
-export function FamiliesSettings({ families, relays, autoFailover, onClose, onSaveRelay, onDeleteRelay, onSetRelayEnabled, onSaveRoute, onDeleteRoute, onReorderRoutes, onSetDefaultRoute, onAutoFailover, onTest, onDiscover, configError }: {
+export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, onSaveRate, onClose, onSaveRelay, onDeleteRelay, onSetRelayEnabled, onSaveRoute, onDeleteRoute, onReorderRoutes, onSetDefaultRoute, onAutoFailover, onTest, onDiscover, configError }: {
 	families: ModelFamily[];
 	relays: RelaySpec[];
 	autoFailover: boolean;
+	usdCnyRate: number;
+	onSaveRate: (rate: number) => Promise<boolean>;
 	configError?: string;
 	onClose: () => void;
 	onSaveRelay: (relay: RelaySpec) => Promise<boolean>;
@@ -44,6 +48,21 @@ export function FamiliesSettings({ families, relays, autoFailover, onClose, onSa
 	const [reveal, setReveal] = useState(false);
 	const [testing, setTesting] = useState(false);
 	const [result, setResult] = useState<TestResult>();
+	const [catalog, setCatalog] = useState<CatalogEntry[]>([]);
+	const [catalogStale, setCatalogStale] = useState(false);
+	const [catalogFetchedAt, setCatalogFetchedAt] = useState(0);
+
+	// 官方牌价目录：失败静默（导入面板的牌价区会显示加载中/不可用）。
+	useEffect(() => {
+		let alive = true;
+		void fetchPublicCatalog().then((response) => {
+			if (!alive) return;
+			setCatalog(response.models);
+			setCatalogStale(response.stale);
+			setCatalogFetchedAt(response.fetchedAt);
+		}).catch(() => {});
+		return () => { alive = false; };
+	}, []);
 
 	useEffect(() => { dialogRef.current?.showModal(); }, []);
 
@@ -76,11 +95,30 @@ export function FamiliesSettings({ families, relays, autoFailover, onClose, onSa
 		[models[index], models[target]] = [models[target], models[index]];
 		patchRoute({ models });
 	};
+	// Discovery only returns ids; matched catalog entries arrive with official
+	// prices already converted to CNY at the configured rate.
+	const fillFromCatalog = (modelId: string): ModelSpec => {
+		const entry = catalog.find((item) => item.modelId.toLowerCase() === modelId.toLowerCase());
+		const blank = blankModel();
+		if (!entry) return { ...blank, modelId };
+		const priced = catalogEntryToPriced(entry, usdCnyRate);
+		const contextWindow = priced.contextWindow ?? blank.contextWindow;
+		return {
+			...blank,
+			modelId: entry.modelId,
+			inputCost: priced.inputCost,
+			outputCost: priced.outputCost,
+			currency: "CNY",
+			contextWindow,
+			maxTokens: priced.maxTokens ? Math.min(priced.maxTokens, contextWindow) : Math.min(blank.maxTokens, contextWindow),
+		};
+	};
+
 	const addModels = (index: number, ids: string[]) => {
 		if (!draft || draft.kind !== "route") return;
 		const models = [...draft.route.models];
 		const existing = new Set(models.map((model) => model.modelId.trim()));
-		const additions = ids.filter((id) => !existing.has(id)).map((modelId) => ({ ...blankModel(), modelId }));
+		const additions = ids.filter((id) => !existing.has(id)).map(fillFromCatalog);
 		// Fill an empty row first so batch discovery leaves no invalid blank row.
 		if (!models[index].modelId.trim() && additions.length) models.splice(index, 1, ...additions);
 		else models.splice(index + 1, 0, ...additions);
@@ -163,6 +201,21 @@ export function FamiliesSettings({ families, relays, autoFailover, onClose, onSa
 	};
 
 	const total = useMemo(() => families.reduce((sum, family) => sum + family.routes.length, 0), [families]);
+	// 已配置的模型都可用于截图识别；视觉线路优先，选择器默认落在真能看图的那个。
+	const extractors = useMemo(() => {
+		const picks: ExtractorPick[] = [];
+		for (const family of families) {
+			for (const route of family.routes) {
+				const relay = relays.find((item) => item.id === route.relayId);
+				if (!relay || !relay.enabled || !relay.apiKey) continue;
+				for (const model of route.models) {
+					if (!model.modelId.trim()) continue;
+					picks.push({ key: `${relay.id} ${model.modelId}`, relayName: relay.name, baseUrl: relay.baseUrl, apiKey: relay.apiKey, modelId: model.modelId.trim(), inputCost: model.inputCost, outputCost: model.outputCost, currency: model.currency, vision: route.vision });
+				}
+			}
+		}
+		return picks.sort((a, b) => Number(b.vision) - Number(a.vision));
+	}, [families, relays]);
 	const relayName = (relayId: string) => relays.find((relay) => relay.id === relayId)?.name ?? "未知中转";
 	const reorder = (routes: RouteSpec[], index: number, offset: number) => {
 		const ids = routes.map((route) => route.relayId);
@@ -194,7 +247,7 @@ export function FamiliesSettings({ families, relays, autoFailover, onClose, onSa
 					{relays.map((relay) => <option key={relay.id} value={relay.id}>{relay.name}（{maskBaseUrl(relay.baseUrl)}）</option>)}
 				</select><small>地址与密钥来自中转，无需重复填写。</small></div>
 				<div className="provider-models">
-					<div className="provider-models-heading"><strong>模型配置</strong><small>单价按每百万令牌填写，顺序与选择器一致</small><PriceImport key={`${draft.familyId}:${draft.route.relayId}`} familyId={draft.familyId} addedIds={draft.route.models.map((model) => model.modelId.trim()).filter(Boolean)} disabled={pending} onImport={importPriced} /></div>
+					<div className="provider-models-heading"><strong>模型配置</strong><small>单价按每百万令牌填写，顺序与选择器一致</small><PriceImport key={`${draft.familyId}:${draft.route.relayId}`} familyId={draft.familyId} addedIds={draft.route.models.map((model) => model.modelId.trim()).filter(Boolean)} extractors={extractors} catalog={catalog} catalogStale={catalogStale} catalogFetchedAt={catalogFetchedAt} usdCnyRate={usdCnyRate} onSaveRate={onSaveRate} relayBaseUrl={relays.find((relay) => relay.id === draft.route.relayId)?.baseUrl ?? ""} disabled={pending} onImport={importPriced} /></div>
 					{draft.route.models.map((model, index) => <div className="provider-model-row" key={index}>
 						<div className="provider-model-first">
 							<ModelIdField baseUrl={relays.find((relay) => relay.id === draft.route.relayId)?.baseUrl ?? ""} apiKey={relays.find((relay) => relay.id === draft.route.relayId)?.apiKey ?? ""} familyId={draft.familyId} value={model.modelId} onChange={(modelId) => patchModel(index, { modelId })} addedIds={draft.route.models.map((item) => item.modelId.trim())} onAdd={(ids) => addModels(index, ids)} disabled={pending} />

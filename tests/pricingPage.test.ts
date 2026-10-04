@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { candidateApiUrls, importPricedModels, parseHtmlTables, parseJsonModels, type FetchedPage } from "../src/chat/pricingPage.ts";
+import { candidateApiUrls, catalogEntryToPriced, catalogForFamily, estimateVisionTokens, importPricedModels, parseHtmlTables, parseJsonModels, parsePricedTable, type FetchedPage } from "../src/chat/pricingPage.ts";
 
 const tokenrhythmEntry = (overrides: Record<string, unknown>) => ({
 	id: "glm-5.1",
@@ -112,4 +112,82 @@ test("candidate API urls stay sane", () => {
 test("unparseable pages throw a friendly error", async () => {
 	const fetchPage = async (url: string): Promise<FetchedPage> => htmlPage(url, "<html><body>hello</body></html>");
 	await assert.rejects(() => importPricedModels("https://example.com/models", fetchPage), /未能从该页面识别/);
+});
+
+test("pasted TSV with Chinese headers maps columns and reports bad rows", () => {
+	const tsv = ["模型ID\t输入单价\t输出单价\t币种\t上下文窗口\t最大输出", "deepseek-chat\t2\t8\tCNY\t64K\t8K", "glm-4.6\t¥4.00\t¥12\t\t200K\t", "bad row without prices\t\t\t\t\t", "| | 2 | 8 |"].join("\n");
+	const { models, errors } = parsePricedTable(tsv);
+	assert.deepEqual(models.map((model) => model.modelId), ["deepseek-chat", "glm-4.6"]);
+	assert.equal(models[0].inputCost, 2);
+	assert.equal(models[0].contextWindow, 64000);
+	assert.equal(models[0].maxTokens, 8000);
+	assert.equal(models[1].outputCost, 12);
+	assert.equal(errors.length, 2);
+	assert.equal(errors[0].line, 4);
+	assert.match(errors[1].reason, /模型 ID/);
+});
+
+test("pasted markdown tables skip the separator row", () => {
+	const md = ["| 模型 | 输入 | 输出 |", "| --- | --- | --- |", "| kimi-k2 | 6.5 | 27 |", "| glm-4.6 | 4 | 12 |"].join("\n");
+	const { models, errors } = parsePricedTable(md);
+	assert.deepEqual(models.map((model) => model.modelId), ["kimi-k2", "glm-4.6"]);
+	assert.equal(errors.length, 0);
+});
+
+test("fenced AI output is unwrapped before parsing", () => {
+	const fenced = ["以下是你要的表格：", "```tsv", "deepseek-chat\t2\t8", "glm-4.6\t4\t12", "```", "希望对你有帮助。"].join("\n");
+	const { models } = parsePricedTable(fenced);
+	assert.deepEqual(models.map((model) => model.modelId), ["deepseek-chat", "glm-4.6"]);
+});
+
+test("positional rows without a header parse id, input and output", () => {
+	const { models } = parsePricedTable(["deepseek-chat  2  8", "glm-4.6  4  12  USD  200K  64K"].join("\n"));
+	assert.equal(models.length, 2);
+	assert.equal(models[1].currency, "USD");
+	assert.equal(models[1].contextWindow, 200000);
+});
+
+test("display names with spaces are slugged into id-shaped guesses", () => {
+	const tsv = ["模型ID\t输入单价\t输出单价\t币种\t上下文窗口", "DeepSeek V4 Flash 0731\t1.50\t4.50\tCNY\t384K", "DeepSeek V4 Pro 0813\t4.50\t13.50\tCNY\t384K", "Kimi-K2\t6.5\t27\tCNY\t256K", "通义千问\t1\t2\tCNY\t"].join("\n");
+	const { models, errors } = parsePricedTable(tsv);
+	assert.deepEqual(models.map((model) => model.modelId), ["deepseek-v4-flash-0731", "deepseek-v4-pro-0813", "Kimi-K2"]);
+	assert.equal(models[0].note, "ID 已格式化");
+	assert.equal(models[0].inputCost, 1.5);
+	assert.equal(models[0].contextWindow, 384000);
+	assert.equal(models[2].note, null);
+	assert.equal(errors.length, 1);
+	assert.match(errors[0].reason, /模型 ID/);
+});
+
+test("catalog entries convert to CNY at the configured rate", () => {
+	const entry = { provider: "zhipuai", modelId: "glm-5.1", inputCost: 1.4, outputCost: 4.4, contextWindow: 200000, maxTokens: 128000, vision: false, tools: true, reasoning: true, status: null };
+	const priced = catalogEntryToPriced(entry, 7.2);
+	assert.equal(priced.modelId, "glm-5.1");
+	assert.equal(priced.inputCost, 10.08);
+	assert.equal(priced.outputCost, 31.68);
+	assert.equal(priced.currency, "CNY");
+	assert.equal(priced.contextWindow, 200000);
+	assert.equal(priced.maxTokens, 128000);
+	assert.equal(priced.reasoning, true);
+	assert.equal(priced.note, "官方牌价");
+	const deprecated = catalogEntryToPriced({ ...entry, status: "deprecated" }, 7.2);
+	assert.equal(deprecated.note, "已弃用");
+});
+
+test("catalog filters by family providers with CN first", () => {
+	const catalog = [
+		{ provider: "deepseek", modelId: "deepseek-flash", inputCost: 0, outputCost: 0, contextWindow: 0, maxTokens: 0, vision: false, tools: false, reasoning: false, status: null },
+		{ provider: "moonshotai-cn", modelId: "kimi-k2.6", inputCost: 0, outputCost: 0, contextWindow: 0, maxTokens: 0, vision: false, tools: false, reasoning: false, status: null },
+		{ provider: "zhipuai", modelId: "glm-5", inputCost: 0, outputCost: 0, contextWindow: 0, maxTokens: 0, vision: false, tools: false, reasoning: false, status: null },
+	];
+	assert.deepEqual(catalogForFamily(catalog, "kimi").map((item) => item.provider), ["moonshotai-cn"]);
+	assert.equal(catalogForFamily(catalog, "glm").length, 1);
+	assert.equal(catalogForFamily(catalog, "unknown-family").length, 0);
+});
+
+test("vision token estimate follows OpenAI-style tiling with a cap", () => {
+	assert.equal(estimateVisionTokens(512, 512), 255);
+	assert.equal(estimateVisionTokens(1024, 1024), 85 + 170 * 4);
+	assert.equal(estimateVisionTokens(10000, 10000), 85 + 170 * 32);
+	assert.equal(estimateVisionTokens(0, 100), 0);
 });
