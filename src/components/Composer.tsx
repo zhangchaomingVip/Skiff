@@ -3,7 +3,11 @@ import type { ImageAttachment, ModelInfo } from "../chat/types";
 import { readImages } from "../chat/images";
 import { appendTextFiles, readTextFiles, type TextAttachment } from "../chat/textAttachments";
 import { ModelMenu } from "./ModelMenu";
+import { ReasoningChip } from "./ReasoningChip";
+import { WebSearchToggle } from "./WebSearchToggle";
 import { Icon } from "./Icon";
+import type { PiCommand } from "../chat/usePiSession";
+import type { WebSearchControls } from "../chat/webSearch";
 
 /** Message composer: Enter sends, Shift+Enter inserts a newline. */
 export function Composer({
@@ -28,6 +32,8 @@ export function Composer({
 	editing,
 	onCancelEdit,
 	getCommands,
+	search,
+	onConfigureSearch,
 }: {
 	disabled: boolean;
 	streaming: boolean;
@@ -49,7 +55,9 @@ export function Composer({
 	restoredFiles: TextAttachment[];
 	editing: boolean;
 	onCancelEdit: () => void;
-	getCommands: () => Promise<{ name: string; description?: string }[]>;
+	getCommands: () => Promise<PiCommand[]>;
+	search: WebSearchControls;
+	onConfigureSearch: () => void;
 }) {
 	const inputRef = useRef<HTMLTextAreaElement>(null);
 	const sendingRef = useRef(false);
@@ -153,8 +161,7 @@ export function Composer({
 				onKeyDown={onKeyDown}
 				onPaste={(event) => { const selected = Array.from(event.clipboardData.files); if (selected.length) { event.preventDefault(); void addAttachments(selected); } }}
 			/>
-			<div className="composer-bottom"><span className="composer-context"><button className="icon-btn" onClick={() => fileRef.current?.click()} disabled={streaming || reading || sendingRef.current} aria-label="添加图片或文本文件" title="添加图片或 UTF-8 文本文件（支持拖放或粘贴）"><Icon name="plus" size={20} /></button><span>{reading ? "读取中…" : "添加附件"}</span></span><input ref={fileRef} type="file" hidden multiple accept="image/png,image/jpeg,image/webp,image/gif,text/*,.log,.json,.ts,.tsx,.js,.rs,.py,.yaml,.yml,.toml" onChange={(event) => { void addAttachments(Array.from(event.target.files ?? [])); event.target.value = ""; }} /><div className="composer-actions">
-				<ModelMenu models={models} model={model} onModel={onSelectModel} disabled={!connected || modelDisabled} level={thinkingLevel} levels={thinkingLevels} onLevel={onThinkingLevel} onMaxTokens={onSetMaxTokens} />
+			<div className="composer-bottom"><span className="composer-context"><button className="icon-btn" onClick={() => fileRef.current?.click()} disabled={streaming || reading || sendingRef.current} aria-label="添加图片或文本文件" title="添加图片或 UTF-8 文本文件（支持拖放或粘贴）"><Icon name="plus" size={20} /></button><ModelMenu models={models} model={model} onModel={onSelectModel} disabled={!connected || modelDisabled} onMaxTokens={onSetMaxTokens} /><WebSearchToggle search={search} disabled={disabled} onConfigure={onConfigureSearch} /><ReasoningChip level={thinkingLevel} levels={thinkingLevels} disabled={!connected || modelDisabled} onLevel={onThinkingLevel} />{reading && <span>读取中…</span>}</span><input ref={fileRef} type="file" hidden multiple accept="image/png,image/jpeg,image/webp,image/gif,text/*,.log,.json,.ts,.tsx,.js,.rs,.py,.yaml,.yml,.toml" onChange={(event) => { void addAttachments(Array.from(event.target.files ?? [])); event.target.value = ""; }} /><div className="composer-actions">
 				{streaming ? (
 					<button className="send-btn" onClick={onAbort} aria-label="停止生成" title="停止生成">
 						<Icon name="stop" size={17} />

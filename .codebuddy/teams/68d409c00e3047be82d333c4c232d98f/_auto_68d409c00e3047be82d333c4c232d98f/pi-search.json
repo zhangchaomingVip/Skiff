@@ -1,0 +1,20 @@
+[
+  {
+    "id": "msg-1791042248434-wc5o1v",
+    "from": "team-lead",
+    "to": "pi-search",
+    "type": "message",
+    "content": "请汇报你的调研结果（无论是否完成，都把已确认的部分发过来）。重点回答：\n\n(a) 本地有没有装 pi？装在哪？（给绝对路径）\n(b) pi 有没有联网搜索相关实现？具体在哪个文件、叫什么（web_search / exa / tavily / brave / fetch / browser 之类）？是内置工具还是要额外配置？配置项叫什么、写在哪个文件？\n(c) pi 的 RPC / CLI 有没有暴露「开关工具或搜索」的接口（set_tools / tool policy / allow-deny list / CLI flag）？给具体名字和位置。\n(d) 基于以上：Skiff 有没有可行的方式去控制它（前端开关 → pi），如果可以，走哪条路最简单？如果不能，缺什么？\n\n控制在 300 字以内 + 关键文件路径清单。",
+    "timestamp": "2026-10-03T15:44:08.434Z",
+    "read": true
+  },
+  {
+    "id": "msg-1791042925969-2v4sv3",
+    "from": "team-lead",
+    "to": "pi-search",
+    "type": "message",
+    "content": "继续深挖，目标：我要**照着契约写**一个 pi extension——注册工具 `web_search`（内部调 Tavily HTTP API）+ 注册命令 `/web` 做开关。请把准确的 API 定义扒出来。\n\n源码根：C:\\Users\\49772\\AppData\\Roaming\\npm\\node_modules\\@earendil-works\\pi-coding-agent\\dist\\\n重点：core/extensions/types.d.ts（345-378、978-1074）、dist/core/extensions/ 下的加载器、dist/modes/rpc/rpc-mode.js、dist/cli/args.js。\n\n需要回答（贴**原始定义片段**，不要改写）：\n1. extension 文件形态：~/.pi/agent/extensions/ 下放什么后缀？怎么被发现？模块导出形式（default export 是函数还是对象？参数是什么？例如 setup(pi, ctx)）。给一个实际加载代码位置和它期望的 shape。\n2. registerTool 完整签名：工具名、description、参数 schema 到底用 **zod 还是 raw JSON Schema**？execute(args) 的返回值形态（返回对象/字符串？）、出错怎么抛。\n3. registerCommand 签名 + 处理函数收到的参数 + 返回值语义（返回字符串会落到对话里吗？会不会被当成工具结果？）\n4. setActiveTools / getActiveTools 确切用法：参数是工具名数组吗？会把内置工具也一起替换掉吗（会不会把 bash/read 都干掉）？能否在命令处理函数里调用？\n5. extension 运行时怎么读自己的配置文件或环境变量？有没有官方 settings / config API（ctx 上有没有？）。我需要它运行时读用户配置的 Tavily key，**不要写死**。\n6. extension 在 `--mode rpc` 子进程里**会不会自动加载**？还是必须加 `-e/--extension` 显式指定？如果必须显式指定，给出准确的参数名和示例命令行。\n7. get_commands 返回的字段结构（我想用它判断扩展是否已安装，从而决定前端要不要显示「联网」开关）。rpc-mode 里还有没有别的命令和 tools 相关。\n\n输出控制在 500 字以内 + 必要的原始代码片段。**只读，不要新建或修改任何文件。**",
+    "timestamp": "2026-10-03T15:55:25.969Z",
+    "read": true
+  }
+]

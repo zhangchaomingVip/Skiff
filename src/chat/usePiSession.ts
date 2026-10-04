@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { PiRpc, type RpcEvent } from "../rpc/RpcClient";
 import { parseMessages, parseModels } from "./parse";
 import { reduce } from "./reducer";
@@ -14,15 +15,39 @@ export interface SessionTarget {
 	elapsedMs?: number;
 }
 
+export interface PiCommand {
+	name: string;
+	description?: string;
+	/** Where the command came from; `extension` means pi loaded a Skiff add-on. */
+	source?: string;
+}
+
 export interface PiSessionActions {
 	rewind: (id: string) => Promise<boolean>;
-	getCommands: () => Promise<{ name: string; description?: string }[]>;
+	getCommands: () => Promise<PiCommand[]>;
 	prompt: (text: string, images?: ImageAttachment[]) => Promise<boolean>;
 	abort: () => Promise<void>;
 	setModel: (model: ModelInfo) => Promise<void>;
 	setThinkingLevel: (level: string) => Promise<void>;
 	setMaxTokens: (maxTokens: number | null) => Promise<boolean>;
+	/** Toggles the pi extension's `web_search` tool via its `/web` command. */
+	setWebSearch: (enabled: boolean) => Promise<void>;
 	clearError: () => void;
+}
+
+function parseCommands(raw: unknown): PiCommand[] {
+	if (!Array.isArray(raw)) return [];
+	return raw
+		.map((item) => {
+			const record = (item ?? {}) as Record<string, unknown>;
+			const name = typeof record.name === "string" ? record.name : String(((record.name as Record<string, unknown> | undefined)?.name) ?? "");
+			return {
+				name,
+				description: typeof record.description === "string" ? record.description : undefined,
+				source: typeof record.source === "string" ? record.source : undefined,
+			};
+		})
+		.filter((command) => command.name.length > 0);
 }
 
 // Serialize teardown/start across fast navigation and React effect cleanup.
@@ -60,6 +85,10 @@ export function usePiSession(target?: SessionTarget) {
 		const rpc = new PiRpc(`chat_${crypto.randomUUID()}`);
 		rpcRef.current = rpc;
 		let cancelled = false;
+		// pi's provider errors go to stderr; without this they are silently dropped.
+		const offStderr = listen<string>(`rpc-stderr://${rpc.instanceId}`, (e) => {
+			if (!cancelled && e.payload) setRawLines((prev) => [...prev.slice(-499), `[stderr] ${e.payload}`]);
+		});
 		setReadyId(undefined);
 		setLoadedId(undefined);
 		setSessionFile(undefined);
@@ -134,6 +163,7 @@ export function usePiSession(target?: SessionTarget) {
 		return () => {
 			cancelled = true;
 			runStarted.current = undefined;
+			void offStderr.then((off) => off());
 			offEvent();
 			offLine();
 			// A late spawn must not become an orphan after switching conversations.
@@ -144,8 +174,8 @@ export function usePiSession(target?: SessionTarget) {
 
 	const actions = useMemo<PiSessionActions>(() => ({
 		getCommands: async () => {
-			const result = await rpcRef.current?.request<{ commands: { name: string; description?: string }[] }>({ type: "get_commands" });
-			return result?.commands ?? [];
+			const result = await rpcRef.current?.request<{ commands?: unknown }>({ type: "get_commands" });
+			return parseCommands(result?.commands);
 		},
 		rewind: async (id) => {
 			const rpc = rpcRef.current;
@@ -232,6 +262,17 @@ export function usePiSession(target?: SessionTarget) {
 				return true;
 			} catch (error) { if (rpcRef.current === rpc) fail(error); return false; }
 			finally { if (rpcRef.current === rpc) { busyRef.current = false; setPending(false); } }
+		},
+		setWebSearch: async (enabled) => {
+			const rpc = rpcRef.current;
+			if (!connected || !rpc || busyRef.current || streamingRef.current) return;
+			busyRef.current = true;
+			setPending(true);
+			try {
+				// pi expands leading slashes into extension commands, so this never
+				// reaches the model as a chat message.
+				await rpc.request({ type: "prompt", message: `/web ${enabled ? "on" : "off"}` });
+			} catch (error) { if (rpcRef.current === rpc) fail(error); } finally { if (rpcRef.current === rpc) { busyRef.current = false; setPending(false); } }
 		},
 		clearError: () => setState((s) => ({ ...s, lastError: undefined })),
 	}), [connected, fail]);

@@ -36,5 +36,5 @@ export const Markdown = memo(function Markdown({ text, streaming = false }: { te
 		img: ({ src, alt }) => src ? <ImagePreview src={src} alt={alt || "回复中的图片"} /> : null,
 		table: ({ children }) => <div className="table-scroll"><table>{children}</table></div>,
 	}), [streaming]);
-	return <div className="md"><ReactMarkdown remarkPlugins={plugins} components={components}>{text}</ReactMarkdown></div>;
+	return <div className={`md${streaming ? " is-streaming" : ""}`}><ReactMarkdown remarkPlugins={plugins} components={components}>{text}</ReactMarkdown></div>;
 });

@@ -8,8 +8,8 @@
 .voyage { --voyage-progress: var(--accent); width: 100%; max-width: calc(var(--content-width) + 80px); margin: 0 auto; padding: 0 40px 12px; flex-shrink: 0; font-variant-numeric: tabular-nums; }
 .voyage-warning { --voyage-progress: color-mix(in srgb, var(--color-warning) 70%, var(--danger) 30%); }
 .voyage-critical { --voyage-progress: var(--danger); }
-.voyage-summary { display: flex; align-items: center; gap: 13px; width: 100%; min-height: 35px; padding: 3px 8px; border: 1px solid transparent; border-radius: var(--radius-md); background: transparent; text-align: left; font-size: 12px; }
-.voyage-summary:hover { border-color: var(--border); background: var(--panel-2); }
+.voyage-summary { display: flex; align-items: center; gap: 13px; width: 100%; max-width: var(--content-width); margin: 0 auto; min-height: 38px; padding: 8px 16px; border: 1px solid var(--color-border-light); border-radius: var(--radius-xl); background: var(--bg); box-shadow: var(--shadow); text-align: left; font-size: 12px; }
+.voyage-summary:hover { border-color: var(--accent); background: var(--panel-2); }
 .voyage-compact-text { color: var(--secondary); white-space: nowrap; }
 .voyage-status { display: inline-flex; align-items: center; gap: 7px; flex: 0 0 75px; color: var(--secondary); white-space: nowrap; }
 .voyage-status-dot { display: inline-block; width: 6px; height: 6px; flex: none; border-radius: 50%; background: var(--muted); }

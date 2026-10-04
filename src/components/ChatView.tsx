@@ -6,6 +6,7 @@ import type { PiSessionActions } from "../chat/usePiSession";
 import { Composer } from "./Composer";
 import { MessageList } from "./MessageList";
 import { ConfirmDialog } from "./ConfirmDialog";
+import type { WebSearchControls } from "../chat/webSearch";
 
 /** Transcript + notices + composer. */
 export function ChatView({
@@ -14,6 +15,8 @@ export function ChatView({
 	actions,
 	pending,
 	projectName,
+	search,
+	onConfigureSearch,
 	onSend,
 	onReconnect,
 }: {
@@ -22,6 +25,8 @@ export function ChatView({
 	actions: PiSessionActions;
 	pending: boolean;
 	projectName?: string;
+	search: WebSearchControls;
+	onConfigureSearch: () => void;
 	onSend: (text: string, images?: ImageAttachment[]) => Promise<boolean>;
 	onReconnect: () => void;
 }) {
@@ -100,6 +105,8 @@ export function ChatView({
 				editing={!!editing}
 				onCancelEdit={cancelEdit}
 				getCommands={actions.getCommands}
+				search={search}
+				onConfigureSearch={onConfigureSearch}
 			/>
 		</section>
 	);

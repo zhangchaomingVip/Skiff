@@ -8,6 +8,7 @@ use serde::Deserialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 
 mod providers;
+mod search;
 
 /// One spawned `pi --mode rpc` session. `child` is kept only so we can kill it
 /// on stop; `stdin` is shared with the reader threads so we can write lines.
@@ -402,7 +403,8 @@ pub fn run() {
 			validate_project_directory,
 			get_workspace_directory,
 			read_system_prompt,
-			providers::list_openai_providers, providers::discover_openai_models, providers::save_openai_provider, providers::set_model_max_tokens
+			providers::list_openai_providers, providers::discover_openai_models, providers::save_openai_provider, providers::set_model_max_tokens,
+			search::get_web_search_status, search::save_web_search_key, search::clear_web_search_key, search::install_web_search_extension
 		])
 		.on_window_event(|window, event| {
 			if matches!(event, tauri::WindowEvent::Destroyed) {

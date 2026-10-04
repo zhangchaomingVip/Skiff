@@ -16,6 +16,16 @@ import { ImagePreview } from "./ImagePreview";
 import { BrandIcon } from "./BrandIcon";
 
 export type MessageAction = (message: ChatMessage) => void;
+
+/** Compact, locale-aware timestamp shown beside a message role. */
+const formatMessageTime = (ts?: number): string | undefined => {
+	if (!ts) return undefined;
+	const diff = Date.now() - ts;
+	if (diff < 60_000) return "刚刚";
+	if (diff < 3_600_000) return `${Math.floor(diff / 60_000)} 分钟前`;
+	if (diff < 86_400_000) return new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+	return new Date(ts).toLocaleDateString([], { month: "numeric", day: "numeric" });
+};
 type Tool = Extract<ContentBlock, { kind: "tool" }>;
 type Result = Extract<ContentBlock, { kind: "toolResult" }>;
 
@@ -66,7 +76,7 @@ export const MessageItem = memo(function MessageItem({ message, showRole, roleDi
 	// Intermediate process-only messages vanish when the turn is collapsed.
 	if (!nodes.length && !showHeader && !message.streaming) return null;
 	return <article className={`msg ${isUser ? "user" : "assistant"}${compact ? " compact" : ""}`} aria-label={isUser ? "你的消息" : "Skiff 的消息"}>
-		{showRole && <div className="msg-role">{roleDisplay.brand && <BrandIcon name={roleDisplay.brand} size={14} />}{roleDisplay.label}</div>}
+		{showRole && <div className="msg-role">{roleDisplay.brand && <BrandIcon name={roleDisplay.brand} size={14} />}{roleDisplay.label}{message.timestamp !== undefined && <span className="msg-time">{formatMessageTime(message.timestamp)}</span>}</div>}
 		<div className="msg-body">
 			{showHeader && <div className="turn-header">
 				<button className="thinking-toggle" onClick={() => onToggleTurn(turnId)} aria-expanded={turnOpen} aria-label={turnOpen ? "收起本轮执行过程" : "展开本轮执行过程"} title={turnOpen ? "收起本轮执行过程" : "展开本轮执行过程"}>

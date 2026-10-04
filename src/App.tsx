@@ -10,6 +10,8 @@ import { ThemeToggle } from "./components/ThemeToggle";
 import type { ImageAttachment } from "./chat/types";
 import { ProviderDialog, type ProviderInfo } from "./components/ProviderDialog";
 import { PromptDialog } from "./components/PromptDialog";
+import { SearchDialog } from "./components/SearchDialog";
+import { useWebSearch } from "./chat/webSearch";
 
 export default function App() {
 	const library = useWorkspace();
@@ -22,6 +24,8 @@ export default function App() {
 	const [projectDialogOpen, setProjectDialogOpen] = useState(false);
 	const [providerDialogOpen, setProviderDialogOpen] = useState(false);
 	const [promptDialogOpen, setPromptDialogOpen] = useState(false);
+	const [searchDialogOpen, setSearchDialogOpen] = useState(false);
+	const search = useWebSearch(actions, connected, session.reconnect);
 	const busy = state.isStreaming || session.pending;
 	const locked = busy || (!!activeChat && !connected && !state.lastError);
 
@@ -66,18 +70,22 @@ export default function App() {
 			<main className="workspace">
 				<header className="chat-header">
 					{!sidebarOpen && <button className="icon-btn" onClick={() => setSidebarOpen(true)} title="展开侧栏" aria-label="展开侧栏"><Icon name="panel" /></button>}
-					<div className="header-title"><span>{activeChat?.title ?? "新聊天"}</span>{activeProject && <span className="header-project" title={activeProject.path}><Icon name="folder" size={14} />{activeProject.name}</span>}</div>
+					<div className="header-title">
+						<div className="header-title-row"><span>{activeChat?.title ?? "新聊天"}</span>{activeProject && <span className="header-project" title={activeProject.path}><Icon name="folder" size={14} />{activeProject.name}</span>}</div>
+						{state.model && <span className="header-model" title={`${state.model.name ?? state.model.id} · ${state.model.provider}`}><span>{state.model.name ?? state.model.id}</span><span className="header-model-sep">·</span><span>{state.model.provider}</span></span>}
+					</div>
 					<div className="header-actions">{busy && <span className="working"><span className="dot busy" />正在处理</span>}<ThemeToggle /><button className="icon-btn" onClick={() => setPromptDialogOpen(true)} disabled={busy} title="系统提示词" aria-label="系统提示词"><Icon name="message" /></button><button className="icon-btn" onClick={() => setProviderDialogOpen(true)} disabled={busy} title="配置提供商" aria-label="配置提供商"><Icon name="settings" /></button><button className={`icon-btn ${rawOpen ? "active" : ""}`} onClick={() => setRawOpen((open) => !open)} title="诊断日志" aria-label="诊断日志" aria-pressed={rawOpen}><Icon name="code" /></button></div>
 				</header>
 				{library.error && <div className="workspace-alert" role="alert"><span>{library.error}</span><button className="btn ghost" onClick={library.workspace ? library.clearError : () => void library.initialize()} disabled={library.loading}>{library.workspace ? "关闭" : "重试"}</button></div>}
 				<div className="body">
-					<VoyageWorkspace key={activeChat?.id ?? "loading"} state={state} connected={connected} pending={session.pending} actions={actions} onSend={send} onReconnect={session.reconnect} projectName={activeProject?.name} />
+					<VoyageWorkspace key={activeChat?.id ?? "loading"} state={state} connected={connected} pending={session.pending} actions={actions} onSend={send} onReconnect={session.reconnect} projectName={activeProject?.name} search={search} onConfigureSearch={() => setSearchDialogOpen(true)} />
 					{rawOpen && <div className="raw-panel"><button className="icon-btn raw-close" onClick={() => setRawOpen(false)} aria-label="关闭诊断日志"><Icon name="close" /></button><RawDrawer lines={rawLines} /></div>}
 				</div>
 			</main>
 			{projectDialogOpen && <ProjectDialog onAdd={library.addProject} onClose={() => setProjectDialogOpen(false)} />}
 			{providerDialogOpen && <ProviderDialog onSaved={providerSaved} onClose={() => setProviderDialogOpen(false)} />}
 			{promptDialogOpen && <PromptDialog sessionPath={session.sessionFile} onSaved={() => { setPromptDialogOpen(false); session.reconnect(); }} onClose={() => setPromptDialogOpen(false)} />}
+			{searchDialogOpen && <SearchDialog savedKeyHint={search.keyHint} search={search} onSaved={() => { search.refresh(); }} onClose={() => setSearchDialogOpen(false)} />}
 		</div>
 	);
 }

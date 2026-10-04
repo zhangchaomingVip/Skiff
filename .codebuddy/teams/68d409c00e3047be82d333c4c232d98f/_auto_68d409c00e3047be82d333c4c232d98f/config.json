@@ -1,0 +1,20 @@
+{
+  "name": "_auto_68d409c00e3047be82d333c4c232d98f",
+  "mainConversationId": "68d409c00e3047be82d333c4c232d98f",
+  "workspacePath": "d:\\workspace\\Skiff",
+  "createdAt": "2026-10-03T15:36:30.671Z",
+  "options": {
+    "workspacePath": "d:\\workspace\\Skiff",
+    "isAutoTeam": true
+  },
+  "isAutoTeam": true,
+  "members": [
+    {
+      "memberId": "pi-search@_auto_68d409c00e3047be82d333c4c232d98f",
+      "name": "pi-search",
+      "role": "调研 pi 联网搜索能力",
+      "sessionId": "dd5fd34e36c243b7b6573ce82a68795a",
+      "status": "running"
+    }
+  ]
+}
