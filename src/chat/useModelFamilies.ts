@@ -150,7 +150,17 @@ export function useModelFamilies() {
 		usdCnyRate: config?.usdCnyRate ?? 7.2,
 		refresh,
 		clearError: () => setError(undefined),
-		saveRelay: (relay: RelaySpec) => run("save_relay", { relay }),
+		// Resolves to the saved relay (its id is minted server-side) so the
+		// settings page can point follow-up route editing at it.
+		saveRelay: async (relay: RelaySpec) => {
+			setError(undefined);
+			try {
+				const next = await invoke<FamiliesConfig>("save_relay", { relay });
+				const runtime = await invoke<RuntimeOffer[]>("list_model_runtime");
+				setConfig(next); setOffers(runtime);
+				return next.relays.find((item) => item.name.trim().toLowerCase() === relay.name.trim().toLowerCase());
+			} catch (e) { setError(String(e)); return undefined; }
+		},
 		deleteRelay: (relayId: string) => run("delete_relay", { relayId }),
 		setRelayEnabled: (relayId: string, enabled: boolean) => run("set_relay_enabled", { relayId, enabled }),
 		saveRoute: (familyId: string, route: RouteSpec) => run("save_route", { familyId, route }),

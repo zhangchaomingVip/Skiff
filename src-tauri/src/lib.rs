@@ -396,6 +396,18 @@ fn read_system_prompt(session_path: String) -> Result<Vec<SystemPromptSection>, 
 	Err("该会话还没有系统提示词快照".to_string())
 }
 
+/// Opens a http(s) link in the system browser, for vendor consoles linked
+/// from the provider editor. Webview navigation would leave the app, so the
+/// shell delegates to the OS instead.
+#[tauri::command]
+fn open_url(url: String) -> Result<(), String> {
+	let trimmed = url.trim();
+	if !trimmed.starts_with("https://") && !trimmed.starts_with("http://") {
+		return Err("仅支持 http/https 链接".to_string());
+	}
+	open::that(trimmed).map_err(|e| format!("打开链接失败：{e}"))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
 	tauri::Builder::default()
@@ -404,6 +416,7 @@ pub fn run() {
 			rpc_start,
 			rpc_send,
 			rpc_stop,
+			open_url,
 			get_pi_auth_status,
 			validate_project_directory,
 			get_workspace_directory,
