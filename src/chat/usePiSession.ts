@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { PiRpc, type RpcEvent } from "../rpc/RpcClient";
 import { parseMessages, parseModels } from "./parse";
@@ -29,7 +28,6 @@ export interface PiSessionActions {
 	abort: () => Promise<void>;
 	setModel: (model: ModelInfo) => Promise<void>;
 	setThinkingLevel: (level: string) => Promise<void>;
-	setMaxTokens: (maxTokens: number | null) => Promise<boolean>;
 	/** Toggles the pi extension's `web_search` tool via its `/web` command. */
 	setWebSearch: (enabled: boolean) => Promise<void>;
 	clearError: () => void;
@@ -232,7 +230,7 @@ export function usePiSession(target?: SessionTarget) {
 			try {
 				const result = await rpc.request<ModelInfo>({ type: "set_model", provider: model.provider, modelId: model.id });
 				if (rpcRef.current !== rpc) return;
-				setState((s) => ({ ...s, model: parseModels([result])[0], thinkingLevels: [], thinkingLevel: undefined }));
+				setState((s) => ({ ...s, model: parseModels([result])[0], thinkingLevels: [], thinkingLevel: undefined, lastError: undefined }));
 				const [data, levels] = await Promise.all([rpc.request<Record<string, unknown>>({ type: "get_state" }), rpc.request<{ levels: string[] }>({ type: "get_available_thinking_levels" }).catch(() => ({ levels: [] }))]);
 				if (rpcRef.current !== rpc) return;
 				setState((s) => ({ ...s, thinkingLevel: String(data.thinkingLevel ?? "off"), thinkingLevels: levels.levels }));
@@ -249,20 +247,6 @@ export function usePiSession(target?: SessionTarget) {
 				setState((s) => ({ ...s, thinkingLevel: String(data.thinkingLevel ?? "off") }));
 			} catch (error) { if (rpcRef.current === rpc) fail(error); } finally { if (rpcRef.current === rpc) { busyRef.current = false; setPending(false); } }
 		},
-		setMaxTokens: async (maxTokens) => {
-			const current = stateRef.current.model;
-			const rpc = rpcRef.current;
-			if (!connected || !current || !rpc || busyRef.current || streamingRef.current) return false;
-			busyRef.current = true; setPending(true);
-			try {
-				await invoke<number | null>("set_model_max_tokens", { provider: current.provider, modelId: current.id, maxTokens });
-				// pi reads models.json at startup, so restart the session with the same model.
-				preferredModel.current = current;
-				setRevision((value) => value + 1);
-				return true;
-			} catch (error) { if (rpcRef.current === rpc) fail(error); return false; }
-			finally { if (rpcRef.current === rpc) { busyRef.current = false; setPending(false); } }
-		},
 		setWebSearch: async (enabled) => {
 			const rpc = rpcRef.current;
 			if (!connected || !rpc || busyRef.current || streamingRef.current) return;
@@ -277,5 +261,12 @@ export function usePiSession(target?: SessionTarget) {
 		clearError: () => setState((s) => ({ ...s, lastError: undefined })),
 	}), [connected, fail]);
 
-	return { state, connected, rawLines, actions, sessionFile, loadedId, pending, elapsedMs, reconnect: (model?: ModelInfo) => { preferredModel.current = model; setRevision((r) => r + 1); } };
+	// Stable identity: callers restart the session from effects and must not
+	// re-trigger on every render.
+	const reconnect = useCallback((model?: ModelInfo) => {
+		preferredModel.current = model;
+		setRevision((revision) => revision + 1);
+	}, []);
+
+	return { state, connected, rawLines, actions, sessionFile, loadedId, pending, elapsedMs, reconnect };
 }

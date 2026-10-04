@@ -92,6 +92,7 @@ export function parseModels(raw: unknown): ModelInfo[] {
 			reasoning: typeof m.reasoning === "boolean" ? m.reasoning : undefined,
 			input: Array.isArray(m.input) ? m.input.filter((value): value is string => typeof value === "string") : undefined,
 			cost: m.cost && typeof m.cost === "object" ? m.cost as ModelInfo["cost"] : undefined,
+			currency: m.currency === "USD" ? "USD" as const : "CNY" as const,
 		}))
 		.filter((m) => m.provider && m.id);
 }

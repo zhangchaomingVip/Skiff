@@ -2,6 +2,7 @@ import type { CSSProperties } from "react";
 import { gaugePosition } from "../chat/sailing";
 import type { VoyageMetrics } from "../chat/useVoyageMetrics";
 import { formatDuration } from "../chat/usage";
+import { costTooltip, formatCosts } from "../chat/cost";
 
 const number = (value: number) => Math.round(value).toLocaleString("zh-CN");
 const GAUGE_RADIUS = 90;
@@ -56,7 +57,7 @@ export function VoyageRail({ metrics, expanded, onToggle }: { metrics: VoyageMet
 			<div className="voyage-instrument"><Speedometer speed={metrics.speed} /><Sea speed={metrics.speed} /></div>
 			<div className="voyage-mileage"><div className="voyage-mileage-title"><strong>航程 · 当前上下文</strong><span>{metrics.context === undefined ? "—" : `${(metrics.ratio * 100).toFixed(1)}%`}</span></div><div className="voyage-mileage-route" title={remaining}><span className="voyage-anchor" aria-hidden="true">⚓</span><div className="voyage-mileage-track"><span style={{ transform: `scaleX(${progress / 100})` }} /><Boat className="voyage-mileage-boat" position={progress} /></div><span className="voyage-flag" aria-hidden="true">⚑</span></div><div className="voyage-mileage-caption"><strong>{metrics.context === undefined ? "—" : number(metrics.context)}</strong><span> / {metrics.limit ? number(metrics.limit) : "—"} tok</span></div><p className="voyage-meter-note">已航行 {metrics.context === undefined ? "—" : number(metrics.context)} m · 1 tok = 1 m</p></div>
 			{metrics.context !== undefined && <dl className="voyage-breakdown"><div><dt>系统提示词与工具定义</dt><dd>~{number(metrics.overhead ?? 0)}</dd></div><div><dt>对话消息</dt><dd>~{number(metrics.conversation ?? 0)}</dd></div></dl>}
-			<div className="voyage-turn"><strong>本次航行记录</strong><dl><div><dt>本轮耗时</dt><dd>{metrics.turn.durationMs === undefined ? "—" : formatDuration(metrics.turn.durationMs)}</dd></div><div><dt>输出 tokens</dt><dd>{metrics.turn.output === undefined ? "—" : number(metrics.turn.output)}</dd></div><div><dt>费用</dt><dd>{metrics.turn.cost === undefined ? "未提供" : `$${metrics.turn.cost.toFixed(4)}`}</dd></div></dl></div>
+			<div className="voyage-turn"><strong>本次航行记录</strong><dl><div><dt>本轮耗时</dt><dd>{metrics.turn.durationMs === undefined ? "—" : formatDuration(metrics.turn.durationMs)}</dd></div><div><dt>输出 tokens</dt><dd>{metrics.turn.output === undefined ? "—" : number(metrics.turn.output)}</dd></div><div><dt>费用</dt><dd title={costTooltip(metrics.turn.cost)}>{formatCosts(metrics.turn.cost)}</dd></div><div><dt>会话累计</dt><dd title={costTooltip(metrics.sessionCost)}>{formatCosts(metrics.sessionCost)}</dd></div></dl></div>
 			<p className="voyage-note">船速按正在输出的文本估算，停泊归零。{metrics.streaming ? "航程在本轮完成后更新。" : ""}</p>
 		</> : <>
 			<button type="button" className="voyage-rail-toggle collapsed-toggle" onClick={onToggle} aria-label="展开航行台" aria-expanded="false">‹</button>

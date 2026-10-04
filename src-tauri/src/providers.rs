@@ -4,7 +4,7 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-static CONFIG_LOCK: Mutex<()> = Mutex::new(());
+pub(crate) static CONFIG_LOCK: Mutex<()> = Mutex::new(());
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -34,7 +34,7 @@ pub struct ProviderInfo {
 	max_tokens: Option<u64>,
 }
 
-fn read_config(path: &Path) -> Result<Value, String> {
+pub(crate) fn read_config(path: &Path) -> Result<Value, String> {
 	if !path.exists() { return Ok(json!({})); }
 	let bytes = std::fs::read(path).map_err(|_| "无法读取 pi 配置文件")?;
 	let value: Value = serde_json::from_slice(&bytes).map_err(|_| "pi 配置不是有效 JSON，请先修复原文件")?;
@@ -57,18 +57,48 @@ fn validate_key(key: &str) -> Result<(), String> {
 	Ok(())
 }
 
+fn discovery_network_error(error: reqwest::Error) -> String {
+	// Do not expose reqwest debug output, request headers, or credentials.
+	if error.is_timeout() { "获取模型列表超时（10 秒），请重试或手动填写模型 ID".into() }
+	else { "无法获取模型，请检查地址和网络；也可手动填写模型 ID".into() }
+}
+
+fn discovery_http_error(status: u16, bytes: &[u8], key: &str) -> String {
+	match status {
+		401 => return "密钥无效或未授权".into(),
+		404 => return "该地址不支持 /models 接口，请手动填写".into(),
+		_ => {}
+	}
+	let value: Option<Value> = serde_json::from_slice(bytes).ok();
+	let message = value.as_ref().and_then(|value| value["error"]["message"].as_str()
+		.or_else(|| value["message"].as_str()).or_else(|| value["error"].as_str()));
+	let text = String::from_utf8_lossy(bytes);
+	let summary = message.unwrap_or(&text).replace(key, "[已隐藏]");
+	let summary = summary.split_whitespace().collect::<Vec<_>>().join(" ");
+	let summary: String = summary.chars().take(180).collect();
+	let summary = if summary.is_empty() { "接口请求失败，请重试或手动填写模型 ID" } else { &summary };
+	format!("HTTP {status} · {summary}")
+}
+
 async fn discover(base: &str, key: &str) -> Result<Vec<String>, String> {
 	let base = base_url(base)?;
 	validate_key(key)?;
 	if key.trim().is_empty() { return Err("请先填写 API Key".into()); }
-	let client = reqwest::Client::builder().timeout(Duration::from_secs(15)).redirect(reqwest::redirect::Policy::none()).build().map_err(|_| "无法初始化连接")?;
-	let mut response = client.get(format!("{base}/models")).bearer_auth(key.trim()).send().await.map_err(|_| "无法获取模型，请检查地址和网络；也可手动填写模型 ID")?;
-	if !response.status().is_success() { return Err(format!("模型列表返回 HTTP {}，请检查地址和密钥，或手动填写模型 ID", response.status().as_u16())); }
+	let client = reqwest::Client::builder().timeout(Duration::from_secs(10)).redirect(reqwest::redirect::Policy::none()).build().map_err(|_| "无法初始化连接")?;
+	let mut response = client.get(format!("{base}/models")).bearer_auth(key.trim()).send().await.map_err(discovery_network_error)?;
+	let status = response.status();
+	if [401, 404].contains(&status.as_u16()) { return Err(discovery_http_error(status.as_u16(), &[], key.trim())); }
 	let mut bytes = Vec::new();
-	while let Some(chunk) = response.chunk().await.map_err(|_| "无法读取模型列表")? {
-		if bytes.len() + chunk.len() > 1024 * 1024 { return Err("模型列表响应过大".into()); }
+	while let Some(chunk) = response.chunk().await.map_err(|error| {
+		let message = discovery_network_error(error);
+		if status.is_success() { message } else { format!("HTTP {} · {message}", status.as_u16()) }
+	})? {
+		if bytes.len() + chunk.len() > 1024 * 1024 {
+			return Err(format!("HTTP {} · 模型列表响应过大，请手动填写模型 ID", status.as_u16()));
+		}
 		bytes.extend_from_slice(&chunk);
 	}
+	if !status.is_success() { return Err(discovery_http_error(status.as_u16(), &bytes, key.trim())); }
 	let value: Value = serde_json::from_slice(&bytes).map_err(|_| "模型列表不是有效 JSON")?;
 	let mut ids: Vec<String> = value["data"].as_array().ok_or("模型列表应包含 data 数组")?.iter().filter_map(|m| m["id"].as_str()).filter(|id| !id.trim().is_empty()).map(str::to_string).collect();
 	ids.sort(); ids.dedup();
@@ -150,7 +180,7 @@ fn merge(config: &mut Value, auth: &mut Value, input: &ProviderInput) -> Result<
 	Ok(())
 }
 
-fn atomic_write(path: &Path, value: &Value) -> Result<(), String> {
+pub(crate) fn atomic_write(path: &Path, value: &Value) -> Result<(), String> {
 	let nonce = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_nanos();
 	let temp = path.with_extension(format!("skiff-{}-{nonce}.tmp", std::process::id()));
 	let result = (|| {
@@ -224,6 +254,46 @@ pub fn set_model_max_tokens(provider: String, model_id: String, max_tokens: Opti
 #[cfg(test)]
 mod tests {
 	use super::*;
+	#[test]
+	fn discovery_reports_http_errors_without_credentials() {
+		use std::io::{Read, Write};
+		for (status, body, expected) in [
+			(401, "", "密钥无效或未授权"),
+			(404, "", "该地址不支持 /models 接口，请手动填写"),
+			(429, r#"{"error":{"message":"rate limited for test-key"}}"#, "HTTP 429 · rate limited for [已隐藏]"),
+			(500, "upstream unavailable", "HTTP 500 · upstream unavailable"),
+		] {
+			let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+			let address = listener.local_addr().unwrap();
+			let server = std::thread::spawn(move || {
+				let (mut stream, _) = listener.accept().unwrap();
+				stream.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+				let mut request = [0; 4096]; stream.read(&mut request).unwrap();
+				write!(stream, "HTTP/1.1 {status} Error\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).unwrap();
+			});
+			let error = tauri::async_runtime::block_on(discover(&format!("http://{address}/v1/"), "test-key")).unwrap_err();
+			assert_eq!(error, expected); assert!(!error.contains("test-key"));
+			server.join().unwrap();
+		}
+	}
+	#[test]
+	fn discovery_times_out_while_reading_the_body() {
+		use std::io::{Read, Write};
+		let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+		let address = listener.local_addr().unwrap();
+		let server = std::thread::spawn(move || {
+			let (mut stream, _) = listener.accept().unwrap();
+			stream.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+			let mut request = [0; 4096]; stream.read(&mut request).unwrap();
+			write!(stream, "HTTP/1.1 200 OK\r\nContent-Length: 100\r\n\r\n").unwrap();
+			std::thread::sleep(Duration::from_secs(11));
+		});
+		let start = std::time::Instant::now();
+		let error = tauri::async_runtime::block_on(discover(&format!("http://{address}/v1"), "test-key")).unwrap_err();
+		assert!(error.contains("超时（10 秒）"));
+		assert!(start.elapsed() >= Duration::from_secs(9));
+		server.join().unwrap();
+	}
 	fn input() -> ProviderInput { ProviderInput { name: "gateway".into(), base_url: "http://localhost:1234/v1/".into(), api_key: "test-key".into(), model_ids: vec!["vision-test".into()], reasoning: true, vision: true, max_thinking: "max".into(), context_window: 128000, max_tokens: Some(8192) } }
 	#[test]
 	fn merges_without_exposing_keys_or_removing_other_config() {

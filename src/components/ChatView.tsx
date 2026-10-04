@@ -2,6 +2,8 @@ import { useCallback, useRef, useState } from "react";
 import type { ChatMessage, ImageAttachment, SessionState } from "../chat/types";
 import { turnDraft, userForTurn } from "../chat/turns";
 import { appendTextFiles, type TextAttachment } from "../chat/textAttachments";
+import { isProviderFailure } from "../chat/modelFamilies";
+import { useModelFamily } from "../chat/familyContext";
 import type { PiSessionActions } from "../chat/usePiSession";
 import { Composer } from "./Composer";
 import { MessageList } from "./MessageList";
@@ -19,6 +21,7 @@ export function ChatView({
 	onConfigureSearch,
 	onSend,
 	onReconnect,
+	failover,
 }: {
 	state: SessionState;
 	connected: boolean;
@@ -29,8 +32,11 @@ export function ChatView({
 	onConfigureSearch: () => void;
 	onSend: (text: string, images?: ImageAttachment[]) => Promise<boolean>;
 	onReconnect: () => void;
+	/** A same-family channel that can take over after a provider error. */
+	failover?: { label: string; switch: () => void };
 }) {
 	const [draft, setDraft] = useState("");
+	const { manage } = useModelFamily();
 	const [editing, setEditing] = useState<ChatMessage>();
 	const [deleting, setDeleting] = useState<ChatMessage>();
 	const [restoredImages, setRestoredImages] = useState<ImageAttachment[]>([]);
@@ -80,9 +86,9 @@ export function ChatView({
 				</div>
 			)}
 			{state.lastError && (
-				<div className="banner error" role="alert"><span>{state.lastError}</span>{!connected ? <button className="btn ghost" onClick={onReconnect}>重新连接</button> : <button className="icon-btn" onClick={actions.clearError} aria-label="关闭错误提示">×</button>}</div>
+				<div className={`banner error ${connected && isProviderFailure(state.lastError) ? "provider-toast" : ""}`} role="alert"><span>{state.lastError}</span>{failover && <button className="btn ghost" disabled={disabled} onClick={failover.switch}>切换到同家族下一个可用提供商（{failover.label}）</button>}{!connected ? <button className="btn ghost" onClick={() => onReconnect()}>重新连接</button> : <button className="icon-btn" onClick={actions.clearError} aria-label="关闭错误提示">×</button>}</div>
 			)}
-			{connected && !state.availableModels.length && <div className="notice model-notice">pi 中暂无可用模型，请先在 pi 配置模型与凭据。<button className="btn ghost" onClick={onReconnect}>重新加载</button></div>}
+			{connected && !state.availableModels.length && <div className="notice model-notice">暂无已启用的提供商，请添加或启用提供商。<button className="btn ghost" onClick={manage}>管理提供商…</button></div>}
 			<Composer
 				disabled={!connected || pending || !state.model || !state.availableModels.length}
 				streaming={state.isStreaming}
@@ -98,7 +104,6 @@ export function ChatView({
 				thinkingLevel={state.thinkingLevel}
 				thinkingLevels={state.thinkingLevels ?? []}
 				onThinkingLevel={actions.setThinkingLevel}
-				onSetMaxTokens={actions.setMaxTokens}
 				focusSignal={focusSignal}
 				restoredImages={restoredImages}
 				restoredFiles={restoredFiles}

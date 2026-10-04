@@ -1,5 +1,6 @@
-import type { ChatMessage } from "./types";
+import type { ChatMessage, ModelInfo } from "./types";
 import { summarizeUsage } from "./usage";
+import { summarizeCosts, type CostSummary } from "./cost";
 
 /** Live text is only a token estimate; pi reports exact output usage after a message ends. */
 export function estimateOutputTokens(messages: ChatMessage[]): number {
@@ -38,7 +39,7 @@ export function contextPressure(ratio: number): "normal" | "warning" | "critical
 }
 
 /** Usage belongs to the most recent user prompt, including any intermediate assistant steps. */
-export function currentTurnStats(messages: ChatMessage[]): { durationMs?: number; output?: number; cost?: number } {
+export function currentTurnStats(messages: ChatMessage[], models: ModelInfo[] = [], current?: ModelInfo): { durationMs?: number; output?: number; cost?: CostSummary } {
 	let userIndex = -1;
 	for (let index = messages.length - 1; index >= 0; index--) {
 		if (messages[index].role === "user") { userIndex = index; break; }
@@ -54,6 +55,6 @@ export function currentTurnStats(messages: ChatMessage[]): { durationMs?: number
 	return {
 		durationMs: measured ?? (started !== undefined && finished !== undefined ? Math.max(0, finished - started) : undefined),
 		output: usage?.output,
-		cost: usage?.cost,
+		cost: usage ? summarizeCosts(usageMessages, models, current) : undefined,
 	};
 }

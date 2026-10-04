@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { contextPressure, currentTurnStats, estimateOutputTokens, outputSpeed, voyageStatus } from "./sailing";
 import type { ChatMessage, ModelInfo } from "./types";
 import { summarizeUsage } from "./usage";
+import { summarizeCosts, type CostSummary } from "./cost";
 
 export interface VoyageMetrics {
 	speed: number;
@@ -14,7 +15,8 @@ export interface VoyageMetrics {
 	status: string;
 	arrived: boolean;
 	pressure: "normal" | "warning" | "critical";
-	turn: { durationMs?: number; output?: number; cost?: number };
+	turn: { durationMs?: number; output?: number; cost?: CostSummary };
+	sessionCost: CostSummary;
 }
 
 const estimateTokens = (text: string): number => {
@@ -26,7 +28,7 @@ const estimateTokens = (text: string): number => {
 	return Math.ceil(units);
 };
 
-export function useVoyageMetrics(messages: ChatMessage[], model: ModelInfo | undefined, streaming: boolean): VoyageMetrics {
+export function useVoyageMetrics(messages: ChatMessage[], model: ModelInfo | undefined, streaming: boolean, pricingModels: ModelInfo[] = []): VoyageMetrics {
 	const liveTokens = estimateOutputTokens(messages);
 	const liveTokensRef = useRef(liveTokens);
 	liveTokensRef.current = liveTokens;
@@ -76,7 +78,8 @@ export function useVoyageMetrics(messages: ChatMessage[], model: ModelInfo | und
 
 	const ratio = data ? data.context / data.limit : 0;
 	const arrived = ratio >= 1;
-	const turn = useMemo(() => currentTurnStats(messages), [messages]);
+	const turn = useMemo(() => currentTurnStats(messages, pricingModels, model), [messages, pricingModels, model]);
+	const sessionCost = useMemo(() => summarizeCosts(messages, pricingModels, model), [messages, pricingModels, model]);
 	return {
 		speed,
 		streaming,
@@ -89,5 +92,6 @@ export function useVoyageMetrics(messages: ChatMessage[], model: ModelInfo | und
 		arrived,
 		pressure: contextPressure(ratio),
 		turn,
+		sessionCost,
 	};
 }

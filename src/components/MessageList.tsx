@@ -13,6 +13,7 @@ export function MessageList({ messages, projectName, running, models, model, onS
 	const [unread, setUnread] = useState(false);
 	const [collapsedTurns, setCollapsedTurns] = useState<string[]>([]);
 	const turns = useMemo(() => groupTurns(messages), [messages]);
+	const lastTurnMessages = useMemo(() => messages.filter((_, index) => turns[index].turnId === turns[turns.length - 1]?.turnId), [messages, turns]);
 	const toggleTurn = useCallback((turnId: string) => setCollapsedTurns((list) => list.includes(turnId) ? list.filter((id) => id !== turnId) : [...list, turnId]), []);
 	const scrollBottom = () => {
 		followingRef.current = true; setAway(false); setUnread(false);
@@ -52,7 +53,7 @@ export function MessageList({ messages, projectName, running, models, model, onS
 		<div className="transcript">
 		<div className="messages" ref={scrollRef} onScroll={() => { const el = scrollRef.current; if (el) { followingRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80; setAway(!followingRef.current); if (followingRef.current) setUnread(false); } }}>
 			{messages.map((message, index) => (
-				<MessageItem key={message.id} message={message} showRole={index === 0 || messages[index - 1].role !== message.role} roleDisplay={message.role === "user" ? { label: "你" } : modelDisplay(message, models, model)} compact={message.role === "assistant" && messages[index + 1]?.role === "assistant"} running={running} turnId={turns[index].turnId} turnHead={turns[index].head} turnSteps={turns[index].stepCount} turnDuration={turns[index].durationMs} turnOpen={!collapsedTurns.includes(turns[index].turnId)} onToggleTurn={toggleTurn} disabled={disabled} isLast={index === messages.length - 1} onContinue={onContinue} onEdit={onEdit} onRegenerate={onRegenerate} onDelete={onDelete} />
+				<MessageItem key={message.id} message={message} turnMessages={index === messages.length - 1 ? lastTurnMessages : undefined} showRole={index === 0 || messages[index - 1].role !== message.role} roleDisplay={message.role === "user" ? { label: "你" } : modelDisplay(message, models, model)} compact={message.role === "assistant" && messages[index + 1]?.role === "assistant"} running={running} turnId={turns[index].turnId} turnHead={turns[index].head} turnSteps={turns[index].stepCount} turnDuration={turns[index].durationMs} turnOpen={!collapsedTurns.includes(turns[index].turnId)} onToggleTurn={toggleTurn} disabled={disabled} isLast={index === messages.length - 1} onContinue={onContinue} onEdit={onEdit} onRegenerate={onRegenerate} onDelete={onDelete} />
 			))}
 		</div>
 		{away && <button className="back-bottom" aria-label="回到底部" onClick={scrollBottom}><Icon name="down" size={15} />{unread ? "有新内容 · 回到底部" : "回到底部"}</button>}

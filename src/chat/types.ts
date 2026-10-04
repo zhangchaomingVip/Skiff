@@ -1,4 +1,6 @@
 /** Model descriptor as reported by pi's `get_available_models` / `get_state`. */
+export type Currency = "CNY" | "USD";
+
 export interface ModelInfo {
 	provider: string;
 	id: string;
@@ -8,6 +10,7 @@ export interface ModelInfo {
 	reasoning?: boolean;
 	input?: string[];
 	cost?: { input?: number; output?: number };
+	currency?: Currency;
 }
 
 export interface Usage {

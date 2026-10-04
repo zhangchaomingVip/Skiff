@@ -2,12 +2,16 @@ import { useEffect, useMemo, useRef } from "react";
 import type { ChatMessage } from "../chat/types";
 import { formatCompletedAt, summarizeUsage } from "../chat/usage";
 import { Icon } from "./Icon";
+import { costTooltip, formatCosts, summarizeCosts } from "../chat/cost";
+import { useModelFamily } from "../chat/familyContext";
 
 const number = (value?: number) => value === undefined ? "未提供" : value.toLocaleString();
 
 /** Fixed usage shown once at the end of the conversation: tokens, cost and duration. */
-export function TurnUsage({ message }: { message: ChatMessage }) {
-	const usage = useMemo(() => summarizeUsage([message]), [message]);
+export function TurnUsage({ message, messages }: { message: ChatMessage; messages?: ChatMessage[] }) {
+	const { pricingModels, models, current } = useModelFamily();
+	const usage = useMemo(() => summarizeUsage(messages ?? [message]), [messages, message]);
+	const cost = useMemo(() => summarizeCosts(messages ?? [message], pricingModels ?? models ?? [], current), [messages, message, pricingModels, models, current]);
 	const root = useRef<HTMLDetailsElement>(null);
 	useEffect(() => {
 		const dismiss = (event: PointerEvent) => { if (root.current?.open && !root.current.contains(event.target as Node)) root.current.open = false; };
@@ -31,10 +35,10 @@ export function TurnUsage({ message }: { message: ChatMessage }) {
 				<div className="usage-rate"><span>缓存命中率</span><b>{(usage.hitRate * 100).toFixed(1)}%</b></div>
 				<div className="cache-bar" aria-label={`缓存命中率 ${(usage.hitRate * 100).toFixed(1)}%`}><i className="hit" style={{ width: `${usage.hitRate * 100}%` }} /><i className="write" style={{ width: `${usage.inputTotal ? usage.cacheWrite / usage.inputTotal * 100 : 0}%` }} /><i className="miss" style={{ flex: 1 }} /></div>
 				<div className="cache-legend"><span><i className="swatch hit" />命中</span><span><i className="swatch write" />写入</span><span><i className="swatch miss" />未命中</span></div>
-				<p className="menu-hint">本轮用量，来自 pi。推理 Token 已包含在输出中。{usage.cost === undefined ? "" : ` pi 估算费用：$${usage.cost.toFixed(4)}（按模型配置单价）。`}</p>
+				<p className="menu-hint">本轮用量，来自 pi。推理 Token 已包含在输出中。费用按提供商配置的单价本地计算。</p>
 			</div>
 		</details>
-		{usage.cost !== undefined && <span className="usage-cost">${usage.cost.toFixed(4)}</span>}
+		<span className="usage-cost" title={costTooltip(cost)}>{formatCosts(cost)}</span>
 		{message.timestamp !== undefined && <span className="usage-time" title="本轮完成时间"><Icon name="clock" size={13} />{formatCompletedAt(message.timestamp)}</span>}
 	</>;
 }

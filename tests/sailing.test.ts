@@ -31,6 +31,6 @@ test("context warning thresholds and current-turn records use only the latest pr
 		{ id: "step", role: "assistant", blocks: [], usage: usage(10, .1) },
 		{ id: "final", role: "assistant", blocks: [], usage: usage(20, .2), durationMs: 2000 },
 	];
-	assert.deepEqual(currentTurnStats(messages), { durationMs: 2000, output: 30, cost: .30000000000000004 });
+	assert.deepEqual(currentTurnStats(messages), { durationMs: 2000, output: 30, cost: { totals: {}, unconfigured: true } });
 	assert.deepEqual(currentTurnStats([...messages, { id: "next", role: "user", blocks: [] }]), {});
 });

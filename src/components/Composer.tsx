@@ -25,7 +25,6 @@ export function Composer({
 	thinkingLevel,
 	thinkingLevels,
 	onThinkingLevel,
-	onSetMaxTokens,
 	focusSignal,
 	restoredImages,
 	restoredFiles,
@@ -49,7 +48,6 @@ export function Composer({
 	thinkingLevel?: string;
 	thinkingLevels: string[];
 	onThinkingLevel: (level: string) => void;
-	onSetMaxTokens: (maxTokens: number | null) => void;
 	focusSignal: number;
 	restoredImages: ImageAttachment[];
 	restoredFiles: TextAttachment[];
@@ -161,7 +159,7 @@ export function Composer({
 				onKeyDown={onKeyDown}
 				onPaste={(event) => { const selected = Array.from(event.clipboardData.files); if (selected.length) { event.preventDefault(); void addAttachments(selected); } }}
 			/>
-			<div className="composer-bottom"><span className="composer-context"><button className="icon-btn" onClick={() => fileRef.current?.click()} disabled={streaming || reading || sendingRef.current} aria-label="添加图片或文本文件" title="添加图片或 UTF-8 文本文件（支持拖放或粘贴）"><Icon name="plus" size={20} /></button><ModelMenu models={models} model={model} onModel={onSelectModel} disabled={!connected || modelDisabled} onMaxTokens={onSetMaxTokens} /><WebSearchToggle search={search} disabled={disabled} onConfigure={onConfigureSearch} /><ReasoningChip level={thinkingLevel} levels={thinkingLevels} disabled={!connected || modelDisabled} onLevel={onThinkingLevel} />{reading && <span>读取中…</span>}</span><input ref={fileRef} type="file" hidden multiple accept="image/png,image/jpeg,image/webp,image/gif,text/*,.log,.json,.ts,.tsx,.js,.rs,.py,.yaml,.yml,.toml" onChange={(event) => { void addAttachments(Array.from(event.target.files ?? [])); event.target.value = ""; }} /><div className="composer-actions">
+			<div className="composer-bottom"><span className="composer-context"><button className="icon-btn" onClick={() => fileRef.current?.click()} disabled={streaming || reading || sendingRef.current} aria-label="添加图片或文本文件" title="添加图片或 UTF-8 文本文件（支持拖放或粘贴）"><Icon name="plus" size={20} /></button><ModelMenu models={models} model={model} onModel={onSelectModel} disabled={!connected || modelDisabled} /><WebSearchToggle search={search} disabled={disabled} onConfigure={onConfigureSearch} /><ReasoningChip level={thinkingLevel} levels={thinkingLevels} disabled={!connected || modelDisabled} onLevel={onThinkingLevel} />{reading && <span>读取中…</span>}</span><input ref={fileRef} type="file" hidden multiple accept="image/png,image/jpeg,image/webp,image/gif,text/*,.log,.json,.ts,.tsx,.js,.rs,.py,.yaml,.yml,.toml" onChange={(event) => { void addAttachments(Array.from(event.target.files ?? [])); event.target.value = ""; }} /><div className="composer-actions">
 				{streaming ? (
 					<button className="send-btn" onClick={onAbort} aria-label="停止生成" title="停止生成">
 						<Icon name="stop" size={17} />

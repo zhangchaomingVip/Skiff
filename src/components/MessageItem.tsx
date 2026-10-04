@@ -29,7 +29,8 @@ const formatMessageTime = (ts?: number): string | undefined => {
 type Tool = Extract<ContentBlock, { kind: "tool" }>;
 type Result = Extract<ContentBlock, { kind: "toolResult" }>;
 
-export const MessageItem = memo(function MessageItem({ message, showRole, roleDisplay, compact, running, turnId, turnHead, turnSteps, turnDuration, turnOpen, onToggleTurn, disabled, isLast, onContinue, onEdit, onRegenerate, onDelete }: {
+export const MessageItem = memo(function MessageItem({ message, turnMessages, showRole, roleDisplay, compact, running, turnId, turnHead, turnSteps, turnDuration, turnOpen, onToggleTurn, disabled, isLast, onContinue, onEdit, onRegenerate, onDelete }: {
+	turnMessages?: ChatMessage[];
 	message: ChatMessage; showRole: boolean; roleDisplay: ModelDisplay; compact: boolean; running: boolean; turnId: string; turnHead: boolean; turnSteps: number; turnDuration?: number; turnOpen: boolean; onToggleTurn: (turnId: string) => void; disabled: boolean; isLast: boolean; onContinue: () => void; onEdit: MessageAction; onRegenerate: MessageAction; onDelete: MessageAction;
 }) {
 	const isUser = message.role === "user";
@@ -87,7 +88,7 @@ export const MessageItem = memo(function MessageItem({ message, showRole, roleDi
 			{!nodes.length && message.streaming ? <span className="typing">正在思考…</span> : nodes}
 		</div>
 		{(showActions || (!isUser && isLast && !running)) && <div className="message-actions">
-			{!isUser && isLast && !running && message.usage && <TurnUsage message={message} />}
+			{!isUser && isLast && !running && message.usage && <TurnUsage message={message} messages={turnMessages} />}
 			{!isUser && isLast && !running && <button className={`continue-btn ${message.stopReason === "length" ? "truncated" : ""}`} disabled={disabled} onClick={onContinue} aria-label="继续生成" title="发送「继续」，让模型接着写下去">{message.stopReason === "length" ? "输出被截断 · 继续" : "继续"}</button>}
 			{showActions && <div className="message-buttons">
 				<CopyButton text={text} label="复制消息" />

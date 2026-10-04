@@ -6,10 +6,11 @@ import type { WebSearchControls } from "../chat/webSearch";
 import { ChatView } from "./ChatView";
 import { ContextUsage } from "./ContextUsage";
 import { VoyageRail } from "./VoyageRail";
+import { useModelFamily } from "../chat/familyContext";
 
 const StableChatView = memo(ChatView);
 
-export function VoyageWorkspace({ state, connected, pending, actions, onSend, onReconnect, projectName, search, onConfigureSearch }: {
+export function VoyageWorkspace({ state, connected, pending, actions, onSend, onReconnect, projectName, search, onConfigureSearch, failover }: {
 	state: SessionState;
 	connected: boolean;
 	pending: boolean;
@@ -19,8 +20,10 @@ export function VoyageWorkspace({ state, connected, pending, actions, onSend, on
 	projectName?: string;
 	search: WebSearchControls;
 	onConfigureSearch: () => void;
+	failover?: { label: string; switch: () => void };
 }) {
-	const metrics = useVoyageMetrics(state.messages, state.model, state.isStreaming);
+	const { pricingModels } = useModelFamily();
+	const metrics = useVoyageMetrics(state.messages, state.model, state.isStreaming, pricingModels ?? state.availableModels);
 	const [expanded, setExpanded] = useState(() => window.innerWidth >= 900);
 	useEffect(() => {
 		const query = window.matchMedia("(max-width: 899px)");
@@ -32,7 +35,7 @@ export function VoyageWorkspace({ state, connected, pending, actions, onSend, on
 
 	return <div className={`chat-and-rail ${expanded ? "rail-expanded" : "rail-collapsed"}`}>
 		<div className="chat-column">
-			<StableChatView state={state} connected={connected} pending={pending} actions={actions} onSend={onSend} onReconnect={onReconnect} projectName={projectName} search={search} onConfigureSearch={onConfigureSearch} />
+			<StableChatView state={state} connected={connected} pending={pending} actions={actions} onSend={onSend} onReconnect={onReconnect} projectName={projectName} search={search} onConfigureSearch={onConfigureSearch} failover={failover} />
 			<ContextUsage metrics={metrics} expanded={expanded} onToggle={toggle} />
 		</div>
 		<VoyageRail metrics={metrics} expanded={expanded} onToggle={toggle} />
