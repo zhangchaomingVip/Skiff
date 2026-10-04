@@ -17,6 +17,7 @@ export interface Conversation {
 	hasMessages: boolean;
 	elapsedMs?: number;
 	selectedModel?: { provider: string; id: string };
+	pinned?: boolean;
 }
 
 interface Workspace {
@@ -40,6 +41,7 @@ function readWorkspace(): Workspace | null {
 		if (!value.chats.some((c) => c.id === value.activeId)) return null;
 		for (const chat of value.chats) {
 			if (chat.selectedModel && (typeof chat.selectedModel.provider !== "string" || typeof chat.selectedModel.id !== "string")) delete chat.selectedModel;
+			if (chat.pinned !== undefined && typeof chat.pinned !== "boolean") delete chat.pinned;
 		}
 		return value;
 	} catch {

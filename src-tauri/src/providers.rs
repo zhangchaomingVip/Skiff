@@ -99,6 +99,53 @@ pub(crate) async fn discover(base: &str, key: &str) -> Result<Vec<String>, Strin
 	Ok(ids)
 }
 
+/// A pricing source page fetched for the import flow: the final URL after
+/// redirects, the media type, and a size-capped body the frontend parses.
+#[derive(serde::Serialize)]
+pub(crate) struct FetchedPage {
+	pub url: String,
+	pub content_type: String,
+	pub body: String,
+}
+
+fn validate_page_url(raw: &str) -> Result<String, String> {
+	let url = reqwest::Url::parse(raw.trim()).map_err(|_| "网页地址格式不正确")?;
+	if !["http", "https"].contains(&url.scheme()) || url.host_str().is_none() || !url.username().is_empty() || url.password().is_some() {
+		return Err("请输入 HTTP(S) 网页地址，不包含凭据".into());
+	}
+	Ok(url.to_string())
+}
+
+/// Fetches a user-supplied public pricing page (HTML or JSON). No credentials
+/// are attached; anything under 2 MiB is handed to the frontend verbatim.
+pub(crate) async fn fetch_pricing_page(raw: &str) -> Result<FetchedPage, String> {
+	let url = validate_page_url(raw)?;
+	let client = reqwest::Client::builder()
+		.timeout(Duration::from_secs(15))
+		.redirect(reqwest::redirect::Policy::limited(5))
+		.build()
+		.map_err(|_| "无法初始化连接")?;
+	let mut response = client.get(&url).send().await.map_err(|error| {
+		if error.is_timeout() { "获取网页超时（15 秒），请重试".to_string() } else { "无法获取网页，请检查地址和网络".to_string() }
+	})?;
+	let status = response.status();
+	if !status.is_success() {
+		return Err(format!("HTTP {} · 网页获取失败，请确认地址可公开访问", status.as_u16()));
+	}
+	let content_type = response.headers().get(reqwest::header::CONTENT_TYPE)
+		.and_then(|value| value.to_str().ok())
+		.map(|value| value.split(';').next().unwrap_or("").trim().to_string())
+		.unwrap_or_default();
+	let mut bytes = Vec::new();
+	while let Some(chunk) = response.chunk().await.map_err(|_| "读取网页内容失败，请重试")? {
+		if bytes.len() + chunk.len() > 2 * 1024 * 1024 {
+			return Err("网页内容过大（超过 2 MB），请改用接口地址".into());
+		}
+		bytes.extend_from_slice(&chunk);
+	}
+	Ok(FetchedPage { url: response.url().to_string(), content_type, body: String::from_utf8_lossy(&bytes).into_owned() })
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;

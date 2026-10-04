@@ -813,6 +813,12 @@ pub async fn discover_relay_models(base_url: String, api_key: String) -> Result<
 	providers::discover(&base_url, &api_key).await
 }
 
+/// 抓取用户提供的公开模型定价页，由前端解析出模型与价格。
+#[tauri::command]
+pub async fn fetch_pricing_page(url: String) -> Result<providers::FetchedPage, String> {
+	providers::fetch_pricing_page(&url).await
+}
+
 /// One `max_tokens=1` completion proves the relay endpoint, key and model work.
 #[tauri::command]
 pub async fn test_provider_connection(base_url: String, api_key: String, model_id: String, timeout_seconds: Option<u64>) -> Result<TestResult, String> {

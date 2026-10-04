@@ -413,6 +413,7 @@ pub fn run() {
 			families::save_route, families::delete_route, families::reorder_routes,
 			families::set_default_route, families::set_family_auto_failover,
 			families::test_provider_connection, families::discover_relay_models,
+			families::fetch_pricing_page,
 			search::get_web_search_status, search::save_web_search_key, search::clear_web_search_key, search::install_web_search_extension
 		])
 		.on_window_event(|window, event| {

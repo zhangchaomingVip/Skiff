@@ -1,4 +1,4 @@
-const FAMILY_KEYWORDS: Record<string, string[]> = {
+export const FAMILY_KEYWORDS: Record<string, string[]> = {
 	deepseek: ["deepseek"],
 	kimi: ["kimi", "moonshot"],
 	glm: ["glm", "chatglm"],
