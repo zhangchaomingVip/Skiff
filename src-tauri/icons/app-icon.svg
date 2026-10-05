@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-label="Skiff">
+	<!-- Source icon for `tauri icon`. White tile so the navy speedboat stays legible on
+	     light task bars; colors mirror the in-app Boat mark (navy hull, brand-blue wheelhouse). -->
+	<rect width="1024" height="1024" rx="160" fill="#ffffff" />
+	<path d="M190 470 H613 C693 470 773 440 834 392 C826 492 770 592 658 640 H288 C228 640 190 582 190 470 Z" fill="#0b1626" />
+	<path d="M358 470 L406 376 L566 376 L596 470 Z" fill="#5b9fff" />
+</svg>

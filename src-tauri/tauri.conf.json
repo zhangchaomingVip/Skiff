@@ -15,7 +15,9 @@
 			{
 				"label": "main",
 				"title": "Skiff",
+				"decorations": false,
 				"width": 1100,
+
 				"height": 750,
 				"minWidth": 600,
 				"minHeight": 400,

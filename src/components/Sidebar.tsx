@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import type { Conversation, Project } from "../chat/workspace";
 import { Icon } from "./Icon";
+import { BrandMark } from "./BrandMark";
 import { ConfirmDialog } from "./ConfirmDialog";
 
 const dayLabel = (timestamp: number) => {
@@ -142,7 +143,7 @@ export function Sidebar({ projects, chats, activeId, activeProjectId, disabled, 
 	return (
 		<aside className="sidebar" aria-label="项目与聊天导航">
 			{deleting && <ConfirmDialog title={deleting.kind === "project" ? "移除项目" : "删除聊天"} description={deleting.kind === "project" ? `从侧栏移除 ${deleting.name} 及其聊天，磁盘上的项目与会话文件会保留。` : `从侧栏删除 ${deleting.name}，pi 会话文件会保留。`} onConfirm={() => { if (deleting.kind === "project") onDeleteProject(deleting.id); else onDeleteChat(deleting.id); }} onClose={() => setDeleting(undefined)} />}
-			<div className="sidebar-brand"><span className="brand-mark">S</span><span>Skiff</span><button className="icon-btn sidebar-search-toggle" onClick={() => setSearchOpen((open) => !open)} aria-label="搜索项目与聊天" aria-expanded={searchOpen} title="搜索项目与聊天"><Icon name="search" size={16} /></button><button className="icon-btn sidebar-toggle" onClick={onClose} aria-label="收起侧栏" title="收起侧栏"><Icon name="panel" /></button></div>
+			<div className="sidebar-brand"><BrandMark /><span>Skiff</span><button className="icon-btn sidebar-search-toggle" onClick={() => setSearchOpen((open) => !open)} aria-label="搜索项目与聊天" aria-expanded={searchOpen} title="搜索项目与聊天"><Icon name="search" size={16} /></button><button className="icon-btn sidebar-toggle" onClick={onClose} aria-label="收起侧栏" title="收起侧栏"><Icon name="panel" /></button></div>
 			{searchOpen && <div className="sidebar-search"><Icon name="search" size={14} /><input autoFocus aria-label="搜索项目与聊天" placeholder="搜索项目与聊天" value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); setSearch(""); setSearchOpen(false); } }} /><button className="icon-btn" onClick={() => { setSearch(""); setSearchOpen(false); }} aria-label="关闭搜索" title="关闭搜索"><Icon name="close" size={13} /></button></div>}
 			<button className="new-chat" onClick={onNewChat} disabled={disabled}><Icon name="edit" /><span>新聊天</span><span className="shortcut">Ctrl N</span></button>
 			<div className="sidebar-scroll" ref={scrollRef} onScroll={updateScrollFades}>

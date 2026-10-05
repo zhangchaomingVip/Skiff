@@ -13,6 +13,8 @@ const paths = {
 	arrow: "M12 19V5m-6 6 6-6 6 6",
 	stop: "M6 6h12v12H6Z",
 	close: "m6 6 12 12M6 18 18 6",
+	minimize: "M5 19h14",
+	maximize: "M4 4h16v16H4Z",
 	code: "m8 7-5 5 5 5m8-10 5 5-5 5m-3-14-2 18",
 	check: "m5 12 4 4L19 6",
 	file: "M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2ZM14 2v5.5h6",
