@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import type { Conversation, Project } from "../chat/workspace";
 import type { RuntimeOffer } from "../chat/modelFamilies";
-import { groupLauncherOffers, type LauncherFamilyDefault } from "../chat/launcherModels";
+import { groupLauncherOffers, recentLauncherOfferIds, type LauncherFamilyDefault } from "../chat/launcherModels";
 import { OfferPickerDialog } from "./OfferPickerDialog";
 import { BrandIcon, type BrandName } from "./BrandIcon";
 import { Icon } from "./Icon";
@@ -42,7 +42,8 @@ export function LauncherView({ activeChat, activeProject, projects, chats, offer
 	const [scope, setScope] = useState<"recent" | "all">(recentOfferIds.length ? "recent" : "all");
 	const [query, setQuery] = useState("");
 	const [routeModel, setRouteModel] = useState<ReturnType<typeof groupLauncherOffers>[number]>();
-	const recentIds = useMemo(() => new Set(recentOfferIds), [recentOfferIds]);
+	const recentChats = useMemo(() => chats.filter((chat) => chat.hasMessages).sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 8), [chats]);
+	const recentIds = useMemo(() => new Set([...recentOfferIds, ...recentLauncherOfferIds(recentChats, offers)]), [offers, recentChats, recentOfferIds]);
 	const visibleModels = useMemo(() => {
 		const needle = query.trim().toLocaleLowerCase();
 		return models.filter((model) => {
@@ -51,7 +52,6 @@ export function LauncherView({ activeChat, activeProject, projects, chats, offer
 		});
 	}, [models, query, recentIds, scope]);
 	const projectNames = useMemo(() => new Map(projects.map((project) => [project.id, project.name])), [projects]);
-	const recentChats = useMemo(() => chats.filter((chat) => chat.hasMessages).sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 8), [chats]);
 	return <section className="launcher" aria-labelledby="launcher-title">
 		<div className="launcher-inner">
 			<div className="launcher-hero">
@@ -72,11 +72,10 @@ export function LauncherView({ activeChat, activeProject, projects, chats, offer
 				<div className="launcher-section-heading"><div><h2>可用模型</h2><p>按模型聚合，线路保留在卡片内。</p></div><div className="launcher-model-tools"><div className="launcher-scope" role="tablist" aria-label="模型范围"><button className={scope === "recent" ? "active" : ""} role="tab" aria-selected={scope === "recent"} onClick={() => setScope("recent")}>最近使用</button><button className={scope === "all" ? "active" : ""} role="tab" aria-selected={scope === "all"} onClick={() => setScope("all")}>全部模型</button></div><label className="launcher-search"><Icon name="search" size={14} /><input aria-label="搜索模型" placeholder="搜索模型或线路" value={query} onChange={(event) => setQuery(event.target.value)} /></label></div></div>
 				{loading ? <div className="launcher-model-grid launcher-model-grid-loading" role="status" aria-label="正在加载模型和线路信息">{[0, 1, 2].map((item) => <div className="launcher-model-card launcher-model-card-loading" key={item} aria-hidden="true"><span className="launcher-skeleton launcher-skeleton-icon" /><span className="launcher-skeleton launcher-skeleton-title" /><span className="launcher-skeleton launcher-skeleton-line" /><span className="launcher-skeleton launcher-skeleton-line short" /><span className="launcher-skeleton launcher-skeleton-actions" /></div>)}</div> : error ? <div className="launcher-empty launcher-error" role="alert"><strong>模型目录读取失败</strong><span>{error}</span><div><button className="btn" onClick={onRetryModels}>重试</button><button className="btn ghost" onClick={onManageProviders}>管理提供商</button></div></div> : !models.length ? <div className="launcher-empty" role="status"><strong>还没有可用线路</strong><span>请先配置并启用一个提供商线路。</span><button className="btn" onClick={onManageProviders}>管理提供商</button></div> : !visibleModels.length ? <div className="launcher-empty" role="status">没有匹配的模型</div> : <div className="launcher-model-grid" role="list">
 					{visibleModels.map((model) => { const offer = model.defaultOffer; const mark = brand(model.familyId); const labels = capabilityLabels(offer); const selected = !!activeChat?.selectedModel && ((activeChat.selectedModel.offerId && activeChat.selectedModel.offerId === offer.offerId) || (activeChat.selectedModel.routeId && activeChat.selectedModel.routeId === offer.routeId && activeChat.selectedModel.id === offer.modelId)); const blocked = !activeProject; const start = () => { if (blocked) return; if (model.offers.length > 1) setRouteModel(model); else onStartChat(offer); }; return <article className={`launcher-model-card${selected ? " selected" : ""}${blocked ? " blocked" : ""}`} key={`${model.familyId}/${model.modelId}`} role="listitem" tabIndex={0} aria-current={selected ? "true" : undefined} onKeyDown={(event) => { if (event.target !== event.currentTarget || (event.key !== "Enter" && event.key !== " ")) return; event.preventDefault(); start(); }}>
-						<div className="launcher-model-top">{mark ? <div className="launcher-model-icon" aria-hidden="true"><BrandIcon name={mark} size={20} /></div> : <div className="launcher-model-icon" aria-hidden="true"><Icon name="spark" size={19} /> </div>}<div className="launcher-model-title"><h3>{model.familyName}</h3><span>{model.modelId}</span></div><span className="launcher-model-status">{blocked ? "先选项目" : "可用"}</span></div>
+						<div className="launcher-model-top">{mark ? <div className="launcher-model-icon" aria-hidden="true"><BrandIcon name={mark} size={20} /></div> : <div className="launcher-model-icon" aria-hidden="true"><Icon name="spark" size={19} /> </div>}<div className="launcher-model-title"><h3>{model.modelId}</h3><span>{model.familyName}</span></div><span className="launcher-model-status">{blocked ? "先选项目" : "可用"}</span></div>
 						<div className="launcher-model-chips">{labels.map((label) => <span key={label}>{label}</span>)}<span>{context(offer.contextWindow)} 上下文</span></div>
 						<div className="launcher-model-route"><span>默认线路</span><strong>{offer.relayName}</strong><span>· {model.offers.length} 条线路</span></div>
 						<div className="launcher-model-price">入 {money(offer).split(" / ")[0]} · 出 {money(offer).split(" / ")[1]} / 百万 token</div>
-						<div className="launcher-model-account">扣费账户：{offer.billingAccountId || "未标注"}</div>
 						<div className="launcher-model-actions"><button className="btn primary" disabled={blocked} onClick={start} title={activeProject ? "使用默认线路开始聊天" : "请先选择项目"}>开始聊天</button>{model.offers.length > 1 && <button className="btn" disabled={blocked} onClick={() => setRouteModel(model)} title={activeProject ? "选择具体线路" : "请先选择项目"}>选择线路</button>}</div>
 					</article>; })}
 				</div>}

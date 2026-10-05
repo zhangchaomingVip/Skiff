@@ -27,9 +27,9 @@ export function VoyageWorkspace({ state, connected, pending, actions, onSend, on
 }) {
 	const { pricingModels } = useModelFamily();
 	const metrics = useVoyageMetrics(state.messages, state.model, state.isStreaming, pricingModels ?? state.availableModels);
-	const [expanded, setExpanded] = useState(() => window.innerWidth >= 900);
+	const [expanded, setExpanded] = useState(() => window.innerWidth >= 1200);
 	useEffect(() => {
-		const query = window.matchMedia("(max-width: 899px)");
+		const query = window.matchMedia("(max-width: 1199px)");
 		const resize = (event: MediaQueryListEvent) => setExpanded(!event.matches);
 		query.addEventListener("change", resize);
 		return () => query.removeEventListener("change", resize);

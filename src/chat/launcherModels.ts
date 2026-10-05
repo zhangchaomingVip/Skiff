@@ -1,4 +1,5 @@
 import type { RuntimeOffer } from "./modelFamilies";
+import type { Conversation } from "./workspace";
 
 export interface LauncherFamilyDefault {
 	id: string;
@@ -14,6 +15,28 @@ export interface LauncherModel {
 }
 
 const offerKey = (offer: RuntimeOffer) => offer.offerId ?? `${offer.familyId}/${offer.routeId ?? offer.relayId}/${offer.modelId}`;
+
+/** Resolve historical session selections back to currently available offer IDs. */
+export function recentLauncherOfferIds(chats: Conversation[], offers: RuntimeOffer[]): Set<string> {
+	const available = new Set(offers.map((offer) => offer.offerId).filter((id): id is string => !!id));
+	const recent = new Set<string>();
+	const remember = (selection: { offerId?: string; routeId?: string; modelId?: string; provider?: string; providerKey?: string; id?: string } | undefined) => {
+		if (!selection) return;
+		if (selection.offerId && available.has(selection.offerId)) { recent.add(selection.offerId); return; }
+		const modelId = selection.modelId ?? selection.id;
+		const match = offers.find((offer) =>
+			(selection.routeId && offer.routeId === selection.routeId && !!modelId && offer.modelId === modelId) ||
+			((selection.provider ?? selection.providerKey) && offer.providerKey === (selection.provider ?? selection.providerKey) && !!modelId && offer.modelId === modelId),
+		);
+		if (match?.offerId) recent.add(match.offerId);
+	};
+	for (const chat of chats) {
+		const snapshot = [...(chat.routeSnapshots ?? [])].reverse().find((item) => !!item);
+		if (snapshot) remember(snapshot);
+		else remember(chat.selectedModel);
+	}
+	return recent;
+}
 
 /** Groups runtime offers for the Launcher while preserving every route. */
 export function groupLauncherOffers(offers: RuntimeOffer[], defaults: LauncherFamilyDefault[] = []): LauncherModel[] {

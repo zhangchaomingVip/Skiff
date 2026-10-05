@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { groupLauncherOffers } from "../src/chat/launcherModels.ts";
+import { groupLauncherOffers, recentLauncherOfferIds } from "../src/chat/launcherModels.ts";
 import type { RuntimeOffer } from "../src/chat/modelFamilies.ts";
 
 const offer = (patch: Partial<RuntimeOffer> = {}): RuntimeOffer => ({
@@ -24,4 +24,16 @@ test("Launcher defaults follow the configured family route", () => {
 
 test("Launcher drops malformed offers without inventing a card", () => {
 	assert.deepEqual(groupLauncherOffers([{ ...offer(), modelId: "" }]), []);
+});
+
+test("Launcher recovers recent offers from historical route snapshots", () => {
+	const current = offer({ offerId: "route-a/model-a" });
+	const ids = recentLauncherOfferIds([{ id: "chat-1", projectId: "project", title: "旧会话", updatedAt: 1, hasMessages: true, routeSnapshots: [{ providerKey: current.providerKey, familyId: current.familyId, familyName: current.familyName, modelId: current.modelId, relayId: current.relayId, relayName: current.relayName, currency: current.currency, inputCost: current.inputCost, outputCost: current.outputCost }] }], [current]);
+	assert.deepEqual([...ids], ["route-a/model-a"]);
+});
+
+test("Launcher recovers legacy recent selections by provider and model", () => {
+	const current = offer({ providerKey: "skiff-glm", familyId: "glm", familyName: "GLM", modelId: "glm-5.3-flash", offerId: "route-glm/glm-5.3-flash" });
+	const ids = recentLauncherOfferIds([{ id: "chat-1", projectId: "project", title: "旧会话", updatedAt: 1, hasMessages: true, selectedModel: { provider: "skiff-glm", id: "glm-5.3-flash" } }], [current]);
+	assert.deepEqual([...ids], ["route-glm/glm-5.3-flash"]);
 });
