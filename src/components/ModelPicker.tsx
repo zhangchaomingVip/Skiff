@@ -20,6 +20,8 @@ const cost = (model: ModelInfo) => typeof model.cost?.input === "number" && type
 	? `${model.currency === "USD" ? "$" : "¥"} 入 ${model.cost.input} · 出 ${model.cost.output} / 百万`
 	: "";
 
+const subtitle = (model: ModelInfo) => [model.id, model.providerName, cost(model)].filter(Boolean).join(" · ");
+
 /**
  * Family-grouped picker: one group per family, one provider group per channel, one row per model.
  * Keyboard: ↑↓ move, Enter confirm, Esc closes (handled by the caller), typing
@@ -103,8 +105,8 @@ export function ModelPicker({ models, familyOf, current, onSelect, onManage, con
 							const index = rendered++;
 							const selected = sameModel(model, current);
 							return <button key={`${model.provider}/${model.id}`} id={`${id}-${index}`} className={`family-option ${index === active ? "focused" : ""}`} role="option" aria-selected={selected} aria-label={`选择 ${group.familyName} ${provider.name} ${model.id}`} disabled={disabled} onMouseMove={() => setActive(index)} onClick={() => onSelect(model)}>
-								<div className="family-option-main"><strong>{model.id}</strong>{selected && <Icon name="check" size={14} />}</div>
-								<small>{cost(model)}</small>
+								<div className="family-option-main"><strong>{model.name ?? model.id}</strong>{selected && <Icon name="check" size={14} />}</div>
+								<small>{subtitle(model)}</small>
 							</button>;
 						})}
 					</div>)}

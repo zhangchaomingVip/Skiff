@@ -1,6 +1,8 @@
 import { parseBlocks } from "./parse";
 import type { ChatMessage, ContentBlock, SessionState } from "./types";
 import type { RpcEvent } from "../rpc/RpcClient";
+import type { RuntimeOffer } from "./modelFamilies";
+import { snapshotForResponse } from "./routeSnapshot";
 
 let seq = 0;
 const nextId = (prefix: string): string => `${prefix}_${++seq}_${Date.now().toString(36)}`;
@@ -32,7 +34,11 @@ function shrinkBlocks(blocks: ContentBlock[]): ContentBlock[] {
  * Pure reducer mapping a single `pi --mode rpc` stdout event to the next
  * chat state. Kept framework-free so it can be reused by the GPUI rewrite.
  */
-export function reduce(state: SessionState, event: RpcEvent): SessionState {
+export interface ReducerOptions {
+	offers?: readonly RuntimeOffer[];
+}
+
+export function reduce(state: SessionState, event: RpcEvent, options: ReducerOptions = {}): SessionState {
 	switch (event.type) {
 		case "agent_start":
 			return { ...state, isStreaming: true, lastError: undefined };
@@ -57,6 +63,7 @@ export function reduce(state: SessionState, event: RpcEvent): SessionState {
 				provider: typeof message?.provider === "string" ? message.provider : undefined,
 				model: typeof message?.model === "string" ? message.model : undefined,
 				usage: message?.usage as ChatMessage["usage"],
+				routeSnapshot: undefined,
 				stopReason: typeof message?.stopReason === "string" ? message.stopReason : undefined,
 				timestamp: timestamp(message?.timestamp),
 			};
@@ -153,6 +160,7 @@ export function reduce(state: SessionState, event: RpcEvent): SessionState {
 				provider: typeof message?.provider === "string" ? message.provider : undefined,
 				model: typeof message?.model === "string" ? message.model : undefined,
 				usage: message?.usage as ChatMessage["usage"],
+				routeSnapshot: role === "assistant" ? snapshotForResponse({ provider: typeof message?.provider === "string" ? message.provider : undefined, model: typeof message?.model === "string" ? message.model : undefined }, state.model, options.offers ?? []) ?? (index >= 0 ? state.messages[index].routeSnapshot : undefined) : undefined,
 				stopReason: typeof message?.stopReason === "string" ? message.stopReason : undefined,
 				durationMs: index >= 0 ? state.messages[index].durationMs : undefined,
 				timestamp: index >= 0 ? state.messages[index].timestamp : timestamp(message?.timestamp),

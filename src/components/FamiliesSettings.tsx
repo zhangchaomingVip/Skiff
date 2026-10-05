@@ -264,7 +264,7 @@ export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, o
 		return (relayId: string) => counts.get(relayId)?.size ?? 0;
 	}, [families]);
 	const reorder = (routes: RouteSpec[], index: number, offset: number) => {
-		const ids = routes.map((route) => route.relayId);
+		const ids = routes.map((route) => route.id);
 		const target = index + offset;
 		if (target < 0 || target >= ids.length) return ids;
 		[ids[index], ids[target]] = [ids[target], ids[index]];
@@ -348,6 +348,13 @@ export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, o
 						</div>
 					</div>
 					<div className="editor-field">
+						<label htmlFor="relay-account">扣费账户</label>
+						<div className="editor-control">
+							<input id="relay-account" maxLength={128} placeholder="wallet-a（同一账户使用同一标识）" value={relay.billingAccountId} onChange={(event) => patchRelay({ billingAccountId: event.target.value })} disabled={pending} />
+							<small>留空按未知账户处理；自动切换到不同或未知账户时需确认。</small>
+						</div>
+					</div>
+					<div className="editor-field">
 						<label htmlFor="relay-timeout">超时</label>
 						<div className="editor-control">
 							<input id="relay-timeout" type="number" min={5} max={600} value={relay.timeoutSeconds} onChange={(event) => patchRelay({ timeoutSeconds: Number(event.target.value) })} disabled={pending} />
@@ -372,6 +379,7 @@ export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, o
 					<option value="" disabled>选择中转…</option>
 					{relays.map((relay) => <option key={relay.id} value={relay.id}>{relay.name}（{maskBaseUrl(relay.baseUrl)}）</option>)}
 				</select><small>地址与密钥来自中转，无需重复填写。</small></div>
+				<label className="provider-toggle inline"><input type="checkbox" checked={draft.route.enabled} onChange={(event) => patchRoute({ enabled: event.target.checked })} disabled={pending} />启用此线路（供应商总开关也须启用）</label>
 				<div className="provider-models">
 					<div className="provider-models-heading"><strong>模型配置</strong><small>单价按每百万令牌填写，顺序与选择器一致</small><PriceImport key={`${draft.familyId}:${draft.route.relayId}`} familyId={draft.familyId} addedIds={draft.route.models.map((model) => model.modelId.trim()).filter(Boolean)} extractors={extractors} catalog={catalog} catalogStale={catalogStale} catalogFetchedAt={catalogFetchedAt} usdCnyRate={usdCnyRate} onSaveRate={onSaveRate} relayBaseUrl={relays.find((relay) => relay.id === draft.route.relayId)?.baseUrl ?? ""} disabled={pending} onImport={importPriced} /></div>
 					{draft.route.models.map((model, index) => <div className="provider-model-row" key={index}>
@@ -383,12 +391,17 @@ export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, o
 								<button type="button" className="icon-btn" disabled={pending || draft.route.models.length <= 1} onClick={() => patchRoute({ models: draft.route.models.filter((_, row) => row !== index) })} aria-label={`删除模型 ${index + 1}`} title="删除模型，至少保留一行"><Icon name="trash" size={14} /></button>
 							</div>
 						</div>
+						<label className="provider-model-alias">模型别名<input maxLength={64} placeholder="可选，仅改变显示名称" value={model.alias} onChange={(event) => patchModel(index, { alias: event.target.value })} disabled={pending} /></label>
 						<div className="provider-model-limits">
 							<label>输入单价<input type="number" required min={0} step="0.000001" value={model.inputCost} onChange={(event) => patchModel(index, { inputCost: Number(event.target.value) })} disabled={pending} /></label>
 							<label>输出单价<input type="number" required min={0} step="0.000001" value={model.outputCost} onChange={(event) => patchModel(index, { outputCost: Number(event.target.value) })} disabled={pending} /></label>
 							<label>币种<select value={model.currency} onChange={(event) => patchModel(index, { currency: event.target.value === "USD" ? "USD" : "CNY" })} disabled={pending}><option value="CNY">人民币</option><option value="USD">美元</option></select></label>
 							<label>默认最大输出<input type="number" required min={1} step={1} max={model.contextWindow} value={model.maxTokens} onChange={(event) => patchModel(index, { maxTokens: Number(event.target.value) })} disabled={pending} /></label>
 							<label>上下文窗口<input type="number" required min={1} step={1} value={model.contextWindow} onChange={(event) => patchModel(index, { contextWindow: Number(event.target.value) })} disabled={pending} /></label>
+						</div>
+						<div className="provider-model-cache">
+							<label>缓存读取单价<input type="number" required min={0} step="0.000001" value={model.cacheReadCost} onChange={(event) => patchModel(index, { cacheReadCost: Number(event.target.value) })} disabled={pending} /></label>
+							<label>缓存写入单价<input type="number" required min={0} step="0.000001" value={model.cacheWriteCost} onChange={(event) => patchModel(index, { cacheWriteCost: Number(event.target.value) })} disabled={pending} /></label>
 						</div>
 					</div>)}
 					<button type="button" className="btn ghost compact" disabled={pending} onClick={() => patchRoute({ models: [...draft.route.models, blankModel()] })}>添加模型</button>
@@ -451,19 +464,20 @@ export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, o
 								<button type="button" className="btn ghost compact" onClick={() => openRoute(family.id)} disabled={pending || !relays.length} title={relays.length ? undefined : "请先添加供应商"}>添加线路</button>
 							</div>
 							{family.routes.length === 0 && <p className="family-empty">还没添加线路，去添加</p>}
-							{family.routes.map((route, index) => <div className="provider-row" key={route.relayId}>
+						{family.routes.map((route, index) => <div className={`provider-row ${route.enabled ? "" : "disabled"}`} key={route.id || route.relayId}>
 								<div className="provider-row-main">
-									<div className="provider-row-title"><strong>{relayName(route.relayId)}</strong>{family.defaultRelayId === route.relayId && <span className="provider-tag">默认</span>}</div>
+								<div className="provider-row-title"><strong>{relayName(route.relayId)}</strong>{family.defaultRouteId === route.id && <span className="provider-tag">默认</span>}{!route.enabled && <span className="provider-tag muted-tag">线路已停用</span>}</div>
 									<small>{route.models.length ? `${route.models.length} 个模型：${route.models.map((model) => model.modelId).join("、")}` : "未配置完整，请添加模型"}</small>
 								</div>
 								<div className="provider-row-actions">
 									<button type="button" className="icon-btn" disabled={pending || index === 0} onClick={() => void mutate(() => onReorderRoutes(family.id, reorder(family.routes, index, -1)))} aria-label={`上移 ${relayName(route.relayId)} 的线路`}><Icon name="arrow" size={14} /></button>
 									<button type="button" className="icon-btn flip" disabled={pending || index === family.routes.length - 1} onClick={() => void mutate(() => onReorderRoutes(family.id, reorder(family.routes, index, 1)))} aria-label={`下移 ${relayName(route.relayId)} 的线路`}><Icon name="arrow" size={14} /></button>
-									<button type="button" className="icon-btn" disabled={pending || family.defaultRelayId === route.relayId || !route.models.length} onClick={() => void mutate(() => onSetDefaultRoute(family.id, route.relayId))} title="设为默认线路" aria-label={`将 ${relayName(route.relayId)} 的线路设为默认`}><Icon name="check" size={14} /></button>
+									<button type="button" className="icon-btn" disabled={pending || family.defaultRouteId === route.id || !route.models.length || !route.enabled || !relays.find((relay) => relay.id === route.relayId)?.enabled} onClick={() => void mutate(() => onSetDefaultRoute(family.id, route.id))} title="设为默认线路" aria-label={`将 ${relayName(route.relayId)} 的线路设为默认`}><Icon name="check" size={14} /></button>
 									<button type="button" className="icon-btn" onClick={() => openRoute(family.id, route)} disabled={pending} aria-label={`编辑 ${relayName(route.relayId)} 的线路`}><Icon name="edit" size={14} /></button>
-									<button type="button" className="icon-btn" onClick={() => setRemoving({ title: "删除线路", description: `将从「${FAMILY_LABELS[family.id] ?? family.displayName}」移除 ${relayName(route.relayId)} 的线路。`, action: () => onDeleteRoute(family.id, route.relayId) })} disabled={pending} title="删除" aria-label={`删除 ${relayName(route.relayId)} 的线路`}><Icon name="trash" size={14} /></button>
+									<button type="button" className="icon-btn" onClick={() => setRemoving({ title: "删除线路", description: `将从「${FAMILY_LABELS[family.id] ?? family.displayName}」移除 ${relayName(route.relayId)} 的线路。`, action: () => onDeleteRoute(family.id, route.id) })} disabled={pending} title="删除" aria-label={`删除 ${relayName(route.relayId)} 的线路`}><Icon name="trash" size={14} /></button>
 								</div>
 							</div>)}
+							{family.defaultRouteId && <button type="button" className="btn ghost compact" disabled={pending} onClick={() => setRemoving({ title: "清空默认线路", description: `明确清空 ${FAMILY_LABELS[family.id] ?? family.displayName} 的默认线路后，可停用或删除原默认线路。已有会话仍使用钉住的线路。`, action: () => onSetDefaultRoute(family.id, null) })}>清空 {FAMILY_LABELS[family.id] ?? family.displayName} 默认线路</button>}
 						</section>)}
 						<div className="family-footer"><label className="provider-toggle inline"><input type="checkbox" checked={autoFailover} disabled={pending} onChange={(event) => void mutate(() => onAutoFailover(event.target.checked))} />失败时自动切换到同家族下一条提供相同模型的启用线路（默认关闭）</label></div>
 					</div>

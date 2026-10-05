@@ -60,3 +60,17 @@ test("models on one channel use independent prices and currencies for historical
 	assert.ok(Math.abs(summary.totals.CNY! - 0.00043) < 1e-12);
 	assert.ok(Math.abs(summary.totals.USD! - 0.00215) < 1e-12);
 });
+
+test("route snapshots keep historical prices after configuration changes and charge cache tiers separately", () => {
+	const historical = reply("snapshot", {
+		routeSnapshot: {
+			offerId: "route-old/deepseek-chat", routeId: "route-old", providerKey: model.provider,
+			familyId: "deepseek", familyName: "DeepSeek", modelId: model.id, relayId: "old", relayName: "旧线路",
+			billingAccountId: "wallet-a", currency: "CNY", inputCost: 1, outputCost: 4, cacheReadCost: .1, cacheWriteCost: .2,
+		},
+	});
+	const summary = summarizeCosts([historical], [{ ...model, cost: { input: 999, output: 999 } }]);
+	assert.ok(Math.abs(summary.totals.CNY! - .00021) < 1e-12);
+	assert.equal(summary.unconfigured, false);
+	assert.equal(formatCosts(summarizeCosts([{ ...historical, usage: undefined }], [model])), "—");
+});

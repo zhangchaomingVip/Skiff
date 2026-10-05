@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import type { RouteSnapshot } from "./types";
+import type { RouteEvent } from "./routeAudit";
+import { normalizeRouteEvents } from "./routeAudit";
 
 export interface Project {
 	id: string;
@@ -16,7 +19,11 @@ export interface Conversation {
 	updatedAt: number;
 	hasMessages: boolean;
 	elapsedMs?: number;
-	selectedModel?: { provider: string; id: string };
+	/** provider/id keep pi compatibility; route/model identify the pinned offer. */
+	selectedModel?: { provider: string; id: string; routeId?: string; modelId?: string; offerId?: string };
+	/** Snapshots are ordered by completed assistant reply, independent of pi's transcript IDs. */
+	routeSnapshots?: Array<RouteSnapshot | null>;
+	routeEvents?: RouteEvent[];
 	pinned?: boolean;
 }
 
@@ -32,6 +39,37 @@ const newChat = (projectId: string): Conversation => ({
 	id: crypto.randomUUID(), projectId, title: "新聊天", updatedAt: Date.now(), hasMessages: false,
 });
 
+export function normalizeSelectedModel(value: unknown): Conversation["selectedModel"] {
+	if (!value || typeof value !== "object") return undefined;
+	const model = value as Record<string, unknown>;
+	if (typeof model.provider !== "string" || typeof model.id !== "string") return undefined;
+	const selected: Conversation["selectedModel"] = { provider: model.provider, id: model.id };
+	for (const key of ["routeId", "modelId", "offerId"] as const) if (typeof model[key] === "string") selected[key] = model[key];
+	return selected;
+}
+
+function normalizeRouteSnapshot(value: unknown): RouteSnapshot | undefined {
+	if (!value || typeof value !== "object") return undefined;
+	const snapshot = value as Record<string, unknown>;
+	if (typeof snapshot.providerKey !== "string" || typeof snapshot.familyId !== "string" || typeof snapshot.familyName !== "string" || typeof snapshot.modelId !== "string" || typeof snapshot.relayId !== "string" || typeof snapshot.relayName !== "string" || (snapshot.billingAccountId !== undefined && typeof snapshot.billingAccountId !== "string") || (snapshot.currency !== "CNY" && snapshot.currency !== "USD") || typeof snapshot.inputCost !== "number" || !Number.isFinite(snapshot.inputCost) || typeof snapshot.outputCost !== "number" || !Number.isFinite(snapshot.outputCost)) return undefined;
+	return {
+		...(typeof snapshot.offerId === "string" ? { offerId: snapshot.offerId } : {}),
+		...(typeof snapshot.routeId === "string" ? { routeId: snapshot.routeId } : {}),
+		providerKey: snapshot.providerKey, familyId: snapshot.familyId, familyName: snapshot.familyName, modelId: snapshot.modelId,
+		...(typeof snapshot.alias === "string" ? { alias: snapshot.alias } : {}),
+		relayId: snapshot.relayId, relayName: snapshot.relayName,
+		...(typeof snapshot.billingAccountId === "string" ? { billingAccountId: snapshot.billingAccountId } : {}),
+		currency: snapshot.currency, inputCost: snapshot.inputCost, outputCost: snapshot.outputCost,
+		...(typeof snapshot.cacheReadCost === "number" && Number.isFinite(snapshot.cacheReadCost) ? { cacheReadCost: snapshot.cacheReadCost } : {}),
+		...(typeof snapshot.cacheWriteCost === "number" && Number.isFinite(snapshot.cacheWriteCost) ? { cacheWriteCost: snapshot.cacheWriteCost } : {}),
+	};
+}
+
+export function normalizeRouteSnapshots(value: unknown): Conversation["routeSnapshots"] {
+	if (!Array.isArray(value)) return undefined;
+	return value.map((item) => item === null ? null : normalizeRouteSnapshot(item) ?? null);
+}
+
 function readWorkspace(): Workspace | null {
 	try {
 		const value = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null") as Workspace | null;
@@ -40,7 +78,12 @@ function readWorkspace(): Workspace | null {
 		if (!value.chats.every((c) => c && typeof c.id === "string" && typeof c.title === "string" && typeof c.updatedAt === "number" && typeof c.hasMessages === "boolean" && (c.sessionFile === undefined || typeof c.sessionFile === "string") && value.projects.some((p) => p.id === c.projectId))) return null;
 		if (!value.chats.some((c) => c.id === value.activeId)) return null;
 		for (const chat of value.chats) {
-			if (chat.selectedModel && (typeof chat.selectedModel.provider !== "string" || typeof chat.selectedModel.id !== "string")) delete chat.selectedModel;
+			const selected = normalizeSelectedModel(chat.selectedModel);
+			if (selected) chat.selectedModel = selected; else delete chat.selectedModel;
+			const snapshots = normalizeRouteSnapshots(chat.routeSnapshots);
+			if (snapshots) chat.routeSnapshots = snapshots; else delete chat.routeSnapshots;
+			const events = normalizeRouteEvents(chat.routeEvents);
+			if (events) chat.routeEvents = events; else delete chat.routeEvents;
 			if (chat.pinned !== undefined && typeof chat.pinned !== "boolean") delete chat.pinned;
 		}
 		return value;

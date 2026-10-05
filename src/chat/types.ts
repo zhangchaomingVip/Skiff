@@ -4,13 +4,23 @@ export type Currency = "CNY" | "USD";
 export interface ModelInfo {
 	provider: string;
 	id: string;
+	/** Product identity from Skiff; provider/id remain pi compatibility fields. */
+	offerId?: string;
+	routeId?: string;
+	modelId?: string;
+	familyId?: string;
+	familyName?: string;
+	relayId?: string;
 	name?: string;
 	providerName?: string;
 	contextWindow?: number;
 	maxTokens?: number;
 	reasoning?: boolean;
+	streaming?: boolean;
+	tools?: boolean;
+	vision?: boolean;
 	input?: string[];
-	cost?: { input?: number; output?: number };
+	cost?: { input?: number; output?: number; cacheRead?: number; cacheWrite?: number };
 	currency?: Currency;
 }
 
@@ -22,6 +32,25 @@ export interface Usage {
 	totalTokens: number;
 	reasoning?: number;
 	cost?: { total?: number };
+}
+
+/** Immutable route and price metadata captured for a completed assistant reply. */
+export interface RouteSnapshot {
+	offerId?: string;
+	routeId?: string;
+	providerKey: string;
+	familyId: string;
+	familyName: string;
+	modelId: string;
+	alias?: string;
+	relayId: string;
+	relayName: string;
+	billingAccountId?: string;
+	currency: Currency;
+	inputCost: number;
+	outputCost: number;
+	cacheReadCost?: number;
+	cacheWriteCost?: number;
 }
 
 export type ContentBlock =
@@ -39,6 +68,7 @@ export interface ChatMessage {
 	provider?: string;
 	model?: string;
 	usage?: Usage;
+	routeSnapshot?: RouteSnapshot;
 	/** pi finish reason, e.g. `stop`, `length`, `toolUse`, `aborted`. */
 	stopReason?: string;
 	/** Wall-clock duration of the turn, attached when the agent run settles. */

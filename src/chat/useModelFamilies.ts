@@ -8,14 +8,17 @@ export type FamilyId = (typeof FAMILY_IDS)[number];
 
 export interface ModelSpec {
 	modelId: string;
+	alias: string;
 	inputCost: number;
 	outputCost: number;
+	cacheReadCost: number;
+	cacheWriteCost: number;
 	currency: Currency;
 	maxTokens: number;
 	contextWindow: number;
 }
 
-export const blankModel = (): ModelSpec => ({ modelId: "", inputCost: 0, outputCost: 0, currency: "CNY", maxTokens: 8192, contextWindow: 128000 });
+export const blankModel = (): ModelSpec => ({ modelId: "", alias: "", inputCost: 0, outputCost: 0, cacheReadCost: 0, cacheWriteCost: 0, currency: "CNY", maxTokens: 8192, contextWindow: 128000 });
 
 export function validateModels(models: ModelSpec[]): string | undefined {
 	if (!models.length) return "请至少添加一个模型，补全线路配置";
@@ -28,6 +31,8 @@ export function validateModels(models: ModelSpec[]): string | undefined {
 		if (!Number.isSafeInteger(model.contextWindow) || model.contextWindow <= 0 || !Number.isSafeInteger(model.maxTokens) || model.maxTokens <= 0) return "上下文窗口和默认最大输出必须为正整数";
 		if (model.maxTokens > model.contextWindow) return "默认最大输出不能超过上下文窗口";
 		if (![model.inputCost, model.outputCost].every((cost) => Number.isFinite(cost) && cost >= 0)) return "模型单价必须为非负数";
+		if (model.alias.length > 64 || [...model.alias].some((char) => /[\u0000-\u001f\u007f]/.test(char))) return "模型别名不能超过 64 个字符或包含控制字符";
+		if (![model.cacheReadCost, model.cacheWriteCost].every((cost) => Number.isFinite(cost) && cost >= 0)) return "缓存单价必须为非负数";
 	}
 	return undefined;
 }
@@ -40,11 +45,14 @@ export interface RelaySpec {
 	apiKey: string;
 	timeoutSeconds: number;
 	enabled: boolean;
+	billingAccountId: string;
 }
 
 /** A route binds one relay to one family with its served models. */
 export interface RouteSpec {
+	id: string;
 	relayId: string;
+	enabled: boolean;
 	models: ModelSpec[];
 	streaming: boolean;
 	tools: boolean;
@@ -56,7 +64,7 @@ export interface ModelFamily {
 	id: string;
 	displayName: string;
 	routes: RouteSpec[];
-	defaultRelayId: string | null;
+	defaultRouteId: string | null;
 }
 
 export interface FamiliesConfig {
@@ -64,6 +72,7 @@ export interface FamiliesConfig {
 	relays: RelaySpec[];
 	families: ModelFamily[];
 	autoFailover: boolean;
+	autoRetry: boolean;
 	usdCnyRate: number;
 }
 
@@ -77,11 +86,11 @@ export interface TestResult {
 export const FAMILY_LABELS: Record<string, string> = { deepseek: "DeepSeek", kimi: "Kimi", glm: "GLM" };
 
 export function blankRelay(): RelaySpec {
-	return { id: "", name: "", baseUrl: "", apiKey: "", timeoutSeconds: 60, enabled: true };
+	return { id: "", name: "", baseUrl: "", apiKey: "", timeoutSeconds: 60, enabled: true, billingAccountId: "" };
 }
 
 export function blankRoute(relayId = ""): RouteSpec {
-	return { relayId, models: [blankModel()], streaming: true, tools: true, vision: false, reasoning: false };
+	return { id: "", relayId, enabled: true, models: [blankModel()], streaming: true, tools: true, vision: false, reasoning: false };
 }
 
 /** Keeps the last four characters visible, the way API keys are shown elsewhere. */
@@ -141,7 +150,7 @@ export function useModelFamilies() {
 
 	// A missing or malformed payload falls back to pi's own model list rather
 	// than blanking the composer.
-	const families = FAMILY_IDS.map((id) => config?.families?.find((family) => family.id === id) ?? { id, displayName: FAMILY_LABELS[id], routes: [], defaultRelayId: null });
+	const families = FAMILY_IDS.map((id) => config?.families?.find((family) => family.id === id) ?? { id, displayName: FAMILY_LABELS[id], routes: [], defaultRouteId: null });
 	const complete = FAMILY_IDS.every((id) => hasFamily(config, id));
 
 	return {
@@ -168,6 +177,7 @@ export function useModelFamilies() {
 		reorderRoutes: (familyId: string, relayIds: string[]) => run("reorder_routes", { familyId, relayIds }),
 		setDefaultRoute: (familyId: string, relayId: string | null) => run("set_default_route", { familyId, relayId }),
 		setAutoFailover: (autoFailover: boolean) => run("set_family_auto_failover", { autoFailover }),
+		setAutoRetry: (autoRetry: boolean) => run("set_family_auto_retry", { autoRetry }),
 		setUsdCnyRate: (rate: number) => run("set_usd_cny_rate", { rate }),
 		test: (baseUrl: string, apiKey: string, modelId: string, timeoutSeconds: number) =>
 			invoke<TestResult>("test_provider_connection", { baseUrl, apiKey, modelId, timeoutSeconds }),

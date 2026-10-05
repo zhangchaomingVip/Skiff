@@ -7,10 +7,11 @@ import { ChatView } from "./ChatView";
 import { ContextUsage } from "./ContextUsage";
 import { VoyageRail } from "./VoyageRail";
 import { useModelFamily } from "../chat/familyContext";
+import type { RouteAuthorizationChoice, RouteAuthorizationRequest } from "../chat/routeAuthorization";
 
 const StableChatView = memo(ChatView);
 
-export function VoyageWorkspace({ state, connected, pending, actions, onSend, onReconnect, projectName, search, onConfigureSearch, failover, modelNotice }: {
+export function VoyageWorkspace({ state, connected, pending, actions, onSend, onReconnect, projectName, search, onConfigureSearch, failover, modelNotice, routeAuthorization }: {
 	modelNotice?: string;
 	state: SessionState;
 	connected: boolean;
@@ -21,7 +22,8 @@ export function VoyageWorkspace({ state, connected, pending, actions, onSend, on
 	projectName?: string;
 	search: WebSearchControls;
 	onConfigureSearch: () => void;
-	failover?: { label: string; switch: () => void };
+	failover?: { label: string; switch: (automatic?: boolean) => void };
+	routeAuthorization?: { request: RouteAuthorizationRequest; onChoice: (choice: RouteAuthorizationChoice) => void };
 }) {
 	const { pricingModels } = useModelFamily();
 	const metrics = useVoyageMetrics(state.messages, state.model, state.isStreaming, pricingModels ?? state.availableModels);
@@ -36,7 +38,7 @@ export function VoyageWorkspace({ state, connected, pending, actions, onSend, on
 
 	return <div className={`chat-and-rail ${expanded ? "rail-expanded" : "rail-collapsed"}`}>
 		<div className="chat-column">
-			<StableChatView state={state} connected={connected} pending={pending} actions={actions} onSend={onSend} onReconnect={onReconnect} projectName={projectName} search={search} onConfigureSearch={onConfigureSearch} failover={failover} />
+			<StableChatView state={state} connected={connected} pending={pending} actions={actions} onSend={onSend} onReconnect={onReconnect} projectName={projectName} search={search} onConfigureSearch={onConfigureSearch} failover={failover} routeAuthorization={routeAuthorization} />
 			<ContextUsage notice={modelNotice} metrics={metrics} expanded={expanded} onToggle={toggle} />
 		</div>
 		<VoyageRail metrics={metrics} expanded={expanded} onToggle={toggle} />

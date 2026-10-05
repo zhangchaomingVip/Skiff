@@ -10,7 +10,19 @@ export interface CostSummary {
 export function summarizeCosts(messages: ChatMessage[], models: ModelInfo[], current?: ModelInfo): CostSummary {
 	const result: CostSummary = { totals: {}, unconfigured: false };
 	for (const message of messages) {
-		if (message.role !== "assistant" || !message.usage || message.streaming) continue;
+		if (message.role !== "assistant" || message.streaming) continue;
+		if (!message.usage) { result.unconfigured = true; continue; }
+		if (message.routeSnapshot) {
+			const snapshot = message.routeSnapshot;
+			const cacheReadPrice = snapshot.cacheReadCost ?? snapshot.inputCost;
+			const cacheWritePrice = snapshot.cacheWriteCost ?? snapshot.inputCost;
+			const prices = [snapshot.inputCost, snapshot.outputCost, cacheReadPrice, cacheWritePrice];
+			if (prices.some((price) => !Number.isFinite(price) || price < 0) || prices.every((price) => price === 0)) { result.unconfigured = true; continue; }
+			const usage = summarizeUsage([message]);
+			const cost = usage.input / 1e6 * snapshot.inputCost + usage.cacheRead / 1e6 * cacheReadPrice + usage.cacheWrite / 1e6 * cacheWritePrice + usage.output / 1e6 * snapshot.outputCost;
+			result.totals[snapshot.currency] = (result.totals[snapshot.currency] ?? 0) + cost;
+			continue;
+		}
 		const matches = (model: ModelInfo) => (!message.provider || message.provider === model.provider) && (!message.model || message.model === model.id);
 		const candidates = models.filter(matches);
 		const model = message.provider ? candidates[0] ?? (current && matches(current) ? current : undefined)

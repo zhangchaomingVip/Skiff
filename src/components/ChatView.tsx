@@ -9,6 +9,7 @@ import { Composer } from "./Composer";
 import { MessageList } from "./MessageList";
 import { ConfirmDialog } from "./ConfirmDialog";
 import type { WebSearchControls } from "../chat/webSearch";
+import { billingAccountLabel, type RouteAuthorizationChoice, type RouteAuthorizationRequest } from "../chat/routeAuthorization";
 
 /** Transcript + notices + composer. */
 export function ChatView({
@@ -22,6 +23,7 @@ export function ChatView({
 	onSend,
 	onReconnect,
 	failover,
+	routeAuthorization,
 }: {
 	state: SessionState;
 	connected: boolean;
@@ -33,7 +35,8 @@ export function ChatView({
 	onSend: (text: string, images?: ImageAttachment[]) => Promise<boolean>;
 	onReconnect: () => void;
 	/** A same-family channel that can take over after a provider error. */
-	failover?: { label: string; switch: () => void };
+	failover?: { label: string; switch: (automatic?: boolean) => void };
+	routeAuthorization?: { request: RouteAuthorizationRequest; onChoice: (choice: RouteAuthorizationChoice) => void };
 }) {
 	const [draft, setDraft] = useState("");
 	const { manage } = useModelFamily();
@@ -85,8 +88,22 @@ export function ChatView({
 					))}
 				</div>
 			)}
+			{routeAuthorization && (
+				<div className="banner route-authorization" role="alert">
+					<div className="route-authorization-copy">
+						<strong>线路切换需要确认</strong>
+						<span>{routeAuthorization.request.source.relayName} → {routeAuthorization.request.target.relayName} · {routeAuthorization.request.target.modelId}</span>
+						<small>目标扣费账户：{billingAccountLabel(routeAuthorization.request.target)}</small>
+					</div>
+					<div className="route-authorization-actions">
+						<button className="btn primary" onClick={() => routeAuthorization.onChoice("once")}>同意</button>
+						<button className="btn" onClick={() => routeAuthorization.onChoice("session")}>本次会话都同意</button>
+						<button className="btn ghost" onClick={() => routeAuthorization.onChoice("keep_failed")}>保持失败</button>
+					</div>
+				</div>
+			)}
 			{state.lastError && (
-				<div className={`banner error ${connected && isProviderFailure(state.lastError) ? "provider-toast" : ""}`} role="alert"><span>{state.lastError}</span>{failover && <button className="btn ghost" disabled={disabled} onClick={failover.switch}>切换到同家族下一个可用提供商（{failover.label}）</button>}{!connected ? <button className="btn ghost" onClick={() => onReconnect()}>重新连接</button> : <button className="icon-btn" onClick={actions.clearError} aria-label="关闭错误提示">×</button>}</div>
+				<div className={`banner error ${connected && isProviderFailure(state.lastError) ? "provider-toast" : ""}`} role="alert"><span>{state.lastError}</span>{failover && <button className="btn ghost" disabled={disabled} onClick={() => failover.switch()}>切换到同家族下一个可用提供商（{failover.label}）</button>}{!connected ? <button className="btn ghost" onClick={() => onReconnect()}>重新连接</button> : <button className="icon-btn" onClick={actions.clearError} aria-label="关闭错误提示">×</button>}</div>
 			)}
 			{connected && !state.availableModels.length && <div className="notice model-notice">暂无已启用的提供商，请添加或启用提供商。<button className="btn ghost" onClick={manage}>管理提供商…</button></div>}
 			<Composer

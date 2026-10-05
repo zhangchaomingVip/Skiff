@@ -6,6 +6,8 @@ import { reduce } from "./reducer";
 import { forkTurn } from "./turns";
 import { loadAppendPrompt } from "./prompt";
 import { initialSessionState, type ImageAttachment, type ModelInfo, type SessionState } from "./types";
+import type { RuntimeOffer } from "./modelFamilies";
+import { attachHistoricalSnapshots } from "./routeSnapshot";
 
 export interface SessionTarget {
 	id: string;
@@ -13,6 +15,7 @@ export interface SessionTarget {
 	sessionFile?: string;
 	elapsedMs?: number;
 	model?: ModelInfo;
+	routeSnapshots?: Array<import("./types").RouteSnapshot | null>;
 }
 
 export interface PiCommand {
@@ -27,7 +30,7 @@ export interface PiSessionActions {
 	getCommands: () => Promise<PiCommand[]>;
 	prompt: (text: string, images?: ImageAttachment[]) => Promise<boolean>;
 	abort: () => Promise<void>;
-	setModel: (model: ModelInfo) => Promise<void>;
+	setModel: (model: ModelInfo) => Promise<boolean>;
 	setThinkingLevel: (level: string) => Promise<void>;
 	/** Toggles the pi extension's `web_search` tool via its `/web` command. */
 	setWebSearch: (enabled: boolean) => Promise<void>;
@@ -53,7 +56,7 @@ function parseCommands(raw: unknown): PiCommand[] {
 let previousTeardown: Promise<void> = Promise.resolve();
 
 /** A real pi session per conversation; transcripts stay in pi's files. */
-export function usePiSession(target?: SessionTarget) {
+export function usePiSession(target?: SessionTarget, runtimeOffers: readonly RuntimeOffer[] = []) {
 	const rpcRef = useRef<PiRpc | null>(null);
 	const busyRef = useRef(false);
 	const streamingRef = useRef(false);
@@ -69,6 +72,8 @@ export function usePiSession(target?: SessionTarget) {
 	const [elapsedMs, setElapsedMs] = useState(0);
 	const runStarted = useRef<number>();
 	const preferredModel = useRef<ModelInfo>();
+	const runtimeOffersRef = useRef(runtimeOffers);
+	runtimeOffersRef.current = runtimeOffers;
 	// Saving a newly assigned pi file must not restart the running session.
 	const targetRef = useRef(target);
 	targetRef.current = target;
@@ -117,7 +122,11 @@ export function usePiSession(target?: SessionTarget) {
 			if (event.type === "agent_start") streamingRef.current = true;
 			if (event.type === "agent_end" || event.type === "agent_settled") streamingRef.current = false;
 			const settled = duration;
-			setState((s) => settled === undefined ? reduce(s, event) : reduce(reduce(s, event), { type: "turn_duration", durationMs: settled, completedAt: Date.now() }));
+			setState((s) => {
+				const options = { offers: runtimeOffersRef.current };
+				const next = reduce(s, event, options);
+				return settled === undefined ? next : reduce(next, { type: "turn_duration", durationMs: settled, completedAt: Date.now() }, options);
+			});
 		});
 		const offLine = rpc.onLine((line) => {
 			if (!cancelled) setRawLines((prev) => [...prev.slice(-499), line]);
@@ -150,11 +159,13 @@ export function usePiSession(target?: SessionTarget) {
 				if (cancelled) return;
 				const availableModels = parseModels(models.models);
 				if (unavailableModel && availableModels.some((model) => model.provider === unavailableModel.provider && model.id === unavailableModel.id)) throw selectionError;
+				const parsedModel = parseModels([data.model])[0];
+				const restoredModel = unavailableModel ?? (parsedModel && preferred ? { ...parsedModel, offerId: preferred.offerId, routeId: preferred.routeId, modelId: preferred.modelId, familyId: preferred.familyId, familyName: preferred.familyName, relayId: preferred.relayId } : parsedModel);
 				setState({
-					...initialSessionState, model: unavailableModel ?? parseModels([data.model])[0],
+					...initialSessionState, model: restoredModel,
 					thinkingLevel: typeof data.thinkingLevel === "string" ? data.thinkingLevel : undefined,
 					thinkingLevels: levels.levels ?? [],
-					availableModels, messages: parseMessages(transcript.messages),
+						availableModels, messages: attachHistoricalSnapshots(parseMessages(transcript.messages), selected.routeSnapshots),
 					isStreaming: Boolean(data.isStreaming),
 				});
 				streamingRef.current = Boolean(data.isStreaming);
@@ -231,17 +242,19 @@ export function usePiSession(target?: SessionTarget) {
 		},
 		setModel: async (model) => {
 			const rpc = rpcRef.current;
-			if (!connected || !rpc || busyRef.current || streamingRef.current) return;
+			if (!connected || !rpc || busyRef.current || streamingRef.current) return false;
 			busyRef.current = true;
 			setPending(true);
 			try {
 				const result = await rpc.request<ModelInfo>({ type: "set_model", provider: model.provider, modelId: model.id });
-				if (rpcRef.current !== rpc) return;
-				setState((s) => ({ ...s, model: parseModels([result])[0], thinkingLevels: [], thinkingLevel: undefined, lastError: undefined }));
+				if (rpcRef.current !== rpc) return false;
+				const parsed = parseModels([result])[0];
+				setState((s) => ({ ...s, model: parsed ? { ...parsed, offerId: model.offerId, routeId: model.routeId, modelId: model.modelId ?? model.id, familyId: model.familyId, familyName: model.familyName, relayId: model.relayId } : parsed, thinkingLevels: [], thinkingLevel: undefined, lastError: undefined }));
 				const [data, levels] = await Promise.all([rpc.request<Record<string, unknown>>({ type: "get_state" }), rpc.request<{ levels: string[] }>({ type: "get_available_thinking_levels" }).catch(() => ({ levels: [] }))]);
-				if (rpcRef.current !== rpc) return;
+				if (rpcRef.current !== rpc) return false;
 				setState((s) => ({ ...s, thinkingLevel: String(data.thinkingLevel ?? "off"), thinkingLevels: levels.levels }));
-			} catch (error) { if (rpcRef.current === rpc) fail(error); } finally { if (rpcRef.current === rpc) { setPending(false); busyRef.current = false; } }
+				return true;
+			} catch (error) { if (rpcRef.current === rpc) fail(error); return false; } finally { if (rpcRef.current === rpc) { setPending(false); busyRef.current = false; } }
 		},
 		setThinkingLevel: async (level) => {
 			const rpc = rpcRef.current;

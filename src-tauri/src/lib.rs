@@ -424,7 +424,7 @@ pub fn run() {
 			families::list_model_families, families::list_model_runtime,
 			families::save_relay, families::delete_relay, families::set_relay_enabled,
 			families::save_route, families::delete_route, families::reorder_routes,
-			families::set_default_route, families::set_family_auto_failover,
+			families::set_default_route, families::set_family_auto_failover, families::set_family_auto_retry,
 			families::test_provider_connection, families::discover_relay_models,
 			families::fetch_pricing_page, families::extract_pricing_table,
 			families::fetch_public_catalog, families::set_usd_cny_rate,

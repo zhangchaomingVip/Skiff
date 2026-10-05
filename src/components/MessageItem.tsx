@@ -88,6 +88,7 @@ export const MessageItem = memo(function MessageItem({ message, turnMessages, sh
 			{!nodes.length && message.streaming ? <span className="typing">正在思考…</span> : nodes}
 		</div>
 		{(showActions || (!isUser && isLast && !running)) && <div className="message-actions">
+			{!isUser && !message.streaming && message.routeSnapshot && <span className="message-route" title={`实际应答线路：${message.routeSnapshot.familyName} · ${message.routeSnapshot.modelId} · ${message.routeSnapshot.relayName}`}><Icon name="pin" size={13} />实际线路：{message.routeSnapshot.relayName} · {message.routeSnapshot.alias || message.routeSnapshot.modelId} · {message.routeSnapshot.billingAccountId || "未知账户"}</span>}
 			{!isUser && isLast && !running && message.usage && <TurnUsage message={message} messages={turnMessages} />}
 			{!isUser && isLast && !running && <button className={`continue-btn ${message.stopReason === "length" ? "truncated" : ""}`} disabled={disabled} onClick={onContinue} aria-label="继续生成" title="发送「继续」，让模型接着写下去">{message.stopReason === "length" ? "输出被截断 · 继续" : "继续"}</button>}
 			{showActions && <div className="message-buttons">

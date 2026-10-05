@@ -10,30 +10,30 @@ export function installMockPi(target, storage) {
 	const providerKey = (familyId, relayId) => `skiff-relay-${relayId}-${familyId}`;
 	// Families ship with two DeepSeek routes (over two relays) so QA can exercise the switcher.
 	const relays = [
-		{ id: "r1", name: "官方直连", baseUrl: "https://api.deepseek.com/v1", apiKey: "sk-mock-0000abcd", timeoutSeconds: 60, enabled: true },
-		{ id: "r2", name: "硅基低价", baseUrl: "https://api.siliconflow.cn/v1", apiKey: "sk-mock-1111efgh", timeoutSeconds: 60, enabled: true },
-		{ id: "r3", name: "官方", baseUrl: "https://api.moonshot.cn/v1", apiKey: "sk-mock-2222ijkl", timeoutSeconds: 60, enabled: true },
+		{ id: "r1", name: "官方直连", baseUrl: "https://api.deepseek.com/v1", apiKey: "sk-mock-0000abcd", timeoutSeconds: 60, enabled: true, billingAccountId: "wallet-a" },
+		{ id: "r2", name: "硅基低价", baseUrl: "https://api.siliconflow.cn/v1", apiKey: "sk-mock-1111efgh", timeoutSeconds: 60, enabled: true, billingAccountId: "wallet-b" },
+		{ id: "r3", name: "官方", baseUrl: "https://api.moonshot.cn/v1", apiKey: "sk-mock-2222ijkl", timeoutSeconds: 60, enabled: true, billingAccountId: "wallet-a" },
 	];
-	const route = (relayId, models, capabilities = {}) => ({ relayId, models, streaming: true, tools: true, vision: false, reasoning: false, ...capabilities });
+	const route = (familyId, relayId, models, capabilities = {}) => ({ id: `route-${familyId}-${relayId}`, relayId, enabled: true, models, streaming: true, tools: true, vision: false, reasoning: false, ...capabilities });
 	const families = [
-		{ id: "deepseek", displayName: "DeepSeek", defaultRelayId: "r1", routes: [
-			route("r1", [
-				{ modelId: "deepseek-flash", inputCost: 1, outputCost: 4, currency: "CNY", maxTokens: 4096, contextWindow: 32000 },
-				{ modelId: "deepseek-chat", inputCost: 0.3, outputCost: 1.2, currency: "CNY", maxTokens: 8192, contextWindow: 128000 },
-				{ modelId: "deepseek-reasoner", inputCost: 5, outputCost: 20, currency: "USD", maxTokens: 16384, contextWindow: 256000 },
+		{ id: "deepseek", displayName: "DeepSeek", defaultRouteId: "route-deepseek-r1", routes: [
+			route("deepseek", "r1", [
+				{ modelId: "deepseek-flash", alias: "", inputCost: 1, outputCost: 4, cacheReadCost: 1, cacheWriteCost: 1, currency: "CNY", maxTokens: 4096, contextWindow: 32000 },
+				{ modelId: "deepseek-chat", alias: "", inputCost: 0.3, outputCost: 1.2, cacheReadCost: 0.3, cacheWriteCost: 0.3, currency: "CNY", maxTokens: 8192, contextWindow: 128000 },
+				{ modelId: "deepseek-reasoner", alias: "", inputCost: 5, outputCost: 20, cacheReadCost: 5, cacheWriteCost: 5, currency: "USD", maxTokens: 16384, contextWindow: 256000 },
 			], { reasoning: true }),
-			route("r2", [{ modelId: "deepseek-ai/DeepSeek-V3", inputCost: 0.14, outputCost: 0.28, currency: "CNY", maxTokens: 8192, contextWindow: 128000 }]),
+			route("deepseek", "r2", [{ modelId: "deepseek-ai/DeepSeek-V3", alias: "", inputCost: 0.14, outputCost: 0.28, cacheReadCost: 0.14, cacheWriteCost: 0.14, currency: "CNY", maxTokens: 8192, contextWindow: 128000 }]),
 		] },
-		{ id: "kimi", displayName: "Kimi", defaultRelayId: "r3", routes: [
-			route("r3", [{ modelId: "kimi-k2", inputCost: 0.6, outputCost: 2.4, currency: "CNY", maxTokens: 8192, contextWindow: 128000 }], { reasoning: true }),
+		{ id: "kimi", displayName: "Kimi", defaultRouteId: "route-kimi-r3", routes: [
+			route("kimi", "r3", [{ modelId: "kimi-k2", alias: "", inputCost: 0.6, outputCost: 2.4, cacheReadCost: 0.6, cacheWriteCost: 0.6, currency: "CNY", maxTokens: 8192, contextWindow: 128000 }], { reasoning: true }),
 		] },
-		{ id: "glm", displayName: "GLM", defaultRelayId: null, routes: [] },
+		{ id: "glm", displayName: "GLM", defaultRouteId: null, routes: [] },
 	];
 	const relayOf = (relayId) => relays.find((relay) => relay.id === relayId);
 	const familyRoutes = () => families.flatMap((family) => family.routes.map((route) => ({ family, route })));
 	const familyModels = () => familyRoutes().flatMap(({ family, route }) => {
 		const relay = relayOf(route.relayId);
-		if (!relay?.enabled) return [];
+		if (!relay?.enabled || !route.enabled) return [];
 		return route.models.map((model) => ({
 			provider: providerKey(family.id, relay.id), id: model.modelId, name: model.modelId,
 			contextWindow: model.contextWindow, maxTokens: model.maxTokens, currency: model.currency, cost: { input: model.inputCost, output: model.outputCost },
@@ -42,11 +42,12 @@ export function installMockPi(target, storage) {
 	});
 	const models = familyModels();
 	let autoFailover = false;
-	const familiesConfig = () => ({ version: 3, relays: structuredClone(relays), autoFailover, families: structuredClone(families) });
-	const offers = () => familyRoutes().flatMap(({ family, route }) => {
+	let autoRetry = false;
+	const familiesConfig = () => ({ version: 4, relays: structuredClone(relays), autoFailover, autoRetry, families: structuredClone(families) });
+	const offers = () => familyRoutes().flatMap(({ family, route }, routeOrder) => {
 		const relay = relayOf(route.relayId);
-		if (!relay?.enabled) return [];
-		return route.models.map((model) => ({ familyId: family.id, familyName: family.displayName, relayId: relay.id, relayName: relay.name, providerKey: providerKey(family.id, relay.id), modelId: model.modelId, inputCost: model.inputCost, outputCost: model.outputCost, currency: model.currency, maxTokens: model.maxTokens, contextWindow: model.contextWindow }));
+		if (!relay?.enabled || !route.enabled) return [];
+		return route.models.map((model) => ({ offerId: `${route.id}/${model.modelId}`, routeId: route.id, familyId: family.id, familyName: family.displayName, relayId: relay.id, relayName: relay.name, providerKey: providerKey(family.id, relay.id), modelId: model.modelId, alias: model.alias, billingAccountId: relay.billingAccountId, routeOrder, streaming: route.streaming, tools: route.tools, vision: route.vision, reasoning: route.reasoning, inputCost: model.inputCost, outputCost: model.outputCost, cacheReadCost: model.cacheReadCost, cacheWriteCost: model.cacheWriteCost, currency: model.currency, maxTokens: model.maxTokens, contextWindow: model.contextWindow }));
 	});
 	const persist = () => storage?.setItem("skiff.test.sessions", JSON.stringify(saved));
 	const emit = (instanceId, event) => {
@@ -70,6 +71,7 @@ export function installMockPi(target, storage) {
 				return { ok: true, latencyMs: 137, status: 200, error: null };
 			}
 			if (command === "set_family_auto_failover") { autoFailover = !!args.autoFailover; return familiesConfig(); }
+			if (command === "set_family_auto_retry") { autoRetry = !!args.autoRetry; return familiesConfig(); }
 			if (command === "save_relay") {
 				const incoming = args.relay;
 				if (!incoming.name?.trim() || incoming.name.trim().length > 32) throw new Error("显示名需为 1–32 个字符");
@@ -92,7 +94,7 @@ export function installMockPi(target, storage) {
 				relays.splice(index, 1);
 				for (const family of families) {
 					family.routes = family.routes.filter((route) => route.relayId !== args.relayId);
-					if (family.defaultRelayId === args.relayId) family.defaultRelayId = null;
+					if (!family.routes.some((route) => route.id === family.defaultRouteId)) family.defaultRouteId = null;
 				}
 				return familiesConfig();
 			}
@@ -111,33 +113,35 @@ export function installMockPi(target, storage) {
 				const ids = new Set(incoming.models.map((model) => model.modelId?.trim()));
 				if (ids.has("")) throw new Error("模型 ID 不能为空");
 				if (ids.size !== incoming.models.length) throw new Error("同一线路内模型 ID 不能重复");
-				const index = family.routes.findIndex((route) => route.relayId === incoming.relayId);
+				incoming.id ||= `route-${args.familyId}-${incoming.relayId}`;
+				incoming.enabled ??= true;
+				const index = family.routes.findIndex((route) => route.id === incoming.id || route.relayId === incoming.relayId);
 				if (index < 0) family.routes.push(incoming); else family.routes[index] = incoming;
-				if (!family.defaultRelayId) family.defaultRelayId = incoming.relayId;
+				if (!family.defaultRouteId) family.defaultRouteId = incoming.id;
 				return familiesConfig();
 			}
 			if (command === "delete_route") {
 				const family = families.find((item) => item.id === args.familyId);
 				const before = family?.routes.length ?? 0;
-				if (family) family.routes = family.routes.filter((route) => route.relayId !== args.relayId);
+			if (family) family.routes = family.routes.filter((route) => route.id !== args.relayId && route.relayId !== args.relayId);
 				if (!family || family.routes.length === before) throw new Error("找不到要删除的线路");
-				if (family.defaultRelayId === args.relayId) family.defaultRelayId = null;
+				if (family && !family.routes.some((route) => route.id === family.defaultRouteId)) family.defaultRouteId = null;
 				return familiesConfig();
 			}
 			if (command === "reorder_routes") {
 				const family = families.find((item) => item.id === args.familyId);
 				if (!family || args.relayIds.length !== family.routes.length) throw new Error("排序请求与现有线路数量不一致");
-				family.routes = args.relayIds.map((id) => family.routes.find((route) => route.relayId === id));
+				family.routes = args.relayIds.map((id) => family.routes.find((route) => route.id === id || route.relayId === id));
 				return familiesConfig();
 			}
 			if (command === "set_default_route") {
 				const family = families.find((item) => item.id === args.familyId);
 				if (!family) throw new Error(`未知模型家族：${args.familyId}`);
-				if (args.relayId == null) { family.defaultRelayId = null; return familiesConfig(); }
-				const route = family.routes.find((route) => route.relayId === args.relayId);
-				const relay = relayOf(args.relayId);
-				if (!route || !route.models.length || !relay?.enabled) throw new Error("默认线路必须是该家族内已启用中转上的线路");
-				family.defaultRelayId = args.relayId;
+				if (args.relayId == null) { family.defaultRouteId = null; return familiesConfig(); }
+				const route = family.routes.find((item) => item.id === args.relayId || item.relayId === args.relayId);
+				const relay = route && relayOf(route.relayId);
+				if (!route || !route.enabled || !route.models.length || !relay?.enabled) throw new Error("默认线路必须是该家族内已启用中转上的线路");
+				family.defaultRouteId = route.id;
 				return familiesConfig();
 			}
 			if (command === "discover_relay_models") {
