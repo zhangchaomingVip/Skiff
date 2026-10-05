@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Skiff · 模型优先方案</title>
+<style>
+  :root {
+    --bg: #f4f6f8; --panel: #fff; --sidebar: #fbfcfd; --text: #1f2933;
+    --muted: #7a8694; --subtle: #a5aeb9; --border: #e4e8ed; --hover: #f1f5fa;
+    --accent: #3878ee; --accent-soft: #edf4ff; --green: #16845c; --orange: #b47724;
+    --shadow: 0 18px 50px rgba(35, 53, 78, .12); --radius: 14px;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; background: linear-gradient(135deg, #eef2f6, #f7f8fa); color: var(--text); font: 14px/1.5 "Segoe UI", system-ui, sans-serif; }
+  button, input { font: inherit; }
+  button { cursor: pointer; }
+  .app { width: min(1320px, calc(100vw - 32px)); height: min(840px, calc(100vh - 32px)); min-height: 650px; margin: 16px auto; display: flex; overflow: hidden; background: var(--panel); border: 1px solid #e1e6eb; border-radius: 18px; box-shadow: var(--shadow); }
+  .sidebar { width: 246px; flex: 0 0 246px; display: flex; flex-direction: column; padding: 18px 12px; background: var(--sidebar); border-right: 1px solid var(--border); }
+  .brand { display: flex; align-items: center; gap: 9px; padding: 0 10px 20px; font-size: 18px; font-weight: 700; letter-spacing: -.4px; }
+  .brand-mark { display: grid; place-items: center; width: 27px; height: 27px; border-radius: 9px; color: #fff; background: #2d73eb; box-shadow: 0 4px 10px #2d73eb40; }
+  .new-chat { display: flex; align-items: center; gap: 9px; width: 100%; padding: 10px 12px; color: #fff; border: 0; border-radius: 9px; background: #2f75eb; box-shadow: 0 5px 12px #2f75eb22; }
+  .new-chat span:last-child { margin-left: auto; opacity: .72; font-size: 11px; }
+  .side-search { display: flex; align-items: center; gap: 8px; margin: 13px 0; padding: 8px 10px; color: var(--muted); border: 1px solid var(--border); border-radius: 8px; background: #fff; }
+  .side-search input { width: 100%; border: 0; outline: 0; color: var(--text); background: transparent; font-size: 12px; }
+  .nav-title { display: flex; justify-content: space-between; align-items: center; padding: 8px 9px 5px; color: var(--subtle); font-size: 11px; }
+  .nav-item, .project-item { display: flex; align-items: center; gap: 9px; width: 100%; padding: 8px 10px; color: #566170; border: 0; border-radius: 8px; background: transparent; text-align: left; }
+  .nav-item:hover, .project-item:hover, .nav-item.active { color: var(--text); background: var(--hover); }
+  .nav-item.active { font-weight: 600; }
+  .nav-item .count, .project-item .count { margin-left: auto; color: var(--subtle); font-size: 11px; }
+  .project-list { padding: 2px 0 0 8px; }
+  .project-item { padding-left: 11px; font-size: 13px; }
+  .project-item.selected { color: var(--accent); background: var(--accent-soft); }
+  .side-spacer { flex: 1; }
+  .connection { display: flex; align-items: center; gap: 7px; padding: 12px 10px 3px; color: var(--muted); border-top: 1px solid var(--border); font-size: 11px; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); }
+
+  .main { min-width: 0; flex: 1; display: flex; flex-direction: column; }
+  .topbar { display: flex; align-items: center; justify-content: space-between; min-height: 62px; padding: 0 28px; border-bottom: 1px solid var(--border); }
+  .topbar-title { font-weight: 650; }
+  .topbar-sub { margin-left: 10px; color: var(--muted); font-size: 12px; }
+  .top-actions { display: flex; align-items: center; gap: 7px; }
+  .ghost { padding: 7px 10px; color: var(--muted); border: 1px solid transparent; border-radius: 8px; background: transparent; }
+  .ghost:hover { color: var(--text); border-color: var(--border); background: var(--hover); }
+  .home { flex: 1; overflow: auto; }
+  .home-inner { width: min(1010px, calc(100% - 64px)); margin: 0 auto; padding: 40px 0 46px; }
+  .hero { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; }
+  .eyebrow { margin: 0 0 7px; color: var(--accent); font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+  h1 { margin: 0; font-size: 28px; letter-spacing: -.8px; }
+  .hero-copy { margin: 7px 0 0; color: var(--muted); }
+  .workspace-select { display: flex; align-items: center; gap: 9px; min-width: 210px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: #fff; box-shadow: 0 2px 6px #172b4d08; }
+  .workspace-select small { display: block; color: var(--subtle); font-size: 10px; }
+  .workspace-select strong { display: block; margin-top: 1px; font-size: 13px; }
+  .workspace-select span:last-child { margin-left: auto; color: var(--muted); }
+  .section-head { display: flex; align-items: center; justify-content: space-between; margin: 34px 0 13px; }
+  .section-head h2 { margin: 0; font-size: 14px; }
+  .section-head a { color: var(--accent); font-size: 12px; text-decoration: none; }
+  .section-note { margin-left: 8px; color: var(--muted); font-size: 12px; }
+  .model-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 13px; }
+  .model-card { position: relative; min-height: 206px; padding: 17px; border: 1px solid var(--border); border-radius: var(--radius); background: #fff; transition: .16s ease; }
+  .model-card:hover { border-color: #9dbcf6; box-shadow: 0 9px 24px #3979ed17; transform: translateY(-2px); }
+  .model-card.external { background: linear-gradient(145deg, #fff, #fbfaf6); }
+  .model-top { display: flex; align-items: flex-start; gap: 11px; }
+  .model-icon { display: grid; place-items: center; width: 37px; height: 37px; flex: none; border-radius: 11px; font-size: 18px; }
+  .model-card h3 { margin: 1px 0 2px; font-size: 15px; }
+  .model-id { color: var(--muted); font-size: 11px; }
+  .status { margin-left: auto; padding: 3px 7px; color: var(--green); border-radius: 20px; background: #eaf8f1; font-size: 10px; white-space: nowrap; }
+  .status.external { color: var(--orange); background: #fff4df; }
+  .model-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 15px; }
+  .chip { padding: 3px 7px; color: #647181; border: 1px solid #e5e9ee; border-radius: 20px; font-size: 10px; }
+  .route-line { display: flex; align-items: center; gap: 6px; margin-top: 14px; color: #596675; font-size: 11px; }
+  .route-line strong { color: var(--text); font-weight: 600; }
+  .price-line { margin-top: 4px; color: var(--green); font-size: 11px; }
+  .price-line.muted { color: var(--muted); }
+  .card-actions { display: flex; align-items: center; gap: 7px; margin-top: 15px; }
+  .primary { padding: 7px 10px; color: #fff; border: 0; border-radius: 8px; background: var(--accent); font-size: 12px; }
+  .secondary { padding: 6px 9px; color: #647181; border: 1px solid var(--border); border-radius: 8px; background: #fff; font-size: 11px; }
+  .primary:hover { background: #2869d8; }
+  .secondary:hover { border-color: #aab7c7; background: var(--hover); }
+  .recent { display: flex; flex-direction: column; gap: 8px; }
+  .recent-row { display: flex; align-items: center; gap: 14px; padding: 13px 15px; border: 1px solid var(--border); border-radius: 11px; background: #fff; transition: .14s ease; }
+  .recent-row:hover { border-color: #b8cbec; background: #fbfdff; }
+  .recent-icon { display: grid; place-items: center; width: 31px; height: 31px; flex: none; border-radius: 9px; background: #edf4ff; }
+  .recent-main { min-width: 0; flex: 1; }
+  .recent-title { overflow: hidden; color: var(--text); text-overflow: ellipsis; white-space: nowrap; }
+  .recent-sub { margin-top: 3px; overflow: hidden; color: var(--muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+  .recent-stat { min-width: 80px; color: #697583; text-align: right; font-size: 11px; }
+  .recent-cost { min-width: 68px; color: var(--green); text-align: right; font-size: 11px; }
+  .resume { color: var(--accent); opacity: 0; font-size: 12px; }
+  .recent-row:hover .resume { opacity: 1; }
+
+  .chat-view { display: none; flex: 1; flex-direction: column; min-height: 0; }
+  .chat-view.show { display: flex; }
+  .chat-head { display: flex; align-items: center; gap: 12px; min-height: 62px; padding: 0 28px; border-bottom: 1px solid var(--border); }
+  .back { color: var(--accent); border: 0; background: transparent; font-size: 12px; }
+  .chat-title { min-width: 0; flex: 1; }
+  .chat-title strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chat-title small { color: var(--muted); }
+  .chat-model { display: flex; align-items: center; gap: 7px; padding: 7px 9px; color: #536273; border: 1px solid var(--border); border-radius: 8px; background: #fff; font-size: 11px; }
+  .chat-body { flex: 1; overflow: auto; padding: 32px 42px; }
+  .messages { width: min(800px, 100%); margin: 0 auto; }
+  .user-msg { display: flex; justify-content: flex-end; margin: 0 0 23px; }
+  .user-bubble { max-width: 70%; padding: 10px 13px; border-radius: 13px; background: #edf1f5; }
+  .assistant { margin-bottom: 30px; }
+  .assistant-who { margin-bottom: 8px; color: #6e7986; font-size: 12px; }
+  .assistant-copy { line-height: 1.8; }
+  .assistant-copy p { margin: 0 0 10px; }
+  .code { padding: 13px 15px; overflow: auto; border: 1px solid #e3e8ef; border-radius: 9px; background: #f8fafc; color: #3f4c5b; font: 12px/1.6 Consolas, monospace; }
+  .usage { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 12px; }
+  .usage span { padding: 3px 8px; color: #788594; border: 1px solid var(--border); border-radius: 20px; font-size: 10px; }
+  .composer-wrap { padding: 0 42px 22px; }
+  .composer { width: min(800px, 100%); margin: 0 auto; padding: 13px 15px 10px; border: 1.5px solid #77a2f0; border-radius: 13px; box-shadow: 0 5px 18px #3679ed12; }
+  .composer textarea { width: 100%; min-height: 42px; resize: none; border: 0; outline: 0; color: var(--text); background: transparent; }
+  .composer textarea::placeholder { color: #a4adb8; }
+  .composer-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 10px; color: var(--muted); font-size: 11px; }
+  .composer-send { display: grid; place-items: center; width: 29px; height: 29px; color: #fff; border: 0; border-radius: 50%; background: var(--text); }
+  .rail-mini { display: flex; align-items: center; gap: 10px; width: min(800px, 100%); margin: 10px auto 0; color: var(--muted); font-size: 10px; }
+  .rail-mini-track { height: 4px; flex: 1; overflow: hidden; border-radius: 4px; background: #e7ebf0; }
+  .rail-mini-track span { display: block; width: 18%; height: 100%; border-radius: inherit; background: var(--accent); }
+
+  .modal-backdrop { display: none; position: fixed; inset: 0; z-index: 10; place-items: center; padding: 20px; background: #14203342; backdrop-filter: blur(3px); }
+  .modal-backdrop.show { display: grid; }
+  .modal { width: min(470px, 100%); padding: 20px; border: 1px solid var(--border); border-radius: 15px; background: #fff; box-shadow: 0 22px 60px #13254329; }
+  .modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+  .modal h2 { margin: 0; font-size: 17px; }
+  .modal p { margin: 5px 0 17px; color: var(--muted); font-size: 12px; }
+  .close { width: 28px; height: 28px; color: var(--muted); border: 0; border-radius: 7px; background: transparent; }
+  .close:hover { background: var(--hover); }
+  .route-option { display: flex; align-items: center; gap: 11px; width: 100%; margin-top: 8px; padding: 11px; text-align: left; border: 1px solid var(--border); border-radius: 10px; background: #fff; }
+  .route-option:hover { border-color: #8eb0ed; background: #f9fbff; }
+  .route-option > span:first-child { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; background: var(--accent-soft); }
+  .route-option strong { display: block; font-size: 12px; }
+  .route-option small { display: block; margin-top: 2px; color: var(--muted); font-size: 10px; }
+  .route-price { margin-left: auto; color: var(--green); font-size: 11px; white-space: nowrap; }
+  @media (max-width: 950px) { .model-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .sidebar { width: 220px; flex-basis: 220px; } .home-inner { width: min(100% - 40px, 800px); } }
+  @media (max-width: 700px) { body { background: var(--panel); } .app { width: 100%; height: 100vh; min-height: 0; margin: 0; border: 0; border-radius: 0; } .sidebar { width: 58px; flex-basis: 58px; padding: 17px 8px; } .brand { justify-content: center; padding: 0 0 18px; } .brand > span:last-child, .new-chat span, .side-search, .nav-title, .nav-item span:not(:first-child), .project-list, .connection span:last-child { display: none; } .new-chat { justify-content: center; padding: 10px 0; } .nav-item { justify-content: center; padding: 10px 0; } .home-inner { width: calc(100% - 28px); padding-top: 26px; } .hero { display: block; } .workspace-select { margin-top: 17px; } .model-grid { grid-template-columns: 1fr; } .topbar, .chat-head { padding: 0 15px; } .topbar-sub { display: none; } .chat-body, .composer-wrap { padding-left: 15px; padding-right: 15px; } .recent-stat, .recent-cost { display: none; } .resume { opacity: 1; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand"><span class="brand-mark">✦</span><span>Skiff</span></div>
+    <button class="new-chat" onclick="showHome()"><span>＋</span><span>新聊天</span><span>Ctrl N</span></button>
+    <label class="side-search"><span>⌕</span><input placeholder="搜索项目与聊天"></label>
+    <div class="nav-title"><span>导航</span></div>
+    <button class="nav-item active" id="homeNav" onclick="showHome()"><span>⌂</span><span>主页</span></button>
+    <button class="nav-item" onclick="showHome()"><span>◷</span><span>最近会话</span><span class="count">12</span></button>
+    <div class="nav-title"><span>项目</span><span>＋</span></div>
+    <div class="project-list">
+      <button class="project-item selected"><span>▣</span><span>Skiff</span><span class="count">8</span></button>
+      <button class="project-item"><span>▣</span><span>api-portal</span><span class="count">4</span></button>
+    </div>
+    <div class="side-spacer"></div>
+    <div class="connection"><span class="dot"></span><span>pi 已连接 · 本地工作区</span></div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar" id="homeTopbar">
+      <div><span class="topbar-title">主页</span><span class="topbar-sub">模型优先的任务入口</span></div>
+      <div class="top-actions"><button class="ghost">⌘ 设置</button><button class="ghost">◐</button></div>
+    </div>
+
+    <section class="home" id="homeView">
+      <div class="home-inner">
+        <div class="hero">
+          <div><p class="eyebrow">START A TASK</p><h1>选择一个模型，开始工作</h1><p class="hero-copy">模型负责执行，项目负责上下文，会话保留完整历史。</p></div>
+          <button class="workspace-select"><span>▣</span><span><small>当前工作区</small><strong>Skiff</strong></span><span>⌄</span></button>
+        </div>
+
+        <div class="section-head"><div><h2>可用模型</h2><span class="section-note">按模型聚合，线路在卡片内选择</span></div><a href="#">查看全部模型 →</a></div>
+        <div class="model-grid">
+          <article class="model-card" onclick="chooseModel('deepseek')">
+            <div class="model-top"><div class="model-icon" style="background:#e5f7f1">🐋</div><div><h3>DeepSeek</h3><div class="model-id">deepseek-v4</div></div><span class="status">可用</span></div>
+            <div class="model-meta"><span class="chip">工具</span><span class="chip">推理</span><span class="chip">128K 上下文</span></div>
+            <div class="route-line">⌁ <span>默认线路：</span><strong>硅基低价</strong><span>· 2 条线路</span></div><div class="price-line">入 ¥2 · 出 ¥8 / 百万 token</div>
+            <div class="card-actions"><button class="primary" onclick="event.stopPropagation(); chooseModel('deepseek')">开始聊天</button><button class="secondary" onclick="event.stopPropagation(); chooseRoute('DeepSeek', 'deepseek-v4')">选择线路</button></div>
+          </article>
+          <article class="model-card" onclick="chooseModel('kimi')">
+            <div class="model-top"><div class="model-icon" style="background:#eaf0ff">☾</div><div><h3>Kimi</h3><div class="model-id">kimi-k2.6</div></div><span class="status">可用</span></div>
+            <div class="model-meta"><span class="chip">工具</span><span class="chip">视觉</span><span class="chip">256K 上下文</span></div>
+            <div class="route-line">⌁ <span>默认线路：</span><strong>官方直连</strong><span>· 1 条线路</span></div><div class="price-line">入 ¥8 · 出 ¥24 / 百万 token</div>
+            <div class="card-actions"><button class="primary" onclick="event.stopPropagation(); chooseModel('kimi')">开始聊天</button></div>
+          </article>
+          <article class="model-card" onclick="chooseModel('glm')">
+            <div class="model-top"><div class="model-icon" style="background:#f0eaff">✺</div><div><h3>GLM</h3><div class="model-id">glm-5.3</div></div><span class="status">可用</span></div>
+            <div class="model-meta"><span class="chip">工具</span><span class="chip">推理</span><span class="chip">128K 上下文</span></div>
+            <div class="route-line">⌁ <span>默认线路：</span><strong>官方直连</strong><span>· 1 条线路</span></div><div class="price-line">入 ¥4 · 出 ¥12 / 百万 token</div>
+            <div class="card-actions"><button class="primary" onclick="event.stopPropagation(); chooseModel('glm')">开始聊天</button></div>
+          </article>
+          <article class="model-card external" onclick="chooseModel('codex')">
+            <div class="model-top"><div class="model-icon" style="background:#f1f1f3">⌘</div><div><h3>Codex CLI</h3><div class="model-id">本地外部 Agent</div></div><span class="status external">外部</span></div>
+            <div class="model-meta"><span class="chip">本地工作区</span><span class="chip">由 cc-switch 管理</span></div>
+            <div class="route-line">⌁ <span>执行方式：</span><strong>本地命令</strong></div><div class="price-line muted">费用由外部 Agent 管理</div>
+            <div class="card-actions"><button class="primary" style="background:#5d6470" onclick="event.stopPropagation(); chooseModel('codex')">开始聊天</button></div>
+          </article>
+        </div>
+
+        <div class="section-head"><div><h2>最近会话</h2><span class="section-note">显示最后一次实际应答线路</span></div><a href="#">查看全部 →</a></div>
+        <div class="recent">
+          <button class="recent-row" onclick="openChat('重构模型选择器：按模型家族组织…', 'DeepSeek · deepseek-v4', '硅基低价')"><span class="recent-icon">🐋</span><span class="recent-main"><span class="recent-title">重构模型选择器：按模型家族组织…</span><span class="recent-sub">▣ Skiff · 21 小时前 · DeepSeek · deepseek-v4 · 硅基低价</span></span><span class="recent-stat">1.6M tok</span><span class="recent-cost">≈ ¥9.87</span><span class="resume">继续 →</span></button>
+          <button class="recent-row" onclick="openChat('排查接口超时问题…', 'DeepSeek · deepseek-flash', 'api-portal')"><span class="recent-icon" style="background:#e9f7f0">🐋</span><span class="recent-main"><span class="recent-title">排查接口超时问题…</span><span class="recent-sub">▣ api-portal · 3 天前 · DeepSeek · deepseek-flash · 经过 cc 中转</span></span><span class="recent-stat">88K tok</span><span class="recent-cost">≈ ¥0.31</span><span class="resume">继续 →</span></button>
+          <button class="recent-row" onclick="openChat('你好', 'Kimi · kimi-k2.6', '官方直连')"><span class="recent-icon" style="background:#eef2ff">☾</span><span class="recent-main"><span class="recent-title">你好</span><span class="recent-sub">▣ Skiff · 刚刚 · Kimi · kimi-k2.6 · 官方直连</span></span><span class="recent-stat">2.1K tok</span><span class="recent-cost">≈ ¥0.02</span><span class="resume">继续 →</span></button>
+        </div>
+      </div>
+    </section>
+
+    <section class="chat-view" id="chatView">
+      <div class="chat-head"><button class="back" onclick="showHome()">← 主页</button><div class="chat-title"><strong id="chatTitle">新聊天</strong><small id="chatProject">▣ Skiff</small></div><button class="chat-model" onclick="chooseRoute('DeepSeek', 'deepseek-v4')">🐋 <span id="chatModel">DeepSeek · deepseek-v4 · 硅基低价</span>⌄</button></div>
+      <div class="chat-body"><div class="messages" id="messages"><div class="user-msg"><div class="user-bubble">帮我梳理一下这个项目的模型选择器，并给出重构建议。</div></div><div class="assistant"><div class="assistant-who">🐋 DeepSeek · deepseek-v4 · 硅基低价</div><div class="assistant-copy"><p>我先从当前的模型家族、线路选择和会话恢复三个层面梳理。这个方案可以把模型作为新任务入口，同时保留项目和聊天作为上下文容器。</p><div class="code">1. 模型家族：DeepSeek / Kimi / GLM
+  2. 实际线路：按 routeId 固定并记录费用
+  3. 会话恢复：从 routeSnapshot 显示真实应答线路</div></div><div class="usage"><span>本轮 2,172 tokens</span><span>≈ ¥0.02</span><span>上下文 0.8%</span><span>已停泊</span></div></div></div></div>
+      <div class="composer-wrap"><div class="composer"><textarea placeholder="描述任务… / 命令 · @文件路径"></textarea><div class="composer-row"><span>＋ 添加附件　　Enter 发送 · Shift + Enter 换行</span><button class="composer-send">↑</button></div></div><div class="rail-mini"><span>上下文</span><span class="rail-mini-track"><span></span></span><span>2,172 / 262,144 tok · 0.8%</span></div></div>
+    </section>
+  </main>
+</div>
+
+<div class="modal-backdrop" id="routeModal" onclick="if(event.target===this) closeRoute()"><div class="modal"><div class="modal-head"><div><h2 id="routeTitle">选择线路</h2><p>线路决定实际请求地址、扣费账户和价格。</p></div><button class="close" onclick="closeRoute()">×</button></div><div id="routeOptions"></div></div></div>
+
+<script>
+  const models = {
+    deepseek: { family: "DeepSeek", model: "deepseek-v4", icon: "🐋", route: "硅基低价" },
+    kimi: { family: "Kimi", model: "kimi-k2.6", icon: "☾", route: "官方直连" },
+    glm: { family: "GLM", model: "glm-5.3", icon: "✺", route: "官方直连" },
+    codex: { family: "Codex CLI", model: "本地外部 Agent", icon: "⌘", route: "本地命令" }
+  };
+  function showHome() { document.getElementById("homeView").style.display = "block"; document.getElementById("chatView").classList.remove("show"); document.getElementById("homeTopbar").style.display = "flex"; }
+  function chooseModel(key) { const item = models[key]; if (!item) return; openChat("新聊天", `${item.family} · ${item.model}`, item.route, item.icon); }
+  function openChat(title, model, route, icon = "🐋") { document.getElementById("homeView").style.display = "none"; document.getElementById("homeTopbar").style.display = "none"; document.getElementById("chatView").classList.add("show"); document.getElementById("chatTitle").textContent = title; document.getElementById("chatModel").textContent = `${model} · ${route}`; document.querySelector(".chat-head .chat-model").firstChild.textContent = icon + " "; }
+  function chooseRoute(family, model) { const modal = document.getElementById("routeModal"); document.getElementById("routeTitle").textContent = `${family} · ${model}`; document.getElementById("routeOptions").innerHTML = `<button class="route-option" onclick="selectRoute('${family}', '${model}', '硅基低价', '¥2 入 · ¥8 出 / 百万')"><span>⌁</span><span><strong>硅基低价</strong><small>同一扣费账户 · 工具 · 推理 · 128K</small></span><span class="route-price">¥2 / ¥8</span></button><button class="route-option" onclick="selectRoute('${family}', '${model}', '官方直连', '¥8 入 · ¥24 出 / 百万')"><span>⌁</span><span><strong>官方直连</strong><small>独立扣费账户 · 工具 · 推理 · 128K</small></span><span class="route-price">¥8 / ¥24</span></button>`; modal.classList.add("show"); }
+  function selectRoute(family, model, route) { closeRoute(); openChat("新聊天", `${family} · ${model}`, route, family === "Kimi" ? "☾" : "🐋"); }
+  function closeRoute() { document.getElementById("routeModal").classList.remove("show"); }
+</script>
+</body>
+</html>

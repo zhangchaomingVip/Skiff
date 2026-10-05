@@ -13,6 +13,7 @@ import { createRouteEvent, type AuditRouteRef, type RouteEvent } from "./chat/ro
 import { VoyageWorkspace } from "./components/VoyageWorkspace";
 import { RawDrawer } from "./components/RawDrawer";
 import { Sidebar } from "./components/Sidebar";
+import { LauncherView } from "./components/LauncherView";
 import { TitleBar } from "./components/TitleBar";
 import { ProjectDialog } from "./components/ProjectDialog";
 import { Icon } from "./components/Icon";
@@ -24,9 +25,16 @@ import { SearchDialog } from "./components/SearchDialog";
 import { useWebSearch } from "./chat/webSearch";
 import { loadRecentOffers, normalizeRecentOfferIds, rememberOffer, saveRecentOffers } from "./chat/recentOffers";
 
+type AppView = "launcher" | "chat";
+
 export default function App() {
 	const library = useWorkspace();
 	const { activeChat, activeProject } = library;
+	const [view, setView] = useState<AppView>();
+	useEffect(() => {
+		if (view === undefined && library.workspace) setView(activeChat?.hasMessages ? "chat" : "launcher");
+	}, [activeChat?.hasMessages, library.workspace, view]);
+	const currentView = view ?? (library.workspace ? "launcher" : "chat");
 	const modelFamilies = useModelFamilies();
 	const session = usePiSession(activeChat && activeProject ? { id: activeChat.id, cwd: activeProject.path, sessionFile: activeChat.hasMessages ? activeChat.sessionFile : undefined, elapsedMs: activeChat.elapsedMs, model: activeChat.selectedModel, routeSnapshots: activeChat.routeSnapshots } : undefined, modelFamilies.offers);
 	const { state, connected, rawLines, actions } = session;
@@ -156,17 +164,24 @@ export default function App() {
 		}, [actions, activeChat?.id, modelFamilies.offers, state.model, validOfferIds]);
 	const displayState = { ...state, model: displayModel, availableModels: displayModels };
 
-	const createChat = () => { if (!locked) library.createChat(); };
+	const openLauncher = useCallback(() => { if (library.workspace) setView("launcher"); }, [library.workspace]);
+	const resumeChat = useCallback(() => { if (activeChat) setView("chat"); }, [activeChat]);
+	const selectChat = useCallback((id: string) => { library.selectChat(id); setView("chat"); }, [library]);
+	const startLauncherChat = useCallback((offer: RuntimeOffer) => {
+		if (!activeProject) { setModelNotice("请先选择一个项目后再开始聊天"); return; }
+		library.createChat(activeProject.id, { provider: offer.providerKey, id: offer.modelId, modelId: offer.modelId, ...(offer.routeId ? { routeId: offer.routeId } : {}), ...(offer.offerId ? { offerId: offer.offerId } : {}) });
+		setView("chat");
+	}, [activeProject, library]);
 	useEffect(() => {
 		const onKeyDown = (event: KeyboardEvent) => {
 			if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "n") {
 				event.preventDefault();
-				createChat();
+				openLauncher();
 			}
 		};
 		window.addEventListener("keydown", onKeyDown);
 		return () => window.removeEventListener("keydown", onKeyDown);
-	}, [locked, activeProject?.id, library.workspace]);
+	}, [openLauncher]);
 
 	const send = async (text: string, images?: ImageAttachment[]) => {
 		if (!activeChat) return false;
@@ -274,26 +289,28 @@ export default function App() {
 		request: routeAuthorization.pending,
 		onChoice: (choice: RouteAuthorizationChoice) => resolveAuthorization(routeAuthorization.pending?.requestId ?? "", choice),
 	} : undefined;
+	const headerModel: ModelInfo | undefined = displayModel ?? state.model ?? (activeChat?.selectedModel ? { ...activeChat.selectedModel, modelId: activeChat.selectedModel.modelId ?? activeChat.selectedModel.id, name: activeChat.selectedModel.modelId ?? activeChat.selectedModel.id, providerName: activeChat.selectedModel.routeId ?? activeChat.selectedModel.provider } : undefined);
+	const headerFamily = headerModel ? familyContext.familyOf(headerModel) : undefined;
 
 	return (
 		<ModelFamilyContext.Provider value={familyContext}>
 		<div className={`app ${sidebarOpen ? "with-sidebar" : ""}`}>
 			<TitleBar />
 			<div className="app-body">
-			{sidebarOpen && <Sidebar projects={library.workspace?.projects ?? []} chats={library.workspace?.chats ?? []} activeId={activeChat?.id} activeProjectId={activeProject?.id} disabled={locked || !library.workspace} connected={connected} onNewChat={createChat} onSelectChat={library.selectChat} onSelectProject={library.selectProject} onAddProject={() => setProjectDialogOpen(true)} onClose={() => setSidebarOpen(false)} onRenameChat={library.renameChat} onRenameProject={library.renameProject} onDeleteChat={library.deleteChat} onDeleteProject={library.deleteProject} onTogglePinChat={(id, pinned) => library.updateChat(id, { pinned })} />}
+			{sidebarOpen && <Sidebar projects={library.workspace?.projects ?? []} chats={library.workspace?.chats ?? []} activeId={activeChat?.id} activeProjectId={activeProject?.id} homeActive={currentView === "launcher"} disabled={locked || !library.workspace} connected={connected} onHome={openLauncher} onNewChat={openLauncher} onSelectChat={selectChat} onSelectProject={library.selectProject} onAddProject={() => setProjectDialogOpen(true)} onClose={() => setSidebarOpen(false)} onRenameChat={library.renameChat} onRenameProject={library.renameProject} onDeleteChat={library.deleteChat} onDeleteProject={library.deleteProject} onTogglePinChat={(id, pinned) => library.updateChat(id, { pinned })} />}
 			<main className="workspace">
 				<header className="chat-header">
 					{!sidebarOpen && <button className="icon-btn" onClick={() => setSidebarOpen(true)} title="展开侧栏" aria-label="展开侧栏"><Icon name="panel" /></button>}
 					<div className="header-title">
-						<div className="header-title-row"><span>{activeChat?.title ?? "新聊天"}</span>{activeProject && <span className="header-project" title={activeProject.path}><Icon name="folder" size={14} />{activeProject.name}</span>}</div>
-						{displayModel && <span className="header-model" title={`${familyContext.familyOf(displayModel)?.name ?? displayModel.provider} · ${displayModel.providerName ?? displayModel.provider} · ${displayModel.id}`}><span>{familyContext.familyOf(displayModel)?.name ?? displayModel.provider}</span><span className="header-model-sep">·</span><span>{displayModel.name ?? displayModel.id}</span><span className="header-model-sep">·</span><span>{displayModel.providerName ?? displayModel.provider}</span></span>}
+						<div className="header-title-row"><span>{currentView === "launcher" ? "主页" : activeChat?.title ?? "新聊天"}</span>{currentView === "chat" && activeProject && <span className="header-project" title={activeProject.path}><Icon name="folder" size={14} />{activeProject.name}</span>}</div>
+						{currentView === "launcher" ? <span className="header-subtitle">模型优先的任务入口</span> : headerModel && <span className="header-model" title={`${headerFamily?.name ?? headerModel.familyName ?? headerModel.provider} · ${headerModel.providerName ?? headerModel.provider} · ${headerModel.id}`}><span>{headerFamily?.name ?? headerModel.familyName ?? headerModel.provider}</span><span className="header-model-sep">·</span><span>{headerModel.name ?? headerModel.id}</span><span className="header-model-sep">·</span><span>{headerModel.providerName ?? headerModel.provider}</span></span>}
 					</div>
 					<div className="header-actions">{busy && <span className="working"><span className="dot busy" />正在处理</span>}<ThemeToggle /><button className="icon-btn" onClick={() => setPromptDialogOpen(true)} disabled={busy} title="系统提示词" aria-label="系统提示词"><Icon name="message" /></button><button className="icon-btn" onClick={() => setProviderDialogOpen(true)} disabled={busy} title="配置提供商" aria-label="配置提供商"><Icon name="settings" /></button><button className={`icon-btn ${rawOpen ? "active" : ""}`} onClick={() => setRawOpen((open) => !open)} title="诊断日志" aria-label="诊断日志" aria-pressed={rawOpen}><Icon name="code" /></button></div>
 				</header>
 				{library.error && <div className="workspace-alert" role="alert"><span>{library.error}</span><button className="btn ghost" onClick={library.workspace ? library.clearError : () => void library.initialize()} disabled={library.loading}>{library.workspace ? "关闭" : "重试"}</button></div>}
 				<div className="body">
-					<VoyageWorkspace modelNotice={modelNotice} key={activeChat?.id ?? "loading"} state={displayState} connected={connected} pending={session.pending} actions={actions} onSend={send} onReconnect={session.reconnect} projectName={activeProject?.name} search={search} onConfigureSearch={() => setSearchDialogOpen(true)} failover={failover} routeAuthorization={routeAuthorizationPrompt} />
-					{rawOpen && <div className="raw-panel"><button className="icon-btn raw-close" onClick={() => setRawOpen(false)} aria-label="关闭诊断日志"><Icon name="close" /></button><RawDrawer lines={rawLines} /></div>}
+					{currentView === "launcher" ? <LauncherView activeChat={activeChat} activeProject={activeProject} projects={library.workspace?.projects ?? []} chats={library.workspace?.chats ?? []} offers={modelFamilies.offers} recentOfferIds={recentOfferIds} familyDefaults={modelFamilies.families} loading={modelFamilies.loading} error={modelFamilies.error} onResume={resumeChat} onSelectProject={library.selectProject} onAddProject={() => setProjectDialogOpen(true)} onManageProviders={() => setProviderDialogOpen(true)} onRetryModels={modelFamilies.refresh} onStartChat={startLauncherChat} onOpenChat={selectChat} /> : <VoyageWorkspace modelNotice={modelNotice} key={activeChat?.id ?? "loading"} state={displayState} connected={connected} pending={session.pending} actions={actions} onSend={send} onReconnect={session.reconnect} projectName={activeProject?.name} search={search} onConfigureSearch={() => setSearchDialogOpen(true)} failover={failover} routeAuthorization={routeAuthorizationPrompt} />}
+					{rawOpen && currentView === "chat" && <div className="raw-panel"><button className="icon-btn raw-close" onClick={() => setRawOpen(false)} aria-label="关闭诊断日志"><Icon name="close" /></button><RawDrawer lines={rawLines} /></div>}
 				</div>
 			</main>
 			</div>

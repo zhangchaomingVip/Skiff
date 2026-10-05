@@ -26,13 +26,15 @@ const highlight = (text: string, query: string) => {
 
 const readOrder = (): string[] => { try { const value = JSON.parse(localStorage.getItem("skiff.sidebar.order") ?? "[]"); return Array.isArray(value) ? value.filter((id) => typeof id === "string") : []; } catch { return []; } };
 
-export function Sidebar({ projects, chats, activeId, activeProjectId, disabled, connected, onNewChat, onSelectChat, onSelectProject, onAddProject, onClose, onRenameChat, onRenameProject, onDeleteChat, onDeleteProject, onTogglePinChat }: {
+export function Sidebar({ projects, chats, activeId, activeProjectId, homeActive, disabled, connected, onHome, onNewChat, onSelectChat, onSelectProject, onAddProject, onClose, onRenameChat, onRenameProject, onDeleteChat, onDeleteProject, onTogglePinChat }: {
 	projects: Project[];
 	chats: Conversation[];
 	activeId?: string;
 	activeProjectId?: string;
+	homeActive: boolean;
 	disabled: boolean;
 	connected: boolean;
+	onHome: () => void;
 	onNewChat: () => void;
 	onSelectChat: (id: string) => void;
 	onSelectProject: (id: string) => void;
@@ -144,8 +146,9 @@ export function Sidebar({ projects, chats, activeId, activeProjectId, disabled, 
 		<aside className="sidebar" aria-label="项目与聊天导航">
 			{deleting && <ConfirmDialog title={deleting.kind === "project" ? "移除项目" : "删除聊天"} description={deleting.kind === "project" ? `从侧栏移除 ${deleting.name} 及其聊天，磁盘上的项目与会话文件会保留。` : `从侧栏删除 ${deleting.name}，pi 会话文件会保留。`} onConfirm={() => { if (deleting.kind === "project") onDeleteProject(deleting.id); else onDeleteChat(deleting.id); }} onClose={() => setDeleting(undefined)} />}
 			<div className="sidebar-brand"><BrandMark /><span>Skiff</span><button className="icon-btn sidebar-search-toggle" onClick={() => setSearchOpen((open) => !open)} aria-label="搜索项目与聊天" aria-expanded={searchOpen} title="搜索项目与聊天"><Icon name="search" size={16} /></button><button className="icon-btn sidebar-toggle" onClick={onClose} aria-label="收起侧栏" title="收起侧栏"><Icon name="panel" /></button></div>
+			<button className="new-chat" onClick={onNewChat} disabled={!projects.length}><Icon name="edit" /><span>新聊天</span><span className="shortcut">Ctrl N</span></button>
+			<button className={`home-nav ${homeActive ? "active" : ""}`} onClick={onHome} disabled={!projects.length} aria-current={homeActive ? "page" : undefined}><Icon name="home" /><span>主页</span></button>
 			{searchOpen && <div className="sidebar-search"><Icon name="search" size={14} /><input autoFocus aria-label="搜索项目与聊天" placeholder="搜索项目与聊天" value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); setSearch(""); setSearchOpen(false); } }} /><button className="icon-btn" onClick={() => { setSearch(""); setSearchOpen(false); }} aria-label="关闭搜索" title="关闭搜索"><Icon name="close" size={13} /></button></div>}
-			<button className="new-chat" onClick={onNewChat} disabled={disabled}><Icon name="edit" /><span>新聊天</span><span className="shortcut">Ctrl N</span></button>
 			<div className="sidebar-scroll" ref={scrollRef} onScroll={updateScrollFades}>
 				<div className="section-label"><button className={`icon-btn section-toggle ${anyExpanded ? "expanded" : ""}`} onClick={toggleAll} aria-label={`${anyExpanded ? "收起" : "展开"}全部项目`} aria-expanded={anyExpanded}><Icon name="chevron" size={13} /></button><button className="section-name" onClick={toggleAll}>项目</button><button className="icon-btn" onClick={onAddProject} disabled={disabled} aria-label="添加项目" title="添加项目"><Icon name="plus" size={16} /></button></div>
 				<nav>
