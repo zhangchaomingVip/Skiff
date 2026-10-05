@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePiSession } from "./chat/usePiSession";
+import { showVoyageIcon } from "./taskbarIcon";
 import { useWorkspace } from "./chat/workspace";
 import { useModelFamilies } from "./chat/useModelFamilies";
 import { ModelFamilyContext } from "./chat/familyContext";
@@ -40,6 +41,9 @@ export default function App() {
 	const [searchDialogOpen, setSearchDialogOpen] = useState(false);
 	const search = useWebSearch(actions, connected, session.reconnect);
 	const busy = state.isStreaming || session.pending;
+	// Mirror the voyage state on the taskbar: the sailing mark while pi answers,
+	// the docked speedboat once the turn ends.
+	useEffect(() => { void showVoyageIcon(busy).catch(() => undefined); }, [busy]);
 	const locked = busy || (!!activeChat && !connected && !state.lastError);
 
 	useEffect(() => {
