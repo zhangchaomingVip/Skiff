@@ -11,6 +11,7 @@ export interface ModelInfo {
 	familyId?: string;
 	familyName?: string;
 	relayId?: string;
+	billingAccountId?: string;
 	name?: string;
 	providerName?: string;
 	contextWindow?: number;

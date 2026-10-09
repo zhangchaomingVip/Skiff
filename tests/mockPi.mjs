@@ -1,5 +1,5 @@
 // Test-only Tauri bridge. Never imported by the application entry point.
-export function installMockPi(target, storage) {
+export function installMockPi(target, storage, fixture) {
 	const callbacks = new Map();
 	const listeners = new Map();
 	const processes = new Map();
@@ -29,6 +29,18 @@ export function installMockPi(target, storage) {
 		] },
 		{ id: "glm", displayName: "GLM", defaultRouteId: null, routes: [] },
 	];
+	if (fixture) {
+		families[0].routes[1].models.push({ ...families[0].routes[0].models[1], inputCost: .14, outputCost: .28 });
+		delete relays[2].billingAccountId;
+		if (fixture === "authorization") families[0].routes[1].reasoning = true;
+		if (fixture === "empty") families.forEach((family) => { family.routes = []; });
+		if (fixture === "single" || fixture === "multi") {
+			const modelId = fixture === "single" ? "deepseek-flash" : "deepseek-chat";
+			families[0].routes.forEach((item) => { item.models = item.models.filter((model) => model.modelId === modelId); });
+			families.slice(1).forEach((family) => { family.routes = []; });
+		}
+		if (fixture === "unknown") families.filter((family) => family.id !== "kimi").forEach((family) => { family.routes = []; });
+	}
 	const relayOf = (relayId) => relays.find((relay) => relay.id === relayId);
 	const familyRoutes = () => families.flatMap((family) => family.routes.map((route) => ({ family, route })));
 	const familyModels = () => familyRoutes().flatMap(({ family, route }) => {
@@ -64,7 +76,11 @@ export function installMockPi(target, storage) {
 			if (command === "plugin:event|listen") { const id = ++sequence; listeners.set(id, args); return id; }
 			if (command === "plugin:event|unlisten") return;
 			if (command === "get_workspace_directory") return { name: "Skiff", path: "D:\\workspace\\Skiff" };
-			if (command === "list_model_families") return familiesConfig();
+			if (command === "list_model_families") {
+				if (fixture === "loading") await new Promise(() => {});
+				if (fixture === "error") throw new Error("预览：模型目录暂时不可用，请重试");
+				return familiesConfig();
+			}
 			if (command === "list_model_runtime") return offers();
 			if (command === "cancel_provider_test") return;
 			if (command === "test_provider_connection") {
@@ -207,10 +223,10 @@ export function installMockPi(target, storage) {
 					session.messages.push(user);
 					saved[session.file] = session.messages;
 					persist();
-					if (String(request.message ?? "").includes("触发失败")) {
+					if (String(request.message ?? "").includes("触发失败") || String(request.message ?? "").includes("触发跨账户")) {
 						session.isStreaming = false;
 						emit(args.instanceId, { type: "agent_start" });
-						emit(args.instanceId, { type: "error", errorMessage: "401 Unauthorized：提供商拒绝了这次请求" });
+						emit(args.instanceId, { type: "error", errorMessage: String(request.message).includes("触发跨账户") ? "503 Service Unavailable：提供商暂时不可用" : "401 Unauthorized：提供商拒绝了这次请求" });
 						emit(args.instanceId, { type: "agent_end" });
 						respond({ disposition: "started" });
 						break;

@@ -5,21 +5,21 @@
 		<div id="root"></div>
 		<script type="module">
 			import { installMockPi } from "./mockPi.mjs";
-			const fixture = new URLSearchParams(location.search).get("fixture");
-			if (fixture) { const { seedPolishPreview } = await import("./polishFixture.mjs"); seedPolishPreview(localStorage, fixture === "long"); }
-			installMockPi(window, localStorage);
+			const { preparePreview } = await import("./uiFixture.mjs");
+			const fixture = preparePreview(window);
+			await new Promise((resolve, reject) => {
+				const script = document.createElement("script");
+				script.src = "/theme-init.js";
+				script.onload = resolve; script.onerror = reject;
+				document.head.append(script);
+			});
+			if (document.documentElement.dataset.previewStatic) await import("./preview.css");
+			window.skiffPreview = installMockPi(window, localStorage, fixture);
 			await import("/src/main.tsx");
-			// Reuse the production theme tokens for deterministic visual QA.
-			const theme = new URLSearchParams(location.search).get("theme");
-			if (theme) {
-				for (const sheet of document.styleSheets) {
-					for (const rule of sheet.cssRules) {
-						const selected = theme === "dark" ? rule instanceof CSSMediaRule && rule.conditionText.includes("prefers-color-scheme: dark") ? rule.cssRules[0] : null : rule.selectorText === ":root" ? rule : null;
-						if (selected) document.documentElement.style.cssText = selected.style.cssText;
-					}
-				}
-				document.documentElement.style.colorScheme = theme;
-			}
+			const environment = document.createElement("meta");
+			environment.name = "skiff-preview-environment";
+			environment.content = JSON.stringify({ userAgent: navigator.userAgent, devicePixelRatio, viewport: { width: innerWidth, height: innerHeight }, visualViewportScale: visualViewport?.scale, language: navigator.language, platform: navigator.platform });
+			document.head.append(environment);
 		</script>
 	</body>
 </html>

@@ -1,3 +1,5 @@
+import { Button, IconButton } from "./ui";
+import { Icon } from "./Icon";
 import { useCallback, useRef, useState } from "react";
 import type { ChatMessage, ImageAttachment, SessionState } from "../chat/types";
 import { turnDraft, userForTurn } from "../chat/turns";
@@ -96,16 +98,16 @@ export function ChatView({
 						<small>目标扣费账户：{billingAccountLabel(routeAuthorization.request.target)}</small>
 					</div>
 					<div className="route-authorization-actions">
-						<button className="btn primary" onClick={() => routeAuthorization.onChoice("once")}>同意</button>
-						<button className="btn" onClick={() => routeAuthorization.onChoice("session")}>本次会话都同意</button>
-						<button className="btn ghost" onClick={() => routeAuthorization.onChoice("keep_failed")}>保持失败</button>
+						<Button variant="primary" size="primary" onClick={() => routeAuthorization.onChoice("once")}>同意</Button>
+						<Button  onClick={() => routeAuthorization.onChoice("session")}>本次会话都同意</Button>
+						<Button variant="ghost" onClick={() => routeAuthorization.onChoice("keep_failed")}>保持失败</Button>
 					</div>
 				</div>
 			)}
 			{state.lastError && (
-				<div className={`banner error ${connected && isProviderFailure(state.lastError) ? "provider-toast" : ""}`} role="alert"><span>{state.lastError}</span>{failover && <button className="btn ghost" disabled={disabled} onClick={() => failover.switch()}>切换到同家族下一个可用提供商（{failover.label}）</button>}{!connected ? <button className="btn ghost" onClick={() => onReconnect()}>重新连接</button> : <button className="icon-btn" onClick={actions.clearError} aria-label="关闭错误提示">×</button>}</div>
+				<div className={`banner error ${connected && isProviderFailure(state.lastError) ? "provider-toast" : ""}`} role="alert"><span>{state.lastError}</span>{failover && <Button variant="ghost" disabled={disabled} onClick={() => failover.switch()}>切换到同家族下一个可用提供商（{failover.label}）</Button>}{!connected ? <Button variant="ghost" onClick={() => onReconnect()}>重新连接</Button> : <IconButton onClick={actions.clearError} aria-label="关闭错误提示"><Icon name="close" /></IconButton>}</div>
 			)}
-			{connected && !state.availableModels.length && <div className="notice model-notice">暂无已启用的提供商，请添加或启用提供商。<button className="btn ghost" onClick={manage}>管理提供商…</button></div>}
+			{connected && !state.availableModels.length && <div className="notice model-notice">暂无已启用的提供商，请添加或启用提供商。<Button variant="ghost" onClick={manage}>管理提供商…</Button></div>}
 			<Composer
 				disabled={!connected || pending || !state.model || !state.availableModels.length}
 				streaming={state.isStreaming}

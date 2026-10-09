@@ -1,3 +1,4 @@
+import { Icon } from "./Icon";
 import type { VoyageMetrics } from "../chat/useVoyageMetrics";
 import { Boat } from "./VoyageRail";
 
@@ -15,9 +16,9 @@ export function ContextUsage({ metrics, expanded, onToggle, notice }: { notice?:
 			{expanded ? <span className="voyage-compact-text">{status} · {metrics.speed ? metrics.speed.toFixed(1) : "0"} tok/s</span> : <>
 				<span className="voyage-status"><span className="voyage-status-dot" />{status}</span>
 				<span className="voyage-speed"><strong>{metrics.speed ? metrics.speed.toFixed(1) : "0"}</strong><small>tok/s</small></span>
-				<span className="voyage-route" title={remaining}><span className="voyage-anchor" aria-hidden="true">⚓</span><span className="voyage-track"><span className="voyage-track-fill" style={{ transform: `scaleX(${progress / 100})` }} /><Boat className="voyage-route-boat" position={progress} /></span><span className="voyage-flag" aria-hidden="true">⚑</span></span>
+				<span className="voyage-route" title={remaining}><span className="voyage-anchor" aria-hidden="true"><Icon name="anchor" size={16} /></span><span className="voyage-track"><span className="voyage-track-fill" style={{ transform: `scaleX(${progress / 100})` }} /><Boat className="voyage-route-boat" position={progress} /></span><span className="voyage-flag" aria-hidden="true"><Icon name="flag" size={16} /></span></span>
 				<span className="voyage-distance"><strong>{distance}</strong><small>{metrics.limit ? ` / ${number(metrics.limit)} tok` : " tok"}</small></span>
-				<span className="voyage-expand" aria-hidden="true">‹</span>
+				<span className="voyage-expand" aria-hidden="true"><Icon name="chevron" size={16} /></span>
 			</>}
 		</button>
 	</div>;

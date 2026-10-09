@@ -1,3 +1,4 @@
+import { Dialog, Input, IconButton, Button, Select } from "./ui";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { TestResult } from "../chat/useModelFamilies";
@@ -51,7 +52,6 @@ export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, o
 	onCancelTest: (requestId: string) => Promise<unknown>;
 	onDiscover: (baseUrl: string, apiKey: string) => Promise<string[]>;
 }) {
-	const dialogRef = useRef<HTMLDialogElement>(null);
 	const [tab, setTab] = useState<"relays" | "families">(relays.length ? "families" : "relays");
 	const [draft, setDraft] = useState<Draft>();
 	const [query, setQuery] = useState("");
@@ -105,7 +105,6 @@ export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, o
 		return () => { alive = false; testRequest.current += 1; cancelActiveTest(); };
 	}, []);
 
-	useEffect(() => { dialogRef.current?.showModal(); }, []);
 
 	const resetConnectionTest = () => {
 		testRequest.current += 1;
@@ -367,13 +366,13 @@ export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, o
 		return ids;
 	};
 
-	return <dialog ref={dialogRef} className="project-dialog provider-dialog family-dialog" aria-labelledby="families-title" onCancel={(event) => { if (pending) event.preventDefault(); else if (draft) { event.preventDefault(); closeDraft(); } else onClose(); }}>
+	return <Dialog onClose={onClose} pending={pending} onEscape={() => { if (draft) closeDraft(); else onClose(); }}  className="project-dialog provider-dialog family-dialog" aria-labelledby="families-title" >
 		{draft?.kind === "pick" ? (
 			<div className="provider-sheet">
 				<div className="dialog-heading provider-sheet-head">
 					<h2 id="families-title">{relays.length ? "添加供应商" : "添加第一个供应商"}</h2>
-					<span className="provider-sheet-search"><Icon name="search" size={15} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索供应商…" aria-label="搜索供应商" autoFocus /></span>
-					<button type="button" className="icon-btn" onClick={() => setDraft(undefined)} aria-label="返回列表"><Icon name="close" /></button>
+					<span className="provider-sheet-search"><Icon name="search" size={15} /><Input appearance="plain" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索供应商…" aria-label="搜索供应商" autoFocus /></span>
+					<IconButton type="button"  onClick={() => setDraft(undefined)} aria-label="返回列表"><Icon name="close" /></IconButton>
 				</div>
 				<div className="provider-sheet-body">
 					{PRESET_KINDS.map(({ kind, title, hint }) => {
@@ -413,22 +412,22 @@ export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, o
 						{preset?.familyId && <span className="provider-tag">{FAMILY_LABELS[preset.familyId]} 家族</span>}
 						<span className="grow" />
 						{site && <button type="button" className="editor-site" onClick={() => openLink(site)} title={site}>{hostOf(site)} ↗</button>}
-						<button type="button" className="icon-btn" onClick={closeDraft} disabled={pending} aria-label="返回列表"><Icon name="close" /></button>
+						<IconButton type="button"  onClick={closeDraft} disabled={pending} aria-label="返回列表"><Icon name="close" /></IconButton>
 					</div>
 					{draft.isNew && preset && <p className="muted">地址已按预设填好，粘贴密钥并通过连接测试即可；保存后到「模型选择」为它配置线路。</p>}
 					<div className="editor-field">
 						<label htmlFor="relay-name">名称</label>
 						<div className="editor-control">
-							<input id="relay-name" required maxLength={32} placeholder="官方直连 / 硅基低价 / 中转站 A" value={relay.name} onChange={(event) => patchRelay({ name: event.target.value })} disabled={pending} />
+							<Input id="relay-name" required maxLength={32} placeholder="官方直连 / 硅基低价 / 中转站 A" value={relay.name} onChange={(event) => patchRelay({ name: event.target.value })} disabled={pending} />
 						</div>
 					</div>
 					<div className="editor-field">
 						<label htmlFor="relay-key">API 密钥</label>
 						<div className="editor-control">
 							<span className="editor-key-row">
-								<input id="relay-key" type={reveal ? "text" : "password"} autoComplete="off" placeholder={draft.isNew ? (preset?.keyOptional ? "可选，本地服务可留空" : "粘贴 API 密钥") : "留空则保留原密钥"} value={relay.apiKey} onChange={(event) => patchRelay({ apiKey: event.target.value })} disabled={pending} />
-								<button type="button" className="btn ghost compact" onClick={() => setReveal((value) => !value)} disabled={pending}>{reveal ? "隐藏" : "显示"}</button>
-								{preset?.keysUrl && <button type="button" className="btn ghost compact" onClick={() => openLink(preset.keysUrl)}>获取密钥 ↗</button>}
+								<Input id="relay-key" type={reveal ? "text" : "password"} autoComplete="off" placeholder={draft.isNew ? (preset?.keyOptional ? "可选，本地服务可留空" : "粘贴 API 密钥") : "留空则保留原密钥"} value={relay.apiKey} onChange={(event) => patchRelay({ apiKey: event.target.value })} disabled={pending} />
+								<Button type="button" variant="ghost" size="compact" onClick={() => setReveal((value) => !value)} disabled={pending}>{reveal ? "隐藏" : "显示"}</Button>
+								{preset?.keysUrl && <Button type="button" variant="ghost" size="compact" onClick={() => openLink(preset.keysUrl)}>获取密钥 ↗</Button>}
 							</span>
 							<small>密钥在本机加密保存，列表仅显示后 4 位。</small>
 						</div>
@@ -438,7 +437,7 @@ export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, o
 						<div className="editor-control">
 							<span className="editor-endpoint">
 								<span className="editor-protocol" title="OpenAI 兼容接口">OpenAI</span>
-								<input id="relay-base" required placeholder="https://api.example.com/v1" value={relay.baseUrl} onChange={(event) => patchRelay({ baseUrl: event.target.value })} disabled={pending} />
+								<Input id="relay-base" required placeholder="https://api.example.com/v1" value={relay.baseUrl} onChange={(event) => patchRelay({ baseUrl: event.target.value })} disabled={pending} />
 							</span>
 							<small>OpenAI 兼容根地址，以 http:// 或 https:// 开头，包含 /v1 等前缀。</small>
 						</div>
@@ -446,39 +445,39 @@ export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, o
 					<div className="editor-field">
 						<label htmlFor="relay-account">扣费账户</label>
 						<div className="editor-control">
-							<input id="relay-account" maxLength={128} placeholder="wallet-a（同一账户使用同一标识）" value={relay.billingAccountId} onChange={(event) => patchRelay({ billingAccountId: event.target.value })} disabled={pending} />
+							<Input id="relay-account" maxLength={128} placeholder="wallet-a（同一账户使用同一标识）" value={relay.billingAccountId} onChange={(event) => patchRelay({ billingAccountId: event.target.value })} disabled={pending} />
 							<small>留空按未知账户处理；自动切换到不同或未知账户时需确认。</small>
 						</div>
 					</div>
 					<div className="editor-field">
 						<label htmlFor="relay-timeout">超时</label>
 						<div className="editor-control">
-							<input id="relay-timeout" type="number" min={5} max={600} value={relay.timeoutSeconds} onChange={(event) => patchRelay({ timeoutSeconds: Number(event.target.value) })} disabled={pending} />
+							<Input id="relay-timeout" type="number" min={5} max={600} value={relay.timeoutSeconds} onChange={(event) => patchRelay({ timeoutSeconds: Number(event.target.value) })} disabled={pending} />
 							<small>超过此时间会终止请求并提示超时。</small>
 						</div>
 					</div>
 					<div className="test-row">
-						<button type="button" className="btn ghost" onClick={() => void testRelay()} disabled={pending || testing || !relay.baseUrl || (!relay.apiKey && !preset?.keyOptional)}>{testing ? "正在测试…" : "测试连接"}</button>
-						<button type="button" className="btn ghost" onClick={() => void testRelay(undefined, true)} disabled={pending || testing || !relay.baseUrl || (!relay.apiKey && !preset?.keyOptional)}>测试所有模型（5 并发）</button>
-						{testing && <button type="button" className="btn ghost" onClick={stopConnectionTest}>停止测试</button>}
+						<Button type="button" variant="ghost" onClick={() => void testRelay()} disabled={pending || testing || !relay.baseUrl || (!relay.apiKey && !preset?.keyOptional)}>{testing ? "正在测试…" : "测试连接"}</Button>
+						<Button type="button" variant="ghost" onClick={() => void testRelay(undefined, true)} disabled={pending || testing || !relay.baseUrl || (!relay.apiKey && !preset?.keyOptional)}>测试所有模型（5 并发）</Button>
+						{testing && <Button type="button" variant="ghost" onClick={stopConnectionTest}>停止测试</Button>}
 						{testStopped && <span className="test-result" role="status">已停止测试，已完成的结果已保留。</span>}
 						{testing && <span className="test-result" role="status">{runningTestModels.length ? `正在测试 ${runningTestModels.length} 个模型 · 已完成 ${completedTestModels.length}/${testBatch.length}` : "正在获取模型列表…"}</span>}
 						{result && !testing && !testStopped && <span className={`test-result ${result.ok ? "ok" : "bad"}`} role="status">{result.ok ? `连接成功 · ${testModel} · ${result.latencyMs} ms` : `连接失败 · 模型 ${testModel} · ${result.latencyMs} ms${result.status ? ` · HTTP ${result.status}` : ""}${result.error ? ` · ${result.error}` : ""}`}</span>}
 						<small>{draft.isNew ? "新中转需至少一个未剔除的模型测试成功才能保存。" : "测试耗时为一次短回复的完整请求时间，最多同时测试 5 个模型。"}</small>
 					</div>
-					{!!relay.excludedModelIds?.length && <div className="connection-exclusions"><span>已剔除 {relay.excludedModelIds.length} 个模型（保存后生效）</span><button type="button" className="btn ghost compact" disabled={pending || testing} onClick={() => setModelExclusions(relay.excludedModelIds ?? [], false)}>恢复全部</button><details><summary>查看剔除名单</summary>{relay.excludedModelIds.map((model) => <div key={model}><span>{model}</span><button type="button" className="btn ghost compact" disabled={pending || testing} onClick={() => setModelExclusions([model], false)}>恢复</button></div>)}</details></div>}
+					{!!relay.excludedModelIds?.length && <div className="connection-exclusions"><span>已剔除 {relay.excludedModelIds.length} 个模型（保存后生效）</span><Button type="button" variant="ghost" size="compact" disabled={pending || testing} onClick={() => setModelExclusions(relay.excludedModelIds ?? [], false)}>恢复全部</Button><details><summary>查看剔除名单</summary>{relay.excludedModelIds.map((model) => <div key={model}><span>{model}</span><Button type="button" variant="ghost" size="compact" disabled={pending || testing} onClick={() => setModelExclusions([model], false)}>恢复</Button></div>)}</details></div>}
 					{showTestModels && <section className="connection-models" aria-label="选择测试模型">
 						<div className="connection-models-heading">
 							<strong>模型连接测速</strong>
 							<span className="muted">已选 {selectedTestModels.length} / {testModels.length}</span>
-						<button type="button" className="btn ghost compact" disabled={pending || testing || !selectableTestModels.length} onClick={() => setSelectedTestModels(allTestModelsSelected ? [] : [...selectableTestModels])}>{allTestModelsSelected ? "取消全选" : "全选"}</button>
+						<Button type="button" variant="ghost" size="compact" disabled={pending || testing || !selectableTestModels.length} onClick={() => setSelectedTestModels(allTestModelsSelected ? [] : [...selectableTestModels])}>{allTestModelsSelected ? "取消全选" : "全选"}</Button>
 						</div>
 						<div className="connection-models-actions connection-speed-controls">
-							<label>慢响应阈值（秒）<input type="number" min={1} max={600} value={slowThreshold} onChange={(event) => setSlowThreshold(Math.max(1, Math.min(600, Number(event.target.value) || 1)))} /></label>
-							<button type="button" className="btn ghost compact" disabled={pending || testing || !slowOrFailedModels(testResults, slowThreshold * 1000).some((model) => !excludedTestModels.includes(model))} onClick={() => setModelExclusions(slowOrFailedModels(testResults, slowThreshold * 1000), true)}>剔除慢/失败模型</button>
-							<select aria-label="测速结果排序" value={testSort} onChange={(event) => setTestSort(event.target.value as "latency" | "name")}><option value="latency">耗时从快到慢</option><option value="name">按模型名称排序</option></select>
+							<label>慢响应阈值（秒）<Input type="number" min={1} max={600} value={slowThreshold} onChange={(event) => setSlowThreshold(Math.max(1, Math.min(600, Number(event.target.value) || 1)))} /></label>
+							<Button type="button" variant="ghost" size="compact" disabled={pending || testing || !slowOrFailedModels(testResults, slowThreshold * 1000).some((model) => !excludedTestModels.includes(model))} onClick={() => setModelExclusions(slowOrFailedModels(testResults, slowThreshold * 1000), true)}>剔除慢/失败模型</Button>
+							<Select aria-label="测速结果排序" value={testSort} onChange={(event) => setTestSort(event.target.value as "latency" | "name")}><option value="latency">耗时从快到慢</option><option value="name">按模型名称排序</option></Select>
 						</div>
-						{testModels.length > 10 && <input type="search" aria-label="搜索测试模型" placeholder="搜索模型…" value={testModelQuery} onChange={(event) => setTestModelQuery(event.target.value)} />}
+						{testModels.length > 10 && <Input type="search" aria-label="搜索测试模型" placeholder="搜索模型…" value={testModelQuery} onChange={(event) => setTestModelQuery(event.target.value)} />}
 						<div className="connection-models-list">
 							{filteredTestModels.map((model) => {
 								const tested = testResults.find((item) => item.modelId === model);
@@ -488,36 +487,36 @@ export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, o
 								return <div className="connection-model" key={model}>
 									<label><input type="checkbox" checked={selectedTestModels.includes(model)} disabled={pending || testing} onChange={(event) => setSelectedTestModels((previous) => event.target.checked ? [...previous, model] : previous.filter((item) => item !== model))} /><span>{model}{excludedTestModels.includes(model) ? "（已剔除）" : ""}</span></label>
 									<span className={`test-result ${waiting || stopped ? "muted" : tested ? tested.ok ? "ok" : "bad" : "muted"}`}>{status}</span>
-									<button type="button" className="btn ghost compact" disabled={pending || testing} onClick={() => setModelExclusions([model], !excludedTestModels.includes(model))}>{excludedTestModels.includes(model) ? "恢复" : "剔除"}</button>
+									<Button type="button" variant="ghost" size="compact" disabled={pending || testing} onClick={() => setModelExclusions([model], !excludedTestModels.includes(model))}>{excludedTestModels.includes(model) ? "恢复" : "剔除"}</Button>
 								</div>;
 							})}
 							{!filteredTestModels.length && <p className="muted">没有匹配的模型</p>}
 						</div>
 						<div className="connection-models-actions">
-							<button type="button" className="btn ghost" disabled={pending || testing || !selectedTestModels.length} onClick={() => void testRelay(selectedTestModels)}>测试选中的 {selectedTestModels.length} 个模型</button>
-							<button type="button" className="btn ghost" disabled={pending || testing || !selectedTestModels.some((model) => !excludedTestModels.includes(model))} onClick={() => setModelExclusions(selectedTestModels, true)}>剔除选中的模型</button>
-							{testing && <button type="button" className="btn ghost" onClick={stopConnectionTest}>停止测试</button>}
+							<Button type="button" variant="ghost" disabled={pending || testing || !selectedTestModels.length} onClick={() => void testRelay(selectedTestModels)}>测试选中的 {selectedTestModels.length} 个模型</Button>
+							<Button type="button" variant="ghost" disabled={pending || testing || !selectedTestModels.some((model) => !excludedTestModels.includes(model))} onClick={() => setModelExclusions(selectedTestModels, true)}>剔除选中的模型</Button>
+							{testing && <Button type="button" variant="ghost" onClick={stopConnectionTest}>停止测试</Button>}
 							{testBatch.length > 1 && <span className="muted" role="status">本轮已完成 {completedTestModels.length} / {testBatch.length}，成功 {testResults.filter((item) => completedTestModels.includes(item.modelId) && item.ok).length} 个</span>}
 						</div>
 						<small className="muted">全选会跳过已失败的模型；可手动勾选重试。每个模型测试可能产生少量 token 费用。</small>
 					</section>}
 					{(configError || error) && <p className="form-error" role="alert">{configError || error}</p>}
 					<div className="dialog-actions editor-actions">
-						{!draft.isNew && <button type="button" className="btn text-danger" onClick={() => setRemoving({ title: "删除供应商", description: `将删除供应商「${relay.name}」，其全部线路与密钥会一并删除。`, action: async () => { const ok = await onDeleteRelay(relay.id); if (ok) setDraft(undefined); return ok; } })} disabled={pending}>删除</button>}
+						{!draft.isNew && <Button type="button" variant="danger" onClick={() => setRemoving({ title: "删除供应商", description: `将删除供应商「${relay.name}」，其全部线路与密钥会一并删除。`, action: async () => { const ok = await onDeleteRelay(relay.id); if (ok) setDraft(undefined); return ok; } })} disabled={pending}>删除</Button>}
 						<span className="grow" />
-						<button type="button" className="btn ghost" onClick={closeDraft} disabled={pending}>取消</button>
-						<button className="btn primary" disabled={pending || testing || (draft.isNew && !connectionPassed)}>{pending ? "保存中…" : draft.isNew ? "添加" : "保存"}</button>
+						<Button type="button" variant="ghost" onClick={closeDraft} disabled={pending}>取消</Button>
+						<Button type="submit" variant="primary" size="primary" disabled={pending || testing || (draft.isNew && !connectionPassed)}>{pending ? "保存中…" : draft.isNew ? "添加" : "保存"}</Button>
 					</div>
 				</form>;
 			})()
 		) : draft?.kind === "route" ? (
 			<form onSubmit={(event) => void submitRoute(event)}>
-				<div className="dialog-heading"><h2 id="families-title">{draft.isNew ? "添加线路" : "编辑线路"} · {FAMILY_LABELS[draft.familyId] ?? draft.familyId}</h2><button type="button" className="icon-btn" onClick={() => setDraft(undefined)} disabled={pending} aria-label="返回列表"><Icon name="close" /></button></div>
+				<div className="dialog-heading"><h2 id="families-title">{draft.isNew ? "添加线路" : "编辑线路"} · {FAMILY_LABELS[draft.familyId] ?? draft.familyId}</h2><IconButton type="button"  onClick={() => setDraft(undefined)} disabled={pending} aria-label="返回列表"><Icon name="close" /></IconButton></div>
 				<p className="muted">图片输入按模型单独设置，目录导入会填入已知能力；流式、工具与推理开关按线路生效。</p>
-				<div className="provider-field"><label htmlFor="route-relay">所属中转</label><select id="route-relay" required value={draft.route.relayId} onChange={(event) => patchRoute({ relayId: event.target.value })} disabled={pending || !draft.isNew}>
+				<div className="provider-field"><label htmlFor="route-relay">所属中转</label><Select id="route-relay" required value={draft.route.relayId} onChange={(event) => patchRoute({ relayId: event.target.value })} disabled={pending || !draft.isNew}>
 					<option value="" disabled>选择中转…</option>
 					{relays.map((relay) => <option key={relay.id} value={relay.id}>{relay.name}（{maskBaseUrl(relay.baseUrl)}）</option>)}
-				</select><small>地址与密钥来自中转，无需重复填写。</small></div>
+				</Select><small>地址与密钥来自中转，无需重复填写。</small></div>
 				<label className="provider-toggle inline"><input type="checkbox" checked={draft.route.enabled} onChange={(event) => patchRoute({ enabled: event.target.checked })} disabled={pending} />启用此线路（供应商总开关也须启用）</label>
 				<div className="provider-models">
 					<div className="provider-models-heading"><strong>模型配置</strong><small>单价按每百万令牌填写，顺序与选择器一致</small><PriceImport key={`${draft.familyId}:${draft.route.relayId}`} familyId={draft.familyId} addedIds={draft.route.models.map((model) => model.modelId.trim()).filter(Boolean)} extractors={extractors} catalog={catalog} catalogStale={catalogStale} catalogFetchedAt={catalogFetchedAt} usdCnyRate={usdCnyRate} onSaveRate={onSaveRate} relayBaseUrl={relays.find((relay) => relay.id === draft.route.relayId)?.baseUrl ?? ""} disabled={pending} onImport={importPriced} /></div>
@@ -525,35 +524,35 @@ export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, o
 						<div className="provider-model-first">
 							<ModelIdField baseUrl={relays.find((relay) => relay.id === draft.route.relayId)?.baseUrl ?? ""} apiKey={relays.find((relay) => relay.id === draft.route.relayId)?.apiKey ?? ""} familyId={draft.familyId} value={model.modelId} onChange={(modelId) => patchModel(index, { modelId, vision: catalogVision(modelId, catalog) })} addedIds={draft.route.models.map((item) => item.modelId.trim())} excludedIds={relays.find((relay) => relay.id === draft.route.relayId)?.excludedModelIds} onAdd={(ids) => addModels(index, ids)} disabled={pending} />
 							<div className="provider-model-actions">
-								<button type="button" className="icon-btn" disabled={pending || index === 0} onClick={() => moveModel(index, -1)} aria-label={`上移模型 ${index + 1}`} title="上移模型"><Icon name="arrow" size={14} /></button>
-								<button type="button" className="icon-btn flip" disabled={pending || index === draft.route.models.length - 1} onClick={() => moveModel(index, 1)} aria-label={`下移模型 ${index + 1}`} title="下移模型"><Icon name="arrow" size={14} /></button>
-								<button type="button" className="icon-btn" disabled={pending || draft.route.models.length <= 1} onClick={() => patchRoute({ models: draft.route.models.filter((_, row) => row !== index) })} aria-label={`删除模型 ${index + 1}`} title="删除模型，至少保留一行"><Icon name="trash" size={14} /></button>
+								<IconButton type="button"  disabled={pending || index === 0} onClick={() => moveModel(index, -1)} aria-label={`上移模型 ${index + 1}`} title="上移模型"><Icon name="arrow" size={14} /></IconButton>
+								<IconButton type="button" className="flip" disabled={pending || index === draft.route.models.length - 1} onClick={() => moveModel(index, 1)} aria-label={`下移模型 ${index + 1}`} title="下移模型"><Icon name="arrow" size={14} /></IconButton>
+								<IconButton type="button"  disabled={pending || draft.route.models.length <= 1} onClick={() => patchRoute({ models: draft.route.models.filter((_, row) => row !== index) })} aria-label={`删除模型 ${index + 1}`} title="删除模型，至少保留一行"><Icon name="trash" size={14} /></IconButton>
 							</div>
 						</div>
-						<label className="provider-model-alias">模型别名<input maxLength={64} placeholder="可选，仅改变显示名称" value={model.alias} onChange={(event) => patchModel(index, { alias: event.target.value })} disabled={pending} /></label>
+						<label className="provider-model-alias">模型别名<Input maxLength={64} placeholder="可选，仅改变显示名称" value={model.alias} onChange={(event) => patchModel(index, { alias: event.target.value })} disabled={pending} /></label>
 						{relays.find((relay) => relay.id === draft.route.relayId)?.excludedModelIds?.includes(model.modelId) && <small className="muted">此模型已在供应商中剔除，不会出现在模型选择列表。可在供应商详情中恢复。</small>}
 						<div className="provider-model-limits">
-							<label>输入单价<input type="number" required min={0} step="0.000001" value={model.inputCost} onChange={(event) => patchModel(index, { inputCost: Number(event.target.value) })} disabled={pending} /></label>
-							<label>输出单价<input type="number" required min={0} step="0.000001" value={model.outputCost} onChange={(event) => patchModel(index, { outputCost: Number(event.target.value) })} disabled={pending} /></label>
-							<label>币种<select value={model.currency} onChange={(event) => patchModel(index, { currency: event.target.value === "USD" ? "USD" : "CNY" })} disabled={pending}><option value="CNY">人民币</option><option value="USD">美元</option></select></label>
-							<label>默认最大输出<input type="number" required min={1} step={1} max={model.contextWindow} value={model.maxTokens} onChange={(event) => patchModel(index, { maxTokens: Number(event.target.value) })} disabled={pending} /></label>
-							<label>上下文窗口<input type="number" required min={1} step={1} value={model.contextWindow} onChange={(event) => patchModel(index, { contextWindow: Number(event.target.value) })} disabled={pending} /></label>
-							<label>图片输入<select aria-label={`模型 ${index + 1} 图片输入`} value={model.vision === undefined ? "default" : String(model.vision)} onChange={(event) => patchModel(index, { vision: event.target.value === "default" ? undefined : event.target.value === "true" })} disabled={pending}><option value="default">跟随线路默认</option><option value="true">支持图片</option><option value="false">仅文本</option></select></label>
+							<label>输入单价<Input type="number" required min={0} step="0.000001" value={model.inputCost} onChange={(event) => patchModel(index, { inputCost: Number(event.target.value) })} disabled={pending} /></label>
+							<label>输出单价<Input type="number" required min={0} step="0.000001" value={model.outputCost} onChange={(event) => patchModel(index, { outputCost: Number(event.target.value) })} disabled={pending} /></label>
+							<label>币种<Select value={model.currency} onChange={(event) => patchModel(index, { currency: event.target.value === "USD" ? "USD" : "CNY" })} disabled={pending}><option value="CNY">人民币</option><option value="USD">美元</option></Select></label>
+							<label>默认最大输出<Input type="number" required min={1} step={1} max={model.contextWindow} value={model.maxTokens} onChange={(event) => patchModel(index, { maxTokens: Number(event.target.value) })} disabled={pending} /></label>
+							<label>上下文窗口<Input type="number" required min={1} step={1} value={model.contextWindow} onChange={(event) => patchModel(index, { contextWindow: Number(event.target.value) })} disabled={pending} /></label>
+							<label>图片输入<Select aria-label={`模型 ${index + 1} 图片输入`} value={model.vision === undefined ? "default" : String(model.vision)} onChange={(event) => patchModel(index, { vision: event.target.value === "default" ? undefined : event.target.value === "true" })} disabled={pending}><option value="default">跟随线路默认</option><option value="true">支持图片</option><option value="false">仅文本</option></Select></label>
 						</div>
 						<div className="provider-model-cache">
-							<label>缓存读取单价<input type="number" required min={0} step="0.000001" value={model.cacheReadCost} onChange={(event) => patchModel(index, { cacheReadCost: Number(event.target.value) })} disabled={pending} /></label>
-							<label>缓存写入单价<input type="number" required min={0} step="0.000001" value={model.cacheWriteCost} onChange={(event) => patchModel(index, { cacheWriteCost: Number(event.target.value) })} disabled={pending} /></label>
+							<label>缓存读取单价<Input type="number" required min={0} step="0.000001" value={model.cacheReadCost} onChange={(event) => patchModel(index, { cacheReadCost: Number(event.target.value) })} disabled={pending} /></label>
+							<label>缓存写入单价<Input type="number" required min={0} step="0.000001" value={model.cacheWriteCost} onChange={(event) => patchModel(index, { cacheWriteCost: Number(event.target.value) })} disabled={pending} /></label>
 						</div>
 					</div>)}
-					<button type="button" className="btn ghost compact" disabled={pending} onClick={() => patchRoute({ models: [...draft.route.models, blankModel()] })}>添加模型</button>
+					<Button type="button" variant="ghost" size="compact" disabled={pending} onClick={() => patchRoute({ models: [...draft.route.models, blankModel()] })}>添加模型</Button>
 				</div>
 				<div className="provider-capabilities"><label><input type="checkbox" checked={draft.route.streaming} onChange={(event) => patchRoute({ streaming: event.target.checked })} disabled={pending} />流式输出</label><label><input type="checkbox" checked={draft.route.tools} onChange={(event) => patchRoute({ tools: event.target.checked })} disabled={pending} />工具调用</label><label><input type="checkbox" checked={draft.route.vision} onChange={(event) => patchRoute({ vision: event.target.checked })} disabled={pending} />默认支持图片</label><label><input type="checkbox" checked={draft.route.reasoning} onChange={(event) => patchRoute({ reasoning: event.target.checked })} disabled={pending} />推理输出</label></div>
 				{(configError || error) && <p className="form-error" role="alert">{configError || error}</p>}
-				<div className="dialog-actions"><button type="button" className="btn ghost" onClick={() => setDraft(undefined)} disabled={pending}>返回</button><button className="btn primary" disabled={pending}>{pending ? "保存中…" : "保存"}</button></div>
+				<div className="dialog-actions"><Button type="button" variant="ghost" onClick={() => setDraft(undefined)} disabled={pending}>返回</Button><Button type="submit" variant="primary" size="primary" disabled={pending}>{pending ? "保存中…" : "保存"}</Button></div>
 			</form>
 		) : (
 			<>
-				<div className="dialog-heading"><h2 id="families-title">模型配置</h2><button type="button" className="icon-btn" onClick={onClose} aria-label="关闭设置"><Icon name="close" /></button></div>
+				<div className="dialog-heading"><h2 id="families-title">模型配置</h2><IconButton type="button"  onClick={onClose} aria-label="关闭设置"><Icon name="close" /></IconButton></div>
 				<p className="muted">先从供应商目录添加地址与密钥，再在家族卡片里为它配置线路；共 {`${total}`} 条线路。</p>
 				<div className="dialog-tabs" role="tablist" aria-label="模型配置分类">
 					<button type="button" role="tab" id="families-tab-relays" aria-selected={tab === "relays"} aria-controls="families-panel-relays" className={`dialog-tab ${tab === "relays" ? "active" : ""}`} onClick={() => setTab("relays")}>供应商<small>{relays.length} 个</small></button>
@@ -566,13 +565,13 @@ export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, o
 						{relays.map((relay) => {
 							const preset = matchPreset(relay.baseUrl);
 							return <div className={`provider-row ${relay.enabled ? "" : "disabled"}`} key={relay.id}>
-								<button type="button" className="provider-relay-btn" onClick={() => openRelay(relay, preset)} disabled={pending} aria-label={`编辑 ${relay.name}`}>
+								<Button type="button" className="provider-relay-btn" onClick={() => openRelay(relay, preset)} disabled={pending} aria-label={`编辑 ${relay.name}`}>
 									<ProviderIcon id={preset?.id ?? ""} name={relay.name} size={22} />
 									<span className="provider-row-text">
 										<span className="provider-row-title"><strong>{relay.name}</strong>{!relay.enabled && <span className="provider-tag muted-tag">已停用</span>}</span>
 										<small>{maskBaseUrl(relay.baseUrl)} · {relayModelCount(relay.id) ? `${relayModelCount(relay.id)} 个模型` : "未配置模型"}</small>
 									</span>
-								</button>
+								</Button>
 								<div className="provider-row-side">
 									{relay.apiKey && <span className="provider-key" title="密钥已保存"><span className="dot ok" />{keyHint(relay.apiKey)}</span>}
 									<label className="switch" title={relay.enabled ? "停用" : "启用"}>
@@ -591,18 +590,18 @@ export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, o
 					</>
 				) : (
 					<div id="families-panel-models" role="tabpanel" aria-labelledby="families-tab-models">
-						{added && <p className="family-added-hint" role="status">已添加「{added.relayName}」，去 {FAMILY_LABELS[added.familyId]} 家族配置模型线路：<button type="button" className="btn ghost compact" disabled={pending || !relays.some((relay) => relay.id === added.relayId)} onClick={() => { openRoute(added.familyId, undefined, added.relayId); setAdded(undefined); }}>添加线路</button></p>}
+						{added && <p className="family-added-hint" role="status">已添加「{added.relayName}」，去 {FAMILY_LABELS[added.familyId]} 家族配置模型线路：<Button type="button" variant="ghost" size="compact" disabled={pending || !relays.some((relay) => relay.id === added.relayId)} onClick={() => { openRoute(added.familyId, undefined, added.relayId); setAdded(undefined); }}>添加线路</Button></p>}
 						{relays.length === 0 && <section className="family-card">
 							<div className="family-card-head">
 								<span className="family-card-title">还没有供应商</span>
-								<button type="button" className="btn ghost compact" onClick={() => setTab("relays")}>去添加供应商</button>
+								<Button type="button" variant="ghost" size="compact" onClick={() => setTab("relays")}>去添加供应商</Button>
 							</div>
 							<p className="family-empty">线路依附于供应商：先到「供应商」添加地址与密钥，再回来为各家族配置线路。</p>
 						</section>}
 						{families.map((family) => <section className="family-card" key={family.id}>
 							<div className="family-card-head">
 								<span className="family-card-title">{brand(family.id) && <BrandIcon name={brand(family.id)!} size={15} />}{FAMILY_LABELS[family.id] ?? family.displayName}<small>{family.routes.length} 条线路</small></span>
-								<button type="button" className="btn ghost compact" onClick={() => openRoute(family.id)} disabled={pending || !relays.length} title={relays.length ? undefined : "请先添加供应商"}>添加线路</button>
+								<Button type="button" variant="ghost" size="compact" onClick={() => openRoute(family.id)} disabled={pending || !relays.length} title={relays.length ? undefined : "请先添加供应商"}>添加线路</Button>
 							</div>
 							{family.routes.length === 0 && <p className="family-empty">还没添加线路，去添加</p>}
 						{family.routes.map((route, index) => <div className={`provider-row ${route.enabled ? "" : "disabled"}`} key={route.id || route.relayId}>
@@ -611,22 +610,22 @@ export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, o
 									<small>{route.models.length ? `${route.models.length} 个模型：${route.models.map((model) => model.modelId).join("、")}` : "未配置完整，请添加模型"}</small>
 								</div>
 								<div className="provider-row-actions">
-									<button type="button" className="icon-btn" disabled={pending || index === 0} onClick={() => void mutate(() => onReorderRoutes(family.id, reorder(family.routes, index, -1)))} aria-label={`上移 ${relayName(route.relayId)} 的线路`}><Icon name="arrow" size={14} /></button>
-									<button type="button" className="icon-btn flip" disabled={pending || index === family.routes.length - 1} onClick={() => void mutate(() => onReorderRoutes(family.id, reorder(family.routes, index, 1)))} aria-label={`下移 ${relayName(route.relayId)} 的线路`}><Icon name="arrow" size={14} /></button>
-									<button type="button" className="icon-btn" disabled={pending || family.defaultRouteId === route.id || !route.models.length || !route.enabled || !relays.find((relay) => relay.id === route.relayId)?.enabled} onClick={() => void mutate(() => onSetDefaultRoute(family.id, route.id))} title="设为默认线路" aria-label={`将 ${relayName(route.relayId)} 的线路设为默认`}><Icon name="check" size={14} /></button>
-									<button type="button" className="icon-btn" onClick={() => openRoute(family.id, route)} disabled={pending} aria-label={`编辑 ${relayName(route.relayId)} 的线路`}><Icon name="edit" size={14} /></button>
-									<button type="button" className="icon-btn" onClick={() => setRemoving({ title: "删除线路", description: `将从「${FAMILY_LABELS[family.id] ?? family.displayName}」移除 ${relayName(route.relayId)} 的线路。`, action: () => onDeleteRoute(family.id, route.id) })} disabled={pending} title="删除" aria-label={`删除 ${relayName(route.relayId)} 的线路`}><Icon name="trash" size={14} /></button>
+									<IconButton type="button"  disabled={pending || index === 0} onClick={() => void mutate(() => onReorderRoutes(family.id, reorder(family.routes, index, -1)))} aria-label={`上移 ${relayName(route.relayId)} 的线路`}><Icon name="arrow" size={14} /></IconButton>
+									<IconButton type="button" className="flip" disabled={pending || index === family.routes.length - 1} onClick={() => void mutate(() => onReorderRoutes(family.id, reorder(family.routes, index, 1)))} aria-label={`下移 ${relayName(route.relayId)} 的线路`}><Icon name="arrow" size={14} /></IconButton>
+									<IconButton type="button"  disabled={pending || family.defaultRouteId === route.id || !route.models.length || !route.enabled || !relays.find((relay) => relay.id === route.relayId)?.enabled} onClick={() => void mutate(() => onSetDefaultRoute(family.id, route.id))} title="设为默认线路" aria-label={`将 ${relayName(route.relayId)} 的线路设为默认`}><Icon name="check" size={14} /></IconButton>
+									<IconButton type="button"  onClick={() => openRoute(family.id, route)} disabled={pending} aria-label={`编辑 ${relayName(route.relayId)} 的线路`}><Icon name="edit" size={14} /></IconButton>
+									<IconButton type="button"  onClick={() => setRemoving({ title: "删除线路", description: `将从「${FAMILY_LABELS[family.id] ?? family.displayName}」移除 ${relayName(route.relayId)} 的线路。`, action: () => onDeleteRoute(family.id, route.id) })} disabled={pending} title="删除" aria-label={`删除 ${relayName(route.relayId)} 的线路`}><Icon name="trash" size={14} /></IconButton>
 								</div>
 							</div>)}
-							{family.defaultRouteId && <button type="button" className="btn ghost compact" disabled={pending} onClick={() => setRemoving({ title: "清空默认线路", description: `明确清空 ${FAMILY_LABELS[family.id] ?? family.displayName} 的默认线路后，可停用或删除原默认线路。已有会话仍使用钉住的线路。`, action: () => onSetDefaultRoute(family.id, null) })}>清空 {FAMILY_LABELS[family.id] ?? family.displayName} 默认线路</button>}
+							{family.defaultRouteId && <Button type="button" variant="ghost" size="compact" disabled={pending} onClick={() => setRemoving({ title: "清空默认线路", description: `明确清空 ${FAMILY_LABELS[family.id] ?? family.displayName} 的默认线路后，可停用或删除原默认线路。已有会话仍使用钉住的线路。`, action: () => onSetDefaultRoute(family.id, null) })}>清空 {FAMILY_LABELS[family.id] ?? family.displayName} 默认线路</Button>}
 						</section>)}
 						<div className="family-footer"><label className="provider-toggle inline"><input type="checkbox" checked={autoFailover} disabled={pending} onChange={(event) => void mutate(() => onAutoFailover(event.target.checked))} />失败时自动切换到同家族下一条提供相同模型的启用线路（默认关闭）</label></div>
 					</div>
 				)}
 				{(configError || error) && <p className="form-error" role="alert">{configError || error}</p>}
-				<div className="dialog-actions"><button type="button" className="btn primary" onClick={onClose} disabled={pending}>完成</button></div>
+				<div className="dialog-actions"><Button type="button" variant="primary" size="primary" onClick={onClose} disabled={pending}>完成</Button></div>
 			</>
 		)}
 		{removing && <ConfirmDialog title={removing.title} description={removing.description} onConfirm={() => void mutate(removing.action)} onClose={() => setRemoving(undefined)} />}
-	</dialog>;
+	</Dialog>;
 }

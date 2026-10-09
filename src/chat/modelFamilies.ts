@@ -75,6 +75,7 @@ export function modelsFromOffers(offers: RuntimeOffer[], _defaults: FamilyDefaul
 			...(resolved.reasoning === undefined ? {} : { reasoning: resolved.reasoning }),
 			name: title,
 			providerName: resolved.relayName,
+			billingAccountId: resolved.billingAccountId,
 			cost: { input: resolved.inputCost, output: resolved.outputCost, cacheRead: resolved.cacheReadCost, cacheWrite: resolved.cacheWriteCost },
 			currency: resolved.currency,
 			maxTokens: resolved.maxTokens,

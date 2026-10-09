@@ -1,3 +1,5 @@
+import { IconButton } from "./ui";
+import { Icon } from "./Icon";
 import type { CSSProperties } from "react";
 import { gaugePosition } from "../chat/sailing";
 import type { VoyageMetrics } from "../chat/useVoyageMetrics";
@@ -53,15 +55,15 @@ export function VoyageRail({ metrics, expanded, onToggle }: { metrics: VoyageMet
 	const remaining = metrics.context === undefined || metrics.limit === undefined ? "剩余额度待首次回复后计算" : `剩余 ${number(Math.max(0, metrics.limit - metrics.context))} tokens`;
 	return <aside id="voyage-rail" className={`voyage-rail ${expanded ? "expanded" : "collapsed"} voyage-${metrics.pressure} ${metrics.streaming ? "voyage-running" : ""} ${metrics.arrived ? "voyage-arrived" : ""}`} aria-label="Skiff 航行台">
 		{expanded ? <>
-			<div className="voyage-rail-header"><strong>Skiff 航行台</strong><button type="button" className="voyage-rail-toggle" onClick={onToggle} aria-label="收起航行台" aria-expanded="true">›</button></div>
+			<div className="voyage-rail-header"><strong>Skiff 航行台</strong><IconButton type="button" className="voyage-rail-toggle" onClick={onToggle} aria-label="收起航行台" aria-expanded="true"><Icon name="chevron" size={16} /></IconButton></div>
 			<span className="voyage-pill"><span className="voyage-status-dot" />{metrics.status}</span>
 			<div className="voyage-instrument"><Speedometer speed={metrics.speed} /><Sea speed={metrics.speed} /></div>
-			<div className="voyage-mileage"><div className="voyage-mileage-title"><strong>航程 · 当前上下文</strong><span>{contextLabel(metrics.ratio, metrics.context)}</span></div><div className="voyage-mileage-route" title={remaining}><span className="voyage-anchor" aria-hidden="true">⚓</span><div className="voyage-mileage-track"><span style={{ transform: `scaleX(${progress / 100})` }} /><Boat className="voyage-mileage-boat" position={progress} /></div><span className="voyage-flag" aria-hidden="true">⚑</span></div><div className="voyage-mileage-caption"><strong>{metrics.context === undefined ? "—" : number(metrics.context)}</strong><span> / {metrics.limit ? number(metrics.limit) : "—"} tok</span></div><p className="voyage-meter-note">已航行 {metrics.context === undefined ? "—" : number(metrics.context)} m · 1 tok = 1 m</p></div>
+			<div className="voyage-mileage"><div className="voyage-mileage-title"><strong>航程 · 当前上下文</strong><span>{contextLabel(metrics.ratio, metrics.context)}</span></div><div className="voyage-mileage-route" title={remaining}><span className="voyage-anchor" aria-hidden="true"><Icon name="anchor" size={16} /></span><div className="voyage-mileage-track"><span style={{ transform: `scaleX(${progress / 100})` }} /><Boat className="voyage-mileage-boat" position={progress} /></div><span className="voyage-flag" aria-hidden="true"><Icon name="flag" size={16} /></span></div><div className="voyage-mileage-caption"><strong>{metrics.context === undefined ? "—" : number(metrics.context)}</strong><span> / {metrics.limit ? number(metrics.limit) : "—"} tok</span></div><p className="voyage-meter-note">已航行 {metrics.context === undefined ? "—" : number(metrics.context)} m · 1 tok = 1 m</p></div>
 			{metrics.context !== undefined && <dl className="voyage-breakdown"><div><dt>系统提示词与工具定义</dt><dd>~{number(metrics.overhead ?? 0)}</dd></div><div><dt>对话消息</dt><dd>~{number(metrics.conversation ?? 0)}</dd></div></dl>}
 			<div className="voyage-turn"><strong>本次航行记录</strong><dl><div><dt>本轮耗时</dt><dd>{metrics.turn.durationMs === undefined ? "—" : formatDuration(metrics.turn.durationMs)}</dd></div><div><dt>输出 tokens</dt><dd>{metrics.turn.output === undefined ? "—" : number(metrics.turn.output)}</dd></div><div><dt>费用</dt><dd title={costTooltip(metrics.turn.cost)}>{formatCosts(metrics.turn.cost)}</dd></div><div><dt>会话累计</dt><dd title={costTooltip(metrics.sessionCost)}>{formatCosts(metrics.sessionCost)}</dd></div></dl></div>
 			<p className="voyage-note">船速按正在输出的文本估算，停泊归零。{metrics.streaming ? "航程在本轮完成后更新。" : ""}</p>
 		</> : <>
-			<button type="button" className="voyage-rail-toggle collapsed-toggle" onClick={onToggle} aria-label="展开航行台" aria-expanded="false">‹</button>
+			<IconButton type="button" className="voyage-rail-toggle collapsed-toggle" onClick={onToggle} aria-label="展开航行台" aria-expanded="false"><Icon name="chevron" size={16} /></IconButton>
 			<span className="voyage-status-dot" title={metrics.status} />
 			<strong className="voyage-collapsed-speed" title={`${metrics.speed.toFixed(1)} tok/s`}>{metrics.speed ? metrics.speed.toFixed(1) : "0"}</strong>
 			<small>tok/s</small>

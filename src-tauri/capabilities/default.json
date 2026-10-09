@@ -11,6 +11,7 @@
 		"core:window:allow-close",
 		"core:window:allow-start-dragging",
 		"core:window:allow-set-icon",
+		"core:window:allow-set-theme",
 		"core:app:default",
 		"core:path:default",
 		"core:event:default"

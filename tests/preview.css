@@ -1,0 +1,5 @@
+[data-preview-static] *, [data-preview-static] *::before, [data-preview-static] *::after {
+	animation: none !important;
+	transition: none !important;
+	caret-color: transparent !important;
+}

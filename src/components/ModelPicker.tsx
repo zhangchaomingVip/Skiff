@@ -1,7 +1,9 @@
+import { Input, Button } from "./ui";
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import type { ModelInfo } from "../chat/types";
 import { FAMILY_LABELS } from "../chat/useModelFamilies";
 import { Icon } from "./Icon";
+import { offerPrice, offerAccount } from "../chat/offerDisplay";
 import { BrandIcon, type BrandName } from "./BrandIcon";
 
 const BRANDABLE = ["deepseek", "kimi", "glm"] as const;
@@ -16,11 +18,9 @@ interface Row {
 
 const sameModel = (a?: ModelInfo, b?: ModelInfo) => !!a && !!b && a.provider === b.provider && a.id === b.id;
 
-const cost = (model: ModelInfo) => typeof model.cost?.input === "number" && typeof model.cost?.output === "number"
-	? `${model.currency === "USD" ? "$" : "¥"} 入 ${model.cost.input} · 出 ${model.cost.output} / 百万`
-	: "";
+const cost = (model: ModelInfo) => offerPrice({ currency: model.currency, inputCost: model.cost?.input, outputCost: model.cost?.output });
 
-const subtitle = (model: ModelInfo) => [model.id, model.providerName, cost(model)].filter(Boolean).join(" · ");
+const subtitle = (model: ModelInfo) => [model.id, model.providerName, offerAccount(model.billingAccountId), cost(model)].filter(Boolean).join(" · ");
 
 /**
  * Family-grouped picker: one group per family, one provider group per channel, one row per model.
@@ -93,7 +93,7 @@ export function ModelPicker({ models, familyOf, current, onSelect, onManage, con
 
 	let rendered = 0;
 	return <div className="family-picker">
-		<div className="model-search"><Icon name="search" size={15} /><input autoFocus role="combobox" aria-expanded="true" aria-controls={id} aria-autocomplete="list" aria-activedescendant={rows[active] ? `${id}-${active}` : undefined} aria-label="搜索家族、提供商或模型" placeholder="搜索家族、提供商或模型…" value={query} disabled={disabled} onChange={(event) => setQuery(event.target.value)} onKeyDown={onKeyDown} /></div>
+		<div className="model-search"><Icon name="search" size={15} /><Input appearance="plain" autoFocus role="combobox" aria-expanded="true" aria-controls={id} aria-autocomplete="list" aria-activedescendant={rows[active] ? `${id}-${active}` : undefined} aria-label="搜索家族、提供商或模型" placeholder="搜索家族、提供商或模型…" value={query} disabled={disabled} onChange={(event) => setQuery(event.target.value)} onKeyDown={onKeyDown} /></div>
 		<div className="family-groups" id={id} role="listbox" aria-label="可用模型" ref={listRef}>
 			{groups.map((group) => {
 				const mark = brand(group.familyId);
@@ -115,6 +115,6 @@ export function ModelPicker({ models, familyOf, current, onSelect, onManage, con
 			{!groups.length && <p className="menu-hint">没有匹配的模型</p>}
 		</div>
 		{configurationHint && <p className="menu-hint" role="status">{configurationHint}</p>}
-		<div className="family-picker-foot"><button className="btn ghost compact" onClick={onManage} disabled={disabled}><Icon name="settings" size={13} />管理提供商…</button></div>
+		<div className="family-picker-foot"><Button variant="ghost" size="compact" onClick={onManage} disabled={disabled}><Icon name="settings" size={13} />管理提供商…</Button></div>
 	</div>;
 }

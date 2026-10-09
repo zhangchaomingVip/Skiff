@@ -1,0 +1,1054 @@
+{
+  "errors": [],
+  "inventory": {
+    "files": [
+      "src/tokens.css",
+      "src/index.css",
+      "src/voyage.css",
+      "src/components/ui.css"
+    ],
+    "tokens": [
+      "--accent",
+      "--action",
+      "--action-active",
+      "--action-foreground",
+      "--action-hover",
+      "--bg",
+      "--border",
+      "--boundary",
+      "--color-accent",
+      "--color-accent-active",
+      "--color-accent-hover",
+      "--color-bg-hover",
+      "--color-bg-primary",
+      "--color-bg-secondary",
+      "--color-bg-tertiary",
+      "--color-border",
+      "--color-border-light",
+      "--color-error",
+      "--color-sidebar-bg",
+      "--color-sidebar-border",
+      "--color-success",
+      "--color-text-disabled",
+      "--color-text-primary",
+      "--color-text-secondary",
+      "--color-text-tertiary",
+      "--color-warning",
+      "--color-window-close",
+      "--content-width",
+      "--control-compact",
+      "--control-primary",
+      "--control-regular",
+      "--danger",
+      "--diff-add",
+      "--diff-add-bg",
+      "--diff-remove",
+      "--diff-remove-bg",
+      "--easing-default",
+      "--error-bg",
+      "--font-family-base",
+      "--font-family-mono",
+      "--font-size-2xl",
+      "--font-size-3xl",
+      "--font-size-base",
+      "--font-size-lg",
+      "--font-size-md",
+      "--font-size-page",
+      "--font-size-sm",
+      "--font-size-xl",
+      "--font-size-xs",
+      "--font-weight-bold",
+      "--font-weight-label",
+      "--font-weight-medium",
+      "--font-weight-regular",
+      "--font-weight-semibold",
+      "--font-weight-title",
+      "--foreground",
+      "--hover",
+      "--line-height-base",
+      "--line-height-relaxed",
+      "--line-height-tight",
+      "--muted",
+      "--overlay",
+      "--overlay-image",
+      "--panel",
+      "--panel-2",
+      "--radius-base",
+      "--radius-full",
+      "--radius-lg",
+      "--radius-md",
+      "--radius-none",
+      "--radius-sm",
+      "--radius-xl",
+      "--radius-xs",
+      "--row-bg",
+      "--secondary",
+      "--selected",
+      "--selection",
+      "--shadow",
+      "--shadow-base",
+      "--shadow-color",
+      "--shadow-color-soft",
+      "--shadow-elevation-1",
+      "--shadow-elevation-2",
+      "--shadow-elevation-3",
+      "--shadow-lg",
+      "--shadow-md",
+      "--shadow-none",
+      "--shadow-sm",
+      "--shadow-xs",
+      "--sidebar",
+      "--sidebar-border",
+      "--space-0-5",
+      "--space-1",
+      "--space-1-5",
+      "--space-10",
+      "--space-12",
+      "--space-15",
+      "--space-16",
+      "--space-2",
+      "--space-2-5",
+      "--space-3",
+      "--space-4",
+      "--space-5",
+      "--space-6",
+      "--space-8",
+      "--space-px",
+      "--subtle",
+      "--surface",
+      "--syn-attr",
+      "--syn-builtin",
+      "--syn-comment",
+      "--syn-keyword",
+      "--syn-meta",
+      "--syn-number",
+      "--syn-string",
+      "--syn-title",
+      "--text",
+      "--transition-base",
+      "--transition-fast",
+      "--transition-slow",
+      "--voyage-progress",
+      "--wake-duration",
+      "--wave-duration"
+    ],
+    "colors": [
+      "src/tokens.css:5 :root --color-bg-primary: #101318",
+      "src/tokens.css:6 :root --color-bg-secondary: #1b222d",
+      "src/tokens.css:7 :root --color-bg-tertiary: #222c39",
+      "src/tokens.css:8 :root --color-bg-hover: #2b394b",
+      "src/tokens.css:9 :root --color-sidebar-bg: #141922",
+      "src/tokens.css:10 :root --color-sidebar-border: #354154",
+      "src/tokens.css:11 :root --color-text-primary: #edf2f9",
+      "src/tokens.css:12 :root --color-text-secondary: #bdc9db",
+      "src/tokens.css:13 :root --color-text-tertiary: #a5b4cb",
+      "src/tokens.css:14 :root --color-text-disabled: #4a4a4a",
+      "src/tokens.css:15 :root --color-accent: #91baff",
+      "src/tokens.css:16 :root --color-accent-hover: #b5d0ff",
+      "src/tokens.css:17 :root --color-accent-active: #7aaaff",
+      "src/tokens.css:18 :root --color-border: #354154",
+      "src/tokens.css:19 :root --color-border-light: #73859f",
+      "src/tokens.css:20 :root --color-success: #79dda3",
+      "src/tokens.css:21 :root --color-warning: #f4cd76",
+      "src/tokens.css:22 :root --color-error: #ff9ca5",
+      "src/tokens.css:66 :root --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.3)",
+      "src/tokens.css:67 :root --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.35)",
+      "src/tokens.css:68 :root --shadow-base: 0 4px 8px rgba(0, 0, 0, 0.4)",
+      "src/tokens.css:69 :root --shadow-md: 0 8px 16px rgba(0, 0, 0, 0.45)",
+      "src/tokens.css:70 :root --shadow-lg: 0 12px 24px rgba(0, 0, 0, 0.5)",
+      "src/tokens.css:71 :root --shadow-elevation-1: 0 1px 3px rgba(0, 0, 0, 0.2)",
+      "src/tokens.css:72 :root --shadow-elevation-2: 0 4px 12px rgba(0, 0, 0, 0.3)",
+      "src/tokens.css:73 :root --shadow-elevation-3: 0 8px 20px rgba(0, 0, 0, 0.35)",
+      "src/tokens.css:82 :root --action: #2458be",
+      "src/tokens.css:83 :root --action-hover: #1d4ca8",
+      "src/tokens.css:84 :root --action-active: #183e8a",
+      "src/tokens.css:85 :root --action-foreground: #ffffff",
+      "src/tokens.css:86 :root --selected: #263e62",
+      "src/tokens.css:87 :root --overlay: rgb(0 0 0 / .5)",
+      "src/tokens.css:103 :root --error-bg: #2a1a1a",
+      "src/tokens.css:104 :root --selection: #3d568a",
+      "src/tokens.css:105 :root --diff-add: #9ee0b7",
+      "src/tokens.css:106 :root --diff-remove: #ffb6b6",
+      "src/tokens.css:107 :root --syn-comment: #7f848e",
+      "src/tokens.css:108 :root --syn-keyword: #c678dd",
+      "src/tokens.css:109 :root --syn-string: #98c379",
+      "src/tokens.css:110 :root --syn-number: #d19a66",
+      "src/tokens.css:111 :root --syn-title: #61afef",
+      "src/tokens.css:112 :root --syn-builtin: #e6c07b",
+      "src/tokens.css:113 :root --syn-attr: #d19a66",
+      "src/tokens.css:114 :root --syn-meta: #61afef",
+      "src/tokens.css:117 :root --color-window-close: #b52b37",
+      "src/tokens.css:120 :root --shadow-color-soft: rgb(0 0 0 / .08)",
+      "src/tokens.css:121 :root --shadow-color: rgb(0 0 0 / .2)",
+      "src/tokens.css:122 :root --overlay-image: rgb(0 0 0 / .75)",
+      "src/tokens.css:127 [data-theme=\"light\"] --color-bg-primary: #fafbfc",
+      "src/tokens.css:128 [data-theme=\"light\"] --color-bg-secondary: #ffffff",
+      "src/tokens.css:129 [data-theme=\"light\"] --color-bg-tertiary: #edf1f6",
+      "src/tokens.css:130 [data-theme=\"light\"] --color-bg-hover: #e1e8f2",
+      "src/tokens.css:131 [data-theme=\"light\"] --color-sidebar-bg: #f0f3f7",
+      "src/tokens.css:132 [data-theme=\"light\"] --color-sidebar-border: #e2e2e2",
+      "src/tokens.css:133 [data-theme=\"light\"] --color-text-primary: #192333",
+      "src/tokens.css:134 [data-theme=\"light\"] --color-text-secondary: #48566b",
+      "src/tokens.css:135 [data-theme=\"light\"] --color-text-tertiary: #55647a",
+      "src/tokens.css:136 [data-theme=\"light\"] --color-text-disabled: #bbb",
+      "src/tokens.css:137 [data-theme=\"light\"] --color-accent: #2458be",
+      "src/tokens.css:138 [data-theme=\"light\"] --color-accent-hover: #1d4ca8",
+      "src/tokens.css:139 [data-theme=\"light\"] --color-accent-active: #183e8a",
+      "src/tokens.css:140 [data-theme=\"light\"] --color-border: #d5dce6",
+      "src/tokens.css:141 [data-theme=\"light\"] --color-border-light: #758399",
+      "src/tokens.css:142 [data-theme=\"light\"] --color-success: #176a3d",
+      "src/tokens.css:143 [data-theme=\"light\"] --color-warning: #805600",
+      "src/tokens.css:144 [data-theme=\"light\"] --color-error: #b52b37",
+      "src/tokens.css:145 [data-theme=\"light\"] --selected: #dce8ff",
+      "src/tokens.css:146 [data-theme=\"light\"] --overlay: rgb(16 25 40 / .35)",
+      "src/tokens.css:147 [data-theme=\"light\"] --error-bg: #fef2f2",
+      "src/tokens.css:148 [data-theme=\"light\"] --selection: #c9d8ff",
+      "src/tokens.css:151 [data-theme=\"light\"] --syn-comment: #646d77",
+      "src/tokens.css:152 [data-theme=\"light\"] --syn-keyword: #a626a4",
+      "src/tokens.css:153 [data-theme=\"light\"] --syn-string: #507a37",
+      "src/tokens.css:154 [data-theme=\"light\"] --syn-number: #916100",
+      "src/tokens.css:155 [data-theme=\"light\"] --syn-title: #2b58c4",
+      "src/tokens.css:156 [data-theme=\"light\"] --syn-builtin: #936000",
+      "src/tokens.css:157 [data-theme=\"light\"] --syn-attr: #916100",
+      "src/tokens.css:158 [data-theme=\"light\"] --syn-meta: #2b58c4",
+      "src/tokens.css:159 [data-theme=\"light\"] --shadow: 0 2px 8px rgba(0, 0, 0, 0.08)"
+    ],
+    "fontSizes": [
+      "src/voyage.css:49 .voyage-gauge-label font-size: 9px",
+      "src/voyage.css:50 .voyage-gauge-number font-size: 24px",
+      "src/voyage.css:51 .voyage-gauge-unit font-size: 9px",
+      "src/voyage.css:52 .voyage-gauge-limit font-size: 8px"
+    ],
+    "radii": [],
+    "shadows": [
+      "src/tokens.css:66 :root --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.3)",
+      "src/tokens.css:67 :root --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.35)",
+      "src/tokens.css:68 :root --shadow-base: 0 4px 8px rgba(0, 0, 0, 0.4)",
+      "src/tokens.css:69 :root --shadow-md: 0 8px 16px rgba(0, 0, 0, 0.45)",
+      "src/tokens.css:70 :root --shadow-lg: 0 12px 24px rgba(0, 0, 0, 0.5)",
+      "src/tokens.css:71 :root --shadow-elevation-1: 0 1px 3px rgba(0, 0, 0, 0.2)",
+      "src/tokens.css:72 :root --shadow-elevation-2: 0 4px 12px rgba(0, 0, 0, 0.3)",
+      "src/tokens.css:73 :root --shadow-elevation-3: 0 8px 20px rgba(0, 0, 0, 0.35)",
+      "src/tokens.css:120 :root --shadow-color-soft: rgb(0 0 0 / .08)",
+      "src/tokens.css:121 :root --shadow-color: rgb(0 0 0 / .2)",
+      "src/tokens.css:159 [data-theme=\"light\"] --shadow: 0 2px 8px rgba(0, 0, 0, 0.08)",
+      "src/index.css:39 .sidebar-scroll.faded-top box-shadow: inset 0 10px 8px -8px var(--shadow-color)",
+      "src/index.css:40 .sidebar-scroll.faded-bottom box-shadow: inset 0 -10px 8px -8px var(--shadow-color)",
+      "src/index.css:41 .sidebar-scroll.faded-top.faded-bottom box-shadow: inset 0 10px 8px -8px var(--shadow-color), inset 0 -10px 8px -8px var(--shadow-color)",
+      "src/index.css:114 .launcher-model-card:focus-within box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 28%, transparent)",
+      "src/index.css:217 .composer:focus-within box-shadow: 0 0 0 1px var(--accent)",
+      "src/index.css:267 .raw-panel box-shadow: -10px 0 30px var(--shadow-color-soft)",
+      "src/index.css:324 .usage-popover box-shadow: 0 8px 35px var(--shadow-color)",
+      "src/index.css:401 .back-bottom box-shadow: 0 3px 16px var(--shadow-color)",
+      "src/index.css:469 .composer-menu box-shadow: 0 8px 28px var(--shadow-color)",
+      "src/index.css:512 .provider-toast box-shadow: 0 8px 28px var(--shadow-color)",
+      "src/index.css:731 .switch .slider::after box-shadow: 0 1px 2px var(--shadow-color)"
+    ],
+    "controlHeights": [
+      "src/index.css:218 .composer-input min-height: 36px",
+      "src/index.css:255 .prompt-input min-height: 160px",
+      "src/index.css:562 .model-discovery-trigger min-height: 34px",
+      "src/index.css:589 .connection-model input[type=\"checkbox\"] height: 14px",
+      "src/components/ui.css:2 .ui-button height: var(--control-regular)",
+      "src/components/ui.css:5 .ui-button[data-size=compact] height: var(--control-compact)",
+      "src/components/ui.css:6 .ui-button[data-size=primary] height: var(--control-primary)",
+      "src/components/ui.css:28 .ui-input height: var(--control-regular)"
+    ],
+    "layers": [
+      "src/tokens.css: reset, pages, components, accessibility",
+      "src/tokens.css: reset",
+      "src/index.css: reset",
+      "src/index.css: pages",
+      "src/voyage.css: pages",
+      "src/components/ui.css: components",
+      "src/components/ui.css: accessibility"
+    ],
+    "duplicateSelectors": []
+  },
+  "contrast": [
+    {
+      "theme": "light",
+      "fg": "--color-text-primary",
+      "bg": "--color-bg-primary",
+      "ratio": 15.24524584521755,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "fg": "--color-text-primary",
+      "bg": "--color-bg-secondary",
+      "ratio": 15.794810646894327,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "fg": "--color-text-primary",
+      "bg": "--color-bg-tertiary",
+      "ratio": 13.924846426794543,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "fg": "--color-text-primary",
+      "bg": "--color-bg-hover",
+      "ratio": 12.806068726778403,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "fg": "--color-text-primary",
+      "bg": "--color-sidebar-bg",
+      "ratio": 14.191539514368722,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "fg": "--color-text-primary",
+      "bg": "--selected",
+      "ratio": 12.808669211630638,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "fg": "--color-text-secondary",
+      "bg": "--color-bg-primary",
+      "ratio": 7.190339956149167,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "fg": "--color-text-secondary",
+      "bg": "--color-bg-secondary",
+      "ratio": 7.4495393021032585,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "fg": "--color-text-secondary",
+      "bg": "--color-bg-tertiary",
+      "ratio": 6.56758052066644,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "fg": "--color-text-secondary",
+      "bg": "--color-bg-hover",
+      "ratio": 6.039914907389481,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "fg": "--color-text-secondary",
+      "bg": "--color-sidebar-bg",
+      "ratio": 6.693364911622324,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "fg": "--color-text-secondary",
+      "bg": "--selected",
+      "ratio": 6.041141412381807,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "fg": "--color-text-tertiary",
+      "bg": "--color-bg-primary",
+      "ratio": 5.807570670787166,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "fg": "--color-text-tertiary",
+      "bg": "--color-bg-secondary",
+      "ratio": 6.016923570459573,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "fg": "--color-text-tertiary",
+      "bg": "--color-bg-tertiary",
+      "ratio": 5.304573670016368,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "fg": "--color-text-tertiary",
+      "bg": "--color-bg-hover",
+      "ratio": 4.878383064518019,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "fg": "--color-text-tertiary",
+      "bg": "--color-sidebar-bg",
+      "ratio": 5.406168552068293,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "fg": "--color-text-tertiary",
+      "bg": "--selected",
+      "ratio": 4.879373701186723,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "fg": "--color-accent",
+      "bg": "--color-bg-primary",
+      "ratio": 6.305701725062195,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "fg": "--color-accent",
+      "bg": "--color-bg-secondary",
+      "ratio": 6.533011389540568,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "fg": "--color-accent",
+      "bg": "--color-bg-tertiary",
+      "ratio": 5.759561310204079,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "fg": "--color-accent",
+      "bg": "--color-bg-hover",
+      "ratio": 5.29681518301283,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "fg": "--color-accent",
+      "bg": "--color-sidebar-bg",
+      "ratio": 5.869870260250051,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "fg": "--color-accent",
+      "bg": "--selected",
+      "ratio": 5.297890789269707,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "fg": "--color-success",
+      "bg": "--color-bg-primary",
+      "ratio": 6.403340998137933,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "fg": "--color-success",
+      "bg": "--color-bg-secondary",
+      "ratio": 6.634170389899718,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "fg": "--color-success",
+      "bg": "--color-bg-tertiary",
+      "ratio": 5.848743990274143,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "fg": "--color-success",
+      "bg": "--color-bg-hover",
+      "ratio": 5.378832570868392,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "fg": "--color-success",
+      "bg": "--color-sidebar-bg",
+      "ratio": 5.9607609953734375,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "fg": "--color-success",
+      "bg": "--selected",
+      "ratio": 5.379924832117467,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "fg": "--color-warning",
+      "bg": "--color-bg-primary",
+      "ratio": 6.238723053956434,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "fg": "--color-warning",
+      "bg": "--color-bg-secondary",
+      "ratio": 6.463618252936741,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "fg": "--color-warning",
+      "bg": "--color-bg-tertiary",
+      "ratio": 5.698383699919029,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "fg": "--color-warning",
+      "bg": "--color-bg-hover",
+      "ratio": 5.240552825939873,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "fg": "--color-warning",
+      "bg": "--color-sidebar-bg",
+      "ratio": 5.807520956915235,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "fg": "--color-warning",
+      "bg": "--selected",
+      "ratio": 5.241617007191119,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "fg": "--color-error",
+      "bg": "--color-bg-primary",
+      "ratio": 6.022733842653991,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "fg": "--color-error",
+      "bg": "--color-bg-secondary",
+      "ratio": 6.239843003332331,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "fg": "--color-error",
+      "bg": "--color-bg-tertiary",
+      "ratio": 5.50110143712269,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "fg": "--color-error",
+      "bg": "--color-bg-hover",
+      "ratio": 5.059121006980427,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "fg": "--color-error",
+      "bg": "--color-sidebar-bg",
+      "ratio": 5.6064602814760445,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "fg": "--color-error",
+      "bg": "--selected",
+      "ratio": 5.06014834548883,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "fg": "--boundary",
+      "bg": "--surface",
+      "ratio": 3.8441241014121275,
+      "minimum": 3
+    },
+    {
+      "theme": "light",
+      "fg": "--boundary",
+      "bg": "--hover",
+      "ratio": 3.116727293380279,
+      "minimum": 3
+    },
+    {
+      "theme": "light",
+      "fg": "--danger",
+      "bg": "--error-bg",
+      "ratio": 5.70416121054135,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "fg": "--syn-comment",
+      "bg": "--sidebar",
+      "ratio": 4.72216574886708,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "fg": "--syn-keyword",
+      "bg": "--sidebar",
+      "ratio": 5.493437886374941,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "fg": "--syn-string",
+      "bg": "--sidebar",
+      "ratio": 4.51388284644193,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "fg": "--syn-number",
+      "bg": "--sidebar",
+      "ratio": 4.820952523412592,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "fg": "--syn-title",
+      "bg": "--sidebar",
+      "ratio": 5.725126817521256,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "fg": "--syn-builtin",
+      "bg": "--sidebar",
+      "ratio": 4.821037374005471,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "fg": "--syn-attr",
+      "bg": "--sidebar",
+      "ratio": 4.820952523412592,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "fg": "--syn-meta",
+      "bg": "--sidebar",
+      "ratio": 5.725126817521256,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "fg": "--action-foreground",
+      "bg": "--action",
+      "ratio": 6.533011389540568,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "fg": "--action-foreground",
+      "bg": "--action-hover",
+      "ratio": 7.920196526661029,
+      "minimum": 4.5
+    },
+    {
+      "theme": "light",
+      "fg": "--action-foreground",
+      "bg": "--action-active",
+      "ratio": 10.024424196616483,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "fg": "--color-text-primary",
+      "bg": "--color-bg-primary",
+      "ratio": 16.545691865509614,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "fg": "--color-text-primary",
+      "bg": "--color-bg-secondary",
+      "ratio": 14.215783097465112,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "fg": "--color-text-primary",
+      "bg": "--color-bg-tertiary",
+      "ratio": 12.552128970712543,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "fg": "--color-text-primary",
+      "bg": "--color-bg-hover",
+      "ratio": 10.432492811710569,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "fg": "--color-text-primary",
+      "bg": "--color-sidebar-bg",
+      "ratio": 15.663847278220885,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "fg": "--color-text-primary",
+      "bg": "--selected",
+      "ratio": 9.584845245661755,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "fg": "--color-text-secondary",
+      "bg": "--color-bg-primary",
+      "ratio": 11.114538628389631,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "fg": "--color-text-secondary",
+      "bg": "--color-bg-secondary",
+      "ratio": 9.549426621376155,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "fg": "--color-text-secondary",
+      "bg": "--color-bg-tertiary",
+      "ratio": 8.431869966364573,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "fg": "--color-text-secondary",
+      "bg": "--color-bg-hover",
+      "ratio": 7.00800820471359,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "fg": "--color-text-secondary",
+      "bg": "--color-sidebar-bg",
+      "ratio": 10.522161119529564,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "fg": "--color-text-secondary",
+      "bg": "--selected",
+      "ratio": 6.4386024831100706,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "fg": "--color-text-tertiary",
+      "bg": "--color-bg-primary",
+      "ratio": 8.854122518037185,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "fg": "--color-text-tertiary",
+      "bg": "--color-bg-secondary",
+      "ratio": 7.607314717203061,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "fg": "--color-text-tertiary",
+      "bg": "--color-bg-tertiary",
+      "ratio": 6.717040826836995,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "fg": "--color-text-tertiary",
+      "bg": "--color-bg-hover",
+      "ratio": 5.582756543168742,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "fg": "--color-text-tertiary",
+      "bg": "--color-sidebar-bg",
+      "ratio": 8.382219615385017,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "fg": "--color-text-tertiary",
+      "bg": "--selected",
+      "ratio": 5.129153547118927,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "fg": "--color-accent",
+      "bg": "--color-bg-primary",
+      "ratio": 9.457454113696992,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "fg": "--color-accent",
+      "bg": "--color-bg-secondary",
+      "ratio": 8.1256871835504,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "fg": "--color-accent",
+      "bg": "--color-bg-tertiary",
+      "ratio": 7.174748855149441,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "fg": "--color-accent",
+      "bg": "--color-bg-hover",
+      "ratio": 5.9631729431574,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "fg": "--color-accent",
+      "bg": "--color-sidebar-bg",
+      "ratio": 8.953395124354854,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "fg": "--color-accent",
+      "bg": "--selected",
+      "ratio": 5.478660840209042,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "fg": "--color-success",
+      "bg": "--color-bg-primary",
+      "ratio": 11.241379232557504,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "fg": "--color-success",
+      "bg": "--color-bg-secondary",
+      "ratio": 9.658405957596035,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "fg": "--color-success",
+      "bg": "--color-bg-tertiary",
+      "ratio": 8.528095596285622,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "fg": "--color-success",
+      "bg": "--color-bg-hover",
+      "ratio": 7.087984533414161,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "fg": "--color-success",
+      "bg": "--color-sidebar-bg",
+      "ratio": 10.642241432188136,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "fg": "--color-success",
+      "bg": "--selected",
+      "ratio": 6.512080677415718,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "fg": "--color-warning",
+      "bg": "--color-bg-primary",
+      "ratio": 12.26614053875308,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "fg": "--color-warning",
+      "bg": "--color-bg-secondary",
+      "ratio": 10.538863817803056,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "fg": "--color-warning",
+      "bg": "--color-bg-tertiary",
+      "ratio": 9.305514647970986,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "fg": "--color-warning",
+      "bg": "--color-bg-hover",
+      "ratio": 7.734123422467816,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "fg": "--color-warning",
+      "bg": "--color-sidebar-bg",
+      "ratio": 11.612385487048622,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "fg": "--color-warning",
+      "bg": "--selected",
+      "ratio": 7.105720315665096,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "fg": "--color-error",
+      "bg": "--color-bg-primary",
+      "ratio": 9.350395823407458,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "fg": "--color-error",
+      "bg": "--color-bg-secondary",
+      "ratio": 8.03370448219755,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "fg": "--color-error",
+      "bg": "--color-bg-tertiary",
+      "ratio": 7.093530766596769,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "fg": "--color-error",
+      "bg": "--color-bg-hover",
+      "ratio": 5.895669882363202,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "fg": "--color-error",
+      "bg": "--color-sidebar-bg",
+      "ratio": 8.852042777013105,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "fg": "--color-error",
+      "bg": "--selected",
+      "ratio": 5.416642451795238,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "fg": "--boundary",
+      "bg": "--surface",
+      "ratio": 4.2523382532066485,
+      "minimum": 3
+    },
+    {
+      "theme": "dark",
+      "fg": "--boundary",
+      "bg": "--hover",
+      "ratio": 3.1206503331814863,
+      "minimum": 3
+    },
+    {
+      "theme": "dark",
+      "fg": "--danger",
+      "bg": "--error-bg",
+      "ratio": 8.366127854574216,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "fg": "--syn-comment",
+      "bg": "--sidebar",
+      "ratio": 4.692953367277542,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "fg": "--syn-keyword",
+      "bg": "--sidebar",
+      "ratio": 5.983606539717585,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "fg": "--syn-string",
+      "bg": "--sidebar",
+      "ratio": 8.740043566189447,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "fg": "--syn-number",
+      "bg": "--sidebar",
+      "ratio": 7.1526109203867705,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "fg": "--syn-title",
+      "bg": "--sidebar",
+      "ratio": 7.45591022042263,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "fg": "--syn-builtin",
+      "bg": "--sidebar",
+      "ratio": 10.227798051284987,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "fg": "--syn-attr",
+      "bg": "--sidebar",
+      "ratio": 7.1526109203867705,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "fg": "--syn-meta",
+      "bg": "--sidebar",
+      "ratio": 7.45591022042263,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "fg": "--action-foreground",
+      "bg": "--action",
+      "ratio": 6.533011389540568,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "fg": "--action-foreground",
+      "bg": "--action-hover",
+      "ratio": 7.920196526661029,
+      "minimum": 4.5
+    },
+    {
+      "theme": "dark",
+      "fg": "--action-foreground",
+      "bg": "--action-active",
+      "ratio": 10.024424196616483,
+      "minimum": 4.5
+    }
+  ]
+}

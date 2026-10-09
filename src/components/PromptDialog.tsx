@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { Dialog, IconButton, TextArea, Button } from "./ui";
+import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { DEFAULT_APPEND_PROMPT, loadAppendPrompt, saveAppendPrompt } from "../chat/prompt";
 import { Icon } from "./Icon";
@@ -11,12 +12,10 @@ const orderOf = (name: string) => { const index = SECTION_ORDER.indexOf(name); r
 
 /** Edits the extra system prompt Skiff passes to pi, and shows pi's current assembled prompt. */
 export function PromptDialog({ sessionPath, onSaved, onClose }: { sessionPath?: string; onSaved: () => void; onClose: () => void }) {
-	const dialog = useRef<HTMLDialogElement>(null);
 	const [text, setText] = useState(loadAppendPrompt);
 	const [sections, setSections] = useState<SystemPromptSection[]>();
 	const [viewerError, setViewerError] = useState<string>();
 	const [loading, setLoading] = useState(false);
-	useEffect(() => { dialog.current?.showModal(); }, []);
 	const loadSystemPrompt = async () => {
 		if (!sessionPath) { setViewerError("当前聊天还没有 pi 会话文件。"); return; }
 		setLoading(true); setViewerError(undefined);
@@ -27,12 +26,12 @@ export function PromptDialog({ sessionPath, onSaved, onClose }: { sessionPath?: 
 		finally { setLoading(false); }
 	};
 	const save = () => { saveAppendPrompt(text); onSaved(); };
-	return <dialog ref={dialog} className="project-dialog prompt-dialog" aria-labelledby="prompt-dialog-title" onCancel={onClose}>
-		<div className="dialog-heading"><h2 id="prompt-dialog-title">系统提示词</h2><button type="button" className="icon-btn" onClick={onClose} aria-label="关闭提示词设置"><Icon name="close" /></button></div>
+	return <Dialog onClose={onClose}  className="project-dialog prompt-dialog" aria-labelledby="prompt-dialog-title" >
+		<div className="dialog-heading"><h2 id="prompt-dialog-title">系统提示词</h2><IconButton type="button"  onClick={onClose} aria-label="关闭提示词设置"><Icon name="close" /></IconButton></div>
 		<p className="muted">附加到 pi 系统提示词末尾（--append-system-prompt），随每次会话启动生效。保存后当前会话会重启。</p>
 		<label htmlFor="append-prompt">附加指令</label>
-		<textarea id="append-prompt" className="prompt-input" rows={8} value={text} onChange={(event) => setText(event.target.value)} placeholder="例如：每次调用工具前先用一句话说明你要做什么。" spellCheck={false} />
-		<div className="prompt-hint"><span>默认指令会让模型像 Codex 一样在工具前先说一句旁白。</span><button type="button" className="btn ghost compact" onClick={() => setText(DEFAULT_APPEND_PROMPT)}>恢复默认</button></div>
+		<TextArea id="append-prompt" className="prompt-input" rows={8} value={text} onChange={(event) => setText(event.target.value)} placeholder="例如：每次调用工具前先用一句话说明你要做什么。" spellCheck={false} />
+		<div className="prompt-hint"><span>默认指令会让模型像 Codex 一样在工具前先说一句旁白。</span><Button type="button" variant="ghost" size="compact" onClick={() => setText(DEFAULT_APPEND_PROMPT)}>恢复默认</Button></div>
 
 		<details className="prompt-system" onToggle={(event) => { if ((event.target as HTMLDetailsElement).open && !sections) void loadSystemPrompt(); }}>
 			<summary><Icon name="file" size={13} />查看 pi 当前系统提示词（只读）</summary>
@@ -44,6 +43,6 @@ export function PromptDialog({ sessionPath, onSaved, onClose }: { sessionPath?: 
 			</details>)}
 		</details>
 
-		<div className="dialog-actions"><button type="button" className="btn ghost" onClick={onClose}>取消</button><button type="button" className="btn primary" onClick={save}>保存并重启</button></div>
-	</dialog>;
+		<div className="dialog-actions"><Button type="button" variant="ghost" onClick={onClose}>取消</Button><Button type="button" variant="primary" size="primary" onClick={save}>保存并重启</Button></div>
+	</Dialog>;
 }

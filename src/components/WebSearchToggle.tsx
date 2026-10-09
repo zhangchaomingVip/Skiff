@@ -1,3 +1,4 @@
+import { Button } from "./ui";
 import { Icon } from "./Icon";
 import type { WebSearchControls } from "../chat/webSearch";
 
@@ -12,7 +13,7 @@ export function WebSearchToggle({ search, disabled, onConfigure }: {
 		void search.toggle(!search.enabled);
 	};
 
-	return <button
+	return <Button
 		type="button"
 		className={`web-trigger${active ? " active" : ""}`}
 		disabled={disabled || search.busy}
@@ -23,5 +24,5 @@ export function WebSearchToggle({ search, disabled, onConfigure }: {
 	>
 		<Icon name="search" size={14} />
 		<span>{search.configured ? (active ? "联网 · 开" : "联网") : "联网未配置"}</span>
-	</button>;
+	</Button>;
 }

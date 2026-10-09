@@ -1,3 +1,4 @@
+import { Button } from "./ui";
 import { memo } from "react";
 import type { ChatMessage, ContentBlock } from "../chat/types";
 import { splitAttachments } from "../chat/textAttachments";
@@ -90,7 +91,7 @@ export const MessageItem = memo(function MessageItem({ message, turnMessages, sh
 		{(showActions || (!isUser && isLast && !running)) && <div className="message-actions">
 			{!isUser && !message.streaming && message.routeSnapshot && <span className="message-route" title={`实际应答线路：${message.routeSnapshot.familyName} · ${message.routeSnapshot.modelId} · ${message.routeSnapshot.relayName}`}><Icon name="pin" size={13} />实际线路：{message.routeSnapshot.relayName} · {message.routeSnapshot.alias || message.routeSnapshot.modelId} · {message.routeSnapshot.billingAccountId || "未知账户"}</span>}
 			{!isUser && isLast && !running && message.usage && <TurnUsage message={message} messages={turnMessages} />}
-			{!isUser && isLast && !running && <button className={`continue-btn ${message.stopReason === "length" ? "truncated" : ""}`} disabled={disabled} onClick={onContinue} aria-label="继续生成" title="发送「继续」，让模型接着写下去">{message.stopReason === "length" ? "输出被截断 · 继续" : "继续"}</button>}
+			{!isUser && isLast && !running && <Button className={`continue-btn ${message.stopReason === "length" ? "truncated" : ""}`} disabled={disabled} onClick={onContinue} aria-label="继续生成" title="发送「继续」，让模型接着写下去">{message.stopReason === "length" ? "输出被截断 · 继续" : "继续"}</Button>}
 			{showActions && <div className="message-buttons">
 				<CopyButton text={text} label="复制消息" />
 				{isUser ? <button disabled={disabled} onClick={() => onEdit(message)} aria-label="编辑并重发" title="编辑并重发"><Icon name="edit" size={14} /></button> : <button disabled={disabled} onClick={() => onRegenerate(message)} aria-label="重新生成" title="从上一条提问重新生成"><Icon name="refresh" size={14} /></button>}

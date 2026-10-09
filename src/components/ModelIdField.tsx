@@ -1,3 +1,4 @@
+import { Input, Button, IconButton } from "./ui";
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { sortDiscoveredModels } from "../chat/modelDiscovery";
 import { discoverModels } from "../rpc/modelDiscovery";
@@ -96,18 +97,18 @@ export function ModelIdField({ baseUrl, apiKey, familyId, value, onChange, added
 	return <div ref={rootRef} className="provider-field model-discovery" onKeyDown={keyDown} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOpen(false); }}>
 		<label htmlFor={fieldId}>模型 ID</label>
 		<div className="field-with-action">
-			<input ref={inputRef} id={fieldId} required role="combobox" aria-autocomplete="list" aria-expanded={open} aria-controls={open ? `${fieldId}-list` : undefined} aria-activedescendant={open ? optionId : undefined} placeholder="deepseek-chat / kimi-k2 / glm-4.6" value={value} onChange={(event) => onChange(event.target.value)} disabled={disabled} />
-			<button type="button" className="btn ghost compact model-discovery-trigger" onClick={() => void fetchModels()} disabled={disabled || loading || !baseUrl.trim() || !apiKey.trim()} aria-busy={loading}>{loading && <span className="model-discovery-spinner" aria-hidden="true" />}{loading ? "获取中…" : "获取模型列表"}</button>
+			<Input ref={inputRef} id={fieldId} required role="combobox" aria-autocomplete="list" aria-expanded={open} aria-controls={open ? `${fieldId}-list` : undefined} aria-activedescendant={open ? optionId : undefined} placeholder="deepseek-chat / kimi-k2 / glm-4.6" value={value} onChange={(event) => onChange(event.target.value)} disabled={disabled} />
+			<Button type="button" className="model-discovery-trigger" variant="ghost" size="compact" onClick={() => void fetchModels()} disabled={disabled || loading || !baseUrl.trim() || !apiKey.trim()} aria-busy={loading}>{loading && <span className="model-discovery-spinner" aria-hidden="true" />}{loading ? "获取中…" : "获取模型列表"}</Button>
 		</div>
 		{open && <div className="model-discovery-menu">
-			<div className="model-discovery-heading"><span>{filtered.length} 个模型</span><button type="button" className="icon-btn" aria-label="关闭模型列表" onClick={() => { setOpen(false); inputRef.current?.focus(); }}><Icon name="close" size={14} /></button></div>
-			{models.length > 10 && <input ref={searchRef} className="model-discovery-search" type="search" placeholder="搜索模型 ID…" aria-label="搜索模型 ID" role="combobox" aria-autocomplete="list" aria-expanded={open} aria-controls={`${fieldId}-list`} aria-activedescendant={optionId} value={query} onChange={(event) => setQuery(event.target.value)} disabled={disabled} />}
+			<div className="model-discovery-heading"><span>{filtered.length} 个模型</span><IconButton type="button"  aria-label="关闭模型列表" onClick={() => { setOpen(false); inputRef.current?.focus(); }}><Icon name="close" size={14} /></IconButton></div>
+			{models.length > 10 && <Input ref={searchRef} className="model-discovery-search" type="search" placeholder="搜索模型 ID…" aria-label="搜索模型 ID" role="combobox" aria-autocomplete="list" aria-expanded={open} aria-controls={`${fieldId}-list`} aria-activedescendant={optionId} value={query} onChange={(event) => setQuery(event.target.value)} disabled={disabled} />}
 			<div id={`${fieldId}-list`} className="model-discovery-options" role="listbox" aria-multiselectable={!!onAdd} aria-label="可用模型" aria-busy={loading}>
 				{filtered.map((id, index) => <button ref={id === active ? activeRef : undefined} id={`${fieldId}-option-${index}`} type="button" role="option" aria-selected={onAdd ? selected.includes(id) : id === value.trim()} className={`model-discovery-option${id === active ? " active" : ""}`} key={id} tabIndex={-1} onMouseEnter={() => setActiveId(id)} onMouseDown={(event) => event.preventDefault()} onClick={() => choose(id)} disabled={disabled || addedIds.includes(id)}>{onAdd && <span aria-hidden="true">{selected.includes(id) ? "☑" : "☐"}</span>}<span>{id}{addedIds.includes(id) ? "（已添加）" : ""}</span>{!onAdd && id === value.trim() && <Icon name="check" size={14} />}</button>)}
 				{!filtered.length && <p className="model-discovery-empty" role="status">没有匹配的模型</p>}
 			</div>
-				{onAdd && <button type="button" className="btn primary compact" disabled={disabled || !selected.length} onClick={() => { onAdd(models.filter((id) => selected.includes(id) && !addedIds.includes(id) && !excludedIds.includes(id))); setOpen(false); setSelected([]); inputRef.current?.focus(); }}>添加选中的 {selected.length} 个模型</button>}
+				{onAdd && <Button type="button" variant="primary" size="compact" disabled={disabled || !selected.length} onClick={() => { onAdd(models.filter((id) => selected.includes(id) && !addedIds.includes(id) && !excludedIds.includes(id))); setOpen(false); setSelected([]); inputRef.current?.focus(); }}>添加选中的 {selected.length} 个模型</Button>}
 		</div>}
-		{error && <div className="model-discovery-error" role="alert"><span>{error}</span><button type="button" className="icon-btn" aria-label="关闭模型获取错误" onClick={() => setError(undefined)}><Icon name="close" size={14} /></button></div>}
+		{error && <div className="model-discovery-error" role="alert"><span>{error}</span><IconButton type="button"  aria-label="关闭模型获取错误" onClick={() => setError(undefined)}><Icon name="close" size={14} /></IconButton></div>}
 	</div>;
 }

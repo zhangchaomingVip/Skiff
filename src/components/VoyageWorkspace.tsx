@@ -8,6 +8,7 @@ import { ContextUsage } from "./ContextUsage";
 import { VoyageRail } from "./VoyageRail";
 import { useModelFamily } from "../chat/familyContext";
 import type { RouteAuthorizationChoice, RouteAuthorizationRequest } from "../chat/routeAuthorization";
+import { Dialog } from "./ui";
 
 const StableChatView = memo(ChatView);
 
@@ -28,11 +29,15 @@ export function VoyageWorkspace({ state, connected, pending, actions, onSend, on
 	const { pricingModels } = useModelFamily();
 	const metrics = useVoyageMetrics(state.messages, state.model, state.isStreaming, pricingModels ?? state.availableModels);
 	const [expanded, setExpanded] = useState(() => window.innerWidth >= 1200);
+	const [narrow, setNarrow] = useState(() => window.innerWidth <= 760);
 	useEffect(() => {
 		const query = window.matchMedia("(max-width: 1199px)");
 		const resize = (event: MediaQueryListEvent) => setExpanded(!event.matches);
+		const compact = window.matchMedia("(max-width: 760px)");
+		const updateCompact = () => setNarrow(compact.matches);
 		query.addEventListener("change", resize);
-		return () => query.removeEventListener("change", resize);
+		compact.addEventListener("change", updateCompact);
+		return () => { query.removeEventListener("change", resize); compact.removeEventListener("change", updateCompact); };
 	}, []);
 	const toggle = () => setExpanded((value) => !value);
 
@@ -41,6 +46,6 @@ export function VoyageWorkspace({ state, connected, pending, actions, onSend, on
 			<StableChatView state={state} connected={connected} pending={pending} actions={actions} onSend={onSend} onReconnect={onReconnect} projectName={projectName} search={search} onConfigureSearch={onConfigureSearch} failover={failover} routeAuthorization={routeAuthorization} />
 			<ContextUsage notice={modelNotice} metrics={metrics} expanded={expanded} onToggle={toggle} />
 		</div>
-		<VoyageRail metrics={metrics} expanded={expanded} onToggle={toggle} />
+		{narrow && expanded ? <Dialog className="voyage-dialog" aria-label="航行台详情" returnFocusSelector=".voyage-summary" onClose={() => setExpanded(false)}><VoyageRail metrics={metrics} expanded onToggle={toggle} /></Dialog> : <VoyageRail metrics={metrics} expanded={expanded} onToggle={toggle} />}
 	</div>;
 }

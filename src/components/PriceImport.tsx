@@ -1,3 +1,4 @@
+import { Button, Input, IconButton, Select, TextArea } from "./ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FAMILY_KEYWORDS } from "../chat/modelDiscovery";
 import { PRICING_IMPORT_PROMPT, catalogEntryToPriced, catalogForFamily, estimateVisionTokens, importPricedModels, parsePricedTable, type PricedModel, type TableRowError } from "../chat/pricingPage";
@@ -259,7 +260,7 @@ export function PriceImport({ familyId, addedIds, extractors, catalog, catalogSt
 	const importable = selected.filter((id) => !added.has(id.toLowerCase()));
 
 	return <>
-		<button type="button" className="btn ghost compact" onClick={() => setOpen((value) => !value)} aria-expanded={open} disabled={disabled}>导入模型与价格</button>
+		<Button type="button" variant="ghost" size="compact" onClick={() => setOpen((value) => !value)} aria-expanded={open} disabled={disabled}>导入模型与价格</Button>
 		{open && <div className="price-import" onPaste={(event) => {
 			if (event.clipboardData.files.length) {
 				event.preventDefault();
@@ -274,24 +275,24 @@ export function PriceImport({ familyId, addedIds, extractors, catalog, catalogSt
 							knownStatus === "done" ? `已自动获取 ${models.length} 个模型的实时售价，下方勾选导入（已跳过本线路已有的）` :
 								`自动获取失败：${error ?? "未知错误"}`}
 					</small>
-					{knownStatus === "error" && <button type="button" className="btn ghost compact" onClick={() => void runKnown()} disabled={disabled || loading}>重试</button>}
+					{knownStatus === "error" && <Button type="button" variant="ghost" size="compact" onClick={() => void runKnown()} disabled={disabled || loading}>重试</Button>}
 				</div>
 			</div>}
 			<div className="price-import-row">
-				<input type="url" inputMode="url" placeholder="https://tokenrhythm.studio/models" aria-label="定价页地址" value={url} onChange={(event) => setUrl(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.nativeEvent.isComposing) { event.preventDefault(); void run(); } }} disabled={disabled || loading} />
-				<button type="button" className="btn ghost compact" onClick={() => void run()} disabled={disabled || loading || !url.trim()} aria-busy={loading}>{loading && <span className="model-discovery-spinner" aria-hidden="true" />}{loading ? "获取中…" : "获取价格"}</button>
+				<Input type="url" inputMode="url" placeholder="https://tokenrhythm.studio/models" aria-label="定价页地址" value={url} onChange={(event) => setUrl(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.nativeEvent.isComposing) { event.preventDefault(); void run(); } }} disabled={disabled || loading} />
+				<Button type="button" variant="ghost" size="compact" onClick={() => void run()} disabled={disabled || loading || !url.trim()} aria-busy={loading}>{loading && <span className="model-discovery-spinner" aria-hidden="true" />}{loading ? "获取中…" : "获取价格"}</Button>
 			</div>
 			<div className="price-import-section">
 				<span className="price-import-label">公开牌价（models.dev）<span className="price-import-free-flag">免费</span></span>
 				<div className="price-import-row">
 					<small className="price-import-hint">1 USD =</small>
-					<input type="number" className="price-import-rate" min={0.01} max={100} step={0.1} aria-label="美元兑人民币汇率" value={rateDraft} onChange={(event) => setRateDraft(event.target.value)} disabled={disabled || savingRate} />
+					<Input type="number" className="price-import-rate" min={0.01} max={100} step={0.1} aria-label="美元兑人民币汇率" value={rateDraft} onChange={(event) => setRateDraft(event.target.value)} disabled={disabled || savingRate} />
 					<small className="price-import-hint">CNY，官方牌价按此折算</small>
-					<button type="button" className="btn ghost compact" onClick={() => void saveRate()} disabled={disabled || savingRate || !rateDirty}>{rateSaved ? "已保存" : "保存"}</button>
+					<Button type="button" variant="ghost" size="compact" onClick={() => void saveRate()} disabled={disabled || savingRate || !rateDirty}>{rateSaved ? "已保存" : "保存"}</Button>
 				</div>
 				<div className="price-import-row">
 					<small className="price-import-hint">{catalog.length ? `收录 ${familyCatalog.length} 个本家族官方模型 · 目录更新于 ${formatStamp(catalogFetchedAt)}${catalogStale ? "（网络失败，读取本地缓存）" : ""} · 牌价≠中转价，导入后请按中转实际核对` : "目录加载中…首次需联网抓取，之后走 24 小时本地缓存"}</small>
-					<button type="button" className="btn ghost compact" onClick={loadCatalogPrices} disabled={disabled || !familyCatalog.length}>带出本家族牌价</button>
+					<Button type="button" variant="ghost" size="compact" onClick={loadCatalogPrices} disabled={disabled || !familyCatalog.length}>带出本家族牌价</Button>
 				</div>
 			</div>
 			<div className="price-import-section">
@@ -299,23 +300,23 @@ export function PriceImport({ familyId, addedIds, extractors, catalog, catalogSt
 				<div className="price-import-images">
 					{images.map((image) => <span className="price-import-thumb" key={image.key}>
 						<img src={image.dataUrl} alt={image.name} />
-						<button type="button" className="icon-btn" onClick={() => removeImage(image.key)} aria-label={`移除 ${image.name}`}><Icon name="close" size={12} /></button>
+						<IconButton type="button"  onClick={() => removeImage(image.key)} aria-label={`移除 ${image.name}`}><Icon name="close" size={12} /></IconButton>
 					</span>)}
-					{images.length < MAX_IMAGES && <button type="button" className="btn ghost compact" onClick={() => fileRef.current?.click()}>选择截图</button>}
+					{images.length < MAX_IMAGES && <Button type="button" variant="ghost" size="compact" onClick={() => fileRef.current?.click()}>选择截图</Button>}
 					<input ref={fileRef} type="file" accept="image/*" multiple className="price-import-file" aria-hidden="true" tabIndex={-1} onChange={(event) => { if (event.target.files) addFiles(event.target.files); event.target.value = ""; }} />
 				</div>
 				{extractors.length ? <>
 					<div className="price-import-row">
-						<select aria-label="识别所用模型" value={pick?.key ?? ""} onChange={(event) => { setPickKey(event.target.value); setConfirming(false); }} disabled={disabled || extracting}>
+						<Select aria-label="识别所用模型" value={pick?.key ?? ""} onChange={(event) => { setPickKey(event.target.value); setConfirming(false); }} disabled={disabled || extracting}>
 							{extractors.map((item) => <option key={item.key} value={item.key}>{item.modelId} · {item.relayName}（入 {formatCost(item.inputCost)} / 出 {formatCost(item.outputCost)} · {item.currency}）</option>)}
-						</select>
-						<button type="button" className="btn ghost compact" onClick={() => setConfirming(true)} disabled={disabled || extracting || !images.length || confirming}>{extracting ? "识别中…" : "识别"}</button>
+						</Select>
+						<Button type="button" variant="ghost" size="compact" onClick={() => setConfirming(true)} disabled={disabled || extracting || !images.length || confirming}>{extracting ? "识别中…" : "识别"}</Button>
 					</div>
 					{confirming && estimate && pick && <div className="price-import-confirm" role="alertdialog" aria-label="识别消耗确认">
 						<span>将用 <strong>{pick.modelId}</strong>（{pick.relayName}）识别 {images.length} 张截图，预计消耗约 {estimate.input.toLocaleString()} 输入 + {estimate.output} 输出 tokens（约 {formatMoney(estimate.cost, pick.currency)}）。<small>估算值，以中转实际计费为准。</small></span>
 						<span className="price-import-confirm-actions">
-							<button type="button" className="btn ghost compact" onClick={() => setConfirming(false)} disabled={extracting}>取消</button>
-							<button type="button" className="btn primary compact" onClick={() => void doExtract()} disabled={extracting}>确认并识别</button>
+							<Button type="button" variant="ghost" size="compact" onClick={() => setConfirming(false)} disabled={extracting}>取消</Button>
+							<Button type="button" variant="primary" size="compact" onClick={() => void doExtract()} disabled={extracting}>确认并识别</Button>
 						</span>
 					</div>}
 				</> : <small className="price-import-hint">暂无可用的已配置模型。先到「模型选择」页配置一个支持视觉的模型，或改用下方粘贴方式（免费）。</small>}
@@ -323,20 +324,20 @@ export function PriceImport({ familyId, addedIds, extractors, catalog, catalogSt
 			</div>
 			<div className="price-import-section">
 				<span className="price-import-label">粘贴识别结果<span className="price-import-free-flag">免费</span></span>
-				<textarea className="price-import-paste" rows={4} placeholder={"模型ID\t输入单价\t输出单价\t币种\t上下文窗口\t最大输出"} aria-label="识别结果" value={pasted} onChange={(event) => setPasted(event.target.value)} disabled={disabled} />
+				<TextArea className="price-import-paste" rows={4} placeholder={"模型ID\t输入单价\t输出单价\t币种\t上下文窗口\t最大输出"} aria-label="识别结果" value={pasted} onChange={(event) => setPasted(event.target.value)} disabled={disabled} />
 				<div className="price-import-row">
 					<details className="price-import-prompt">
 						<summary>没有现成表格？复制提示词，把截图发给任意 AI</summary>
 						<pre>{PRICING_IMPORT_PROMPT}</pre>
-						<button type="button" className="btn ghost compact" onClick={copyPrompt}>{copied ? "已复制" : "复制提示词"}</button>
+						<Button type="button" variant="ghost" size="compact" onClick={copyPrompt}>{copied ? "已复制" : "复制提示词"}</Button>
 					</details>
-					<button type="button" className="btn ghost compact" onClick={parsePasted} disabled={disabled || !pasted.trim()}>解析并预览</button>
+					<Button type="button" variant="ghost" size="compact" onClick={parsePasted} disabled={disabled || !pasted.trim()}>解析并预览</Button>
 				</div>
 			</div>
-			{error && <div className="model-discovery-error" role="alert"><span>{error}</span><button type="button" className="icon-btn" aria-label="关闭导入错误" onClick={() => setError(undefined)}><Icon name="close" size={14} /></button></div>}
+			{error && <div className="model-discovery-error" role="alert"><span>{error}</span><IconButton type="button"  aria-label="关闭导入错误" onClick={() => setError(undefined)}><Icon name="close" size={14} /></IconButton></div>}
 			{rowErrors.length > 0 && <ul className="price-import-errors">{rowErrors.map((row) => <li key={row.line}>第 {row.line} 行：{row.reason}{row.text ? `（${row.text}）` : ""}</li>)}</ul>}
 			{models.length > 0 && <div className="price-import-list">
-				{models.length > 10 && <input className="price-import-search" type="search" placeholder="搜索模型 ID…" aria-label="搜索模型 ID" value={query} onChange={(event) => setQuery(event.target.value)} disabled={disabled} />}
+				{models.length > 10 && <Input className="price-import-search" type="search" placeholder="搜索模型 ID…" aria-label="搜索模型 ID" value={query} onChange={(event) => setQuery(event.target.value)} disabled={disabled} />}
 				{filtered.map((model) => {
 					const isAdded = added.has(model.modelId.toLowerCase());
 					return <label className={`price-import-option${isAdded ? " disabled" : ""}`} key={model.modelId}>
@@ -347,7 +348,7 @@ export function PriceImport({ familyId, addedIds, extractors, catalog, catalogSt
 				})}
 				{!filtered.length && <p className="model-discovery-empty" role="status">没有匹配的模型</p>}
 			</div>}
-			{models.length > 0 && <div className="price-import-actions"><button type="button" className="btn primary compact" onClick={importSelected} disabled={disabled || !importable.length}>导入 {importable.length} 个模型</button></div>}
+			{models.length > 0 && <div className="price-import-actions"><Button type="button" variant="primary" size="compact" onClick={importSelected} disabled={disabled || !importable.length}>导入 {importable.length} 个模型</Button></div>}
 		</div>}
 	</>;
 }

@@ -1,3 +1,4 @@
+import { Button } from "./ui";
 import { useState } from "react";
 import type { ContentBlock } from "../chat/types";
 import { toolKind, toolKindLabel } from "../chat/toolRuns";
@@ -23,7 +24,7 @@ export function ToolCallBlock({ tool, result }: { tool: Tool; result?: Result })
 			{command && <div className="tool-command"><code>$ {command}</code><CopyButton text={command} label="复制命令" /></div>}
 			{!command && <details className="tool-parameters"><summary>调用参数</summary><pre>{tool.argsText || "无参数"}</pre></details>}
 			{diff && <div className="tool-diff" aria-label={tool.name === "write" ? "写入内容" : "文件变更"}>{diff.split("\n").map((line, i) => <div key={i} className={/^\s*\+/.test(line) ? "diff-add" : /^\s*-/.test(line) ? "diff-remove" : ""}>{line || " "}</div>)}</div>}
-			{result ? <><div className="tool-output-heading">执行输出<CopyButton text={output} label="复制工具输出" /></div><pre className="tool-output">{(full ? lines : lines.slice(-12)).join("\n") || "无输出"}</pre>{lines.length > 12 && <button className="btn compact" aria-expanded={full} aria-label="切换完整工具输出" onClick={() => setFull(!full)}>{full ? "仅显示末尾" : `显示全部 ${lines.length} 行`}</button>}</> : <p className="muted">等待工具执行结果…</p>}
+			{result ? <><div className="tool-output-heading">执行输出<CopyButton text={output} label="复制工具输出" /></div><pre className="tool-output">{(full ? lines : lines.slice(-12)).join("\n") || "无输出"}</pre>{lines.length > 12 && <Button size="compact" aria-expanded={full} aria-label="切换完整工具输出" onClick={() => setFull(!full)}>{full ? "仅显示末尾" : `显示全部 ${lines.length} 行`}</Button>}</> : <p className="muted">等待工具执行结果…</p>}
 		</div>
 	</details>;
 }

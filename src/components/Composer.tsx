@@ -1,3 +1,4 @@
+import { TextArea, IconButton } from "./ui";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import type { ImageAttachment, ModelInfo } from "../chat/types";
 import { readImages } from "../chat/images";
@@ -150,7 +151,8 @@ export function Composer({
 			{files.length > 0 && <div className="text-attachments">{files.map((file) => <div key={file.id}><Icon name="code" size={14} /><span>{file.name}</span><button disabled={streaming || sendingRef.current} aria-label={`移除文本文件 ${file.name}`} onClick={() => setFiles((items) => items.filter((item) => item.id !== file.id))}><Icon name="close" size={12} /></button></div>)}</div>}
 			{images.length > 0 && <div className="attachment-list">{images.map((image) => <div className="attachment" key={image.id}><img src={`data:${image.mimeType};base64,${image.data}`} alt={image.name} /><button className="attachment-remove" aria-label={`移除图片 ${image.name}`} disabled={streaming || sendingRef.current} onClick={() => setImages((previous) => previous.filter((item) => item.id !== image.id))}><Icon name="close" size={12} /></button><span title={image.name}>{image.name}</span></div>)}</div>}
 			{(imageError || (images.length > 0 && !canUseImages)) && <p className="attachment-error" role="alert">{imageError ?? IMAGE_CAPABILITY_ERROR}</p>}
-			<textarea
+			<TextArea
+				appearance="plain"
 				ref={inputRef}
 				className="composer-input"
 				rows={1}
@@ -161,15 +163,15 @@ export function Composer({
 				onKeyDown={onKeyDown}
 				onPaste={(event) => { const selected = Array.from(event.clipboardData.files); if (selected.length) { event.preventDefault(); void addAttachments(selected); } }}
 			/>
-			<div className="composer-bottom"><span className="composer-context"><button className="icon-btn" onClick={() => fileRef.current?.click()} disabled={streaming || reading || sendingRef.current} aria-label="添加图片或文本文件" title="添加图片或 UTF-8 文本文件（支持拖放或粘贴）"><Icon name="plus" size={20} /></button><ModelMenu models={models} model={model} onModel={onSelectModel} disabled={!connected || modelDisabled} /><WebSearchToggle search={search} disabled={disabled} onConfigure={onConfigureSearch} /><ReasoningChip level={thinkingLevel} levels={thinkingLevels} disabled={!connected || modelDisabled} onLevel={onThinkingLevel} />{reading && <span>读取中…</span>}</span><input ref={fileRef} type="file" hidden multiple accept="image/png,image/jpeg,image/webp,image/gif,text/*,.log,.json,.ts,.tsx,.js,.rs,.py,.yaml,.yml,.toml" onChange={(event) => { void addAttachments(Array.from(event.target.files ?? [])); event.target.value = ""; }} /><div className="composer-actions">
+			<div className="composer-bottom"><span className="composer-context"><IconButton  onClick={() => fileRef.current?.click()} disabled={streaming || reading || sendingRef.current} aria-label="添加图片或文本文件" title="添加图片或 UTF-8 文本文件（支持拖放或粘贴）"><Icon name="plus" size={20} /></IconButton><ModelMenu models={models} model={model} onModel={onSelectModel} disabled={!connected || modelDisabled} /><WebSearchToggle search={search} disabled={disabled} onConfigure={onConfigureSearch} /><ReasoningChip level={thinkingLevel} levels={thinkingLevels} disabled={!connected || modelDisabled} onLevel={onThinkingLevel} />{reading && <span>读取中…</span>}</span><input ref={fileRef} type="file" hidden multiple accept="image/png,image/jpeg,image/webp,image/gif,text/*,.log,.json,.ts,.tsx,.js,.rs,.py,.yaml,.yml,.toml" onChange={(event) => { void addAttachments(Array.from(event.target.files ?? [])); event.target.value = ""; }} /><div className="composer-actions">
 				{streaming ? (
-					<button className="send-btn" onClick={onAbort} aria-label="停止生成" title="停止生成">
+					<IconButton className="send-btn" variant="primary" size="primary" onClick={onAbort} aria-label="停止生成" title="停止生成">
 						<Icon name="stop" size={17} />
-					</button>
+					</IconButton>
 				) : (
-					<button className="send-btn" onClick={() => void submit()} disabled={disabled || reading || (!text.trim() && !images.length && !files.length) || (images.length > 0 && !canUseImages)} aria-label="发送消息" title="发送消息（Enter）">
+					<IconButton className="send-btn" variant="primary" size="primary" onClick={() => void submit()} disabled={disabled || reading || (!text.trim() && !images.length && !files.length) || (images.length > 0 && !canUseImages)} aria-label="发送消息" title="发送消息（Enter）">
 						<Icon name="arrow" size={19} />
-					</button>
+					</IconButton>
 				)}
 			</div></div>
 		</div><p className="composer-hint">Enter 发送 · Shift + Enter 换行<span>Ctrl K 聚焦 · Esc 清空 / 停止</span></p></div>

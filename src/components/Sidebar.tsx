@@ -1,3 +1,4 @@
+import { Input, IconButton } from "./ui";
 import { useEffect, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import type { Conversation, Project } from "../chat/workspace";
@@ -89,7 +90,7 @@ export function Sidebar({ projects, chats, activeId, activeProjectId, homeActive
 	};
 	const startEdit = (next: { id: string; kind: "chat" | "project"; text: string }) => { skipBlur.current = false; setEditing(next); };
 	const cancelRename = () => { skipBlur.current = true; setEditing(undefined); };
-	const renameInput = () => editing && <input className="rename-input" autoFocus aria-label="新名称" value={editing.text} onChange={(event) => setEditing({ ...editing, text: event.target.value })} onBlur={() => { if (skipBlur.current) { skipBlur.current = false; return; } commitRename(); }} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); cancelRename(); } if (event.key === "Enter") { event.preventDefault(); commitRename(); } }} />;
+	const renameInput = () => editing && <Input className="rename-input" autoFocus aria-label="新名称" value={editing.text} onChange={(event) => setEditing({ ...editing, text: event.target.value })} onBlur={() => { if (skipBlur.current) { skipBlur.current = false; return; } commitRename(); }} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); cancelRename(); } if (event.key === "Enter") { event.preventDefault(); commitRename(); } }} />;
 
 	const sortChats = (list: Conversation[]) => {
 		const rank = new Map(order.map((id, index) => [id, index]));
@@ -131,9 +132,9 @@ export function Sidebar({ projects, chats, activeId, activeProjectId, homeActive
 				{!!search && <time dateTime={new Date(chat.updatedAt).toISOString()}>{dayLabel(chat.updatedAt)}</time>}
 			</button>}
 			<div className="sidebar-row-actions">
-				<button className="icon-btn" disabled={disabled} aria-label={`${chat.pinned ? "取消固定" : "固定"}聊天 ${chat.title}`} title={chat.pinned ? "取消固定" : "固定到顶部"} onClick={() => onTogglePinChat(chat.id, !chat.pinned)}><Icon name="pin" size={13} /></button>
-				<button className="icon-btn" disabled={disabled} aria-label={`重命名聊天 ${chat.title}`} title="重命名聊天（Enter 或失焦保存）" onClick={() => startEdit({ id: chat.id, kind: "chat", text: chat.title })}><Icon name="edit" size={13} /></button>
-				<button className="icon-btn" disabled={disabled} aria-label={`删除聊天 ${chat.title}`} title="从侧栏删除聊天" onClick={() => setDeleting({ id: chat.id, kind: "chat", name: chat.title })}><Icon name="trash" size={13} /></button>
+				<IconButton size="compact"  disabled={disabled} aria-label={`${chat.pinned ? "取消固定" : "固定"}聊天 ${chat.title}`} title={chat.pinned ? "取消固定" : "固定到顶部"} onClick={() => onTogglePinChat(chat.id, !chat.pinned)}><Icon name="pin" size={13} /></IconButton>
+				<IconButton size="compact"  disabled={disabled} aria-label={`重命名聊天 ${chat.title}`} title="重命名聊天（Enter 或失焦保存）" onClick={() => startEdit({ id: chat.id, kind: "chat", text: chat.title })}><Icon name="edit" size={13} /></IconButton>
+				<IconButton size="compact"  disabled={disabled} aria-label={`删除聊天 ${chat.title}`} title="从侧栏删除聊天" onClick={() => setDeleting({ id: chat.id, kind: "chat", name: chat.title })}><Icon name="trash" size={13} /></IconButton>
 			</div>
 		</div>;
 	};
@@ -145,12 +146,12 @@ export function Sidebar({ projects, chats, activeId, activeProjectId, homeActive
 	return (
 		<aside className="sidebar" aria-label="项目与聊天导航">
 			{deleting && <ConfirmDialog title={deleting.kind === "project" ? "移除项目" : "删除聊天"} description={deleting.kind === "project" ? `从侧栏移除 ${deleting.name} 及其聊天，磁盘上的项目与会话文件会保留。` : `从侧栏删除 ${deleting.name}，pi 会话文件会保留。`} onConfirm={() => { if (deleting.kind === "project") onDeleteProject(deleting.id); else onDeleteChat(deleting.id); }} onClose={() => setDeleting(undefined)} />}
-			<div className="sidebar-brand"><BrandMark /><span>Skiff</span><button className="icon-btn sidebar-search-toggle" onClick={() => setSearchOpen((open) => !open)} aria-label="搜索项目与聊天" aria-expanded={searchOpen} title="搜索项目与聊天"><Icon name="search" size={16} /></button><button className="icon-btn sidebar-toggle" onClick={onClose} aria-label="收起侧栏" title="收起侧栏"><Icon name="panel" /></button></div>
+			<div className="sidebar-brand"><BrandMark /><span>Skiff</span><IconButton size="compact" className="sidebar-search-toggle" onClick={() => setSearchOpen((open) => !open)} aria-label="搜索项目与聊天" aria-expanded={searchOpen} title="搜索项目与聊天"><Icon name="search" size={16} /></IconButton><IconButton size="compact" className="sidebar-toggle" onClick={onClose} aria-label="收起侧栏" title="收起侧栏"><Icon name="panel" /></IconButton></div>
 			<button className="new-chat" onClick={onNewChat} disabled={!projects.length}><Icon name="edit" /><span>新聊天</span><span className="shortcut">Ctrl N</span></button>
 			<button className={`home-nav ${homeActive ? "active" : ""}`} onClick={onHome} disabled={!projects.length} aria-current={homeActive ? "page" : undefined}><Icon name="home" /><span>主页</span></button>
-			{searchOpen && <div className="sidebar-search"><Icon name="search" size={14} /><input autoFocus aria-label="搜索项目与聊天" placeholder="搜索项目与聊天" value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); setSearch(""); setSearchOpen(false); } }} /><button className="icon-btn" onClick={() => { setSearch(""); setSearchOpen(false); }} aria-label="关闭搜索" title="关闭搜索"><Icon name="close" size={13} /></button></div>}
+			{searchOpen && <div className="sidebar-search"><Icon name="search" size={14} /><Input autoFocus aria-label="搜索项目与聊天" placeholder="搜索项目与聊天" value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); setSearch(""); setSearchOpen(false); } }} /><IconButton size="compact"  onClick={() => { setSearch(""); setSearchOpen(false); }} aria-label="关闭搜索" title="关闭搜索"><Icon name="close" size={13} /></IconButton></div>}
 			<div className="sidebar-scroll" ref={scrollRef} onScroll={updateScrollFades}>
-				<div className="section-label"><button className={`icon-btn section-toggle ${anyExpanded ? "expanded" : ""}`} onClick={toggleAll} aria-label={`${anyExpanded ? "收起" : "展开"}全部项目`} aria-expanded={anyExpanded}><Icon name="chevron" size={13} /></button><button className="section-name" onClick={toggleAll}>项目</button><button className="icon-btn" onClick={onAddProject} disabled={disabled} aria-label="添加项目" title="添加项目"><Icon name="plus" size={16} /></button></div>
+				<div className="section-label"><IconButton size="compact" className={`section-toggle ${anyExpanded ? "expanded" : ""}`} onClick={toggleAll} aria-label={`${anyExpanded ? "收起" : "展开"}全部项目`} aria-expanded={anyExpanded}><Icon name="chevron" size={13} /></IconButton><button className="section-name" onClick={toggleAll}>项目</button><IconButton size="compact"  onClick={onAddProject} disabled={disabled} aria-label="添加项目" title="添加项目"><Icon name="plus" size={16} /></IconButton></div>
 				<nav>
 					{visibleProjects.map((project) => {
 						const isCollapsed = collapsed.has(project.id);
@@ -178,9 +179,9 @@ export function Sidebar({ projects, chats, activeId, activeProjectId, homeActive
 						};
 						return <div className="project-group" key={project.id}>
 							<div className={`project-row ${project.id === activeProjectId ? "current" : ""}`}>
-								<button className={`icon-btn project-chevron ${isCollapsed ? "" : "expanded"}`} onClick={() => setCollapsed((previous) => { const next = new Set(previous); if (next.has(project.id)) next.delete(project.id); else next.add(project.id); return next; })} aria-label={`${isCollapsed ? "展开" : "收起"}${project.name}`} aria-expanded={!isCollapsed}><Icon name="chevron" size={13} /></button>
+								<IconButton size="compact" className={`project-chevron ${isCollapsed ? "" : "expanded"}`} onClick={() => setCollapsed((previous) => { const next = new Set(previous); if (next.has(project.id)) next.delete(project.id); else next.add(project.id); return next; })} aria-label={`${isCollapsed ? "展开" : "收起"}${project.name}`} aria-expanded={!isCollapsed}><Icon name="chevron" size={13} /></IconButton>
 								{editing?.id === project.id ? renameInput() : <button className="project-select" disabled={disabled} onClick={() => onSelectProject(project.id)} title={project.path}><Icon name="folder" size={15} /><span>{project.name}</span><span className="project-count">{history.length}</span></button>}
-								<div className="sidebar-row-actions"><button className="icon-btn" disabled={disabled} aria-label={`重命名项目 ${project.name}`} title="重命名项目（Enter 或失焦保存）" onClick={() => startEdit({ id: project.id, kind: "project", text: project.name })}><Icon name="edit" size={13} /></button><button className="icon-btn" disabled={disabled || projects.length <= 1} aria-label={`移除项目 ${project.name}`} title={projects.length <= 1 ? "至少保留一个项目" : "移除项目"} onClick={() => setDeleting({ id: project.id, kind: "project", name: project.name })}><Icon name="trash" size={13} /></button></div>
+								<div className="sidebar-row-actions"><IconButton size="compact"  disabled={disabled} aria-label={`重命名项目 ${project.name}`} title="重命名项目（Enter 或失焦保存）" onClick={() => startEdit({ id: project.id, kind: "project", text: project.name })}><Icon name="edit" size={13} /></IconButton><IconButton size="compact"  disabled={disabled || projects.length <= 1} aria-label={`移除项目 ${project.name}`} title={projects.length <= 1 ? "至少保留一个项目" : "移除项目"} onClick={() => setDeleting({ id: project.id, kind: "project", name: project.name })}><Icon name="trash" size={13} /></IconButton></div>
 							</div>
 							{(!isCollapsed || !!search) && <div className="project-chats">
 								{renderRows()}

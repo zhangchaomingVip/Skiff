@@ -1,36 +1,9 @@
-import { useEffect, useState } from "react";
+import { setThemePreference, useThemePreference } from "../theme";
 import { Icon } from "./Icon";
+import { IconButton, Tooltip } from "./ui";
 
+const labels = { system: "跟随系统", light: "浅色", dark: "深色" };
 export function ThemeToggle() {
-	const [theme, setTheme] = useState<"light" | "dark">(() => {
-		try {
-			return (localStorage.getItem("skiff.theme") as "light" | "dark") || "dark";
-		} catch {
-			return "dark";
-		}
-	});
-
-	useEffect(() => {
-		document.documentElement.setAttribute("data-theme", theme);
-		try {
-			localStorage.setItem("skiff.theme", theme);
-		} catch {
-			// Theme preference is optional.
-		}
-	}, [theme]);
-
-	const toggleTheme = () => {
-		setTheme((current) => (current === "dark" ? "light" : "dark"));
-	};
-
-	return (
-		<button
-			className="icon-btn"
-			onClick={toggleTheme}
-			title={theme === "dark" ? "切换到浅色模式" : "切换到深色模式"}
-			aria-label={theme === "dark" ? "切换到浅色模式" : "切换到深色模式"}
-		>
-			<Icon name={theme === "dark" ? "sun" : "moon"} />
-		</button>
-	);
+	const theme = useThemePreference();
+	return <Tooltip text={`主题：${labels[theme]} · 系统 → 浅色 → 深色`}><IconButton onClick={() => setThemePreference(theme === "system" ? "light" : theme === "light" ? "dark" : "system")} aria-label={`主题：${labels[theme]}，点击切换`}><Icon name={theme === "system" ? "monitor" : theme === "dark" ? "moon" : "sun"} size={16} /></IconButton></Tooltip>;
 }

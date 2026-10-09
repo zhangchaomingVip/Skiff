@@ -1,0 +1,12 @@
+@layer pages {
+	.gallery { max-width: 1000px; margin: auto; padding: var(--space-6); }
+	.gallery header, .gallery-row { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
+	.gallery section { margin-block: var(--space-6); }
+	.gallery h1 { font-size: 28px; margin: 0; }
+	.gallery h2 { font-size: var(--font-size-lg); }
+	.gallery p { color: var(--secondary); }
+	.gallery form { max-width: 460px; display: grid; gap: var(--space-3); }
+	.gallery-card { padding: var(--space-4); margin-bottom: var(--space-3); }
+	.gallery a { color: var(--accent); }
+	.gallery .ui-list-row { padding: var(--space-3); margin-block: var(--space-3); }
+}
