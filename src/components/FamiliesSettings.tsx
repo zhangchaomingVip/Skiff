@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { TestResult } from "../chat/useModelFamilies";
+import { slowOrFailedModels, testModelsConcurrently } from "../chat/providerConnection";
 import { FAMILY_LABELS, blankRelay, blankRoute, blankModel, validateModels, maskBaseUrl, maskKey, type ModelFamily, type ModelSpec, type RelaySpec, type RouteSpec } from "../chat/useModelFamilies";
 import { filterPresets, hostOf, matchPreset, PRESET_KINDS, type ProviderPreset } from "../chat/providerPresets";
 import type { PricedModel } from "../chat/pricingPage";
 import { catalogEntryToPriced } from "../chat/pricingPage";
+import { catalogVision } from "../chat/modelVision";
 import { fetchPublicCatalog, type CatalogEntry } from "../rpc/pricingPage";
 import { BrandIcon, type BrandName } from "./BrandIcon";
 import { ConfirmDialog } from "./ConfirmDialog";
@@ -29,7 +31,7 @@ type Draft =
  * over the preset's endpoint. Forms take over the dialog body so the lists
  * stay uncluttered.
  */
-export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, onSaveRate, onClose, onSaveRelay, onDeleteRelay, onSetRelayEnabled, onSaveRoute, onDeleteRoute, onReorderRoutes, onSetDefaultRoute, onAutoFailover, onTest, onDiscover, configError }: {
+export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, onSaveRate, onClose, onSaveRelay, onDeleteRelay, onSetRelayEnabled, onSaveRoute, onDeleteRoute, onReorderRoutes, onSetDefaultRoute, onAutoFailover, onTest, onCancelTest, onDiscover, configError }: {
 	families: ModelFamily[];
 	relays: RelaySpec[];
 	autoFailover: boolean;
@@ -45,7 +47,8 @@ export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, o
 	onReorderRoutes: (familyId: string, relayIds: string[]) => Promise<boolean>;
 	onSetDefaultRoute: (familyId: string, relayId: string | null) => Promise<boolean>;
 	onAutoFailover: (autoFailover: boolean) => Promise<boolean>;
-	onTest: (baseUrl: string, apiKey: string, modelId: string, timeoutSeconds: number) => Promise<TestResult>;
+	onTest: (baseUrl: string, apiKey: string, modelId: string, timeoutSeconds: number, requestId?: string) => Promise<TestResult>;
+	onCancelTest: (requestId: string) => Promise<unknown>;
 	onDiscover: (baseUrl: string, apiKey: string) => Promise<string[]>;
 }) {
 	const dialogRef = useRef<HTMLDialogElement>(null);
@@ -58,10 +61,37 @@ export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, o
 	const [error, setError] = useState<string>();
 	const [reveal, setReveal] = useState(false);
 	const [testing, setTesting] = useState(false);
-	const [result, setResult] = useState<TestResult>();
+	const [testResults, setTestResults] = useState<(TestResult & { modelId: string })[]>([]);
+	const [testModels, setTestModels] = useState<string[]>([]);
+	const [testModel, setTestModel] = useState<string>();
+	const [showTestModels, setShowTestModels] = useState(false);
+	const [selectedTestModels, setSelectedTestModels] = useState<string[]>([]);
+	const [testModelQuery, setTestModelQuery] = useState("");
+	const [testBatch, setTestBatch] = useState<string[]>([]);
+	const [completedTestModels, setCompletedTestModels] = useState<string[]>([]);
+	const [testStopped, setTestStopped] = useState(false);
+	const [runningTestModels, setRunningTestModels] = useState<string[]>([]);
+	const [stoppedTestModels, setStoppedTestModels] = useState<string[]>([]);
+	const [slowThreshold, setSlowThreshold] = useState(10);
+	const [testSort, setTestSort] = useState<"latency" | "name">("latency");
+	const testRequest = useRef(0);
+	const activeTests = useRef(new Map<string, string>());
+	const excludedTestModels = draft?.kind === "relay" ? draft.relay.excludedModelIds ?? [] : [];
+	const result = testResults.find((item) => item.modelId === testModel);
+	const connectionPassed = testResults.some((item) => item.ok && !excludedTestModels.includes(item.modelId));
+	const selectableTestModels = testModels.filter((model) => !excludedTestModels.includes(model) && !testResults.some((item) => item.modelId === model && !item.ok));
+	const allTestModelsSelected = selectableTestModels.length > 0 && selectableTestModels.length === selectedTestModels.length && selectableTestModels.every((model) => selectedTestModels.includes(model));
+	const filteredTestModels = testModels.filter((model) => model.toLowerCase().includes(testModelQuery.trim().toLowerCase())).sort((a, b) => {
+		const latency = (model: string) => { const tested = testResults.find((item) => item.modelId === model); return tested?.ok ? tested.latencyMs : Number.POSITIVE_INFINITY; };
+		return (testSort === "latency" ? latency(a) - latency(b) : 0) || a.localeCompare(b);
+	});
 	const [catalog, setCatalog] = useState<CatalogEntry[]>([]);
 	const [catalogStale, setCatalogStale] = useState(false);
 	const [catalogFetchedAt, setCatalogFetchedAt] = useState(0);
+	const cancelActiveTest = () => {
+		for (const requestId of activeTests.current.keys()) void onCancelTest(requestId).catch(() => {});
+		activeTests.current.clear();
+	};
 
 	// 官方牌价目录：失败静默（导入面板的牌价区会显示加载中/不可用）。
 	useEffect(() => {
@@ -72,17 +102,44 @@ export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, o
 			setCatalogStale(response.stale);
 			setCatalogFetchedAt(response.fetchedAt);
 		}).catch(() => {});
-		return () => { alive = false; };
+		return () => { alive = false; testRequest.current += 1; cancelActiveTest(); };
 	}, []);
 
 	useEffect(() => { dialogRef.current?.showModal(); }, []);
 
+	const resetConnectionTest = () => {
+		testRequest.current += 1;
+		cancelActiveTest();
+		setTesting(false); setTestResults([]); setTestModels([]); setTestModel(undefined);
+		setShowTestModels(false); setSelectedTestModels([]); setTestModelQuery(""); setTestBatch([]);
+		setCompletedTestModels([]); setTestStopped(false);
+		setRunningTestModels([]); setStoppedTestModels([]);
+	};
+	const closeDraft = () => { resetConnectionTest(); setDraft(undefined); };
+	const stopConnectionTest = () => {
+		testRequest.current += 1;
+		setStoppedTestModels([...activeTests.current.values()]);
+		cancelActiveTest();
+		setRunningTestModels([]);
+		setTesting(false); setTestStopped(true);
+	};
+	const setModelExclusions = (models: string[], excluded: boolean) => {
+		setDraft((current) => {
+			if (!current || current.kind !== "relay") return current;
+			const previous = current.relay.excludedModelIds ?? [];
+			const excludedModelIds = excluded ? [...new Set([...previous, ...models])].sort() : previous.filter((model) => !models.includes(model));
+			return { ...current, relay: { ...current.relay, excludedModelIds } };
+		});
+	};
+
 	const openPick = () => {
-		setError(undefined); setResult(undefined); setReveal(false); setQuery("");
+		resetConnectionTest();
+		setError(undefined); setReveal(false); setQuery("");
 		setDraft({ kind: "pick" });
 	};
 	const openRelay = (relay?: RelaySpec, preset?: ProviderPreset) => {
-		setError(undefined); setResult(undefined); setReveal(false);
+		resetConnectionTest();
+		setError(undefined); setReveal(false);
 		if (relay) {
 			setDraft({ kind: "relay", relay: { ...relay }, isNew: false, preset: preset ?? matchPreset(relay.baseUrl) });
 		} else if (preset) {
@@ -92,13 +149,14 @@ export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, o
 		}
 	};
 	const openRoute = (familyId: string, route?: RouteSpec, preferredRelayId?: string) => {
-		setError(undefined); setResult(undefined); setReveal(false);
+		resetConnectionTest();
+		setError(undefined); setReveal(false);
 		const fallbackRelay = preferredRelayId ?? relays[0]?.id ?? "";
-		setDraft({ kind: "route", familyId, route: route ? { ...route, models: route.models.length ? route.models.map((model) => ({ ...model })) : [blankModel()] } : blankRoute(fallbackRelay), isNew: !route });
+		setDraft({ kind: "route", familyId, route: route ? { ...route, models: route.models.length ? route.models.map((model) => ({ ...model, vision: model.vision ?? catalogVision(model.modelId, catalog) })) : [blankModel()] } : blankRoute(fallbackRelay), isNew: !route });
 	};
 
 	const patchRelay = (value: Partial<RelaySpec>) => {
-		setResult(undefined);
+		resetConnectionTest();
 		setDraft((current) => current && current.kind === "relay" ? { ...current, relay: { ...current.relay, ...value } } : current);
 	};
 	const patchRoute = (value: Partial<RouteSpec>) => {
@@ -122,12 +180,13 @@ export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, o
 	const fillFromCatalog = (modelId: string): ModelSpec => {
 		const entry = catalog.find((item) => item.modelId.toLowerCase() === modelId.toLowerCase());
 		const blank = blankModel();
-		if (!entry) return { ...blank, modelId };
+		if (!entry) return { ...blank, modelId, vision: catalogVision(modelId, catalog) };
 		const priced = catalogEntryToPriced(entry, usdCnyRate);
 		const contextWindow = priced.contextWindow ?? blank.contextWindow;
 		return {
 			...blank,
 			modelId: entry.modelId,
+			vision: priced.vision,
 			inputCost: priced.inputCost,
 			outputCost: priced.outputCost,
 			currency: "CNY",
@@ -138,9 +197,10 @@ export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, o
 
 	const addModels = (index: number, ids: string[]) => {
 		if (!draft || draft.kind !== "route") return;
+		const excluded = relays.find((relay) => relay.id === draft.route.relayId)?.excludedModelIds ?? [];
 		const models = [...draft.route.models];
 		const existing = new Set(models.map((model) => model.modelId.trim()));
-		const additions = ids.filter((id) => !existing.has(id)).map(fillFromCatalog);
+		const additions = ids.filter((id) => !existing.has(id) && !excluded.includes(id)).map(fillFromCatalog);
 		// Fill an empty row first so batch discovery leaves no invalid blank row.
 		if (!models[index].modelId.trim() && additions.length) models.splice(index, 1, ...additions);
 		else models.splice(index + 1, 0, ...additions);
@@ -151,20 +211,23 @@ export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, o
 	// dropping the placeholder row once real models land.
 	const importPriced = (priced: PricedModel[]) => {
 		if (!draft || draft.kind !== "route") return;
+		const excluded = relays.find((relay) => relay.id === draft.route.relayId)?.excludedModelIds ?? [];
 		const models = [...draft.route.models];
 		for (const item of priced) {
+			if (excluded.includes(item.modelId)) continue;
 			const index = models.findIndex((model) => model.modelId.trim().toLowerCase() === item.modelId.toLowerCase());
 			if (index >= 0) {
 				const contextWindow = item.contextWindow ?? models[index].contextWindow;
 				models[index] = {
 					...models[index], inputCost: item.inputCost, outputCost: item.outputCost, currency: item.currency,
+					vision: models[index].vision ?? item.vision,
 					contextWindow, maxTokens: item.maxTokens ? Math.min(item.maxTokens, contextWindow) : models[index].maxTokens,
 				};
 			} else {
 				const blank = blankModel();
 				const contextWindow = item.contextWindow ?? blank.contextWindow;
 				models.push({
-					...blank, modelId: item.modelId, inputCost: item.inputCost, outputCost: item.outputCost, currency: item.currency,
+					...blank, modelId: item.modelId, vision: item.vision, inputCost: item.inputCost, outputCost: item.outputCost, currency: item.currency,
 					contextWindow, maxTokens: item.maxTokens ? Math.min(item.maxTokens, contextWindow) : blank.maxTokens,
 				});
 			}
@@ -174,27 +237,59 @@ export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, o
 	};
 
 	// A new relay must pass one live connection test (max_tokens=1) before it
-	// can be saved; the test model is picked from the relay's own /models list.
-	const testRelay = async () => {
+	// can be saved. After failure, the user chooses which models to test next.
+	const testRelay = async (selected?: string[], all = false) => {
 		if (!draft || draft.kind !== "relay" || testing) return;
 		const relay = draft.relay;
-		setTesting(true); setError(undefined); setResult(undefined);
+		const request = ++testRequest.current;
+		setTesting(true); setTestStopped(false); setError(undefined); setCompletedTestModels([]);
+		setRunningTestModels([]); setStoppedTestModels([]);
+		if (all) setShowTestModels(true);
 		try {
-			const models = await onDiscover(relay.baseUrl, relay.apiKey);
+			const models = testModels.length && !all ? testModels : await onDiscover(relay.baseUrl, relay.apiKey);
+			if (request !== testRequest.current) return;
 			if (!models.length) { setError("接口未返回模型，无法测试连接"); return; }
-			setResult(await onTest(relay.baseUrl, relay.apiKey, models[0], relay.timeoutSeconds));
-		} catch (e) { setError(String(e)); }
-		finally { setTesting(false); }
+			setTestModels(models);
+			const batch = all ? models : selected ? models.filter((model) => selected.includes(model)) : [testModel ?? models.find((model) => !excludedTestModels.includes(model)) ?? models[0]];
+			if (!batch.length) { setError("请至少选择一个模型"); return; }
+			setTestBatch(batch);
+			await testModelsConcurrently(batch, {
+				concurrency: 5,
+				isCancelled: () => request !== testRequest.current,
+				onStart: (model, requestId) => {
+					activeTests.current.set(requestId, model);
+					setTestModel(model);
+					setRunningTestModels((previous) => [...previous, model]);
+				},
+				test: async (model, requestId) => {
+					try { return await onTest(relay.baseUrl, relay.apiKey, model, relay.timeoutSeconds, requestId); }
+					finally {
+						activeTests.current.delete(requestId);
+						if (request === testRequest.current) setRunningTestModels((previous) => previous.filter((item) => item !== model));
+					}
+				},
+				onResult: (model, tested) => {
+					setTestModel(model);
+					setTestResults((previous) => [...previous.filter((item) => item.modelId !== model), { ...tested, modelId: model }]);
+					setCompletedTestModels((previous) => [...previous, model]);
+					if (!tested.ok) setShowTestModels(true);
+				},
+			});
+		} catch (e) {
+			if (request === testRequest.current) setError(String(e));
+		} finally {
+			if (request === testRequest.current) setTesting(false);
+		}
 	};
 
 	const submitRelay = async (event: FormEvent) => {
 		event.preventDefault();
-		if (!draft || draft.kind !== "relay" || pending) return;
+		if (!draft || draft.kind !== "relay" || pending || testing) return;
 		const relay = draft.relay;
 		if (!relay.name.trim()) { setError("请填写名称"); return; }
 		if (!/^https?:\/\//i.test(relay.baseUrl.trim())) { setError("接口地址必须以 http:// 或 https:// 开头"); return; }
 		if (relays.some((item) => item.id !== relay.id && item.name.trim().toLowerCase() === relay.name.trim().toLowerCase())) { setError("名称不能重复"); return; }
-		if (draft.isNew && !result?.ok) { setError("请先通过连接测试再保存"); return; }
+		if (draft.isNew && !connectionPassed) { setError("请先通过连接测试再保存"); return; }
 		setPending(true); setError(undefined);
 		try {
 			const saved = await onSaveRelay(relay);
@@ -241,8 +336,8 @@ export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, o
 				const relay = relays.find((item) => item.id === route.relayId);
 				if (!relay || !relay.enabled || !relay.apiKey) continue;
 				for (const model of route.models) {
-					if (!model.modelId.trim()) continue;
-					picks.push({ key: `${relay.id} ${model.modelId}`, relayName: relay.name, baseUrl: relay.baseUrl, apiKey: relay.apiKey, modelId: model.modelId.trim(), inputCost: model.inputCost, outputCost: model.outputCost, currency: model.currency, vision: route.vision });
+					if (!model.modelId.trim() || relay.excludedModelIds?.includes(model.modelId)) continue;
+					picks.push({ key: `${relay.id} ${model.modelId}`, relayName: relay.name, baseUrl: relay.baseUrl, apiKey: relay.apiKey, modelId: model.modelId.trim(), inputCost: model.inputCost, outputCost: model.outputCost, currency: model.currency, vision: model.vision ?? route.vision });
 				}
 			}
 		}
@@ -258,11 +353,12 @@ export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, o
 			for (const route of family.routes) {
 				let bucket = counts.get(route.relayId);
 				if (!bucket) counts.set(route.relayId, bucket = new Set());
-				for (const model of route.models) if (model.modelId.trim()) bucket.add(model.modelId.trim());
+				const excluded = relays.find((relay) => relay.id === route.relayId)?.excludedModelIds ?? [];
+				for (const model of route.models) if (model.modelId.trim() && !excluded.includes(model.modelId)) bucket.add(model.modelId.trim());
 			}
 		}
 		return (relayId: string) => counts.get(relayId)?.size ?? 0;
-	}, [families]);
+	}, [families, relays]);
 	const reorder = (routes: RouteSpec[], index: number, offset: number) => {
 		const ids = routes.map((route) => route.id);
 		const target = index + offset;
@@ -271,7 +367,7 @@ export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, o
 		return ids;
 	};
 
-	return <dialog ref={dialogRef} className="project-dialog provider-dialog family-dialog" aria-labelledby="families-title" onCancel={(event) => { if (pending) event.preventDefault(); else if (draft) { event.preventDefault(); setDraft(undefined); } else onClose(); }}>
+	return <dialog ref={dialogRef} className="project-dialog provider-dialog family-dialog" aria-labelledby="families-title" onCancel={(event) => { if (pending) event.preventDefault(); else if (draft) { event.preventDefault(); closeDraft(); } else onClose(); }}>
 		{draft?.kind === "pick" ? (
 			<div className="provider-sheet">
 				<div className="dialog-heading provider-sheet-head">
@@ -317,7 +413,7 @@ export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, o
 						{preset?.familyId && <span className="provider-tag">{FAMILY_LABELS[preset.familyId]} 家族</span>}
 						<span className="grow" />
 						{site && <button type="button" className="editor-site" onClick={() => openLink(site)} title={site}>{hostOf(site)} ↗</button>}
-						<button type="button" className="icon-btn" onClick={() => setDraft(undefined)} disabled={pending} aria-label="返回列表"><Icon name="close" /></button>
+						<button type="button" className="icon-btn" onClick={closeDraft} disabled={pending} aria-label="返回列表"><Icon name="close" /></button>
 					</div>
 					{draft.isNew && preset && <p className="muted">地址已按预设填好，粘贴密钥并通过连接测试即可；保存后到「模型选择」为它配置线路。</p>}
 					<div className="editor-field">
@@ -361,20 +457,63 @@ export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, o
 							<small>超过此时间会终止请求并提示超时。</small>
 						</div>
 					</div>
-					{draft.isNew && <div className="test-row"><button type="button" className="btn ghost" onClick={() => void testRelay()} disabled={pending || testing || !relay.baseUrl || (!relay.apiKey && !preset?.keyOptional)}>{testing ? "正在测试…" : "测试连接"}</button>{result && <span className={`test-result ${result.ok ? "ok" : "bad"}`} role="status">{result.ok ? `连接成功 · ${result.latencyMs} ms` : `连接失败 · ${result.latencyMs} ms${result.status ? ` · HTTP ${result.status}` : ""}${result.error ? ` · ${result.error}` : ""}`}</span>}<small>新中转需先通过一次连接测试才能保存。</small></div>}
+					<div className="test-row">
+						<button type="button" className="btn ghost" onClick={() => void testRelay()} disabled={pending || testing || !relay.baseUrl || (!relay.apiKey && !preset?.keyOptional)}>{testing ? "正在测试…" : "测试连接"}</button>
+						<button type="button" className="btn ghost" onClick={() => void testRelay(undefined, true)} disabled={pending || testing || !relay.baseUrl || (!relay.apiKey && !preset?.keyOptional)}>测试所有模型（5 并发）</button>
+						{testing && <button type="button" className="btn ghost" onClick={stopConnectionTest}>停止测试</button>}
+						{testStopped && <span className="test-result" role="status">已停止测试，已完成的结果已保留。</span>}
+						{testing && <span className="test-result" role="status">{runningTestModels.length ? `正在测试 ${runningTestModels.length} 个模型 · 已完成 ${completedTestModels.length}/${testBatch.length}` : "正在获取模型列表…"}</span>}
+						{result && !testing && !testStopped && <span className={`test-result ${result.ok ? "ok" : "bad"}`} role="status">{result.ok ? `连接成功 · ${testModel} · ${result.latencyMs} ms` : `连接失败 · 模型 ${testModel} · ${result.latencyMs} ms${result.status ? ` · HTTP ${result.status}` : ""}${result.error ? ` · ${result.error}` : ""}`}</span>}
+						<small>{draft.isNew ? "新中转需至少一个未剔除的模型测试成功才能保存。" : "测试耗时为一次短回复的完整请求时间，最多同时测试 5 个模型。"}</small>
+					</div>
+					{!!relay.excludedModelIds?.length && <div className="connection-exclusions"><span>已剔除 {relay.excludedModelIds.length} 个模型（保存后生效）</span><button type="button" className="btn ghost compact" disabled={pending || testing} onClick={() => setModelExclusions(relay.excludedModelIds ?? [], false)}>恢复全部</button><details><summary>查看剔除名单</summary>{relay.excludedModelIds.map((model) => <div key={model}><span>{model}</span><button type="button" className="btn ghost compact" disabled={pending || testing} onClick={() => setModelExclusions([model], false)}>恢复</button></div>)}</details></div>}
+					{showTestModels && <section className="connection-models" aria-label="选择测试模型">
+						<div className="connection-models-heading">
+							<strong>模型连接测速</strong>
+							<span className="muted">已选 {selectedTestModels.length} / {testModels.length}</span>
+						<button type="button" className="btn ghost compact" disabled={pending || testing || !selectableTestModels.length} onClick={() => setSelectedTestModels(allTestModelsSelected ? [] : [...selectableTestModels])}>{allTestModelsSelected ? "取消全选" : "全选"}</button>
+						</div>
+						<div className="connection-models-actions connection-speed-controls">
+							<label>慢响应阈值（秒）<input type="number" min={1} max={600} value={slowThreshold} onChange={(event) => setSlowThreshold(Math.max(1, Math.min(600, Number(event.target.value) || 1)))} /></label>
+							<button type="button" className="btn ghost compact" disabled={pending || testing || !slowOrFailedModels(testResults, slowThreshold * 1000).some((model) => !excludedTestModels.includes(model))} onClick={() => setModelExclusions(slowOrFailedModels(testResults, slowThreshold * 1000), true)}>剔除慢/失败模型</button>
+							<select aria-label="测速结果排序" value={testSort} onChange={(event) => setTestSort(event.target.value as "latency" | "name")}><option value="latency">耗时从快到慢</option><option value="name">按模型名称排序</option></select>
+						</div>
+						{testModels.length > 10 && <input type="search" aria-label="搜索测试模型" placeholder="搜索模型…" value={testModelQuery} onChange={(event) => setTestModelQuery(event.target.value)} />}
+						<div className="connection-models-list">
+							{filteredTestModels.map((model) => {
+								const tested = testResults.find((item) => item.modelId === model);
+								const waiting = testing && testBatch.includes(model) && !completedTestModels.includes(model);
+								const stopped = stoppedTestModels.includes(model);
+								const status = waiting ? runningTestModels.includes(model) ? "正在测试…" : "等待测试" : stopped ? "已停止" : tested ? `${tested.ok ? "成功" : "失败"} · ${tested.latencyMs} ms${!tested.ok && tested.status ? ` · HTTP ${tested.status}` : ""}${tested.error ? ` · ${tested.error}` : ""}` : "未测试";
+								return <div className="connection-model" key={model}>
+									<label><input type="checkbox" checked={selectedTestModels.includes(model)} disabled={pending || testing} onChange={(event) => setSelectedTestModels((previous) => event.target.checked ? [...previous, model] : previous.filter((item) => item !== model))} /><span>{model}{excludedTestModels.includes(model) ? "（已剔除）" : ""}</span></label>
+									<span className={`test-result ${waiting || stopped ? "muted" : tested ? tested.ok ? "ok" : "bad" : "muted"}`}>{status}</span>
+									<button type="button" className="btn ghost compact" disabled={pending || testing} onClick={() => setModelExclusions([model], !excludedTestModels.includes(model))}>{excludedTestModels.includes(model) ? "恢复" : "剔除"}</button>
+								</div>;
+							})}
+							{!filteredTestModels.length && <p className="muted">没有匹配的模型</p>}
+						</div>
+						<div className="connection-models-actions">
+							<button type="button" className="btn ghost" disabled={pending || testing || !selectedTestModels.length} onClick={() => void testRelay(selectedTestModels)}>测试选中的 {selectedTestModels.length} 个模型</button>
+							<button type="button" className="btn ghost" disabled={pending || testing || !selectedTestModels.some((model) => !excludedTestModels.includes(model))} onClick={() => setModelExclusions(selectedTestModels, true)}>剔除选中的模型</button>
+							{testing && <button type="button" className="btn ghost" onClick={stopConnectionTest}>停止测试</button>}
+							{testBatch.length > 1 && <span className="muted" role="status">本轮已完成 {completedTestModels.length} / {testBatch.length}，成功 {testResults.filter((item) => completedTestModels.includes(item.modelId) && item.ok).length} 个</span>}
+						</div>
+						<small className="muted">全选会跳过已失败的模型；可手动勾选重试。每个模型测试可能产生少量 token 费用。</small>
+					</section>}
 					{(configError || error) && <p className="form-error" role="alert">{configError || error}</p>}
 					<div className="dialog-actions editor-actions">
 						{!draft.isNew && <button type="button" className="btn text-danger" onClick={() => setRemoving({ title: "删除供应商", description: `将删除供应商「${relay.name}」，其全部线路与密钥会一并删除。`, action: async () => { const ok = await onDeleteRelay(relay.id); if (ok) setDraft(undefined); return ok; } })} disabled={pending}>删除</button>}
 						<span className="grow" />
-						<button type="button" className="btn ghost" onClick={() => setDraft(undefined)} disabled={pending}>取消</button>
-						<button className="btn primary" disabled={pending || (draft.isNew && !result?.ok)}>{pending ? "保存中…" : draft.isNew ? "添加" : "保存"}</button>
+						<button type="button" className="btn ghost" onClick={closeDraft} disabled={pending}>取消</button>
+						<button className="btn primary" disabled={pending || testing || (draft.isNew && !connectionPassed)}>{pending ? "保存中…" : draft.isNew ? "添加" : "保存"}</button>
 					</div>
 				</form>;
 			})()
 		) : draft?.kind === "route" ? (
 			<form onSubmit={(event) => void submitRoute(event)}>
 				<div className="dialog-heading"><h2 id="families-title">{draft.isNew ? "添加线路" : "编辑线路"} · {FAMILY_LABELS[draft.familyId] ?? draft.familyId}</h2><button type="button" className="icon-btn" onClick={() => setDraft(undefined)} disabled={pending} aria-label="返回列表"><Icon name="close" /></button></div>
-				<p className="muted">线路声明该中转在本家族下可用的模型及价格，能力开关按线路生效。</p>
+				<p className="muted">图片输入按模型单独设置，目录导入会填入已知能力；流式、工具与推理开关按线路生效。</p>
 				<div className="provider-field"><label htmlFor="route-relay">所属中转</label><select id="route-relay" required value={draft.route.relayId} onChange={(event) => patchRoute({ relayId: event.target.value })} disabled={pending || !draft.isNew}>
 					<option value="" disabled>选择中转…</option>
 					{relays.map((relay) => <option key={relay.id} value={relay.id}>{relay.name}（{maskBaseUrl(relay.baseUrl)}）</option>)}
@@ -384,7 +523,7 @@ export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, o
 					<div className="provider-models-heading"><strong>模型配置</strong><small>单价按每百万令牌填写，顺序与选择器一致</small><PriceImport key={`${draft.familyId}:${draft.route.relayId}`} familyId={draft.familyId} addedIds={draft.route.models.map((model) => model.modelId.trim()).filter(Boolean)} extractors={extractors} catalog={catalog} catalogStale={catalogStale} catalogFetchedAt={catalogFetchedAt} usdCnyRate={usdCnyRate} onSaveRate={onSaveRate} relayBaseUrl={relays.find((relay) => relay.id === draft.route.relayId)?.baseUrl ?? ""} disabled={pending} onImport={importPriced} /></div>
 					{draft.route.models.map((model, index) => <div className="provider-model-row" key={index}>
 						<div className="provider-model-first">
-							<ModelIdField baseUrl={relays.find((relay) => relay.id === draft.route.relayId)?.baseUrl ?? ""} apiKey={relays.find((relay) => relay.id === draft.route.relayId)?.apiKey ?? ""} familyId={draft.familyId} value={model.modelId} onChange={(modelId) => patchModel(index, { modelId })} addedIds={draft.route.models.map((item) => item.modelId.trim())} onAdd={(ids) => addModels(index, ids)} disabled={pending} />
+							<ModelIdField baseUrl={relays.find((relay) => relay.id === draft.route.relayId)?.baseUrl ?? ""} apiKey={relays.find((relay) => relay.id === draft.route.relayId)?.apiKey ?? ""} familyId={draft.familyId} value={model.modelId} onChange={(modelId) => patchModel(index, { modelId, vision: catalogVision(modelId, catalog) })} addedIds={draft.route.models.map((item) => item.modelId.trim())} excludedIds={relays.find((relay) => relay.id === draft.route.relayId)?.excludedModelIds} onAdd={(ids) => addModels(index, ids)} disabled={pending} />
 							<div className="provider-model-actions">
 								<button type="button" className="icon-btn" disabled={pending || index === 0} onClick={() => moveModel(index, -1)} aria-label={`上移模型 ${index + 1}`} title="上移模型"><Icon name="arrow" size={14} /></button>
 								<button type="button" className="icon-btn flip" disabled={pending || index === draft.route.models.length - 1} onClick={() => moveModel(index, 1)} aria-label={`下移模型 ${index + 1}`} title="下移模型"><Icon name="arrow" size={14} /></button>
@@ -392,12 +531,14 @@ export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, o
 							</div>
 						</div>
 						<label className="provider-model-alias">模型别名<input maxLength={64} placeholder="可选，仅改变显示名称" value={model.alias} onChange={(event) => patchModel(index, { alias: event.target.value })} disabled={pending} /></label>
+						{relays.find((relay) => relay.id === draft.route.relayId)?.excludedModelIds?.includes(model.modelId) && <small className="muted">此模型已在供应商中剔除，不会出现在模型选择列表。可在供应商详情中恢复。</small>}
 						<div className="provider-model-limits">
 							<label>输入单价<input type="number" required min={0} step="0.000001" value={model.inputCost} onChange={(event) => patchModel(index, { inputCost: Number(event.target.value) })} disabled={pending} /></label>
 							<label>输出单价<input type="number" required min={0} step="0.000001" value={model.outputCost} onChange={(event) => patchModel(index, { outputCost: Number(event.target.value) })} disabled={pending} /></label>
 							<label>币种<select value={model.currency} onChange={(event) => patchModel(index, { currency: event.target.value === "USD" ? "USD" : "CNY" })} disabled={pending}><option value="CNY">人民币</option><option value="USD">美元</option></select></label>
 							<label>默认最大输出<input type="number" required min={1} step={1} max={model.contextWindow} value={model.maxTokens} onChange={(event) => patchModel(index, { maxTokens: Number(event.target.value) })} disabled={pending} /></label>
 							<label>上下文窗口<input type="number" required min={1} step={1} value={model.contextWindow} onChange={(event) => patchModel(index, { contextWindow: Number(event.target.value) })} disabled={pending} /></label>
+							<label>图片输入<select aria-label={`模型 ${index + 1} 图片输入`} value={model.vision === undefined ? "default" : String(model.vision)} onChange={(event) => patchModel(index, { vision: event.target.value === "default" ? undefined : event.target.value === "true" })} disabled={pending}><option value="default">跟随线路默认</option><option value="true">支持图片</option><option value="false">仅文本</option></select></label>
 						</div>
 						<div className="provider-model-cache">
 							<label>缓存读取单价<input type="number" required min={0} step="0.000001" value={model.cacheReadCost} onChange={(event) => patchModel(index, { cacheReadCost: Number(event.target.value) })} disabled={pending} /></label>
@@ -406,7 +547,7 @@ export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, o
 					</div>)}
 					<button type="button" className="btn ghost compact" disabled={pending} onClick={() => patchRoute({ models: [...draft.route.models, blankModel()] })}>添加模型</button>
 				</div>
-				<div className="provider-capabilities"><label><input type="checkbox" checked={draft.route.streaming} onChange={(event) => patchRoute({ streaming: event.target.checked })} disabled={pending} />流式输出</label><label><input type="checkbox" checked={draft.route.tools} onChange={(event) => patchRoute({ tools: event.target.checked })} disabled={pending} />工具调用</label><label><input type="checkbox" checked={draft.route.vision} onChange={(event) => patchRoute({ vision: event.target.checked })} disabled={pending} />视觉输入</label><label><input type="checkbox" checked={draft.route.reasoning} onChange={(event) => patchRoute({ reasoning: event.target.checked })} disabled={pending} />推理输出</label></div>
+				<div className="provider-capabilities"><label><input type="checkbox" checked={draft.route.streaming} onChange={(event) => patchRoute({ streaming: event.target.checked })} disabled={pending} />流式输出</label><label><input type="checkbox" checked={draft.route.tools} onChange={(event) => patchRoute({ tools: event.target.checked })} disabled={pending} />工具调用</label><label><input type="checkbox" checked={draft.route.vision} onChange={(event) => patchRoute({ vision: event.target.checked })} disabled={pending} />默认支持图片</label><label><input type="checkbox" checked={draft.route.reasoning} onChange={(event) => patchRoute({ reasoning: event.target.checked })} disabled={pending} />推理输出</label></div>
 				{(configError || error) && <p className="form-error" role="alert">{configError || error}</p>}
 				<div className="dialog-actions"><button type="button" className="btn ghost" onClick={() => setDraft(undefined)} disabled={pending}>返回</button><button className="btn primary" disabled={pending}>{pending ? "保存中…" : "保存"}</button></div>
 			</form>

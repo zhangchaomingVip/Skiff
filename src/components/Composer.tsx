@@ -9,6 +9,8 @@ import { Icon } from "./Icon";
 import type { PiCommand } from "../chat/usePiSession";
 import type { WebSearchControls } from "../chat/webSearch";
 
+const IMAGE_CAPABILITY_ERROR = "当前模型未启用图片输入，请在模型配置中确认视觉能力或切换模型。";
+
 /** Message composer: Enter sends, Shift+Enter inserts a newline. */
 export function Composer({
 	disabled,
@@ -89,7 +91,7 @@ export function Composer({
 	const [reading, setReading] = useState(false);
 	const addingRef = useRef(false);
 	const canUseImages = model?.input?.includes("image") ?? false;
-	useEffect(() => { setImageError(undefined); }, [model?.provider, model?.id]);
+	useEffect(() => { setImageError(undefined); }, [model?.provider, model?.id, canUseImages]);
 	const addAttachments = async (selected: File[]) => {
 		if (!selected.length || addingRef.current || sendingRef.current || streaming) return;
 		addingRef.current = true; setReading(true); setImageError(undefined);
@@ -112,7 +114,7 @@ export function Composer({
 	const submit = async () => {
 		const trimmed = text.trim();
 		if ((!trimmed && !images.length && !files.length) || disabled || streaming || sendingRef.current || reading) return;
-		if (images.length && !canUseImages) { setImageError("当前模型不支持图片，请切换到多模态模型。"); return; }
+		if (images.length && !canUseImages) { setImageError(IMAGE_CAPABILITY_ERROR); return; }
 		sendingRef.current = true;
 		const sentIds = new Set(images.map((image) => image.id));
 		const sentFiles = new Set(files.map((file) => file.id));
@@ -147,7 +149,7 @@ export function Composer({
 			</div>}
 			{files.length > 0 && <div className="text-attachments">{files.map((file) => <div key={file.id}><Icon name="code" size={14} /><span>{file.name}</span><button disabled={streaming || sendingRef.current} aria-label={`移除文本文件 ${file.name}`} onClick={() => setFiles((items) => items.filter((item) => item.id !== file.id))}><Icon name="close" size={12} /></button></div>)}</div>}
 			{images.length > 0 && <div className="attachment-list">{images.map((image) => <div className="attachment" key={image.id}><img src={`data:${image.mimeType};base64,${image.data}`} alt={image.name} /><button className="attachment-remove" aria-label={`移除图片 ${image.name}`} disabled={streaming || sendingRef.current} onClick={() => setImages((previous) => previous.filter((item) => item.id !== image.id))}><Icon name="close" size={12} /></button><span title={image.name}>{image.name}</span></div>)}</div>}
-			{(imageError || (images.length > 0 && !canUseImages)) && <p className="attachment-error" role="alert">{imageError ?? "当前模型不支持图片，请切换到多模态模型。"}</p>}
+			{(imageError || (images.length > 0 && !canUseImages)) && <p className="attachment-error" role="alert">{imageError ?? IMAGE_CAPABILITY_ERROR}</p>}
 			<textarea
 				ref={inputRef}
 				className="composer-input"

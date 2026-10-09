@@ -71,6 +71,7 @@ export function modelsFromOffers(offers: RuntimeOffer[], _defaults: FamilyDefaul
 			...(resolved.streaming === undefined ? {} : { streaming: resolved.streaming }),
 			...(resolved.tools === undefined ? {} : { tools: resolved.tools }),
 			...(resolved.vision === undefined ? {} : { vision: resolved.vision }),
+			...(resolved.vision === undefined ? {} : { input: resolved.vision ? ["text", "image"] : ["text"] }),
 			...(resolved.reasoning === undefined ? {} : { reasoning: resolved.reasoning }),
 			name: title,
 			providerName: resolved.relayName,
@@ -83,9 +84,9 @@ export function modelsFromOffers(offers: RuntimeOffer[], _defaults: FamilyDefaul
 }
 
 /**
- * Reconciles the live model reported by pi with the family list. The live entry
- * carries capabilities pi resolved from models.json (vision and reasoning). Prices and
- * limits come from the configured model, matched by provider key and model ID.
+ * Reconciles the live model reported by pi with the family list. Explicit route
+ * capabilities, prices and limits take precedence; older offers without capability
+ * fields retain pi's values, matched by provider key and model ID.
  */
 export function reconcile(current: ModelInfo | undefined, offers: RuntimeOffer[], available: ModelInfo[] = [], defaults: FamilyDefaults = []): ModelInfo[] {
 	if (!offers.length) return available.length ? available : current ? [current] : [];

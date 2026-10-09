@@ -7,6 +7,7 @@ import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { once } from "node:events";
+import { testImage } from "./imageFixture.mjs";
 
 const cli = process.argv[2];
 if (!cli) throw new Error("Usage: node tests/pi.families.integration.mjs <pi-cli.js>");
@@ -40,14 +41,14 @@ await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
 let child;
 try {
 	const routes = [
-		{ id: "a", path: "stream", model: "deepseek-chat", streaming: true, tools: true, input: 1, timeout: 5 },
-		{ id: "b", path: "json", model: "deepseek-v4.1", streaming: false, tools: false, input: 2, timeout: 5 },
+		{ id: "a", path: "stream", model: "deepseek-chat", streaming: true, tools: true, vision: true, input: 1, timeout: 5 },
+		{ id: "b", path: "json", model: "deepseek-v4.1", streaming: false, tools: false, vision: true, input: 2, timeout: 5 },
 		{ id: "c", path: "failure", model: "deepseek-chat", streaming: true, tools: false, input: 0, timeout: 5 },
 		{ id: "d", path: "timeout", model: "deepseek-chat", streaming: true, tools: false, input: 0, timeout: 1 },
 	].map((item) => ({ providerKey: `skiff-deepseek-${item.id}`, keyEnv: `SKIFF_TEST_KEY_${item.id}`,
 		baseUrl: `http://127.0.0.1:${server.address().port}/${item.path}/v1`,
 		streaming: item.streaming, tools: item.tools, timeoutSeconds: item.timeout,
-		models: [{ id: item.model, name: item.id, api: "openai-completions", input: ["text"], reasoning: false,
+		models: [{ id: item.model, name: item.id, api: "openai-completions", input: item.vision ? ["text", "image"] : ["text"], reasoning: false,
 			contextWindow: 64000, maxTokens: item.id === "a" ? 100 : 200, cost: { input: item.input, output: 3, cacheRead: 0, cacheWrite: 0 } }] }));
 	routes[0].models.push(
 		{ ...routes[0].models[0], id: "deepseek-flash", maxTokens: 300, contextWindow: 32000, cost: { input: 4, output: 6, cacheRead: 0, cacheWrite: 0 } },
@@ -88,7 +89,8 @@ try {
 			assert.equal(selected.cost.input, model.cost.input);
 			assert.equal(selected.contextWindow, model.contextWindow);
 			const count = events.filter((event) => event.type === "agent_end").length;
-			await rpc({ type: "prompt", message: "只回复一行" });
+			const images = model.input.includes("image") ? [{ type: "image", mimeType: "image/png", data: testImage().toString("base64") }] : [];
+			await rpc({ type: "prompt", message: "只回复一行", ...(images.length ? { images } : {}) });
 			const deadline = Date.now() + 15000;
 			while (events.filter((event) => event.type === "agent_end").length === count) {
 				if (Date.now() > deadline) throw new Error(`No agent_end for ${route.providerKey}: ${stderr.slice(-1500)}`);
@@ -111,6 +113,8 @@ try {
 			assert.equal(request.key, `Bearer dummy-${route.providerKey}`);
 			assert.equal(request.payload.model, model.id);
 			assert.equal(request.payload.stream, route.streaming);
+			if (images.length) assert.ok(request.payload.messages.some((message) => Array.isArray(message.content)
+				&& message.content.some((part) => part.type === "image_url" && part.image_url.url === `data:image/png;base64,${images[0].data}`)), "Route image did not reach upstream");
 			assert.equal(request.payload.max_tokens ?? request.payload.max_completion_tokens, model.maxTokens);
 			if (index === 0) {
 				const previous = await rpc({ type: "get_state" });
@@ -120,12 +124,15 @@ try {
 				await rpc({ type: "set_model", provider: selected.provider, modelId: selected.id });
 				const restored = (await rpc({ type: "get_state" })).model;
 				assert.equal(restored.id, model.id); assert.equal(restored.provider, route.providerKey);
+				assert.deepEqual(restored.input, ["text", "image"]);
+				assert.ok((await rpc({ type: "get_messages" })).messages.some((message) => message.role === "user"
+					&& Array.isArray(message.content) && message.content.some((block) => block.type === "image")), "Route image missing from restored history");
 			}
 			if (!route.tools) assert.equal(request.payload.tools, undefined);
 			else assert.ok(request.payload.tools?.length > 0);
 		}
 	}
-	console.log("PASS: real pi multi-model channel routing, independent prices/limits, session model restoration, separate keys, streaming toggle, tool toggle, 401 and request timeout (local only).");
+	console.log("PASS: real pi multi-model channel routing, image payloads and history, independent prices/limits, session model restoration, separate keys, streaming toggle, tool toggle, 401 and request timeout (local only).");
 } finally {
 	if (child && child.exitCode === null) { const exited = once(child, "exit"); child.kill(); await exited; }
 	server.closeAllConnections(); await new Promise((resolve) => server.close(resolve));

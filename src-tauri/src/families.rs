@@ -10,7 +10,11 @@
 //! `models.json` / `auth.json` as `skiff-relay-<relay>-<family>`, with every
 //! route of a relay sharing one key environment variable.
 
+use std::collections::HashMap;
+use std::future::Future;
 use std::path::Path;
+use std::sync::{Mutex, OnceLock};
+use std::task::Poll;
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -65,6 +69,9 @@ pub enum Currency {
 #[serde(rename_all = "camelCase")]
 pub struct ModelSpec {
 	pub model_id: String,
+	/// Per-model image capability; old configurations retain the route default.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub vision: Option<bool>,
 	#[serde(default)]
 	pub alias: String,
 	#[serde(default)]
@@ -98,6 +105,8 @@ pub struct RelaySpec {
 	pub enabled: bool,
 	#[serde(default)]
 	pub billing_account_id: String,
+	#[serde(default)]
+	pub excluded_model_ids: Vec<String>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -449,6 +458,9 @@ fn normalize_relay(mut relay: RelaySpec, config: &FamiliesConfig) -> Result<Rela
 	relay.base_url = validate_base_url(&relay.base_url)?;
 	relay.api_key = validate_api_key(&relay.api_key)?;
 	relay.timeout_seconds = relay.timeout_seconds.clamp(5, 600);
+	relay.excluded_model_ids = relay.excluded_model_ids.iter().map(|id| validate_model_id(id)).collect::<Result<Vec<_>, _>>()?;
+	relay.excluded_model_ids.sort();
+	relay.excluded_model_ids.dedup();
 	Ok(relay)
 }
 
@@ -470,6 +482,7 @@ fn normalize_models(models: &[ModelSpec]) -> Result<Vec<ModelSpec>, String> {
 		let cache_write_cost = if model.cache_write_cost == 0.0 && input_cost > 0.0 { input_cost } else { money(model.cache_write_cost) };
 		normalized.push(ModelSpec {
 			model_id,
+			vision: model.vision,
 			alias,
 			input_cost,
 			output_cost: money(model.output_cost),
@@ -557,7 +570,7 @@ fn key_env(key: &str) -> String {
 }
 
 fn project_model(route: &RouteSpec, item: &ModelSpec, key: &str) -> Value {
-	let vision = if route.vision { json!(["text", "image"]) } else { json!(["text"]) };
+	let vision = if item.vision.unwrap_or(route.vision) { json!(["text", "image"]) } else { json!(["text"]) };
 	json!({
 		"id": item.model_id, "name": if item.alias.is_empty() { item.model_id.clone() } else { item.alias.clone() }, "api": "openai-completions", "provider": key,
 		"cost": { "input": item.input_cost, "output": item.output_cost, "cacheRead": item.cache_read_cost, "cacheWrite": item.cache_write_cost },
@@ -593,7 +606,8 @@ pub fn prepare_runtime(dir: &Path, cmd: &mut std::process::Command) -> Result<()
 		}
 		for family in &config.families {
 			for route in family.routes.iter().filter(|route| route.relay_id == relay.id) {
-				if !route.enabled || route.models.is_empty() || !relay.enabled {
+				let models: Vec<_> = route.models.iter().filter(|model| !relay.excluded_model_ids.contains(&model.model_id)).collect();
+				if !route.enabled || models.is_empty() || !relay.enabled {
 					continue;
 				}
 				let route_key = provider_key(&family.id, &relay.id);
@@ -602,7 +616,7 @@ pub fn prepare_runtime(dir: &Path, cmd: &mut std::process::Command) -> Result<()
 				routes.push(json!({ "providerKey": route_key, "baseUrl": relay.base_url,
 					"keyEnv": key_env(&route_key), "streaming": route.streaming, "tools": route.tools,
 					"timeoutSeconds": relay.timeout_seconds,
-					"models": route.models.iter().map(|model| project_model(route, model, &route_key)).collect::<Vec<_>>() }));
+					"models": models.iter().map(|model| project_model(route, model, &route_key)).collect::<Vec<_>>() }));
 			}
 		}
 	}
@@ -638,7 +652,7 @@ pub fn project(dir: &Path, config: &FamiliesConfig) -> Result<(), String> {
 		for route in &family.routes {
 			if !route.enabled || route.models.is_empty() { continue; }
 			let Some(relay) = config.relays.iter().find(|relay| relay.id == route.relay_id) else { continue };
-			if !relay.enabled { continue; }
+			if !relay.enabled || route.models.iter().all(|model| relay.excluded_model_ids.contains(&model.model_id)) { continue; }
 			desired.push((provider_key(&family.id, &relay.id), relay, route));
 		}
 	}
@@ -650,7 +664,7 @@ pub fn project(dir: &Path, config: &FamiliesConfig) -> Result<(), String> {
 			let entry = json!({
 				"api": "openai-completions",
 				"baseUrl": relay.base_url,
-				"models": route.models.iter().map(|item| project_model(route, item, key)).collect::<Vec<_>>(),
+				"models": route.models.iter().filter(|item| !relay.excluded_model_ids.contains(&item.model_id)).map(|item| project_model(route, item, key)).collect::<Vec<_>>(),
 			});
 			map.insert(key.clone(), entry);
 		}
@@ -690,6 +704,7 @@ pub fn runtime_offers(config: &FamiliesConfig) -> Vec<RuntimeOffer> {
 				continue;
 			}
 			for model in &route.models {
+				if relay.excluded_model_ids.contains(&model.model_id) { continue; }
 				offers.push(RuntimeOffer {
 					offer_id: format!("{}/{}", route.id, model.model_id),
 					route_id: route.id.clone(),
@@ -704,7 +719,7 @@ pub fn runtime_offers(config: &FamiliesConfig) -> Vec<RuntimeOffer> {
 					route_order,
 					streaming: route.streaming,
 					tools: route.tools,
-					vision: route.vision,
+					vision: model.vision.unwrap_or(route.vision),
 					reasoning: route.reasoning,
 					input_cost: model.input_cost,
 					output_cost: model.output_cost,
@@ -969,6 +984,41 @@ mod tests {
 	use super::*;
 
 	#[test]
+	fn model_vision_survives_save_and_controls_projection_and_runtime_independently() {
+		let dir = std::env::temp_dir().join(format!("skiff-model-vision-test-{}", std::process::id()));
+		std::fs::create_dir_all(&dir).unwrap();
+		let mut config: FamiliesConfig = serde_json::from_value(json!({
+			"version": 4,
+			"relays": [{ "id": "r1", "name": "Relay", "baseUrl": "https://relay.example/v1", "enabled": true }],
+			"families": [{ "id": "glm", "displayName": "GLM", "routes": [{
+				"id": "route-glm-r1", "relayId": "r1", "vision": false,
+				"models": [
+					{ "modelId": "glm-5.3", "vision": false, "contextWindow": 128000, "maxTokens": 8192 },
+					{ "modelId": "glm-5.3-flash", "vision": true, "contextWindow": 128000, "maxTokens": 8192 },
+					{ "modelId": "legacy", "contextWindow": 128000, "maxTokens": 8192 }
+				]
+			}] }]
+		})).unwrap();
+		config.families[0].routes[0].models = normalize_models(&config.families[0].routes[0].models).unwrap();
+		for default_vision in [false, true] {
+			config.families[0].routes[0].vision = default_vision;
+			save(&dir, &config).unwrap();
+			let saved = load_plain(&dir).unwrap();
+			let route = &saved.families.iter().find(|family| family.id == "glm").unwrap().routes[0];
+			assert_eq!(route.models.iter().map(|model| model.vision).collect::<Vec<_>>(), vec![Some(false), Some(true), None]);
+			assert_eq!(runtime_offers(&saved).iter().map(|offer| offer.vision).collect::<Vec<_>>(), vec![false, true, default_vision]);
+			let expected = vec![json!(["text"]), json!(["text", "image"]), if default_vision { json!(["text", "image"]) } else { json!(["text"]) }];
+			let projected = providers::read_config(&dir.join("models.json")).unwrap();
+			assert_eq!(projected["providers"]["skiff-relay-r1-glm"]["models"].as_array().unwrap().iter().map(|model| model["input"].clone()).collect::<Vec<_>>(), expected);
+			let mut command = std::process::Command::new("pi");
+			prepare_runtime(&dir, &mut command).unwrap();
+			let runtime: Value = serde_json::from_str(command.get_envs().find(|(name, _)| *name == "SKIFF_FAMILY_RUNTIME").unwrap().1.unwrap().to_str().unwrap()).unwrap();
+			assert_eq!(runtime[0]["models"].as_array().unwrap().iter().map(|model| model["input"].clone()).collect::<Vec<_>>(), expected);
+		}
+		std::fs::remove_dir_all(dir).unwrap();
+	}
+
+	#[test]
 	fn migrates_v3_route_and_model_fields_without_losing_default() {
 		let mut value = json!({
 			"version": 3,
@@ -988,8 +1038,8 @@ mod tests {
 
 	#[test]
 	fn runtime_offers_skip_disabled_routes_and_expose_offer_identity() {
-		let relay = RelaySpec { id: "r1".into(), name: "Relay".into(), base_url: "https://relay.example/v1".into(), api_key: String::new(), timeout_seconds: 60, enabled: true, billing_account_id: "wallet-a".into() };
-		let model = ModelSpec { model_id: "kimi-k3".into(), alias: "k3-便宜".into(), input_cost: 1.0, output_cost: 4.0, cache_read_cost: 0.5, cache_write_cost: 0.7, currency: Currency::Cny, max_tokens: 8192, context_window: 128000 };
+		let relay = RelaySpec { id: "r1".into(), name: "Relay".into(), base_url: "https://relay.example/v1".into(), api_key: String::new(), timeout_seconds: 60, enabled: true, billing_account_id: "wallet-a".into(), excluded_model_ids: Vec::new() };
+		let model = ModelSpec { model_id: "kimi-k3".into(), vision: None, alias: "k3-便宜".into(), input_cost: 1.0, output_cost: 4.0, cache_read_cost: 0.5, cache_write_cost: 0.7, currency: Currency::Cny, max_tokens: 8192, context_window: 128000 };
 		let route = RouteSpec { id: "route-kimi-r1".into(), relay_id: "r1".into(), enabled: true, models: vec![model], streaming: true, tools: true, vision: false, reasoning: true };
 		let disabled = RouteSpec { id: "route-kimi-r2".into(), relay_id: "r1".into(), enabled: false, models: vec![], streaming: true, tools: true, vision: false, reasoning: false };
 		let family = ModelFamily { id: "kimi".into(), display_name: "Kimi".into(), routes: vec![route, disabled], default_route_id: Some("route-kimi-r1".into()) };
@@ -1016,16 +1066,16 @@ mod tests {
 			"custom": {"type": "oauth"},
 			"skiff-relay-stale-kimi": {"type": "api_key", "key": "old"}
 		}).to_string()).unwrap();
-		let model = ModelSpec { model_id: "kimi-k3".into(), alias: "k3".into(), input_cost: 1.0, output_cost: 4.0, cache_read_cost: 1.0, cache_write_cost: 1.0, currency: Currency::Cny, max_tokens: 8192, context_window: 128000 };
+		let model = ModelSpec { model_id: "kimi-k3".into(), vision: None, alias: "k3".into(), input_cost: 1.0, output_cost: 4.0, cache_read_cost: 1.0, cache_write_cost: 1.0, currency: Currency::Cny, max_tokens: 8192, context_window: 128000 };
 		let active = RouteSpec { id: "route-kimi-r1".into(), relay_id: "r1".into(), enabled: true, models: vec![model.clone()], streaming: true, tools: true, vision: false, reasoning: false };
 		let stopped_route = RouteSpec { id: "route-kimi-stopped".into(), relay_id: "r1".into(), enabled: false, models: vec![model.clone()], streaming: true, tools: true, vision: false, reasoning: false };
 		let stopped_relay_route = RouteSpec { id: "route-kimi-r2".into(), relay_id: "r2".into(), enabled: true, models: vec![model], streaming: true, tools: true, vision: false, reasoning: false };
-		let deepseek_model = ModelSpec { model_id: "deepseek-chat".into(), alias: String::new(), input_cost: 0.3, output_cost: 1.2, cache_read_cost: 0.3, cache_write_cost: 0.3, currency: Currency::Cny, max_tokens: 8192, context_window: 128000 };
+		let deepseek_model = ModelSpec { model_id: "deepseek-chat".into(), vision: None, alias: String::new(), input_cost: 0.3, output_cost: 1.2, cache_read_cost: 0.3, cache_write_cost: 0.3, currency: Currency::Cny, max_tokens: 8192, context_window: 128000 };
 		let config = FamiliesConfig {
 			version: 4,
 			relays: vec![
-				RelaySpec { id: "r1".into(), name: "Active".into(), base_url: "https://active.example/v1".into(), api_key: "key-active".into(), timeout_seconds: 60, enabled: true, billing_account_id: "wallet-a".into() },
-				RelaySpec { id: "r2".into(), name: "Stopped".into(), base_url: "https://stopped.example/v1".into(), api_key: "key-stopped".into(), timeout_seconds: 60, enabled: false, billing_account_id: "wallet-b".into() },
+				RelaySpec { id: "r1".into(), name: "Active".into(), base_url: "https://active.example/v1".into(), api_key: "key-active".into(), timeout_seconds: 60, enabled: true, billing_account_id: "wallet-a".into(), excluded_model_ids: Vec::new() },
+				RelaySpec { id: "r2".into(), name: "Stopped".into(), base_url: "https://stopped.example/v1".into(), api_key: "key-stopped".into(), timeout_seconds: 60, enabled: false, billing_account_id: "wallet-b".into(), excluded_model_ids: Vec::new() },
 			],
 			families: vec![
 				ModelFamily { id: "kimi".into(), display_name: "Kimi".into(), routes: vec![active, stopped_route, stopped_relay_route], default_route_id: Some("route-kimi-r1".into()) },
@@ -1059,12 +1109,12 @@ mod tests {
 		let dir = std::env::temp_dir().join(format!("skiff-default-test-{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(&dir).unwrap();
-		let model = ModelSpec { model_id: "kimi-k3".into(), alias: String::new(), input_cost: 1.0, output_cost: 4.0, cache_read_cost: 1.0, cache_write_cost: 1.0, currency: Currency::Cny, max_tokens: 8192, context_window: 128000 };
+		let model = ModelSpec { model_id: "kimi-k3".into(), vision: None, alias: String::new(), input_cost: 1.0, output_cost: 4.0, cache_read_cost: 1.0, cache_write_cost: 1.0, currency: Currency::Cny, max_tokens: 8192, context_window: 128000 };
 		let config = FamiliesConfig {
 			version: 4,
 			relays: vec![
-				RelaySpec { id: "r1".into(), name: "Primary".into(), base_url: "https://primary.example/v1".into(), api_key: "key-1".into(), timeout_seconds: 60, enabled: true, billing_account_id: String::new() },
-				RelaySpec { id: "r2".into(), name: "Backup".into(), base_url: "https://backup.example/v1".into(), api_key: "key-2".into(), timeout_seconds: 60, enabled: true, billing_account_id: String::new() },
+				RelaySpec { id: "r1".into(), name: "Primary".into(), base_url: "https://primary.example/v1".into(), api_key: "key-1".into(), timeout_seconds: 60, enabled: true, billing_account_id: String::new(), excluded_model_ids: Vec::new() },
+				RelaySpec { id: "r2".into(), name: "Backup".into(), base_url: "https://backup.example/v1".into(), api_key: "key-2".into(), timeout_seconds: 60, enabled: true, billing_account_id: String::new(), excluded_model_ids: Vec::new() },
 			],
 			families: vec![ModelFamily { id: "kimi".into(), display_name: "Kimi".into(), routes: vec![
 				RouteSpec { id: "route-kimi-r1".into(), relay_id: "r1".into(), enabled: true, models: vec![model.clone()], streaming: true, tools: true, vision: false, reasoning: false },
@@ -1105,9 +1155,54 @@ pub async fn extract_pricing_table(base_url: String, api_key: String, model_id: 
 	providers::extract_pricing_table(&base_url, &api_key, &model_id, &instruction, &images).await
 }
 
+#[derive(Default)]
+struct ProviderTestRequests {
+	running: HashMap<String, tauri::async_runtime::Sender<()>>,
+	// IPC cancellation can arrive before the test command starts running.
+	cancelled: HashMap<String, std::time::Instant>,
+}
+
+fn provider_test_requests() -> &'static Mutex<ProviderTestRequests> {
+	static REQUESTS: OnceLock<Mutex<ProviderTestRequests>> = OnceLock::new();
+	REQUESTS.get_or_init(|| Mutex::new(ProviderTestRequests::default()))
+}
+
+/// Dropping the request future closes an in-flight HTTP request, including body reads.
+#[tauri::command]
+pub fn cancel_provider_test(request_id: String) -> Result<(), String> {
+	if request_id.is_empty() || request_id.len() > 128 { return Err("测试请求标识无效".into()); }
+	let mut requests = provider_test_requests().lock().map_err(|_| "无法停止测试")?;
+	requests.cancelled.retain(|_, time| time.elapsed().as_secs() < 60);
+	if let Some(sender) = requests.running.get(&request_id) { let _ = sender.try_send(()); }
+	else { requests.cancelled.insert(request_id, std::time::Instant::now()); }
+	Ok(())
+}
+
 /// One `max_tokens=1` completion proves the relay endpoint, key and model work.
 #[tauri::command]
-pub async fn test_provider_connection(base_url: String, api_key: String, model_id: String, timeout_seconds: Option<u64>) -> Result<TestResult, String> {
+pub async fn test_provider_connection(base_url: String, api_key: String, model_id: String, timeout_seconds: Option<u64>, request_id: Option<String>) -> Result<TestResult, String> {
+	let Some(request_id) = request_id else {
+		return run_provider_test(base_url, api_key, model_id, timeout_seconds).await;
+	};
+	if request_id.is_empty() || request_id.len() > 128 { return Err("测试请求标识无效".into()); }
+	let (sender, mut receiver) = tauri::async_runtime::channel(1);
+	{
+		let mut requests = provider_test_requests().lock().map_err(|_| "无法初始化测试")?;
+		requests.cancelled.retain(|_, time| time.elapsed().as_secs() < 60);
+		if requests.cancelled.remove(&request_id).is_some() { return Err("测试已停止".into()); }
+		if requests.running.contains_key(&request_id) { return Err("测试请求标识重复".into()); }
+		requests.running.insert(request_id.clone(), sender);
+	}
+	let mut pending = Box::pin(run_provider_test(base_url, api_key, model_id, timeout_seconds));
+	let result = std::future::poll_fn(|context| {
+		if receiver.poll_recv(context).is_ready() { return Poll::Ready(Err("测试已停止".into())); }
+		pending.as_mut().poll(context)
+	}).await;
+	if let Ok(mut requests) = provider_test_requests().lock() { requests.running.remove(&request_id); }
+	result
+}
+
+async fn run_provider_test(base_url: String, api_key: String, model_id: String, timeout_seconds: Option<u64>) -> Result<TestResult, String> {
 	let base = validate_base_url(&base_url)?;
 	let model = validate_model_id(&model_id)?;
 	let key = validate_api_key(&api_key)?;
@@ -1180,5 +1275,98 @@ fn network_error(error: &reqwest::Error) -> String {
 		"无法连接，请检查 Base URL 与网络".into()
 	} else {
 		"请求失败".into()
+	}
+}
+
+#[cfg(test)]
+mod connection_test_tests {
+	use super::*;
+	use std::io::{Read, Write};
+	use std::net::TcpListener;
+	use std::sync::mpsc;
+	use std::time::{Duration, Instant};
+
+	fn stops_stalled_request(send_headers: bool) {
+		let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+		let address = listener.local_addr().unwrap();
+		let (ready_tx, ready_rx) = mpsc::channel();
+		let (release_tx, release_rx) = mpsc::channel();
+		let server = std::thread::spawn(move || {
+			let (mut socket, _) = listener.accept().unwrap();
+			socket.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+			let mut buffer = [0; 4096];
+			let _ = socket.read(&mut buffer).unwrap();
+			if send_headers {
+				socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 100\r\n\r\n{").unwrap();
+			}
+			ready_tx.send(()).unwrap();
+			let _ = release_rx.recv_timeout(Duration::from_secs(5));
+		});
+		let request_id = format!("cancel-{address}-{send_headers}");
+		let token = request_id.clone();
+		let (done_tx, done_rx) = mpsc::channel();
+		tauri::async_runtime::spawn(async move {
+			let result = test_provider_connection(format!("http://{address}/v1"), "test-key".into(), "test-model".into(), Some(60), Some(token)).await;
+			let _ = done_tx.send(result);
+		});
+		ready_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+		let stopped = Instant::now();
+		cancel_provider_test(request_id.clone()).unwrap();
+		let result = done_rx.recv_timeout(Duration::from_secs(2));
+		let _ = release_tx.send(());
+		server.join().unwrap();
+		assert_eq!(result.unwrap().err().unwrap(), "测试已停止");
+		assert!(stopped.elapsed() < Duration::from_secs(2));
+		assert!(!provider_test_requests().lock().unwrap().running.contains_key(&request_id));
+	}
+
+	#[test]
+	fn stopping_cancels_waiting_for_headers() { stops_stalled_request(false); }
+
+	#[test]
+	fn stopping_cancels_waiting_for_body() { stops_stalled_request(true); }
+
+	#[test]
+	fn stopping_before_registration_does_not_send_a_request() {
+		let request_id = "cancel-before-start".to_string();
+		cancel_provider_test(request_id.clone()).unwrap();
+		let result = tauri::async_runtime::block_on(test_provider_connection("http://127.0.0.1:1/v1".into(), "test-key".into(), "test-model".into(), Some(60), Some(request_id)));
+		assert_eq!(result.err().unwrap(), "测试已停止");
+	}
+
+	#[test]
+	fn exclusions_persist_filter_runtime_and_projection_and_can_be_restored() {
+		let dir = std::env::temp_dir().join(format!("skiff-exclusions-{}", next_id()));
+		let mut config: FamiliesConfig = serde_json::from_value(json!({
+			"relays": [
+				{ "id": "r1", "name": "One", "baseUrl": "https://one.example/v1", "apiKey": "test-key", "excludedModelIds": ["slow"] },
+				{ "id": "r2", "name": "Two", "baseUrl": "https://two.example/v1" }
+			],
+			"families": [{ "id": "deepseek", "displayName": "DeepSeek", "routes": [
+				{ "id": "route-one", "relayId": "r1", "models": [
+					{ "modelId": "fast", "contextWindow": 1000, "maxTokens": 100 },
+					{ "modelId": "slow", "contextWindow": 1000, "maxTokens": 100 }
+				] },
+				{ "id": "route-two", "relayId": "r2", "models": [{ "modelId": "slow", "contextWindow": 1000, "maxTokens": 100 }] }
+			] }]
+		})).unwrap();
+		save(&dir, &config).unwrap();
+		let saved = load_plain(&dir).unwrap();
+		assert_eq!(saved.relays[0].excluded_model_ids, ["slow"]);
+		assert_eq!(runtime_offers(&saved).iter().map(|offer| (offer.relay_id.as_str(), offer.model_id.as_str())).collect::<Vec<_>>(), [("r1", "fast"), ("r2", "slow")]);
+		let projected = providers::read_config(&dir.join("models.json")).unwrap();
+		assert_eq!(projected["providers"]["skiff-relay-r1-deepseek"]["models"].as_array().unwrap().len(), 1);
+		let mut command = std::process::Command::new("pi");
+		prepare_runtime(&dir, &mut command).unwrap();
+		let runtime: Value = serde_json::from_str(command.get_envs().find(|(name, _)| *name == "SKIFF_FAMILY_RUNTIME").unwrap().1.unwrap().to_str().unwrap()).unwrap();
+		assert_eq!(runtime[0]["models"].as_array().unwrap().len(), 1);
+		assert_eq!(saved.families[0].routes[0].models.len(), 2);
+		config.relays[0].excluded_model_ids.push("fast".into());
+		save(&dir, &config).unwrap();
+		assert!(providers::read_config(&dir.join("models.json")).unwrap()["providers"]["skiff-relay-r1-deepseek"].is_null());
+		config.relays[0].excluded_model_ids.clear();
+		save(&dir, &config).unwrap();
+		assert_eq!(runtime_offers(&load_plain(&dir).unwrap()).len(), 3);
+		std::fs::remove_dir_all(dir).unwrap();
 	}
 }

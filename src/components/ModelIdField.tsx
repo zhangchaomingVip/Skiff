@@ -3,13 +3,14 @@ import { sortDiscoveredModels } from "../chat/modelDiscovery";
 import { discoverModels } from "../rpc/modelDiscovery";
 import { Icon } from "./Icon";
 
-export function ModelIdField({ baseUrl, apiKey, familyId, value, onChange, addedIds = [], onAdd, disabled }: {
+export function ModelIdField({ baseUrl, apiKey, familyId, value, onChange, addedIds = [], excludedIds = [], onAdd, disabled }: {
 	baseUrl: string;
 	apiKey: string;
 	familyId: string;
 	value: string;
 	onChange: (id: string) => void;
 	addedIds?: string[];
+	excludedIds?: string[];
 	onAdd?: (ids: string[]) => void;
 	disabled: boolean;
 }) {
@@ -29,7 +30,7 @@ export function ModelIdField({ baseUrl, apiKey, familyId, value, onChange, added
 	const [query, setQuery] = useState("");
 	const [activeId, setActiveId] = useState("");
 	const [error, setError] = useState<string>();
-	const filtered = useMemo(() => models.filter((id) => id.toLowerCase().includes(query.trim().toLowerCase())), [models, query]);
+	const filtered = useMemo(() => models.filter((id) => !excludedIds.includes(id) && id.toLowerCase().includes(query.trim().toLowerCase())), [models, query, excludedIds]);
 	const active = filtered.includes(activeId) ? activeId : filtered[0];
 	const activeIndex = filtered.indexOf(active);
 	const optionId = activeIndex >= 0 ? `${fieldId}-option-${activeIndex}` : undefined;
@@ -77,7 +78,7 @@ export function ModelIdField({ baseUrl, apiKey, familyId, value, onChange, added
 		}
 	};
 	const choose = (id: string) => {
-		if (disabled || addedIds.includes(id)) return;
+		if (disabled || addedIds.includes(id) || excludedIds.includes(id)) return;
 		if (onAdd) { setSelected((items) => items.includes(id) ? items.filter((item) => item !== id) : [...items, id]); return; }
 		onChange(id); setOpen(false); inputRef.current?.focus();
 	};
@@ -105,7 +106,7 @@ export function ModelIdField({ baseUrl, apiKey, familyId, value, onChange, added
 				{filtered.map((id, index) => <button ref={id === active ? activeRef : undefined} id={`${fieldId}-option-${index}`} type="button" role="option" aria-selected={onAdd ? selected.includes(id) : id === value.trim()} className={`model-discovery-option${id === active ? " active" : ""}`} key={id} tabIndex={-1} onMouseEnter={() => setActiveId(id)} onMouseDown={(event) => event.preventDefault()} onClick={() => choose(id)} disabled={disabled || addedIds.includes(id)}>{onAdd && <span aria-hidden="true">{selected.includes(id) ? "☑" : "☐"}</span>}<span>{id}{addedIds.includes(id) ? "（已添加）" : ""}</span>{!onAdd && id === value.trim() && <Icon name="check" size={14} />}</button>)}
 				{!filtered.length && <p className="model-discovery-empty" role="status">没有匹配的模型</p>}
 			</div>
-			{onAdd && <button type="button" className="btn primary compact" disabled={disabled || !selected.length} onClick={() => { onAdd(models.filter((id) => selected.includes(id) && !addedIds.includes(id))); setOpen(false); setSelected([]); inputRef.current?.focus(); }}>添加选中的 {selected.length} 个模型</button>}
+				{onAdd && <button type="button" className="btn primary compact" disabled={disabled || !selected.length} onClick={() => { onAdd(models.filter((id) => selected.includes(id) && !addedIds.includes(id) && !excludedIds.includes(id))); setOpen(false); setSelected([]); inputRef.current?.focus(); }}>添加选中的 {selected.length} 个模型</button>}
 		</div>}
 		{error && <div className="model-discovery-error" role="alert"><span>{error}</span><button type="button" className="icon-btn" aria-label="关闭模型获取错误" onClick={() => setError(undefined)}><Icon name="close" size={14} /></button></div>}
 	</div>;

@@ -51,6 +51,30 @@ test("an empty family list asks the caller to fall back to pi's own models", () 
 	assert.deepEqual(reconcile({ provider: "deepseek", id: "deepseek-chat" }, []).map((model) => model.provider), ["deepseek"]);
 });
 
+test("vision routes expose image input before pi model metadata arrives", () => {
+	const vision = offer("kimi", "vision", { modelId: "kimi-k2.6", vision: true });
+	const text = offer("kimi", "text", { modelId: "kimi-k2.6", vision: false });
+	assert.deepEqual(modelsFromOffers([vision, text]).map((model) => model.input), [["text", "image"], ["text"]]);
+	assert.deepEqual(reconcile({ provider: vision.providerKey, id: vision.modelId }, [vision])[0].input, ["text", "image"]);
+});
+
+test("route vision changes override stale pi input metadata in both directions", () => {
+	const configured = offer("kimi", "relay", { modelId: "kimi-k3", vision: true });
+	const current = { provider: configured.providerKey, id: configured.modelId, input: ["text"] };
+	assert.deepEqual(reconcile(current, [configured])[0].input, ["text", "image"]);
+	const disabled = { ...configured, vision: false };
+	const stale = { ...current, input: ["text", "image"] };
+	assert.deepEqual(reconcile(stale, [disabled])[0].input, ["text"]);
+	assert.deepEqual(reconcile(undefined, [disabled], [stale])[0].input, ["text"]);
+});
+
+test("legacy offers preserve pi image input on selection and restoration", () => {
+	const legacy = offer("kimi", "relay", { modelId: "kimi-k2.6" });
+	const live = { provider: legacy.providerKey, id: legacy.modelId, input: ["text", "image"] };
+	assert.deepEqual(reconcile(live, [legacy])[0].input, ["text", "image"]);
+	assert.deepEqual(reconcile(undefined, [legacy], [live])[0].input, ["text", "image"]);
+});
+
 test("keys and base urls are masked for display", () => {
 	assert.equal(maskKey("sk-1234567890abcd"), "…abcd");
 	assert.equal(maskKey("abc"), "…abc");

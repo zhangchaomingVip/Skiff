@@ -8,6 +8,8 @@ export type FamilyId = (typeof FAMILY_IDS)[number];
 
 export interface ModelSpec {
 	modelId: string;
+	/** Undefined retains the legacy route default; a boolean overrides it. */
+	vision?: boolean;
 	alias: string;
 	inputCost: number;
 	outputCost: number;
@@ -46,6 +48,7 @@ export interface RelaySpec {
 	timeoutSeconds: number;
 	enabled: boolean;
 	billingAccountId: string;
+	excludedModelIds?: string[];
 }
 
 /** A route binds one relay to one family with its served models. */
@@ -86,7 +89,7 @@ export interface TestResult {
 export const FAMILY_LABELS: Record<string, string> = { deepseek: "DeepSeek", kimi: "Kimi", glm: "GLM" };
 
 export function blankRelay(): RelaySpec {
-	return { id: "", name: "", baseUrl: "", apiKey: "", timeoutSeconds: 60, enabled: true, billingAccountId: "" };
+	return { id: "", name: "", baseUrl: "", apiKey: "", timeoutSeconds: 60, enabled: true, billingAccountId: "", excludedModelIds: [] };
 }
 
 export function blankRoute(relayId = ""): RouteSpec {
@@ -179,8 +182,9 @@ export function useModelFamilies() {
 		setAutoFailover: (autoFailover: boolean) => run("set_family_auto_failover", { autoFailover }),
 		setAutoRetry: (autoRetry: boolean) => run("set_family_auto_retry", { autoRetry }),
 		setUsdCnyRate: (rate: number) => run("set_usd_cny_rate", { rate }),
-		test: (baseUrl: string, apiKey: string, modelId: string, timeoutSeconds: number) =>
-			invoke<TestResult>("test_provider_connection", { baseUrl, apiKey, modelId, timeoutSeconds }),
+		test: (baseUrl: string, apiKey: string, modelId: string, timeoutSeconds: number, requestId?: string) =>
+			invoke<TestResult>("test_provider_connection", { baseUrl, apiKey, modelId, timeoutSeconds, requestId }),
+		cancelTest: (requestId: string) => invoke("cancel_provider_test", { requestId }),
 		discover: (baseUrl: string, apiKey: string) => invoke<string[]>("discover_relay_models", { baseUrl, apiKey }),
 	};
 }

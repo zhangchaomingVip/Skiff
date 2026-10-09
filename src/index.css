@@ -704,9 +704,31 @@ details[open] > summary .disclosure { transform: rotate(90deg); }
 .model-discovery-error { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-top: 6px; padding: 6px 9px; background: var(--panel); border: 1px solid var(--danger); border-radius: var(--radius-sm); color: var(--danger); font-size: 12px; overflow-wrap: anywhere; }
 .model-discovery-error > span { min-width: 0; padding-top: 4px; }
 .test-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 16px; }
-.test-result { font-size: 12px; }
+.test-result { min-width: 0; overflow-wrap: anywhere; font-size: 12px; }
 .test-result.ok { color: var(--color-success); }
 .test-result.bad { color: var(--danger); }
+.connection-models { margin: 12px 0 0 78px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-md); }
+.connection-models-heading, .connection-models-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 12px; }
+.connection-models-heading strong { margin-right: auto; }
+.connection-models > input { width: 100%; margin-top: 10px; padding: 8px 10px; background: var(--panel-2); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.preset-editor .connection-models .muted { margin: 0; }
+.connection-models-list { max-height: 220px; overflow-y: auto; margin: 10px 0; }
+.connection-model { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.connection-model:last-child { border-bottom: 0; }
+.connection-model label { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1 1 220px; font-size: 12px; overflow-wrap: anywhere; cursor: pointer; }
+.connection-model input[type="checkbox"] { width: 14px; height: 14px; margin: 0; flex-shrink: 0; }
+.connection-models > small { display: block; margin-top: 8px; font-size: 12px; }
+.connection-speed-controls { margin-top: 10px; }
+.connection-speed-controls label { display: flex; align-items: center; gap: 6px; }
+.connection-speed-controls input { width: 64px; }
+.connection-speed-controls input, .connection-speed-controls select { padding: 5px; background: var(--panel-2); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.connection-exclusions { margin: 12px 0 0 78px; font-size: 12px; overflow-wrap: anywhere; }
+.connection-exclusions > button { margin-left: 8px; }
+.connection-exclusions details { margin-top: 8px; }
+.connection-exclusions details > div { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+.connection-exclusions details > div span { min-width: 0; flex: 1; }
+@media (max-width: 640px) { .connection-models { margin-left: 0; } }
+@media (max-width: 640px) { .connection-exclusions { margin-left: 0; } }
 
 /* Clone-from-another-family picker inside the provider form. */
 .clone-row { position: relative; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 4px 0 12px; }

@@ -34,10 +34,10 @@ export function installMockPi(target, storage) {
 	const familyModels = () => familyRoutes().flatMap(({ family, route }) => {
 		const relay = relayOf(route.relayId);
 		if (!relay?.enabled || !route.enabled) return [];
-		return route.models.map((model) => ({
+		return route.models.filter((model) => !relay.excludedModelIds?.includes(model.modelId)).map((model) => ({
 			provider: providerKey(family.id, relay.id), id: model.modelId, name: model.modelId,
 			contextWindow: model.contextWindow, maxTokens: model.maxTokens, currency: model.currency, cost: { input: model.inputCost, output: model.outputCost },
-			reasoning: route.reasoning, input: route.vision ? ["text", "image"] : ["text"],
+			reasoning: route.reasoning, input: (model.vision ?? route.vision) ? ["text", "image"] : ["text"],
 		}));
 	});
 	const models = familyModels();
@@ -47,7 +47,7 @@ export function installMockPi(target, storage) {
 	const offers = () => familyRoutes().flatMap(({ family, route }, routeOrder) => {
 		const relay = relayOf(route.relayId);
 		if (!relay?.enabled || !route.enabled) return [];
-		return route.models.map((model) => ({ offerId: `${route.id}/${model.modelId}`, routeId: route.id, familyId: family.id, familyName: family.displayName, relayId: relay.id, relayName: relay.name, providerKey: providerKey(family.id, relay.id), modelId: model.modelId, alias: model.alias, billingAccountId: relay.billingAccountId, routeOrder, streaming: route.streaming, tools: route.tools, vision: route.vision, reasoning: route.reasoning, inputCost: model.inputCost, outputCost: model.outputCost, cacheReadCost: model.cacheReadCost, cacheWriteCost: model.cacheWriteCost, currency: model.currency, maxTokens: model.maxTokens, contextWindow: model.contextWindow }));
+		return route.models.filter((model) => !relay.excludedModelIds?.includes(model.modelId)).map((model) => ({ offerId: `${route.id}/${model.modelId}`, routeId: route.id, familyId: family.id, familyName: family.displayName, relayId: relay.id, relayName: relay.name, providerKey: providerKey(family.id, relay.id), modelId: model.modelId, alias: model.alias, billingAccountId: relay.billingAccountId, routeOrder, streaming: route.streaming, tools: route.tools, vision: model.vision ?? route.vision, reasoning: route.reasoning, inputCost: model.inputCost, outputCost: model.outputCost, cacheReadCost: model.cacheReadCost, cacheWriteCost: model.cacheWriteCost, currency: model.currency, maxTokens: model.maxTokens, contextWindow: model.contextWindow }));
 	});
 	const persist = () => storage?.setItem("skiff.test.sessions", JSON.stringify(saved));
 	const emit = (instanceId, event) => {
@@ -66,6 +66,7 @@ export function installMockPi(target, storage) {
 			if (command === "get_workspace_directory") return { name: "Skiff", path: "D:\\workspace\\Skiff" };
 			if (command === "list_model_families") return familiesConfig();
 			if (command === "list_model_runtime") return offers();
+			if (command === "cancel_provider_test") return;
 			if (command === "test_provider_connection") {
 				if (String(args.baseUrl).includes("fail")) return { ok: false, latencyMs: 42, status: 401, error: "Invalid API key" };
 				return { ok: true, latencyMs: 137, status: 200, error: null };
