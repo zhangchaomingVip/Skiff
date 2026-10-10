@@ -32,7 +32,7 @@ const saveCollapsedFamilies = (collapsed: ReadonlySet<string>) => {
 	try { localStorage.setItem(COLLAPSE_KEY, JSON.stringify([...collapsed])); } catch { /* Optional preference; grouping still works. */ }
 };
 
-export function LauncherView({ activeChat, activeProject, projects, chats, offers, recentOfferIds, familyDefaults, loading, disabled = false, error, onResume, onSelectProject, onAddProject, onManageProviders, onRetryModels, onStartChat, onOpenChat }: {
+export function LauncherView({ activeChat, activeProject, projects, chats, offers, recentOfferIds, familyDefaults, loading, disabled = false, navigationDisabled = disabled, error, onResume, onSelectProject, onAddProject, onManageProviders, onRetryModels, onStartChat, onOpenChat }: {
 	activeChat?: Conversation;
 	activeProject?: Project;
 	projects: Project[];
@@ -42,6 +42,7 @@ export function LauncherView({ activeChat, activeProject, projects, chats, offer
 	familyDefaults: LauncherFamilyDefault[];
 	loading: boolean;
 	disabled?: boolean;
+	navigationDisabled?: boolean;
 	error?: string;
 	onResume: () => void;
 	onSelectProject: (id: string) => void;
@@ -113,13 +114,13 @@ export function LauncherView({ activeChat, activeProject, projects, chats, offer
 					</button>
 				</div>
 				{workspaceOpen && <Popover anchor={workspaceAnchor} onClose={() => setWorkspaceOpen(false)} className="launcher-ws-pop" aria-label="切换工作区">
-					{projects.map((project) => <ListRow key={project.id} className="launcher-ws-item" onClick={() => { onSelectProject(project.id); setWorkspaceOpen(false); }}>
+					{projects.map((project) => <ListRow key={project.id} className="launcher-ws-item" disabled={navigationDisabled} onClick={() => { onSelectProject(project.id); setWorkspaceOpen(false); }}>
 						<Icon name="folder" size={14} />
 						<span className="launcher-ws-item-name">{project.name}</span>
 						<span className="launcher-ws-item-path" title={project.path}>{project.path}</span>
 						{project.id === activeProject?.id && <Icon name="check" size={14} />}
 					</ListRow>)}
-					<Button variant="ghost" className="launcher-ws-add" onClick={() => { setWorkspaceOpen(false); onAddProject(); }}><Icon name="plus" size={14} />添加项目</Button>
+					<Button variant="ghost" className="launcher-ws-add" disabled={disabled} onClick={() => { setWorkspaceOpen(false); onAddProject(); }}><Icon name="plus" size={14} />添加项目</Button>
 				</Popover>}
 			</div>
 			<div className="launcher-section" aria-busy={loading}>
@@ -144,7 +145,7 @@ export function LauncherView({ activeChat, activeProject, projects, chats, offer
 			</div>
 			<div className="launcher-section launcher-recent-section">
 				<div className="launcher-section-heading"><div><h2>最近会话</h2><p>显示最后一次完成回复的实际线路。</p></div></div>
-				{recentChats.length ? <div className="launcher-recent-list">{recentChats.map((chat) => { const snapshot = [...(chat.routeSnapshots ?? [])].reverse().find((item) => !!item); const modelText = snapshot ? `${snapshot.familyName} · ${snapshot.modelId}` : chat.selectedModel?.modelId ?? chat.selectedModel?.id; return <ListRow className="launcher-recent-row" key={chat.id} onClick={() => onOpenChat(chat.id)}><span className="launcher-recent-main"><strong>{chat.title}</strong><span>{projectNames.get(chat.projectId) ?? "项目已移除"} · {relativeTime(chat.updatedAt)}</span><span>{modelText ?? "尚无模型记录"}{snapshot ? ` · ${snapshot.relayName}` : " · 尚无完成回复线路"}</span></span><span className="launcher-recent-arrow">继续 →</span></ListRow>; })}</div> : <div className="launcher-empty launcher-recent-empty" role="status">还没有可恢复的历史会话</div>}
+				{recentChats.length ? <div className="launcher-recent-list">{recentChats.map((chat) => { const snapshot = [...(chat.routeSnapshots ?? [])].reverse().find((item) => !!item); const modelText = snapshot ? `${snapshot.familyName} · ${snapshot.modelId}` : chat.selectedModel?.modelId ?? chat.selectedModel?.id; return <ListRow className="launcher-recent-row" key={chat.id} disabled={navigationDisabled} onClick={() => onOpenChat(chat.id)}><span className="launcher-recent-main"><strong>{chat.title}</strong><span>{projectNames.get(chat.projectId) ?? "项目已移除"} · {relativeTime(chat.updatedAt)}</span><span>{modelText ?? "尚无模型记录"}{snapshot ? ` · ${snapshot.relayName}` : " · 尚无完成回复线路"}</span></span><span className="launcher-recent-arrow">继续 →</span></ListRow>; })}</div> : <div className="launcher-empty launcher-recent-empty" role="status">还没有可恢复的历史会话</div>}
 			</div>
 			{activeChat && <div className="launcher-resume">
 				<div><h2>当前会话</h2><p>{activeChat.title}</p></div>

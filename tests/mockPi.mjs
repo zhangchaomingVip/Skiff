@@ -1,9 +1,9 @@
 // Test-only Tauri bridge. Never imported by the application entry point.
-export function installMockPi(target, storage, fixture) {
+export function installMockPi(target, storage, fixture, sessionOverrides) {
 	const callbacks = new Map();
 	const listeners = new Map();
 	const processes = new Map();
-	const saved = JSON.parse(storage?.getItem("skiff.test.sessions") ?? "{}");
+	const saved = sessionOverrides ?? JSON.parse(storage?.getItem("skiff.test.sessions") ?? "{}");
 	const commands = [];
 	let sequence = 0;
 	let failSend = false;
@@ -67,7 +67,10 @@ export function installMockPi(target, storage, fixture) {
 			if (listener.event === `rpc://${instanceId}`) callbacks.get(listener.handler)?.({ payload: JSON.stringify(event) });
 		}
 	};
-	target.__TAURI_EVENT_PLUGIN_INTERNALS__ = { unregisterListener: (_event, id) => listeners.delete(id) };
+	target.__TAURI_EVENT_PLUGIN_INTERNALS__ = { unregisterListener: (_event, id) => {
+		callbacks.delete(listeners.get(id)?.handler);
+		listeners.delete(id);
+	} };
 	target.__TAURI_INTERNALS__ = {
 		transformCallback(callback) { const id = ++sequence; callbacks.set(id, callback); return id; },
 		async invoke(command, args) {
@@ -176,7 +179,7 @@ export function installMockPi(target, storage, fixture) {
 				processes.set(args.options.instanceId, { file, messages: [], model: models[0], thinkingLevel: "high", isStreaming: false });
 				return;
 			}
-			if (command === "rpc_stop") { processes.delete(args.instanceId); return; }
+			if (command === "rpc_stop") { target.clearTimeout(processes.get(args.instanceId)?.timer); processes.delete(args.instanceId); return; }
 			if (command !== "rpc_send") throw new Error(`Unknown mock command: ${command}`);
 			if (failSend) { failSend = false; throw new Error("Simulated transport failure"); }
 			const request = JSON.parse(args.message);
@@ -260,5 +263,5 @@ export function installMockPi(target, storage, fixture) {
 			}
 		},
 	};
-	return { commands, processes, listeners, emit, failNextSend: () => { failSend = true; } };
+	return { commands, processes, listeners, callbacks, emit, failNextSend: () => { failSend = true; } };
 }

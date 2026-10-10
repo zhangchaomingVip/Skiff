@@ -1,1 +1,1 @@
-{ "extends": "../tsconfig.json", "include": ["../src", "./uiGallery.tsx"] }
+{ "extends": "../tsconfig.json", "compilerOptions": { "allowJs": true }, "include": ["../src", "./uiGallery.tsx", "./session-switch.preview.tsx"] }

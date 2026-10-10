@@ -1,0 +1,1615 @@
+[
+  {
+    "query": "messages=100&chats=30&kind=text",
+    "baseline": {
+      "code": 0,
+      "seconds": 15.645,
+      "scale": {
+        "messageCount": 100,
+        "chatCount": 30,
+        "kind": "text",
+        "bytes": 15631,
+        "codeLines": 0,
+        "entryCount": 100
+      },
+      "samples": 60,
+      "summary": {
+        "highlight": {
+          "n": 60,
+          "p50": 9.100000001490116,
+          "p95": 30.30000000447035
+        },
+        "loading": {
+          "n": 0
+        },
+        "paintOpportunity": {
+          "n": 60,
+          "p50": 17.899999998509884,
+          "p95": 44
+        },
+        "history": {
+          "n": 60,
+          "p50": 185.60000000149012,
+          "p95": 194.5
+        },
+        "ready": {
+          "n": 60,
+          "p50": 185.60000000149012,
+          "p95": 194.5
+        }
+      },
+      "longestTask": 76,
+      "mountedMax": 100,
+      "oldMessagesMounted": 100,
+      "parseMax": 0.19999999552965164,
+      "jsonParseMax": 0.29999999701976776,
+      "raw": "0-baseline.json.gz"
+    },
+    "current": {
+      "code": 0,
+      "seconds": 14.702,
+      "scale": {
+        "messageCount": 100,
+        "chatCount": 30,
+        "kind": "text",
+        "bytes": 15631,
+        "codeLines": 0,
+        "entryCount": 100
+      },
+      "samples": 60,
+      "summary": {
+        "highlight": {
+          "n": 60,
+          "p50": 6.399999998509884,
+          "p95": 8
+        },
+        "loading": {
+          "n": 60,
+          "p50": 6.399999998509884,
+          "p95": 8
+        },
+        "paintOpportunity": {
+          "n": 60,
+          "p50": 13.299999997019768,
+          "p95": 15.100000001490116
+        },
+        "history": {
+          "n": 60,
+          "p50": 174.89999999850988,
+          "p95": 184.40000000596046
+        },
+        "ready": {
+          "n": 60,
+          "p50": 174.89999999850988,
+          "p95": 184.40000000596046
+        }
+      },
+      "longestTask": 56,
+      "mountedMax": 100,
+      "oldMessagesMounted": 0,
+      "parseMax": 0.30000000447034836,
+      "jsonParseMax": 0.30000000447034836,
+      "raw": "0-current.json.gz"
+    }
+  },
+  {
+    "query": "messages=100&chats=30&kind=code",
+    "baseline": {
+      "code": 0,
+      "seconds": 29.038,
+      "scale": {
+        "messageCount": 100,
+        "chatCount": 30,
+        "kind": "code",
+        "bytes": 187431,
+        "codeLines": 8000,
+        "entryCount": 100
+      },
+      "samples": 60,
+      "summary": {
+        "highlight": {
+          "n": 60,
+          "p50": 12.800000004470348,
+          "p95": 234
+        },
+        "loading": {
+          "n": 0
+        },
+        "paintOpportunity": {
+          "n": 60,
+          "p50": 22.899999998509884,
+          "p95": 284.8999999985099
+        },
+        "history": {
+          "n": 60,
+          "p50": 325.19999999552965,
+          "p95": 401
+        },
+        "ready": {
+          "n": 60,
+          "p50": 325.19999999552965,
+          "p95": 401
+        }
+      },
+      "longestTask": 294,
+      "mountedMax": 100,
+      "oldMessagesMounted": 100,
+      "parseMax": 0.5,
+      "jsonParseMax": 0.5,
+      "raw": "1-baseline.json.gz"
+    },
+    "current": {
+      "code": 0,
+      "seconds": 24.551,
+      "scale": {
+        "messageCount": 100,
+        "chatCount": 30,
+        "kind": "code",
+        "bytes": 187431,
+        "codeLines": 8000,
+        "entryCount": 100
+      },
+      "samples": 60,
+      "summary": {
+        "highlight": {
+          "n": 60,
+          "p50": 17,
+          "p95": 28.299999997019768
+        },
+        "loading": {
+          "n": 60,
+          "p50": 17,
+          "p95": 28.399999998509884
+        },
+        "paintOpportunity": {
+          "n": 60,
+          "p50": 24.69999999552965,
+          "p95": 37.79999999701977
+        },
+        "history": {
+          "n": 60,
+          "p50": 207.39999999850988,
+          "p95": 415.6000000014901
+        },
+        "ready": {
+          "n": 60,
+          "p50": 207.39999999850988,
+          "p95": 415.6000000014901
+        }
+      },
+      "longestTask": 263,
+      "mountedMax": 100,
+      "oldMessagesMounted": 0,
+      "parseMax": 0.20000000298023224,
+      "jsonParseMax": 0.6000000014901161,
+      "raw": "1-current.json.gz"
+    }
+  },
+  {
+    "query": "messages=100&chats=30&kind=tool",
+    "baseline": {
+      "code": 0,
+      "seconds": 16.461,
+      "scale": {
+        "messageCount": 100,
+        "chatCount": 30,
+        "kind": "tool",
+        "bytes": 55871,
+        "codeLines": 0,
+        "entryCount": 150
+      },
+      "samples": 60,
+      "summary": {
+        "highlight": {
+          "n": 60,
+          "p50": 8.5,
+          "p95": 39.79999999701977
+        },
+        "loading": {
+          "n": 0
+        },
+        "paintOpportunity": {
+          "n": 60,
+          "p50": 16.5,
+          "p95": 60.100000001490116
+        },
+        "history": {
+          "n": 60,
+          "p50": 196.10000000149012,
+          "p95": 211.30000000447035
+        },
+        "ready": {
+          "n": 60,
+          "p50": 196.10000000149012,
+          "p95": 211.30000000447035
+        }
+      },
+      "longestTask": 68,
+      "mountedMax": 100,
+      "oldMessagesMounted": 100,
+      "parseMax": 0.8000000044703484,
+      "jsonParseMax": 0.6000000014901161,
+      "raw": "2-baseline.json.gz"
+    },
+    "current": {
+      "code": 0,
+      "seconds": 15.099,
+      "scale": {
+        "messageCount": 100,
+        "chatCount": 30,
+        "kind": "tool",
+        "bytes": 55871,
+        "codeLines": 0,
+        "entryCount": 150
+      },
+      "samples": 60,
+      "summary": {
+        "highlight": {
+          "n": 60,
+          "p50": 6.399999998509884,
+          "p95": 8.100000001490116
+        },
+        "loading": {
+          "n": 60,
+          "p50": 6.399999998509884,
+          "p95": 8.100000001490116
+        },
+        "paintOpportunity": {
+          "n": 60,
+          "p50": 13.700000002980232,
+          "p95": 15
+        },
+        "history": {
+          "n": 60,
+          "p50": 177.10000000149012,
+          "p95": 195
+        },
+        "ready": {
+          "n": 60,
+          "p50": 177.10000000149012,
+          "p95": 195
+        }
+      },
+      "longestTask": 70,
+      "mountedMax": 100,
+      "oldMessagesMounted": 0,
+      "parseMax": 1.1000000014901161,
+      "jsonParseMax": 0.7000000029802322,
+      "raw": "2-current.json.gz"
+    }
+  },
+  {
+    "query": "messages=100&chats=30&kind=image",
+    "baseline": {
+      "code": 0,
+      "seconds": 15.924,
+      "scale": {
+        "messageCount": 100,
+        "chatCount": 30,
+        "kind": "image",
+        "bytes": 361431,
+        "codeLines": 0,
+        "imageSize": [
+          320,
+          240
+        ],
+        "entryCount": 100
+      },
+      "samples": 60,
+      "summary": {
+        "highlight": {
+          "n": 60,
+          "p50": 7.899999998509884,
+          "p95": 34.399999998509884
+        },
+        "loading": {
+          "n": 0
+        },
+        "paintOpportunity": {
+          "n": 60,
+          "p50": 17,
+          "p95": 50.600000001490116
+        },
+        "history": {
+          "n": 60,
+          "p50": 192.90000000596046,
+          "p95": 202.09999999403954
+        },
+        "ready": {
+          "n": 60,
+          "p50": 192.90000000596046,
+          "p95": 202.09999999403954
+        }
+      },
+      "longestTask": 60,
+      "mountedMax": 100,
+      "oldMessagesMounted": 100,
+      "parseMax": 0.3999999985098839,
+      "jsonParseMax": 0.7000000029802322,
+      "raw": "3-baseline.json.gz"
+    },
+    "current": {
+      "code": 0,
+      "seconds": 15.096,
+      "scale": {
+        "messageCount": 100,
+        "chatCount": 30,
+        "kind": "image",
+        "bytes": 361431,
+        "codeLines": 0,
+        "imageSize": [
+          320,
+          240
+        ],
+        "entryCount": 100
+      },
+      "samples": 60,
+      "summary": {
+        "highlight": {
+          "n": 60,
+          "p50": 6.5,
+          "p95": 7.5
+        },
+        "loading": {
+          "n": 60,
+          "p50": 6.5,
+          "p95": 7.5
+        },
+        "paintOpportunity": {
+          "n": 60,
+          "p50": 12.899999998509884,
+          "p95": 14.600000001490116
+        },
+        "history": {
+          "n": 60,
+          "p50": 175.60000000149012,
+          "p95": 191.20000000298023
+        },
+        "ready": {
+          "n": 60,
+          "p50": 175.60000000149012,
+          "p95": 191.20000000298023
+        }
+      },
+      "longestTask": 0,
+      "mountedMax": 100,
+      "oldMessagesMounted": 0,
+      "parseMax": 0.30000000447034836,
+      "jsonParseMax": 0.4000000059604645,
+      "raw": "3-current.json.gz"
+    }
+  },
+  {
+    "query": "messages=1000&chats=30&kind=text",
+    "baseline": {
+      "code": 0,
+      "seconds": 26.129,
+      "scale": {
+        "messageCount": 1000,
+        "chatCount": 30,
+        "kind": "text",
+        "bytes": 158281,
+        "codeLines": 0,
+        "entryCount": 1000
+      },
+      "samples": 60,
+      "summary": {
+        "highlight": {
+          "n": 60,
+          "p50": 8.100000001490116,
+          "p95": 177.39999999850988
+        },
+        "loading": {
+          "n": 0
+        },
+        "paintOpportunity": {
+          "n": 60,
+          "p50": 16.899999998509884,
+          "p95": 246.80000000447035
+        },
+        "history": {
+          "n": 60,
+          "p50": 282.90000000596046,
+          "p95": 365
+        },
+        "ready": {
+          "n": 60,
+          "p50": 282.90000000596046,
+          "p95": 365.1000000014901
+        }
+      },
+      "longestTask": 256,
+      "mountedMax": 1000,
+      "oldMessagesMounted": 1000,
+      "parseMax": 1.1000000014901161,
+      "jsonParseMax": 1.5,
+      "raw": "4-baseline.json.gz"
+    },
+    "current": {
+      "code": 0,
+      "seconds": 21.419,
+      "scale": {
+        "messageCount": 1000,
+        "chatCount": 30,
+        "kind": "text",
+        "bytes": 158281,
+        "codeLines": 0,
+        "entryCount": 1000
+      },
+      "samples": 60,
+      "summary": {
+        "highlight": {
+          "n": 60,
+          "p50": 6.300000004470348,
+          "p95": 19.799999997019768
+        },
+        "loading": {
+          "n": 60,
+          "p50": 6.399999998509884,
+          "p95": 19.899999998509884
+        },
+        "paintOpportunity": {
+          "n": 60,
+          "p50": 14.800000004470348,
+          "p95": 27.599999994039536
+        },
+        "history": {
+          "n": 60,
+          "p50": 188.79999999701977,
+          "p95": 296.1000000014901
+        },
+        "ready": {
+          "n": 60,
+          "p50": 188.79999999701977,
+          "p95": 296.1000000014901
+        }
+      },
+      "longestTask": 182,
+      "mountedMax": 1000,
+      "oldMessagesMounted": 0,
+      "parseMax": 0.8000000044703484,
+      "jsonParseMax": 1.6000000014901161,
+      "raw": "4-current.json.gz"
+    }
+  },
+  {
+    "query": "messages=1000&chats=30&kind=code",
+    "baseline": {
+      "code": 0,
+      "seconds": 171.576,
+      "scale": {
+        "messageCount": 1000,
+        "chatCount": 30,
+        "kind": "code",
+        "bytes": 1876281,
+        "codeLines": 80000,
+        "entryCount": 1000
+      },
+      "samples": 60,
+      "summary": {
+        "highlight": {
+          "n": 60,
+          "p50": 24.30000000447035,
+          "p95": 2432
+        },
+        "loading": {
+          "n": 0
+        },
+        "paintOpportunity": {
+          "n": 60,
+          "p50": 41.5,
+          "p95": 2802.7999999970198
+        },
+        "history": {
+          "n": 60,
+          "p50": 2359.89999999851,
+          "p95": 2832.39999999851
+        },
+        "ready": {
+          "n": 60,
+          "p50": 2359.89999999851,
+          "p95": 2832.39999999851
+        }
+      },
+      "longestTask": 3117,
+      "mountedMax": 1000,
+      "oldMessagesMounted": 1000,
+      "parseMax": 0.6000000014901161,
+      "jsonParseMax": 3.600000001490116,
+      "raw": "5-baseline.json.gz"
+    },
+    "current": {
+      "code": 0,
+      "seconds": 98.145,
+      "scale": {
+        "messageCount": 1000,
+        "chatCount": 30,
+        "kind": "code",
+        "bytes": 1876281,
+        "codeLines": 80000,
+        "entryCount": 1000
+      },
+      "samples": 60,
+      "summary": {
+        "highlight": {
+          "n": 60,
+          "p50": 6.899999998509884,
+          "p95": 138.39999999850988
+        },
+        "loading": {
+          "n": 60,
+          "p50": 6.899999998509884,
+          "p95": 138.39999999850988
+        },
+        "paintOpportunity": {
+          "n": 60,
+          "p50": 20.799999997019768,
+          "p95": 150
+        },
+        "history": {
+          "n": 60,
+          "p50": 326.1000000014901,
+          "p95": 1508.5999999940395
+        },
+        "ready": {
+          "n": 60,
+          "p50": 326.1000000014901,
+          "p95": 1508.5999999940395
+        }
+      },
+      "longestTask": 1528,
+      "mountedMax": 1000,
+      "oldMessagesMounted": 0,
+      "parseMax": 0.6000000014901161,
+      "jsonParseMax": 3,
+      "raw": "5-current.json.gz"
+    }
+  },
+  {
+    "query": "messages=1000&chats=30&kind=tool",
+    "baseline": {
+      "code": 0,
+      "seconds": 36.58,
+      "scale": {
+        "messageCount": 1000,
+        "chatCount": 30,
+        "kind": "tool",
+        "bytes": 561671,
+        "codeLines": 0,
+        "entryCount": 1500
+      },
+      "samples": 60,
+      "summary": {
+        "highlight": {
+          "n": 60,
+          "p50": 9.700000002980232,
+          "p95": 296.3999999985099
+        },
+        "loading": {
+          "n": 0
+        },
+        "paintOpportunity": {
+          "n": 60,
+          "p50": 20.200000002980232,
+          "p95": 443.6000000014901
+        },
+        "history": {
+          "n": 60,
+          "p50": 353.80000000447035,
+          "p95": 511.1000000014901
+        },
+        "ready": {
+          "n": 60,
+          "p50": 353.80000000447035,
+          "p95": 511.1000000014901
+        }
+      },
+      "longestTask": 500,
+      "mountedMax": 1000,
+      "oldMessagesMounted": 1000,
+      "parseMax": 1.8999999985098839,
+      "jsonParseMax": 2.7000000029802322,
+      "raw": "6-baseline.json.gz"
+    },
+    "current": {
+      "code": 0,
+      "seconds": 28.475,
+      "scale": {
+        "messageCount": 1000,
+        "chatCount": 30,
+        "kind": "tool",
+        "bytes": 561671,
+        "codeLines": 0,
+        "entryCount": 1500
+      },
+      "samples": 60,
+      "summary": {
+        "highlight": {
+          "n": 60,
+          "p50": 7.399999998509884,
+          "p95": 36.20000000298023
+        },
+        "loading": {
+          "n": 60,
+          "p50": 7.399999998509884,
+          "p95": 36.20000000298023
+        },
+        "paintOpportunity": {
+          "n": 60,
+          "p50": 17.399999998509884,
+          "p95": 44.399999998509884
+        },
+        "history": {
+          "n": 60,
+          "p50": 205.59999999403954,
+          "p95": 357.8999999985099
+        },
+        "ready": {
+          "n": 60,
+          "p50": 205.59999999403954,
+          "p95": 357.8999999985099
+        }
+      },
+      "longestTask": 257,
+      "mountedMax": 1000,
+      "oldMessagesMounted": 0,
+      "parseMax": 3.5,
+      "jsonParseMax": 2.5,
+      "raw": "6-current.json.gz"
+    }
+  },
+  {
+    "query": "messages=1000&chats=30&kind=image",
+    "baseline": {
+      "code": 0,
+      "seconds": 31.447,
+      "scale": {
+        "messageCount": 1000,
+        "chatCount": 30,
+        "kind": "image",
+        "bytes": 3616281,
+        "codeLines": 0,
+        "imageSize": [
+          320,
+          240
+        ],
+        "entryCount": 1000
+      },
+      "samples": 60,
+      "summary": {
+        "highlight": {
+          "n": 60,
+          "p50": 8.300000004470348,
+          "p95": 235.60000000149012
+        },
+        "loading": {
+          "n": 0
+        },
+        "paintOpportunity": {
+          "n": 60,
+          "p50": 23.200000002980232,
+          "p95": 340.20000000298023
+        },
+        "history": {
+          "n": 60,
+          "p50": 400,
+          "p95": 438.20000000298023
+        },
+        "ready": {
+          "n": 60,
+          "p50": 400,
+          "p95": 438.20000000298023
+        }
+      },
+      "longestTask": 362,
+      "mountedMax": 1000,
+      "oldMessagesMounted": 1000,
+      "parseMax": 0.9000000059604645,
+      "jsonParseMax": 2.600000001490116,
+      "raw": "7-baseline.json.gz"
+    },
+    "current": {
+      "code": 0,
+      "seconds": 25.309,
+      "scale": {
+        "messageCount": 1000,
+        "chatCount": 30,
+        "kind": "image",
+        "bytes": 3616281,
+        "codeLines": 0,
+        "imageSize": [
+          320,
+          240
+        ],
+        "entryCount": 1000
+      },
+      "samples": 60,
+      "summary": {
+        "highlight": {
+          "n": 60,
+          "p50": 7.4000000059604645,
+          "p95": 22.69999999552965
+        },
+        "loading": {
+          "n": 60,
+          "p50": 7.4000000059604645,
+          "p95": 22.799999997019768
+        },
+        "paintOpportunity": {
+          "n": 60,
+          "p50": 21.200000002980232,
+          "p95": 30.5
+        },
+        "history": {
+          "n": 60,
+          "p50": 195.70000000298023,
+          "p95": 363.70000000298023
+        },
+        "ready": {
+          "n": 60,
+          "p50": 195.70000000298023,
+          "p95": 363.70000000298023
+        }
+      },
+      "longestTask": 216,
+      "mountedMax": 1000,
+      "oldMessagesMounted": 0,
+      "parseMax": 1.1999999955296516,
+      "jsonParseMax": 2.2999999970197678,
+      "raw": "7-current.json.gz"
+    }
+  },
+  {
+    "query": "messages=10000&chats=30&kind=text",
+    "baseline": {
+      "code": 0,
+      "seconds": 196.33,
+      "scale": {
+        "messageCount": 10000,
+        "chatCount": 30,
+        "kind": "text",
+        "bytes": 1602781,
+        "codeLines": 0,
+        "entryCount": 10000
+      },
+      "samples": 60,
+      "summary": {
+        "highlight": {
+          "n": 60,
+          "p50": 18.69999999552965,
+          "p95": 3760.89999999851
+        },
+        "loading": {
+          "n": 0
+        },
+        "paintOpportunity": {
+          "n": 60,
+          "p50": 63.399999998509884,
+          "p95": 5226.10000000149
+        },
+        "history": {
+          "n": 60,
+          "p50": 2283.89999999851,
+          "p95": 5355.20000000298
+        },
+        "ready": {
+          "n": 60,
+          "p50": 2283.89999999851,
+          "p95": 5355.20000000298
+        }
+      },
+      "longestTask": 5424,
+      "mountedMax": 10000,
+      "oldMessagesMounted": 10000,
+      "parseMax": 6.399999998509884,
+      "jsonParseMax": 10.5,
+      "raw": "8-baseline.json.gz"
+    },
+    "current": {
+      "code": 0,
+      "seconds": 94.676,
+      "scale": {
+        "messageCount": 10000,
+        "chatCount": 30,
+        "kind": "text",
+        "bytes": 1602781,
+        "codeLines": 0,
+        "entryCount": 10000
+      },
+      "samples": 60,
+      "summary": {
+        "highlight": {
+          "n": 60,
+          "p50": 11.600000001490116,
+          "p95": 160.29999999701977
+        },
+        "loading": {
+          "n": 60,
+          "p50": 11.700000002980232,
+          "p95": 160.39999999850988
+        },
+        "paintOpportunity": {
+          "n": 60,
+          "p50": 47.899999998509884,
+          "p95": 172.39999999850988
+        },
+        "history": {
+          "n": 60,
+          "p50": 439.5,
+          "p95": 1744.2000000029802
+        },
+        "ready": {
+          "n": 60,
+          "p50": 439.5,
+          "p95": 1744.2000000029802
+        }
+      },
+      "longestTask": 1932,
+      "mountedMax": 10000,
+      "oldMessagesMounted": 0,
+      "parseMax": 4.5,
+      "jsonParseMax": 7.9000000059604645,
+      "raw": "8-current.json.gz"
+    }
+  },
+  {
+    "query": "messages=10000&chats=30&kind=code",
+    "baseline": {
+      "code": "fixture exceeded 5 minutes",
+      "error": "Error: ENOENT: no such file or directory, open 'D:\\workspace\\Skiff\\dist\\session-switch-scale\\9-baseline.json'",
+      "failure": "fixture exceeded 5 minutes",
+      "longestTask": null,
+      "parseMax": null,
+      "jsonParseMax": null,
+      "raw": null
+    },
+    "current": {
+      "code": "fixture exceeded 5 minutes",
+      "seconds": 300.06,
+      "scale": {
+        "messageCount": 10000,
+        "chatCount": 30,
+        "kind": "code",
+        "bytes": 18782781,
+        "codeLines": 800000,
+        "entryCount": 10000
+      },
+      "samples": 10,
+      "longestTask": null,
+      "mountedMax": 10000,
+      "oldMessagesMounted": 0,
+      "parseMax": null,
+      "jsonParseMax": null,
+      "failure": "fixture exceeded 5 minutes",
+      "raw": "9-current.json.gz"
+    }
+  },
+  {
+    "query": "messages=10000&chats=30&kind=tool",
+    "baseline": {
+      "code": "fixture exceeded 5 minutes",
+      "seconds": 300.061,
+      "scale": {
+        "messageCount": 10000,
+        "chatCount": 30,
+        "kind": "tool",
+        "bytes": 5646671,
+        "codeLines": 0,
+        "entryCount": 15000
+      },
+      "samples": 50,
+      "longestTask": null,
+      "mountedMax": 10000,
+      "oldMessagesMounted": 10000,
+      "parseMax": null,
+      "jsonParseMax": null,
+      "failure": "fixture exceeded 5 minutes",
+      "raw": "10-baseline.json.gz"
+    },
+    "current": {
+      "code": 0,
+      "seconds": 161.431,
+      "scale": {
+        "messageCount": 10000,
+        "chatCount": 30,
+        "kind": "tool",
+        "bytes": 5646671,
+        "codeLines": 0,
+        "entryCount": 15000
+      },
+      "samples": 60,
+      "summary": {
+        "highlight": {
+          "n": 60,
+          "p50": 8.400000005960464,
+          "p95": 349.8999999985099
+        },
+        "loading": {
+          "n": 60,
+          "p50": 8.400000005960464,
+          "p95": 349.8999999985099
+        },
+        "paintOpportunity": {
+          "n": 60,
+          "p50": 49.900000005960464,
+          "p95": 359.59999999403954
+        },
+        "history": {
+          "n": 60,
+          "p50": 533.6000000014901,
+          "p95": 2173.8000000044703
+        },
+        "ready": {
+          "n": 60,
+          "p50": 533.6000000014901,
+          "p95": 2173.8000000044703
+        }
+      },
+      "longestTask": 2775,
+      "mountedMax": 10000,
+      "oldMessagesMounted": 0,
+      "parseMax": 51.600000001490116,
+      "jsonParseMax": 15,
+      "raw": "10-current.json.gz"
+    }
+  },
+  {
+    "query": "messages=10000&chats=30&kind=image",
+    "baseline": {
+      "code": 0,
+      "seconds": 231.472,
+      "scale": {
+        "messageCount": 10000,
+        "chatCount": 30,
+        "kind": "image",
+        "bytes": 36182781,
+        "codeLines": 0,
+        "imageSize": [
+          320,
+          240
+        ],
+        "entryCount": 10000
+      },
+      "samples": 60,
+      "summary": {
+        "highlight": {
+          "n": 60,
+          "p50": 20.400000005960464,
+          "p95": 2470.10000000149
+        },
+        "loading": {
+          "n": 0
+        },
+        "paintOpportunity": {
+          "n": 60,
+          "p50": 63,
+          "p95": 3525.10000000149
+        },
+        "history": {
+          "n": 60,
+          "p50": 3106,
+          "p95": 3631
+        },
+        "ready": {
+          "n": 60,
+          "p50": 3106,
+          "p95": 3631
+        }
+      },
+      "longestTask": 6935,
+      "mountedMax": 10000,
+      "oldMessagesMounted": 10000,
+      "parseMax": 6,
+      "jsonParseMax": 215.69999999552965,
+      "raw": "11-baseline.json.gz"
+    },
+    "current": {
+      "code": 0,
+      "seconds": 227.358,
+      "scale": {
+        "messageCount": 10000,
+        "chatCount": 30,
+        "kind": "image",
+        "bytes": 36182781,
+        "codeLines": 0,
+        "imageSize": [
+          320,
+          240
+        ],
+        "entryCount": 10000
+      },
+      "samples": 60,
+      "summary": {
+        "highlight": {
+          "n": 60,
+          "p50": 14.699999995529652,
+          "p95": 336.6000000014901
+        },
+        "loading": {
+          "n": 60,
+          "p50": 14.799999997019768,
+          "p95": 336.6000000014901
+        },
+        "paintOpportunity": {
+          "n": 60,
+          "p50": 62.100000001490116,
+          "p95": 353.70000000298023
+        },
+        "history": {
+          "n": 60,
+          "p50": 511,
+          "p95": 3916.3000000044703
+        },
+        "ready": {
+          "n": 60,
+          "p50": 511,
+          "p95": 3916.3000000044703
+        }
+      },
+      "longestTask": 4087,
+      "mountedMax": 10000,
+      "oldMessagesMounted": 0,
+      "parseMax": 6.800000004470348,
+      "jsonParseMax": 45.099999994039536,
+      "raw": "11-current.json.gz"
+    }
+  },
+  {
+    "query": "messages=100&chats=30&expanded=0",
+    "baseline": {
+      "code": 0,
+      "seconds": 17.603,
+      "scale": {
+        "messageCount": 100,
+        "chatCount": 30,
+        "kind": "text",
+        "bytes": 15631,
+        "codeLines": 0,
+        "entryCount": 100
+      },
+      "samples": 60,
+      "summary": {
+        "highlight": {
+          "n": 60,
+          "p50": 17.700000002980232,
+          "p95": 57.30000000447035
+        },
+        "loading": {
+          "n": 0
+        },
+        "paintOpportunity": {
+          "n": 60,
+          "p50": 34,
+          "p95": 86.60000000149012
+        },
+        "history": {
+          "n": 60,
+          "p50": 204.30000000447035,
+          "p95": 228.20000000298023
+        },
+        "ready": {
+          "n": 60,
+          "p50": 204.30000000447035,
+          "p95": 228.20000000298023
+        }
+      },
+      "longestTask": 86,
+      "mountedMax": 100,
+      "oldMessagesMounted": 100,
+      "parseMax": 0.20000000298023224,
+      "jsonParseMax": 0.29999999701976776,
+      "raw": "12-baseline.json.gz"
+    },
+    "current": {
+      "code": 0,
+      "seconds": 16.917,
+      "scale": {
+        "messageCount": 100,
+        "chatCount": 30,
+        "kind": "text",
+        "bytes": 15631,
+        "codeLines": 0,
+        "entryCount": 100
+      },
+      "samples": 60,
+      "summary": {
+        "highlight": {
+          "n": 60,
+          "p50": 11,
+          "p95": 15.900000005960464
+        },
+        "loading": {
+          "n": 60,
+          "p50": 11.100000001490116,
+          "p95": 15.900000005960464
+        },
+        "paintOpportunity": {
+          "n": 60,
+          "p50": 24.19999999552965,
+          "p95": 30.69999999552965
+        },
+        "history": {
+          "n": 60,
+          "p50": 187.19999999552965,
+          "p95": 217.5
+        },
+        "ready": {
+          "n": 60,
+          "p50": 187.19999999552965,
+          "p95": 217.5
+        }
+      },
+      "longestTask": 50,
+      "mountedMax": 100,
+      "oldMessagesMounted": 0,
+      "parseMax": 0.3999999985098839,
+      "jsonParseMax": 0.6000000014901161,
+      "raw": "12-current.json.gz"
+    }
+  },
+  {
+    "query": "messages=100&chats=30&expanded=1",
+    "baseline": {
+      "code": 0,
+      "seconds": 18.422,
+      "scale": {
+        "messageCount": 100,
+        "chatCount": 30,
+        "kind": "text",
+        "bytes": 15631,
+        "codeLines": 0,
+        "entryCount": 100
+      },
+      "samples": 60,
+      "summary": {
+        "highlight": {
+          "n": 60,
+          "p50": 21.400000005960464,
+          "p95": 67.60000000149012
+        },
+        "loading": {
+          "n": 0
+        },
+        "paintOpportunity": {
+          "n": 60,
+          "p50": 41.899999998509884,
+          "p95": 110.5
+        },
+        "history": {
+          "n": 60,
+          "p50": 210.09999999403954,
+          "p95": 241.70000000298023
+        },
+        "ready": {
+          "n": 60,
+          "p50": 210.09999999403954,
+          "p95": 241.70000000298023
+        }
+      },
+      "longestTask": 102,
+      "mountedMax": 100,
+      "oldMessagesMounted": 100,
+      "parseMax": 0.3999999985098839,
+      "jsonParseMax": 0.30000000447034836,
+      "raw": "13-baseline.json.gz"
+    },
+    "current": {
+      "code": 0,
+      "seconds": 17.506,
+      "scale": {
+        "messageCount": 100,
+        "chatCount": 30,
+        "kind": "text",
+        "bytes": 15631,
+        "codeLines": 0,
+        "entryCount": 100
+      },
+      "samples": 60,
+      "summary": {
+        "highlight": {
+          "n": 60,
+          "p50": 14.599999994039536,
+          "p95": 18.5
+        },
+        "loading": {
+          "n": 60,
+          "p50": 14.699999995529652,
+          "p95": 18.5
+        },
+        "paintOpportunity": {
+          "n": 60,
+          "p50": 30.899999998509884,
+          "p95": 37.100000001490116
+        },
+        "history": {
+          "n": 60,
+          "p50": 191.5,
+          "p95": 217.89999999850988
+        },
+        "ready": {
+          "n": 60,
+          "p50": 191.5,
+          "p95": 217.89999999850988
+        }
+      },
+      "longestTask": 51,
+      "mountedMax": 100,
+      "oldMessagesMounted": 0,
+      "parseMax": 0.3999999985098839,
+      "jsonParseMax": 0.30000000447034836,
+      "raw": "13-current.json.gz"
+    }
+  },
+  {
+    "query": "messages=100&chats=300&expanded=0",
+    "baseline": {
+      "code": 0,
+      "seconds": 24.936,
+      "scale": {
+        "messageCount": 100,
+        "chatCount": 300,
+        "kind": "text",
+        "bytes": 15631,
+        "codeLines": 0,
+        "entryCount": 100
+      },
+      "samples": 60,
+      "summary": {
+        "highlight": {
+          "n": 60,
+          "p50": 59.599999994039536,
+          "p95": 98.60000000149012
+        },
+        "loading": {
+          "n": 0
+        },
+        "paintOpportunity": {
+          "n": 60,
+          "p50": 124.29999999701977,
+          "p95": 184
+        },
+        "history": {
+          "n": 60,
+          "p50": 271.90000000596046,
+          "p95": 293.19999999552965
+        },
+        "ready": {
+          "n": 60,
+          "p50": 271.90000000596046,
+          "p95": 293.19999999552965
+        }
+      },
+      "longestTask": 162,
+      "mountedMax": 100,
+      "oldMessagesMounted": 100,
+      "parseMax": 0.30000000447034836,
+      "jsonParseMax": 0.20000000298023224,
+      "raw": "14-baseline.json.gz"
+    },
+    "current": {
+      "code": 0,
+      "seconds": 26.013,
+      "scale": {
+        "messageCount": 100,
+        "chatCount": 300,
+        "kind": "text",
+        "bytes": 15631,
+        "codeLines": 0,
+        "entryCount": 100
+      },
+      "samples": 60,
+      "summary": {
+        "highlight": {
+          "n": 60,
+          "p50": 50.5,
+          "p95": 64.29999999701977
+        },
+        "loading": {
+          "n": 60,
+          "p50": 50.899999998509884,
+          "p95": 64.79999999701977
+        },
+        "paintOpportunity": {
+          "n": 60,
+          "p50": 124.79999999701977,
+          "p95": 148.09999999403954
+        },
+        "history": {
+          "n": 60,
+          "p50": 273.30000000447035,
+          "p95": 307.1000000014901
+        },
+        "ready": {
+          "n": 60,
+          "p50": 273.30000000447035,
+          "p95": 307.1000000014901
+        }
+      },
+      "longestTask": 131,
+      "mountedMax": 100,
+      "oldMessagesMounted": 0,
+      "parseMax": 0.3999999985098839,
+      "jsonParseMax": 5.600000001490116,
+      "raw": "14-current.json.gz"
+    }
+  },
+  {
+    "query": "messages=100&chats=300&expanded=1",
+    "baseline": {
+      "code": 0,
+      "seconds": 31.427,
+      "scale": {
+        "messageCount": 100,
+        "chatCount": 300,
+        "kind": "text",
+        "bytes": 15631,
+        "codeLines": 0,
+        "entryCount": 100
+      },
+      "samples": 60,
+      "summary": {
+        "highlight": {
+          "n": 60,
+          "p50": 94.20000000298023,
+          "p95": 165.20000000298023
+        },
+        "loading": {
+          "n": 0
+        },
+        "paintOpportunity": {
+          "n": 60,
+          "p50": 210.70000000298023,
+          "p95": 293.20000000298023
+        },
+        "history": {
+          "n": 60,
+          "p50": 347.5,
+          "p95": 404.20000000298023
+        },
+        "ready": {
+          "n": 60,
+          "p50": 347.5,
+          "p95": 404.20000000298023
+        }
+      },
+      "longestTask": 272,
+      "mountedMax": 100,
+      "oldMessagesMounted": 100,
+      "parseMax": 0.3999999985098839,
+      "jsonParseMax": 0.3999999985098839,
+      "raw": "15-baseline.json.gz"
+    },
+    "current": {
+      "code": 0,
+      "seconds": 28.287,
+      "scale": {
+        "messageCount": 100,
+        "chatCount": 300,
+        "kind": "text",
+        "bytes": 15631,
+        "codeLines": 0,
+        "entryCount": 100
+      },
+      "samples": 60,
+      "summary": {
+        "highlight": {
+          "n": 60,
+          "p50": 55.70000000298023,
+          "p95": 91.5
+        },
+        "loading": {
+          "n": 60,
+          "p50": 56.399999998509884,
+          "p95": 92.19999999552965
+        },
+        "paintOpportunity": {
+          "n": 60,
+          "p50": 134.5,
+          "p95": 216.09999999403954
+        },
+        "history": {
+          "n": 60,
+          "p50": 276.3999999985099,
+          "p95": 334.1000000014901
+        },
+        "ready": {
+          "n": 60,
+          "p50": 276.5,
+          "p95": 334.1000000014901
+        }
+      },
+      "longestTask": 271,
+      "mountedMax": 100,
+      "oldMessagesMounted": 0,
+      "parseMax": 0.19999999552965164,
+      "jsonParseMax": 0.29999999701976776,
+      "raw": "15-current.json.gz"
+    }
+  },
+  {
+    "query": "messages=100&chats=3000&expanded=0",
+    "baseline": {
+      "code": 0,
+      "seconds": 84.885,
+      "scale": {
+        "messageCount": 100,
+        "chatCount": 3000,
+        "kind": "text",
+        "bytes": 15631,
+        "codeLines": 0,
+        "entryCount": 100
+      },
+      "samples": 60,
+      "summary": {
+        "highlight": {
+          "n": 60,
+          "p50": 307.1000000014901,
+          "p95": 470
+        },
+        "loading": {
+          "n": 0
+        },
+        "paintOpportunity": {
+          "n": 60,
+          "p50": 673,
+          "p95": 944.6000000014901
+        },
+        "history": {
+          "n": 60,
+          "p50": 788,
+          "p95": 1113.6999999955297
+        },
+        "ready": {
+          "n": 60,
+          "p50": 788,
+          "p95": 1113.6999999955297
+        }
+      },
+      "longestTask": 927,
+      "mountedMax": 100,
+      "oldMessagesMounted": 100,
+      "parseMax": 0.30000000447034836,
+      "jsonParseMax": 0.30000000447034836,
+      "raw": "16-baseline.json.gz"
+    },
+    "current": {
+      "code": 0,
+      "seconds": 94.735,
+      "scale": {
+        "messageCount": 100,
+        "chatCount": 3000,
+        "kind": "text",
+        "bytes": 15631,
+        "codeLines": 0,
+        "entryCount": 100
+      },
+      "samples": 60,
+      "summary": {
+        "highlight": {
+          "n": 60,
+          "p50": 264.1000000014901,
+          "p95": 487.40000000596046
+        },
+        "loading": {
+          "n": 60,
+          "p50": 268.70000000298023,
+          "p95": 490.80000000447035
+        },
+        "paintOpportunity": {
+          "n": 60,
+          "p50": 701.1000000014901,
+          "p95": 1126.6000000014901
+        },
+        "history": {
+          "n": 60,
+          "p50": 835.1000000014901,
+          "p95": 1269.7000000029802
+        },
+        "ready": {
+          "n": 60,
+          "p50": 835.1000000014901,
+          "p95": 1269.7000000029802
+        }
+      },
+      "longestTask": 1073,
+      "mountedMax": 100,
+      "oldMessagesMounted": 0,
+      "parseMax": 0.29999999701976776,
+      "jsonParseMax": 0.29999999701976776,
+      "raw": "16-current.json.gz"
+    }
+  },
+  {
+    "query": "messages=100&chats=3000&expanded=1",
+    "baseline": {
+      "code": 0,
+      "seconds": 135.584,
+      "scale": {
+        "messageCount": 100,
+        "chatCount": 3000,
+        "kind": "text",
+        "bytes": 15631,
+        "codeLines": 0,
+        "entryCount": 100
+      },
+      "samples": 60,
+      "summary": {
+        "highlight": {
+          "n": 60,
+          "p50": 482.29999999701977,
+          "p95": 921.8999999985099
+        },
+        "loading": {
+          "n": 0
+        },
+        "paintOpportunity": {
+          "n": 60,
+          "p50": 1016.1000000014901,
+          "p95": 1799.6000000014901
+        },
+        "history": {
+          "n": 60,
+          "p50": 1212.5,
+          "p95": 2082.5
+        },
+        "ready": {
+          "n": 60,
+          "p50": 1212.5,
+          "p95": 2082.5
+        }
+      },
+      "longestTask": 1739,
+      "mountedMax": 100,
+      "oldMessagesMounted": 100,
+      "parseMax": 4.899999998509884,
+      "jsonParseMax": 0.30000000447034836,
+      "raw": "17-baseline.json.gz"
+    },
+    "current": {
+      "code": 0,
+      "seconds": 180.392,
+      "scale": {
+        "messageCount": 100,
+        "chatCount": 3000,
+        "kind": "text",
+        "bytes": 15631,
+        "codeLines": 0,
+        "entryCount": 100
+      },
+      "samples": 60,
+      "summary": {
+        "highlight": {
+          "n": 60,
+          "p50": 570.7000000029802,
+          "p95": 1022.8000000044703
+        },
+        "loading": {
+          "n": 60,
+          "p50": 578.1000000014901,
+          "p95": 1032.8000000044703
+        },
+        "paintOpportunity": {
+          "n": 60,
+          "p50": 1304.3999999985099,
+          "p95": 2310
+        },
+        "history": {
+          "n": 60,
+          "p50": 1507.6999999955297,
+          "p95": 2673.5
+        },
+        "ready": {
+          "n": 60,
+          "p50": 1507.6999999955297,
+          "p95": 2673.5
+        }
+      },
+      "longestTask": 2275,
+      "mountedMax": 100,
+      "oldMessagesMounted": 0,
+      "parseMax": 0.6000000014901161,
+      "jsonParseMax": 0.20000000298023224,
+      "raw": "17-current.json.gz"
+    }
+  }
+]

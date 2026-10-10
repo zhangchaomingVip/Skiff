@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { PiSessionActions } from "./usePiSession";
+import type { PiSessionActions, SessionOwner } from "./usePiSession";
+import { useSessionValue } from "./useSessionValue";
 
 /** Secret never leaves Rust; only a trailing hint comes back. */
 interface Status {
@@ -31,12 +32,12 @@ export interface WebSearchControls {
  * (`/web on|off`), the key stored beside pi's config, and the shipped extension
  * file itself.
  */
-export function useWebSearch(actions: PiSessionActions, connected: boolean, reconnect: () => void): WebSearchControls {
-	const [available, setAvailable] = useState(false);
-	const [status, setStatus] = useState<Status>();
-	const [enabled, setEnabled] = useState(false);
-	const [busy, setBusy] = useState(false);
-	const [error, setError] = useState<string>();
+export function useWebSearch(actions: PiSessionActions, connected: boolean, reconnect: () => void, owner: SessionOwner, isCurrent: () => boolean): WebSearchControls {
+	const [available, setAvailable] = useSessionValue(owner, isCurrent, () => false);
+	const [status, setStatus] = useSessionValue<Status | undefined>(owner, isCurrent, () => undefined);
+	const [enabled, setEnabled] = useSessionValue(owner, isCurrent, () => false);
+	const [busy, setBusy] = useSessionValue(owner, isCurrent, () => false);
+	const [error, setError] = useSessionValue<string | undefined>(owner, isCurrent, () => undefined);
 
 	const refresh = useCallback(() => {
 		void invoke<Status>("get_web_search_status")
@@ -45,7 +46,7 @@ export function useWebSearch(actions: PiSessionActions, connected: boolean, reco
 				setEnabled(next.enabled);
 			})
 			.catch((e) => setError(String(e)));
-	}, []);
+	}, [setStatus, setEnabled, setError]);
 
 	useEffect(() => {
 		if (!connected) {
@@ -61,11 +62,12 @@ export function useWebSearch(actions: PiSessionActions, connected: boolean, reco
 			})
 			.catch(() => undefined);
 		return () => { cancelled = true; };
-	}, [actions, connected]);
+	}, [actions, connected, setAvailable]);
 
 	useEffect(() => { refresh(); }, [refresh, connected]);
 
 	const toggle = useCallback(async (next: boolean) => {
+		if (!isCurrent() || !connected) return;
 		setBusy(true);
 		setError(undefined);
 		try {
@@ -76,9 +78,10 @@ export function useWebSearch(actions: PiSessionActions, connected: boolean, reco
 		} finally {
 			setBusy(false);
 		}
-	}, [actions]);
+	}, [actions, connected, isCurrent, setBusy, setError, setEnabled]);
 
 	const clearKey = useCallback(async () => {
+		if (!isCurrent()) return;
 		setBusy(true);
 		setError(undefined);
 		try {
@@ -90,13 +93,15 @@ export function useWebSearch(actions: PiSessionActions, connected: boolean, reco
 		} finally {
 			setBusy(false);
 		}
-	}, [refresh]);
+	}, [refresh, isCurrent, setBusy, setError, setEnabled]);
 
 	const install = useCallback(async () => {
+		if (!isCurrent()) return;
 		setBusy(true);
 		setError(undefined);
 		try {
 			const changed = await invoke<boolean>("install_web_search_extension");
+			if (!isCurrent()) return;
 			if (changed) reconnect();
 			refresh();
 		} catch (e) {
@@ -104,7 +109,7 @@ export function useWebSearch(actions: PiSessionActions, connected: boolean, reco
 		} finally {
 			setBusy(false);
 		}
-	}, [reconnect, refresh]);
+	}, [reconnect, refresh, isCurrent, setBusy, setError]);
 
 	return {
 		available,

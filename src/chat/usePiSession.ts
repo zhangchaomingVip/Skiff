@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { PiRpc, type RpcEvent } from "../rpc/RpcClient";
 import { parseMessages, parseModels } from "./parse";
@@ -55,26 +55,36 @@ function parseCommands(raw: unknown): PiCommand[] {
 
 // Serialize teardown/start across fast navigation and React effect cleanup.
 let previousTeardown: Promise<void> = Promise.resolve();
+let nextGeneration = 0;
+
+export interface SessionOwner {
+	id?: string;
+	cwd?: string;
+	generation: number;
+}
+
+interface SessionSnapshot {
+	owner: SessionOwner;
+	phase: "loading" | "ready" | "error";
+	state: SessionState;
+	readyId?: string;
+	loadedId?: string;
+	loadedConfig?: FamiliesConfig;
+	sessionFile?: string;
+	rawLines: string[];
+	pending: boolean;
+	elapsedMs: number;
+}
 
 /** A real pi session per conversation; transcripts stay in pi's files. */
 export function usePiSession(target?: SessionTarget, runtimeOffers: readonly RuntimeOffer[] = [], configuration?: { config?: FamiliesConfig; ready: boolean }) {
 	const rpcRef = useRef<PiRpc | null>(null);
 	const busyRef = useRef(false);
 	const streamingRef = useRef(false);
-	const [state, setState] = useState<SessionState>(initialSessionState);
-	const stateRef = useRef(state);
-	stateRef.current = state;
-	const [readyId, setReadyId] = useState<string>();
-	const [loadedId, setLoadedId] = useState<string>();
-	const [loadedConfig, setLoadedConfig] = useState<FamiliesConfig>();
-	const [sessionFile, setSessionFile] = useState<string>();
-	const [rawLines, setRawLines] = useState<string[]>([]);
 	const [revision, setRevision] = useState(0);
-	const [pending, setPending] = useState(false);
-	const [elapsedMs, setElapsedMs] = useState(0);
 	const runStarted = useRef<number>();
 	const promptRef = useRef<{ id: string; cancelled: boolean }>();
-	const preferredModel = useRef<{ chatId?: string; model?: ModelInfo }>();
+	const preferredModel = useRef<{ chatId?: string; cwd?: string; model?: ModelInfo }>();
 	const runtimeOffersRef = useRef(runtimeOffers);
 	runtimeOffersRef.current = runtimeOffers;
 	// Saving a newly assigned pi file must not restart the running session.
@@ -85,21 +95,53 @@ export function usePiSession(target?: SessionTarget, runtimeOffers: readonly Run
 	// Finish initial migration before spawning. Refreshes with an existing
 	// configuration leave the current conversation running until it is idle.
 	const configurationReady = !configuration || configuration.ready || !!configuration.config;
+	const owner = useMemo<SessionOwner>(() => ({ id: target?.id, cwd: target?.cwd, generation: ++nextGeneration }), [target?.id, target?.cwd, revision, configurationReady]);
+	if (preferredModel.current && (preferredModel.current.chatId !== owner.id || preferredModel.current.cwd !== owner.cwd)) preferredModel.current = undefined;
+	const ownerRef = useRef<SessionOwner>();
+	ownerRef.current = owner;
+	const empty = useMemo<SessionSnapshot>(() => ({ owner, phase: "loading", state: initialSessionState, rawLines: [], pending: false, elapsedMs: targetRef.current?.elapsedMs ?? 0 }), [owner]);
+	const [snapshot, setSnapshot] = useState(empty);
+	// Project ownership during render, before effects mount a newly keyed chat.
+	// ID alone is insufficient for A→B→A, reconnects and cwd changes.
+	const visible = snapshot.owner === owner ? snapshot : empty;
+	const { state, readyId, loadedId, loadedConfig, sessionFile, rawLines, pending, elapsedMs, phase } = visible;
+	const stateRef = useRef(state);
+	stateRef.current = state;
+	const setters = useMemo(() => {
+		function field<K extends keyof SessionSnapshot>(key: K): Dispatch<SetStateAction<SessionSnapshot[K]>> {
+			return (update) => {
+				if (ownerRef.current !== owner) return;
+				setSnapshot((previous) => {
+					if (ownerRef.current !== owner) return previous;
+					const current = previous.owner === owner ? previous : empty;
+					const value = typeof update === "function" ? (update as (value: SessionSnapshot[K]) => SessionSnapshot[K])(current[key]) : update;
+					return { ...current, [key]: value };
+				});
+			};
+		}
+		return { setState: field("state"), setReadyId: field("readyId"), setLoadedId: field("loadedId"), setLoadedConfig: field("loadedConfig"), setSessionFile: field("sessionFile"), setRawLines: field("rawLines"), setPending: field("pending"), setElapsedMs: field("elapsedMs"), setPhase: field("phase") };
+	}, [owner, empty]);
+	const { setState, setReadyId, setLoadedId, setLoadedConfig, setSessionFile, setRawLines, setPending, setElapsedMs, setPhase } = setters;
 	const connected = !!target && readyId === target.id;
+	const isCurrent = useCallback(() => ownerRef.current === owner, [owner]);
+	const ownsRpc = useCallback((rpc: PiRpc | null) => isCurrent() && !!rpc && rpcRef.current === rpc, [isCurrent]);
 
 	const fail = useCallback((error: unknown) => {
 		setState((s) => ({ ...s, lastError: error instanceof Error ? error.message : String(error) }));
-	}, []);
+		setPhase((value) => value === "loading" ? "error" : value);
+	}, [setState, setPhase]);
 
 	useEffect(() => {
+		ownerRef.current = owner;
 		const selected = targetRef.current;
-		if (!selected || !configurationReady) return;
+		if (!selected || !configurationReady) return () => { if (ownerRef.current === owner) ownerRef.current = undefined; };
 		const rpc = new PiRpc(`chat_${crypto.randomUUID()}`);
 		rpcRef.current = rpc;
 		let cancelled = false;
+		const current = () => !cancelled && isCurrent();
 		// pi's provider errors go to stderr; without this they are silently dropped.
 		const offStderr = listen<string>(`rpc-stderr://${rpc.instanceId}`, (e) => {
-			if (!cancelled && e.payload) setRawLines((prev) => [...prev.slice(-499), `[stderr] ${e.payload}`]);
+			if (current() && e.payload) setRawLines((prev) => [...prev.slice(-499), `[stderr] ${e.payload}`]);
 		});
 		setReadyId(undefined);
 		setLoadedId(undefined);
@@ -109,12 +151,13 @@ export function usePiSession(target?: SessionTarget, runtimeOffers: readonly Run
 		setRawLines([]);
 		setPending(false);
 		setElapsedMs(selected.elapsedMs ?? 0);
+		setPhase("loading");
 		runStarted.current = undefined;
 		promptRef.current = undefined;
 		busyRef.current = false;
 		streamingRef.current = false;
 		const offEvent = rpc.onEvent((event: RpcEvent) => {
-			if (cancelled) return;
+			if (!current()) return;
 			const now = Date.now();
 			if (event.type === "agent_start" && runStarted.current === undefined) runStarted.current = now;
 			let duration: number | undefined;
@@ -124,6 +167,7 @@ export function usePiSession(target?: SessionTarget, runtimeOffers: readonly Run
 				runStarted.current = undefined;
 			}
 			if (event.type === "bridge_exit") {
+				setPhase("error");
 				setReadyId(undefined);
 				setPending(false);
 				streamingRef.current = false;
@@ -137,24 +181,24 @@ export function usePiSession(target?: SessionTarget, runtimeOffers: readonly Run
 			});
 		});
 		const offLine = rpc.onLine((line) => {
-			if (!cancelled) setRawLines((prev) => [...prev.slice(-499), line]);
+			if (current()) setRawLines((prev) => [...prev.slice(-499), line]);
 		});
 		const preceding = previousTeardown;
 		let startupConfig: FamiliesConfig | undefined;
 		const spawned = preceding.then(async () => {
-			if (cancelled) return;
+			if (!current()) return;
 			startupConfig = configurationRef.current?.config;
 			await rpc.start({ cwd: selected.cwd, appendSystemPrompt: loadAppendPrompt() });
 		});
 		void (async () => {
 			try {
 				await spawned;
-				if (cancelled) return;
+				if (!current()) return;
 				if (selected.sessionFile) {
 					const result = await rpc.request<{ cancelled?: boolean }>({ type: "switch_session", sessionPath: selected.sessionFile });
 					if (result.cancelled) throw new Error("pi 扩展取消了聊天切换，未载入该聊天。");
 				}
-				if (cancelled) return;
+				if (!current()) return;
 				const preferred = preferredModel.current?.chatId === selected.id ? preferredModel.current.model ?? selected.model : selected.model;
 				preferredModel.current = undefined;
 				let unavailableModel: ModelInfo | undefined;
@@ -163,14 +207,14 @@ export function usePiSession(target?: SessionTarget, runtimeOffers: readonly Run
 					try { await rpc.request({ type: "set_model", provider: preferred.provider, modelId: preferred.id }); }
 					catch (error) { unavailableModel = preferred; selectionError = error; } // The app resolves removed/disabled models after loading configuration.
 				}
-				if (cancelled) return;
+				if (!current()) return;
 				const [data, models, transcript, levels] = await Promise.all([
 					rpc.request<Record<string, unknown>>({ type: "get_state" }),
 					rpc.request<{ models?: unknown }>({ type: "get_available_models" }),
 					rpc.request<{ messages?: unknown }>({ type: "get_messages" }),
 					rpc.request<{ levels?: string[] }>({ type: "get_available_thinking_levels" }).catch(() => ({ levels: [] })),
 				]);
-				if (cancelled) return;
+				if (!current()) return;
 				const availableModels = parseModels(models.models);
 				if (unavailableModel && availableModels.some((model) => model.provider === unavailableModel.provider && model.id === unavailableModel.id)) throw selectionError;
 				const parsedModel = parseModels([data.model])[0];
@@ -192,12 +236,14 @@ export function usePiSession(target?: SessionTarget, runtimeOffers: readonly Run
 				setLoadedId(selected.id);
 				setLoadedConfig(startupConfig);
 				setReadyId(selected.id);
+				setPhase("ready");
 			} catch (error) {
-				if (!cancelled) fail(error);
+				if (current()) fail(error);
 			}
 		})();
 		return () => {
 			cancelled = true;
+			if (ownerRef.current === owner) ownerRef.current = undefined;
 			runStarted.current = undefined;
 			promptRef.current = undefined;
 			void offStderr.then((off) => off());
@@ -209,39 +255,43 @@ export function usePiSession(target?: SessionTarget, runtimeOffers: readonly Run
 			previousTeardown = spawned.catch(() => {}).then(() => rpc.stop()).catch(() => {});
 			if (rpcRef.current === rpc) rpcRef.current = null;
 		};
-	}, [target?.id, target?.cwd, revision, configurationReady, fail]);
+	}, [owner, configurationReady, fail, isCurrent, setters]);
 
 	const actions = useMemo<PiSessionActions>(() => ({
 		getCommands: async () => {
-			const result = await rpcRef.current?.request<{ commands?: unknown }>({ type: "get_commands" });
-			return parseCommands(result?.commands);
+			const rpc = rpcRef.current;
+			if (!connected || !ownsRpc(rpc) || !rpc) return [];
+			const result = await rpc.request<{ commands?: unknown }>({ type: "get_commands" });
+			return ownsRpc(rpc) ? parseCommands(result?.commands) : [];
 		},
 		rewind: async (id) => {
 			const rpc = rpcRef.current;
-			if (!connected || !rpc || busyRef.current || streamingRef.current) return false;
+			if (!connected || !ownsRpc(rpc) || !rpc || busyRef.current || streamingRef.current) return false;
 			busyRef.current = true; setPending(true);
 			let forked = false;
 			try {
-				if (!await forkTurn(rpc, stateRef.current.messages, id)) { fail("pi 扩展取消了消息操作。"); return false; }
+				const accepted = await forkTurn(rpc, stateRef.current.messages, id);
+				if (!ownsRpc(rpc)) return false;
+				if (!accepted) { fail("pi 扩展取消了消息操作。"); return false; }
 				forked = true;
 				const [transcript, data] = await Promise.all([rpc.request<{ messages: unknown }>({ type: "get_messages" }), rpc.request<Record<string, unknown>>({ type: "get_state" })]);
-				if (rpcRef.current !== rpc) return false;
+				if (!ownsRpc(rpc)) return false;
 				setState((s) => ({ ...s, messages: parseMessages(transcript.messages), lastError: undefined }));
 				setSessionFile(typeof data.sessionFile === "string" ? data.sessionFile : undefined);
 				return true;
 			} catch (error) {
-				if (rpcRef.current === rpc) {
+				if (ownsRpc(rpc)) {
 					fail(error);
 					// If refresh failed after forking, reload the indexed original session.
 					if (forked) { setReadyId(undefined); setRevision((value) => value + 1); }
 				}
 				return false;
 			}
-			finally { if (rpcRef.current === rpc) { busyRef.current = false; setPending(false); } }
+			finally { if (ownsRpc(rpc)) { busyRef.current = false; setPending(false); } }
 		},
 		prompt: async (text, images = []) => {
 			const rpc = rpcRef.current;
-			if (!connected || !rpc || busyRef.current || streamingRef.current || runStarted.current !== undefined || (!text.trim() && !images.length)) return false;
+			if (!connected || !ownsRpc(rpc) || !rpc || busyRef.current || streamingRef.current || runStarted.current !== undefined || (!text.trim() && !images.length)) return false;
 			busyRef.current = true;
 			setPending(true);
 			const prompt = { id: crypto.randomUUID(), cancelled: false };
@@ -254,11 +304,11 @@ export function usePiSession(target?: SessionTarget, runtimeOffers: readonly Run
 			}));
 			try {
 				await rpc.request({ type: "prompt", message: text.trim(), ...(images.length ? { images: images.map(({ data, mimeType }) => ({ type: "image", data, mimeType })) } : {}) });
-				if (rpcRef.current !== rpc || promptRef.current !== prompt || prompt.cancelled) return false;
+				if (!ownsRpc(rpc) || promptRef.current !== prompt || prompt.cancelled) return false;
 				// pi may assign its file lazily on the first message.
 				try {
 					const data = await rpc.request<Record<string, unknown>>({ type: "get_state" });
-					if (rpcRef.current === rpc && promptRef.current === prompt && !prompt.cancelled) {
+					if (ownsRpc(rpc) && promptRef.current === prompt && !prompt.cancelled) {
 						setSessionFile(typeof data.sessionFile === "string" ? data.sessionFile : undefined);
 						// Extension commands may complete without starting an agent run.
 						if (text.trim().startsWith("/") && !data.isStreaming && !streamingRef.current) {
@@ -266,10 +316,10 @@ export function usePiSession(target?: SessionTarget, runtimeOffers: readonly Run
 							setState((s) => reduce(s, { type: "prompt_cancel", promptId: prompt.id }));
 						}
 					}
-				} catch (error) { if (rpcRef.current === rpc && promptRef.current === prompt && !prompt.cancelled) fail(error); }
-				return rpcRef.current === rpc && promptRef.current === prompt && !prompt.cancelled;
+				} catch (error) { if (ownsRpc(rpc) && promptRef.current === prompt && !prompt.cancelled) fail(error); }
+				return ownsRpc(rpc) && promptRef.current === prompt && !prompt.cancelled;
 			} catch (error) {
-				if (rpcRef.current === rpc && promptRef.current === prompt && !prompt.cancelled) {
+				if (ownsRpc(rpc) && promptRef.current === prompt && !prompt.cancelled) {
 					if (!streamingRef.current) {
 						runStarted.current = undefined;
 						setState((s) => reduce(s, { type: "prompt_cancel", promptId: prompt.id }));
@@ -278,71 +328,75 @@ export function usePiSession(target?: SessionTarget, runtimeOffers: readonly Run
 				}
 				return false;
 			} finally {
-				if (rpcRef.current === rpc && promptRef.current === prompt) { setPending(false); busyRef.current = false; }
+				if (ownsRpc(rpc) && promptRef.current === prompt) { setPending(false); busyRef.current = false; }
 			}
 		},
 		abort: async () => {
 			const rpc = rpcRef.current;
+			if (!connected || !ownsRpc(rpc)) return;
 			const prompt = promptRef.current;
 			try {
 				await rpc?.request({ type: "abort" });
-				if (rpcRef.current === rpc && promptRef.current === prompt && prompt && !streamingRef.current) {
+				if (ownsRpc(rpc) && promptRef.current === prompt && prompt && !streamingRef.current) {
 					prompt.cancelled = true;
 					runStarted.current = undefined;
 					busyRef.current = false;
 					setPending(false);
 					setState((s) => reduce(s, { type: "prompt_cancel", promptId: prompt.id }));
 				}
-			} catch (error) { if (rpcRef.current === rpc) fail(error); }
+			} catch (error) { if (ownsRpc(rpc)) fail(error); }
 		},
 		setModel: async (model) => {
 			const rpc = rpcRef.current;
-			if (!connected || !rpc || busyRef.current || streamingRef.current) return false;
+			if (!connected || !ownsRpc(rpc) || !rpc || busyRef.current || streamingRef.current) return false;
 			busyRef.current = true;
 			setPending(true);
 			try {
 				const result = await rpc.request<ModelInfo>({ type: "set_model", provider: model.provider, modelId: model.id });
-				if (rpcRef.current !== rpc) return false;
+				if (!ownsRpc(rpc)) return false;
 				const parsed = parseModels([result])[0];
 				setState((s) => ({ ...s, model: parsed ? { ...parsed, offerId: model.offerId, routeId: model.routeId, modelId: model.modelId ?? model.id, familyId: model.familyId, familyName: model.familyName, relayId: model.relayId } : parsed, thinkingLevels: [], thinkingLevel: undefined, lastError: undefined }));
 				const [data, levels] = await Promise.all([rpc.request<Record<string, unknown>>({ type: "get_state" }), rpc.request<{ levels: string[] }>({ type: "get_available_thinking_levels" }).catch(() => ({ levels: [] }))]);
-				if (rpcRef.current !== rpc) return false;
+				if (!ownsRpc(rpc)) return false;
 				setState((s) => ({ ...s, thinkingLevel: String(data.thinkingLevel ?? "off"), thinkingLevels: levels.levels }));
 				return true;
-			} catch (error) { if (rpcRef.current === rpc) fail(error); return false; } finally { if (rpcRef.current === rpc) { setPending(false); busyRef.current = false; } }
+			} catch (error) { if (ownsRpc(rpc)) fail(error); return false; } finally { if (ownsRpc(rpc)) { setPending(false); busyRef.current = false; } }
 		},
 		setThinkingLevel: async (level) => {
 			const rpc = rpcRef.current;
-			if (!connected || !rpc || busyRef.current || streamingRef.current) return;
+			if (!connected || !ownsRpc(rpc) || !rpc || busyRef.current || streamingRef.current) return;
 			busyRef.current = true; setPending(true);
 			try {
 				await rpc.request({ type: "set_thinking_level", level });
+				if (!ownsRpc(rpc)) return;
 				const data = await rpc.request<Record<string, unknown>>({ type: "get_state" });
-				if (rpcRef.current !== rpc) return;
+				if (!ownsRpc(rpc)) return;
 				setState((s) => ({ ...s, thinkingLevel: String(data.thinkingLevel ?? "off") }));
-			} catch (error) { if (rpcRef.current === rpc) fail(error); } finally { if (rpcRef.current === rpc) { busyRef.current = false; setPending(false); } }
+			} catch (error) { if (ownsRpc(rpc)) fail(error); } finally { if (ownsRpc(rpc)) { busyRef.current = false; setPending(false); } }
 		},
 		setWebSearch: async (enabled) => {
 			const rpc = rpcRef.current;
-			if (!connected || !rpc || busyRef.current || streamingRef.current) return;
+			if (!connected || !ownsRpc(rpc) || !rpc || busyRef.current || streamingRef.current) return;
 			busyRef.current = true;
 			setPending(true);
 			try {
 				// pi expands leading slashes into extension commands, so this never
 				// reaches the model as a chat message.
 				await rpc.request({ type: "prompt", message: `/web ${enabled ? "on" : "off"}` });
-			} catch (error) { if (rpcRef.current === rpc) fail(error); } finally { if (rpcRef.current === rpc) { busyRef.current = false; setPending(false); } }
+			} catch (error) { if (ownsRpc(rpc)) fail(error); } finally { if (ownsRpc(rpc)) { busyRef.current = false; setPending(false); } }
 		},
 		clearError: () => setState((s) => ({ ...s, lastError: undefined })),
-	}), [connected, fail]);
+	}), [connected, fail, ownsRpc, setters]);
 
 	// Stable identity: callers restart the session from effects and must not
 	// re-trigger on every render.
 	const reconnect = useCallback((model?: ModelInfo) => {
-		preferredModel.current = { chatId: targetRef.current?.id, model };
-		setReadyId(undefined);
+		preferredModel.current = { chatId: targetRef.current?.id, cwd: targetRef.current?.cwd, model };
+		// Invalidate callbacks immediately, including the gap before React renders.
+		ownerRef.current = undefined;
 		setRevision((revision) => revision + 1);
 	}, []);
+	const canNavigate = useCallback(() => !busyRef.current && !streamingRef.current && runStarted.current === undefined, []);
 
-	return { state, connected, rawLines, actions, sessionFile, loadedId, loadedConfig, pending, elapsedMs, reconnect };
+	return { owner, phase, loading: !!target && phase === "loading", isCurrent, canNavigate, state, connected, rawLines, actions, sessionFile, loadedId, loadedConfig, pending, elapsedMs, reconnect };
 }

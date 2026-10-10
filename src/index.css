@@ -524,6 +524,7 @@ details[open] > summary .disclosure { transform: rotate(90deg); }
 
 /* Family-grouped model picker */
 .chat { flex: 1; min-width: 0; display: flex; flex-direction: column; position: relative; }
+.session-loading { flex: 1; display: flex; align-items: center; justify-content: center; gap: var(--space-2); color: var(--secondary); }
 .provider-toast { position: absolute; z-index: 8; top: 12px; left: 50%; transform: translateX(-50%); flex-wrap: wrap; width: min(600px, calc(100% - 32px)); background: var(--bg); box-shadow: 0 8px 28px var(--shadow-color); }
 .provider-toast > span { flex-basis: calc(100% - 40px); }
 .provider-toast .ui-button { white-space: normal; text-align: left; }

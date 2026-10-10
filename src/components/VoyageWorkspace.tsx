@@ -13,9 +13,10 @@ import { Dialog } from "./ui";
 
 const StableChatView = memo(ChatView);
 
-export function VoyageWorkspace({ state, connected, pending, actions, onSend, onReconnect, projectName, search, onConfigureSearch, failover, modelNotice, routeAuthorization }: {
+export function VoyageWorkspace({ state, loading = false, connected, pending, actions, onSend, onReconnect, projectName, search, onConfigureSearch, failover, modelNotice, routeAuthorization }: {
 	modelNotice?: string;
 	state: SessionState;
+	loading?: boolean;
 	connected: boolean;
 	pending: boolean;
 	actions: PiSessionActions;
@@ -45,7 +46,7 @@ export function VoyageWorkspace({ state, connected, pending, actions, onSend, on
 	return <div className={`chat-and-rail ${expanded ? "rail-expanded" : "rail-collapsed"}`}>
 		<div className="chat-column">
 			<LiveTurnContext.Provider value={metrics.liveTurn}>
-				<StableChatView state={state} connected={connected} pending={pending} actions={actions} onSend={onSend} onReconnect={onReconnect} projectName={projectName} search={search} onConfigureSearch={onConfigureSearch} failover={failover} routeAuthorization={routeAuthorization} />
+				<StableChatView state={state} loading={loading} connected={connected} pending={pending} actions={actions} onSend={onSend} onReconnect={onReconnect} projectName={projectName} search={search} onConfigureSearch={onConfigureSearch} failover={failover} routeAuthorization={routeAuthorization} />
 			</LiveTurnContext.Provider>
 			<ContextUsage notice={modelNotice} metrics={metrics} expanded={expanded} onToggle={toggle} />
 		</div>

@@ -1,0 +1,1274 @@
+{
+  "query": "messages=1000&kind=tool",
+  "samples": 60,
+  "sidebarRows": 30,
+  "samplingWindow": [
+    2015.7999999970198,
+    29674.19999999553
+  ],
+  "commits": {
+    "count": 520,
+    "total": 8440.59999988228,
+    "max": 249.80000001192093
+  },
+  "longTasks": {
+    "count": 93,
+    "total": 12823,
+    "max": 264
+  },
+  "layout": {
+    "count": 300,
+    "total": 1668.9489999999987,
+    "max": 66.337
+  },
+  "style": {
+    "count": 1599,
+    "total": 1656.6409999999992,
+    "max": 59.559
+  },
+  "parseMessages": {
+    "count": 60,
+    "total": 23.900000028312206,
+    "max": 1.5
+  },
+  "jsonParse": {
+    "count": 478,
+    "total": 53.19999998807907,
+    "max": 2.1999999955296516
+  },
+  "workspaceStringify": {
+    "count": 119,
+    "total": 6.599999949336052,
+    "max": 0.29999999701976776
+  },
+  "workspaceStorage": {
+    "count": 119,
+    "total": 9.899999998509884,
+    "max": 0.20000000298023224
+  },
+  "longCalls": [
+    {
+      "duration": 262.181,
+      "start": 39072960960,
+      "frame": {
+        "function": "z",
+        "bundle": "session-switch-BpVseffJ.js",
+        "line": 1,
+        "column": 10284,
+        "source": {
+          "source": "../../../node_modules/scheduler/cjs/scheduler.production.min.js",
+          "line": 14,
+          "column": 62,
+          "name": "R"
+        }
+      }
+    },
+    {
+      "duration": 234.112,
+      "start": 39074899947,
+      "frame": {
+        "function": "z",
+        "bundle": "session-switch-BpVseffJ.js",
+        "line": 1,
+        "column": 10284,
+        "source": {
+          "source": "../../../node_modules/scheduler/cjs/scheduler.production.min.js",
+          "line": 14,
+          "column": 62,
+          "name": "R"
+        }
+      }
+    },
+    {
+      "duration": 233.994,
+      "start": 39073932472,
+      "frame": {
+        "function": "z",
+        "bundle": "session-switch-BpVseffJ.js",
+        "line": 1,
+        "column": 10284,
+        "source": {
+          "source": "../../../node_modules/scheduler/cjs/scheduler.production.min.js",
+          "line": 14,
+          "column": 62,
+          "name": "R"
+        }
+      }
+    },
+    {
+      "duration": 232.569,
+      "start": 39086167223,
+      "frame": {
+        "function": "z",
+        "bundle": "session-switch-BpVseffJ.js",
+        "line": 1,
+        "column": 10284,
+        "source": {
+          "source": "../../../node_modules/scheduler/cjs/scheduler.production.min.js",
+          "line": 14,
+          "column": 62,
+          "name": "R"
+        }
+      }
+    },
+    {
+      "duration": 230.168,
+      "start": 39079559493,
+      "frame": {
+        "function": "z",
+        "bundle": "session-switch-BpVseffJ.js",
+        "line": 1,
+        "column": 10284,
+        "source": {
+          "source": "../../../node_modules/scheduler/cjs/scheduler.production.min.js",
+          "line": 14,
+          "column": 62,
+          "name": "R"
+        }
+      }
+    },
+    {
+      "duration": 230,
+      "start": 39082399942,
+      "frame": {
+        "function": "z",
+        "bundle": "session-switch-BpVseffJ.js",
+        "line": 1,
+        "column": 10284,
+        "source": {
+          "source": "../../../node_modules/scheduler/cjs/scheduler.production.min.js",
+          "line": 14,
+          "column": 62,
+          "name": "R"
+        }
+      }
+    },
+    {
+      "duration": 229.98,
+      "start": 39080492474,
+      "frame": {
+        "function": "z",
+        "bundle": "session-switch-BpVseffJ.js",
+        "line": 1,
+        "column": 10284,
+        "source": {
+          "source": "../../../node_modules/scheduler/cjs/scheduler.production.min.js",
+          "line": 14,
+          "column": 62,
+          "name": "R"
+        }
+      }
+    },
+    {
+      "duration": 226.018,
+      "start": 39078657567,
+      "frame": {
+        "function": "z",
+        "bundle": "session-switch-BpVseffJ.js",
+        "line": 1,
+        "column": 10284,
+        "source": {
+          "source": "../../../node_modules/scheduler/cjs/scheduler.production.min.js",
+          "line": 14,
+          "column": 62,
+          "name": "R"
+        }
+      }
+    },
+    {
+      "duration": 224.877,
+      "start": 39075849482,
+      "frame": {
+        "function": "z",
+        "bundle": "session-switch-BpVseffJ.js",
+        "line": 1,
+        "column": 10284,
+        "source": {
+          "source": "../../../node_modules/scheduler/cjs/scheduler.production.min.js",
+          "line": 14,
+          "column": 62,
+          "name": "R"
+        }
+      }
+    },
+    {
+      "duration": 222.145,
+      "start": 39099075811,
+      "frame": {
+        "function": "z",
+        "bundle": "session-switch-BpVseffJ.js",
+        "line": 1,
+        "column": 10284,
+        "source": {
+          "source": "../../../node_modules/scheduler/cjs/scheduler.production.min.js",
+          "line": 14,
+          "column": 62,
+          "name": "R"
+        }
+      }
+    },
+    {
+      "duration": 222.1,
+      "start": 39081415176,
+      "frame": {
+        "function": "z",
+        "bundle": "session-switch-BpVseffJ.js",
+        "line": 1,
+        "column": 10284,
+        "source": {
+          "source": "../../../node_modules/scheduler/cjs/scheduler.production.min.js",
+          "line": 14,
+          "column": 62,
+          "name": "R"
+        }
+      }
+    },
+    {
+      "duration": 221.909,
+      "start": 39083367735,
+      "frame": {
+        "function": "z",
+        "bundle": "session-switch-BpVseffJ.js",
+        "line": 1,
+        "column": 10284,
+        "source": {
+          "source": "../../../node_modules/scheduler/cjs/scheduler.production.min.js",
+          "line": 14,
+          "column": 62,
+          "name": "R"
+        }
+      }
+    },
+    {
+      "duration": 218.977,
+      "start": 39084300432,
+      "frame": {
+        "function": "z",
+        "bundle": "session-switch-BpVseffJ.js",
+        "line": 1,
+        "column": 10284,
+        "source": {
+          "source": "../../../node_modules/scheduler/cjs/scheduler.production.min.js",
+          "line": 14,
+          "column": 62,
+          "name": "R"
+        }
+      }
+    },
+    {
+      "duration": 216.466,
+      "start": 39087066707,
+      "frame": {
+        "function": "z",
+        "bundle": "session-switch-BpVseffJ.js",
+        "line": 1,
+        "column": 10284,
+        "source": {
+          "source": "../../../node_modules/scheduler/cjs/scheduler.production.min.js",
+          "line": 14,
+          "column": 62,
+          "name": "R"
+        }
+      }
+    },
+    {
+      "duration": 216.312,
+      "start": 39077665715,
+      "frame": {
+        "function": "z",
+        "bundle": "session-switch-BpVseffJ.js",
+        "line": 1,
+        "column": 10284,
+        "source": {
+          "source": "../../../node_modules/scheduler/cjs/scheduler.production.min.js",
+          "line": 14,
+          "column": 62,
+          "name": "R"
+        }
+      }
+    },
+    {
+      "duration": 215.302,
+      "start": 39085207776,
+      "frame": {
+        "function": "z",
+        "bundle": "session-switch-BpVseffJ.js",
+        "line": 1,
+        "column": 10284,
+        "source": {
+          "source": "../../../node_modules/scheduler/cjs/scheduler.production.min.js",
+          "line": 14,
+          "column": 62,
+          "name": "R"
+        }
+      }
+    },
+    {
+      "duration": 214.878,
+      "start": 39089875480,
+      "frame": {
+        "function": "z",
+        "bundle": "session-switch-BpVseffJ.js",
+        "line": 1,
+        "column": 10284,
+        "source": {
+          "source": "../../../node_modules/scheduler/cjs/scheduler.production.min.js",
+          "line": 14,
+          "column": 62,
+          "name": "R"
+        }
+      }
+    },
+    {
+      "duration": 213.967,
+      "start": 39090791487,
+      "frame": {
+        "function": "z",
+        "bundle": "session-switch-BpVseffJ.js",
+        "line": 1,
+        "column": 10284,
+        "source": {
+          "source": "../../../node_modules/scheduler/cjs/scheduler.production.min.js",
+          "line": 14,
+          "column": 62,
+          "name": "R"
+        }
+      }
+    },
+    {
+      "duration": 213.104,
+      "start": 39094491889,
+      "frame": {
+        "function": "z",
+        "bundle": "session-switch-BpVseffJ.js",
+        "line": 1,
+        "column": 10284,
+        "source": {
+          "source": "../../../node_modules/scheduler/cjs/scheduler.production.min.js",
+          "line": 14,
+          "column": 62,
+          "name": "R"
+        }
+      }
+    },
+    {
+      "duration": 211.411,
+      "start": 39076767338,
+      "frame": {
+        "function": "z",
+        "bundle": "session-switch-BpVseffJ.js",
+        "line": 1,
+        "column": 10284,
+        "source": {
+          "source": "../../../node_modules/scheduler/cjs/scheduler.production.min.js",
+          "line": 14,
+          "column": 62,
+          "name": "R"
+        }
+      }
+    },
+    {
+      "duration": 210.568,
+      "start": 39093582860,
+      "frame": {
+        "function": "z",
+        "bundle": "session-switch-BpVseffJ.js",
+        "line": 1,
+        "column": 10284,
+        "source": {
+          "source": "../../../node_modules/scheduler/cjs/scheduler.production.min.js",
+          "line": 14,
+          "column": 62,
+          "name": "R"
+        }
+      }
+    },
+    {
+      "duration": 209.605,
+      "start": 39091707438,
+      "frame": {
+        "function": "z",
+        "bundle": "session-switch-BpVseffJ.js",
+        "line": 1,
+        "column": 10284,
+        "source": {
+          "source": "../../../node_modules/scheduler/cjs/scheduler.production.min.js",
+          "line": 14,
+          "column": 62,
+          "name": "R"
+        }
+      }
+    },
+    {
+      "duration": 207.491,
+      "start": 39097266162,
+      "frame": {
+        "function": "z",
+        "bundle": "session-switch-BpVseffJ.js",
+        "line": 1,
+        "column": 10284,
+        "source": {
+          "source": "../../../node_modules/scheduler/cjs/scheduler.production.min.js",
+          "line": 14,
+          "column": 62,
+          "name": "R"
+        }
+      }
+    },
+    {
+      "duration": 207.265,
+      "start": 39088001741,
+      "frame": {
+        "function": "z",
+        "bundle": "session-switch-BpVseffJ.js",
+        "line": 1,
+        "column": 10284,
+        "source": {
+          "source": "../../../node_modules/scheduler/cjs/scheduler.production.min.js",
+          "line": 14,
+          "column": 62,
+          "name": "R"
+        }
+      }
+    },
+    {
+      "duration": 207.26,
+      "start": 39098158814,
+      "frame": {
+        "function": "z",
+        "bundle": "session-switch-BpVseffJ.js",
+        "line": 1,
+        "column": 10284,
+        "source": {
+          "source": "../../../node_modules/scheduler/cjs/scheduler.production.min.js",
+          "line": 14,
+          "column": 62,
+          "name": "R"
+        }
+      }
+    },
+    {
+      "duration": 206.109,
+      "start": 39095399017,
+      "frame": {
+        "function": "z",
+        "bundle": "session-switch-BpVseffJ.js",
+        "line": 1,
+        "column": 10284,
+        "source": {
+          "source": "../../../node_modules/scheduler/cjs/scheduler.production.min.js",
+          "line": 14,
+          "column": 62,
+          "name": "R"
+        }
+      }
+    },
+    {
+      "duration": 206.086,
+      "start": 39092617960,
+      "frame": {
+        "function": "z",
+        "bundle": "session-switch-BpVseffJ.js",
+        "line": 1,
+        "column": 10284,
+        "source": {
+          "source": "../../../node_modules/scheduler/cjs/scheduler.production.min.js",
+          "line": 14,
+          "column": 62,
+          "name": "R"
+        }
+      }
+    },
+    {
+      "duration": 205.284,
+      "start": 39088899199,
+      "frame": {
+        "function": "z",
+        "bundle": "session-switch-BpVseffJ.js",
+        "line": 1,
+        "column": 10284,
+        "source": {
+          "source": "../../../node_modules/scheduler/cjs/scheduler.production.min.js",
+          "line": 14,
+          "column": 62,
+          "name": "R"
+        }
+      }
+    },
+    {
+      "duration": 202.447,
+      "start": 39100000153,
+      "frame": {
+        "function": "z",
+        "bundle": "session-switch-BpVseffJ.js",
+        "line": 1,
+        "column": 10284,
+        "source": {
+          "source": "../../../node_modules/scheduler/cjs/scheduler.production.min.js",
+          "line": 14,
+          "column": 62,
+          "name": "R"
+        }
+      }
+    },
+    {
+      "duration": 200.016,
+      "start": 39096299214,
+      "frame": {
+        "function": "z",
+        "bundle": "session-switch-BpVseffJ.js",
+        "line": 1,
+        "column": 10284,
+        "source": {
+          "source": "../../../node_modules/scheduler/cjs/scheduler.production.min.js",
+          "line": 14,
+          "column": 62,
+          "name": "R"
+        }
+      }
+    },
+    {
+      "duration": 127.292,
+      "start": 39072354633,
+      "frame": {
+        "function": "gy",
+        "bundle": "session-switch-BpVseffJ.js",
+        "line": 5,
+        "column": 19048,
+        "source": {
+          "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+          "line": 88,
+          "column": 125,
+          "name": "a"
+        }
+      }
+    },
+    {
+      "duration": 63.083,
+      "start": 39078049784,
+      "frame": {
+        "function": "z",
+        "bundle": "session-switch-BpVseffJ.js",
+        "line": 1,
+        "column": 10284,
+        "source": {
+          "source": "../../../node_modules/scheduler/cjs/scheduler.production.min.js",
+          "line": 14,
+          "column": 62,
+          "name": "R"
+        }
+      }
+    },
+    {
+      "duration": 62.301,
+      "start": 39092975239,
+      "frame": {
+        "function": "z",
+        "bundle": "session-switch-BpVseffJ.js",
+        "line": 1,
+        "column": 10284,
+        "source": {
+          "source": "../../../node_modules/scheduler/cjs/scheduler.production.min.js",
+          "line": 14,
+          "column": 62,
+          "name": "R"
+        }
+      }
+    },
+    {
+      "duration": 62.041,
+      "start": 39081791485,
+      "frame": {
+        "function": "z",
+        "bundle": "session-switch-BpVseffJ.js",
+        "line": 1,
+        "column": 10284,
+        "source": {
+          "source": "../../../node_modules/scheduler/cjs/scheduler.production.min.js",
+          "line": 14,
+          "column": 62,
+          "name": "R"
+        }
+      }
+    },
+    {
+      "duration": 59.077,
+      "start": 39096653548,
+      "frame": {
+        "function": "z",
+        "bundle": "session-switch-BpVseffJ.js",
+        "line": 1,
+        "column": 10284,
+        "source": {
+          "source": "../../../node_modules/scheduler/cjs/scheduler.production.min.js",
+          "line": 14,
+          "column": 62,
+          "name": "R"
+        }
+      }
+    },
+    {
+      "duration": 58.127,
+      "start": 39089257850,
+      "frame": {
+        "function": "z",
+        "bundle": "session-switch-BpVseffJ.js",
+        "line": 1,
+        "column": 10284,
+        "source": {
+          "source": "../../../node_modules/scheduler/cjs/scheduler.production.min.js",
+          "line": 14,
+          "column": 62,
+          "name": "R"
+        }
+      }
+    },
+    {
+      "duration": 55.093,
+      "start": 39100361215,
+      "frame": {
+        "function": "z",
+        "bundle": "session-switch-BpVseffJ.js",
+        "line": 1,
+        "column": 10284,
+        "source": {
+          "source": "../../../node_modules/scheduler/cjs/scheduler.production.min.js",
+          "line": 14,
+          "column": 62,
+          "name": "R"
+        }
+      }
+    }
+  ],
+  "longestCallStacks": [
+    {
+      "sampledMs": 23.706,
+      "stack": [
+        {
+          "codeType": "other",
+          "functionName": "(root)",
+          "scriptId": 0
+        },
+        {
+          "function": "z",
+          "bundle": "session-switch-BpVseffJ.js",
+          "line": 0,
+          "column": 10283,
+          "source": {
+            "source": "../../../node_modules/scheduler/cjs/scheduler.production.min.js",
+            "line": 14,
+            "column": 62,
+            "name": "R"
+          }
+        },
+        {
+          "function": "Z",
+          "bundle": "session-switch-BpVseffJ.js",
+          "line": 0,
+          "column": 9775,
+          "source": {
+            "source": "../../../node_modules/scheduler/cjs/scheduler.production.min.js",
+            "line": 13,
+            "column": 9,
+            "name": "J"
+          }
+        },
+        {
+          "function": "nm",
+          "bundle": "session-switch-BpVseffJ.js",
+          "line": 7,
+          "column": 38125,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 291,
+            "column": 9,
+            "name": "sl"
+          }
+        },
+        {
+          "function": "Ol",
+          "bundle": "session-switch-BpVseffJ.js",
+          "line": 7,
+          "column": 43704,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 304,
+            "column": 9,
+            "name": "ul"
+          }
+        },
+        {
+          "function": "j1",
+          "bundle": "session-switch-BpVseffJ.js",
+          "line": 7,
+          "column": 43988,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 304,
+            "column": 282,
+            "name": "Gl"
+          }
+        },
+        {
+          "function": "om",
+          "bundle": "session-switch-BpVseffJ.js",
+          "line": 7,
+          "column": 44069,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 305,
+            "column": 9,
+            "name": "Hl"
+          }
+        },
+        {
+          "function": "lm",
+          "bundle": "session-switch-BpVseffJ.js",
+          "line": 7,
+          "column": 44275,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 306,
+            "column": 9,
+            "name": "Fl"
+          }
+        },
+        {
+          "function": "Hp",
+          "bundle": "session-switch-BpVseffJ.js",
+          "line": 7,
+          "column": 15603,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 242,
+            "column": 9,
+            "name": "kk"
+          }
+        },
+        {
+          "function": "L",
+          "bundle": "session-switch-BpVseffJ.js",
+          "line": 0,
+          "column": 17408,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 35,
+            "column": 9,
+            "name": "ua"
+          }
+        },
+        {
+          "codeType": "JS",
+          "functionName": "setAttribute",
+          "scriptId": 0
+        }
+      ]
+    },
+    {
+      "sampledMs": 22.105,
+      "stack": [
+        {
+          "codeType": "other",
+          "functionName": "(root)",
+          "scriptId": 0
+        },
+        {
+          "function": "z",
+          "bundle": "session-switch-BpVseffJ.js",
+          "line": 0,
+          "column": 10283,
+          "source": {
+            "source": "../../../node_modules/scheduler/cjs/scheduler.production.min.js",
+            "line": 14,
+            "column": 62,
+            "name": "R"
+          }
+        },
+        {
+          "function": "Z",
+          "bundle": "session-switch-BpVseffJ.js",
+          "line": 0,
+          "column": 9775,
+          "source": {
+            "source": "../../../node_modules/scheduler/cjs/scheduler.production.min.js",
+            "line": 13,
+            "column": 9,
+            "name": "J"
+          }
+        },
+        {
+          "function": "nm",
+          "bundle": "session-switch-BpVseffJ.js",
+          "line": 7,
+          "column": 38125,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 291,
+            "column": 9,
+            "name": "sl"
+          }
+        },
+        {
+          "function": "Ol",
+          "bundle": "session-switch-BpVseffJ.js",
+          "line": 7,
+          "column": 43704,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 304,
+            "column": 9,
+            "name": "ul"
+          }
+        },
+        {
+          "function": "j1",
+          "bundle": "session-switch-BpVseffJ.js",
+          "line": 7,
+          "column": 43988,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 304,
+            "column": 282,
+            "name": "Gl"
+          }
+        },
+        {
+          "function": "om",
+          "bundle": "session-switch-BpVseffJ.js",
+          "line": 7,
+          "column": 44069,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 305,
+            "column": 9,
+            "name": "Hl"
+          }
+        },
+        {
+          "function": "lm",
+          "bundle": "session-switch-BpVseffJ.js",
+          "line": 7,
+          "column": 44275,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 306,
+            "column": 9,
+            "name": "Fl"
+          }
+        },
+        {
+          "function": "Hp",
+          "bundle": "session-switch-BpVseffJ.js",
+          "line": 7,
+          "column": 15603,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 242,
+            "column": 9,
+            "name": "kk"
+          }
+        }
+      ]
+    },
+    {
+      "sampledMs": 20.267,
+      "stack": [
+        {
+          "codeType": "other",
+          "functionName": "(root)",
+          "scriptId": 0
+        },
+        {
+          "function": "z",
+          "bundle": "session-switch-BpVseffJ.js",
+          "line": 0,
+          "column": 10283,
+          "source": {
+            "source": "../../../node_modules/scheduler/cjs/scheduler.production.min.js",
+            "line": 14,
+            "column": 62,
+            "name": "R"
+          }
+        },
+        {
+          "function": "Z",
+          "bundle": "session-switch-BpVseffJ.js",
+          "line": 0,
+          "column": 9775,
+          "source": {
+            "source": "../../../node_modules/scheduler/cjs/scheduler.production.min.js",
+            "line": 13,
+            "column": 9,
+            "name": "J"
+          }
+        },
+        {
+          "function": "nm",
+          "bundle": "session-switch-BpVseffJ.js",
+          "line": 7,
+          "column": 38125,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 291,
+            "column": 9,
+            "name": "sl"
+          }
+        },
+        {
+          "function": "Ol",
+          "bundle": "session-switch-BpVseffJ.js",
+          "line": 7,
+          "column": 43704,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 304,
+            "column": 9,
+            "name": "ul"
+          }
+        },
+        {
+          "function": "j1",
+          "bundle": "session-switch-BpVseffJ.js",
+          "line": 7,
+          "column": 43988,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 304,
+            "column": 282,
+            "name": "Gl"
+          }
+        },
+        {
+          "function": "om",
+          "bundle": "session-switch-BpVseffJ.js",
+          "line": 7,
+          "column": 44069,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 305,
+            "column": 9,
+            "name": "Hl"
+          }
+        },
+        {
+          "function": "ec",
+          "bundle": "session-switch-BpVseffJ.js",
+          "line": 7,
+          "column": 49768,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 319,
+            "column": 3,
+            "name": null
+          }
+        },
+        {
+          "function": "wu",
+          "bundle": "session-switch-BpVseffJ.js",
+          "line": 5,
+          "column": 17254,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 175,
+            "column": 9,
+            "name": "ai"
+          }
+        },
+        {
+          "function": "z2",
+          "bundle": "session-switch-BpVseffJ.js",
+          "line": 32,
+          "column": 13052,
+          "source": {
+            "source": "../../../node_modules/react-markdown/lib/index.js",
+            "line": 175,
+            "column": 16,
+            "name": "Markdown"
+          }
+        },
+        {
+          "function": "i",
+          "bundle": "session-switch-BpVseffJ.js",
+          "line": 22,
+          "column": 11945,
+          "source": {
+            "source": "../../../node_modules/remark-parse/lib/index.js",
+            "line": 32,
+            "column": 11,
+            "name": "parser"
+          }
+        },
+        {
+          "function": "mb",
+          "bundle": "session-switch-BpVseffJ.js",
+          "line": 22,
+          "column": 1390,
+          "source": {
+            "source": "../../../node_modules/mdast-util-from-markdown/lib/index.js",
+            "line": 74,
+            "column": 16,
+            "name": "fromMarkdown"
+          }
+        },
+        {
+          "function": "ab",
+          "bundle": "session-switch-BpVseffJ.js",
+          "line": 22,
+          "column": 153,
+          "source": {
+            "source": "../../../node_modules/micromark/lib/parse.js",
+            "line": 25,
+            "column": 16,
+            "name": "parse"
+          }
+        },
+        {
+          "function": "kk",
+          "bundle": "session-switch-BpVseffJ.js",
+          "line": 20,
+          "column": 12012,
+          "source": {
+            "source": "../../../node_modules/micromark-util-combine-extensions/index.js",
+            "line": 44,
+            "column": 9,
+            "name": "syntaxExtension"
+          }
+        }
+      ]
+    },
+    {
+      "sampledMs": 15.936,
+      "stack": [
+        {
+          "codeType": "other",
+          "functionName": "(root)",
+          "scriptId": 0
+        },
+        {
+          "function": "z",
+          "bundle": "session-switch-BpVseffJ.js",
+          "line": 0,
+          "column": 10283,
+          "source": {
+            "source": "../../../node_modules/scheduler/cjs/scheduler.production.min.js",
+            "line": 14,
+            "column": 62,
+            "name": "R"
+          }
+        },
+        {
+          "function": "Z",
+          "bundle": "session-switch-BpVseffJ.js",
+          "line": 0,
+          "column": 9775,
+          "source": {
+            "source": "../../../node_modules/scheduler/cjs/scheduler.production.min.js",
+            "line": 13,
+            "column": 9,
+            "name": "J"
+          }
+        },
+        {
+          "function": "nm",
+          "bundle": "session-switch-BpVseffJ.js",
+          "line": 7,
+          "column": 38125,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 291,
+            "column": 9,
+            "name": "sl"
+          }
+        },
+        {
+          "function": "Ol",
+          "bundle": "session-switch-BpVseffJ.js",
+          "line": 7,
+          "column": 43704,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 304,
+            "column": 9,
+            "name": "ul"
+          }
+        },
+        {
+          "function": "j1",
+          "bundle": "session-switch-BpVseffJ.js",
+          "line": 7,
+          "column": 43988,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 304,
+            "column": 282,
+            "name": "Gl"
+          }
+        },
+        {
+          "function": "om",
+          "bundle": "session-switch-BpVseffJ.js",
+          "line": 7,
+          "column": 44069,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 305,
+            "column": 9,
+            "name": "Hl"
+          }
+        },
+        {
+          "function": "lm",
+          "bundle": "session-switch-BpVseffJ.js",
+          "line": 7,
+          "column": 44275,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 306,
+            "column": 9,
+            "name": "Fl"
+          }
+        },
+        {
+          "function": "Hp",
+          "bundle": "session-switch-BpVseffJ.js",
+          "line": 7,
+          "column": 15603,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 242,
+            "column": 9,
+            "name": "kk"
+          }
+        },
+        {
+          "codeType": "JS",
+          "functionName": "createElement",
+          "scriptId": 0
+        }
+      ]
+    },
+    {
+      "sampledMs": 14.206,
+      "stack": [
+        {
+          "codeType": "other",
+          "functionName": "(root)",
+          "scriptId": 0
+        },
+        {
+          "function": "z",
+          "bundle": "session-switch-BpVseffJ.js",
+          "line": 0,
+          "column": 10283,
+          "source": {
+            "source": "../../../node_modules/scheduler/cjs/scheduler.production.min.js",
+            "line": 14,
+            "column": 62,
+            "name": "R"
+          }
+        },
+        {
+          "function": "Z",
+          "bundle": "session-switch-BpVseffJ.js",
+          "line": 0,
+          "column": 9775,
+          "source": {
+            "source": "../../../node_modules/scheduler/cjs/scheduler.production.min.js",
+            "line": 13,
+            "column": 9,
+            "name": "J"
+          }
+        },
+        {
+          "function": "nm",
+          "bundle": "session-switch-BpVseffJ.js",
+          "line": 7,
+          "column": 38125,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 291,
+            "column": 9,
+            "name": "sl"
+          }
+        },
+        {
+          "function": "Ol",
+          "bundle": "session-switch-BpVseffJ.js",
+          "line": 7,
+          "column": 43704,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 304,
+            "column": 9,
+            "name": "ul"
+          }
+        },
+        {
+          "function": "j1",
+          "bundle": "session-switch-BpVseffJ.js",
+          "line": 7,
+          "column": 43988,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 304,
+            "column": 282,
+            "name": "Gl"
+          }
+        },
+        {
+          "function": "om",
+          "bundle": "session-switch-BpVseffJ.js",
+          "line": 7,
+          "column": 44069,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 305,
+            "column": 9,
+            "name": "Hl"
+          }
+        },
+        {
+          "function": "lm",
+          "bundle": "session-switch-BpVseffJ.js",
+          "line": 7,
+          "column": 44275,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 306,
+            "column": 9,
+            "name": "Fl"
+          }
+        },
+        {
+          "function": "Hp",
+          "bundle": "session-switch-BpVseffJ.js",
+          "line": 7,
+          "column": 15603,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 242,
+            "column": 9,
+            "name": "kk"
+          }
+        },
+        {
+          "function": "$p",
+          "bundle": "session-switch-BpVseffJ.js",
+          "line": 7,
+          "column": 12703,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 235,
+            "column": 3,
+            "name": null
+          }
+        },
+        {
+          "codeType": "JS",
+          "functionName": "appendChild",
+          "scriptId": 0
+        }
+      ]
+    }
+  ]
+}

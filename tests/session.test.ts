@@ -77,3 +77,17 @@ test("bridge exit rejects pending requests instead of leaving the UI waiting", a
 	await rejected;
 	await rpc.stop();
 });
+
+test("navigation teardown rejects outstanding RPC and clears its timeout immediately", async () => {
+	globalThis.window = globalThis;
+	const mock = installMockPi(window);
+	const rpc = new PiRpc("switching_chat");
+	await rpc.start();
+	const waiting = rpc.request({ type: "never_reply" });
+	const rejected = assert.rejects(waiting, /RPC stopped/);
+	await rpc.stop();
+	await rejected;
+	assert.equal(mock.processes.size, 0);
+	assert.equal(mock.listeners.size, 0);
+	assert.equal(mock.callbacks.size, 0);
+});

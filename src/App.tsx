@@ -2,6 +2,7 @@ import { SidebarPresentation } from "./components/SidebarPresentation";
 import { IconButton, Button, Tooltip } from "./components/ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePiSession } from "./chat/usePiSession";
+import { useSessionValue } from "./chat/useSessionValue";
 import { showVoyageIcon } from "./taskbarIcon";
 import { useWorkspace } from "./chat/workspace";
 import { useModelFamilies } from "./chat/useModelFamilies";
@@ -40,12 +41,11 @@ export default function App() {
 	const modelFamilies = useModelFamilies();
 	const session = usePiSession(activeChat && activeProject ? { id: activeChat.id, cwd: activeProject.path, sessionFile: activeChat.hasMessages ? activeChat.sessionFile : undefined, elapsedMs: activeChat.elapsedMs, model: activeChat.selectedModel, routeSnapshots: activeChat.routeSnapshots } : undefined, modelFamilies.offers, { config: modelFamilies.config, ready: !modelFamilies.loading });
 	const { state, connected, rawLines, actions } = session;
-	const [modelNotice, setModelNotice] = useState<string>();
-	const [routeAuthorization, setRouteAuthorization] = useState(() => createRouteAuthorizationState("none"));
-	const [routeEvents, setRouteEvents] = useState<RouteEvent[]>([]);
+	const [modelNotice, setModelNotice] = useSessionValue<string | undefined>(session.owner, session.isCurrent, () => undefined);
+	const [routeAuthorization, setRouteAuthorization] = useSessionValue(session.owner, session.isCurrent, () => createRouteAuthorizationState(activeChat?.id ?? "none"));
+	const [routeEvents, setRouteEvents] = useSessionValue<RouteEvent[]>(session.owner, session.isCurrent, () => activeChat?.routeEvents ?? []);
 	const routeAuthorizationContext = useRef<{ requestId: string; automatic: boolean; failureKind: ReturnType<typeof classifyProviderFailure> }>();
-	useEffect(() => { setRouteAuthorization(createRouteAuthorizationState(activeChat?.id ?? "none")); }, [activeChat?.id]);
-	useEffect(() => { setRouteEvents(activeChat?.routeEvents ?? []); routeAuthorizationContext.current = undefined; }, [activeChat?.id]);
+	useEffect(() => { routeAuthorizationContext.current = undefined; }, [session.owner]);
 	const fallbackNoticeRef = useRef("");
 	useEffect(() => {
 		if (!modelNotice) return;
@@ -59,7 +59,7 @@ export default function App() {
 	const [providerDialogOpen, setProviderDialogOpen] = useState(false);
 	const [promptDialogOpen, setPromptDialogOpen] = useState(false);
 	const [searchDialogOpen, setSearchDialogOpen] = useState(false);
-	const search = useWebSearch(actions, connected, session.reconnect);
+	const search = useWebSearch(actions, connected, session.reconnect, session.owner, session.isCurrent);
 	const busy = state.isStreaming || session.pending;
 	const [recentOfferIds, setRecentOfferIds] = useState<string[]>(loadRecentOffers);
 	const validOfferIds = useMemo(() => new Set(modelFamilies.offers.map((offer) => offer.offerId).filter((id): id is string => !!id)), [modelFamilies.offers]);
@@ -74,6 +74,7 @@ export default function App() {
 	}, [modelFamilies.offers, recentOfferIds]);
 	const pendingRecentOffer = useRef<{ id: string; assistantCount: number }>();
 	const requestRequirements = useRef<RouteRequirements>({});
+	useEffect(() => { pendingRecentOffer.current = undefined; requestRequirements.current = {}; }, [session.owner]);
 	useEffect(() => {
 		const assistantCount = state.messages.filter((message) => message.role === "assistant").length;
 		if (pendingRecentOffer.current && assistantCount > pendingRecentOffer.current.assistantCount && !state.isStreaming && !state.lastError) {
@@ -85,10 +86,11 @@ export default function App() {
 	// Mirror the voyage state on the taskbar: the sailing mark while pi answers,
 	// the docked speedboat once the turn ends.
 	useEffect(() => { void showVoyageIcon(busy).catch(() => undefined); }, [busy]);
-	const locked = busy || (!!activeChat && !connected && !state.lastError);
+	const navigationDisabled = busy || search.busy || !library.workspace;
+	const locked = navigationDisabled || session.loading;
 
 	useEffect(() => {
-		if (!activeChat || session.loadedId !== activeChat.id) return;
+		if (!session.isCurrent() || !activeChat || session.loadedId !== activeChat.id) return;
 		const firstUser = state.messages.find((m) => m.role === "user");
 		const title = firstUser?.blocks.filter((b) => b.kind === "text").map((b) => b.kind === "text" ? b.text : "").join(" ").replace(/\s+/g, " ").trim() || (firstUser ? "图片聊天" : "");
 		library.updateChat(activeChat.id, {
@@ -103,24 +105,24 @@ export default function App() {
 				return current?.provider !== selectedModel.provider || current.id !== selectedModel.id || current.routeId !== selectedModel.routeId || current.offerId !== selectedModel.offerId ? { selectedModel } : {};
 			})() : {}),
 		});
-	}, [activeChat?.id, activeChat?.selectedModel, session.loadedId, session.sessionFile, state.messages, state.model, session.elapsedMs, modelFamilies.offers]);
+	}, [activeChat?.id, activeChat?.selectedModel, session.loadedId, session.sessionFile, state.messages, state.model, session.elapsedMs, modelFamilies.offers, session.isCurrent]);
 	const routeSnapshots = useMemo(() => snapshotsForMessages(state.messages), [state.messages]);
 	const routeSnapshotsJson = useMemo(() => JSON.stringify(routeSnapshots), [routeSnapshots]);
 	const savedRouteSnapshots = useRef("");
-	useEffect(() => { savedRouteSnapshots.current = ""; }, [activeChat?.id]);
+	useEffect(() => { savedRouteSnapshots.current = ""; }, [session.owner]);
 	useEffect(() => {
-		if (!activeChat || session.loadedId !== activeChat.id || savedRouteSnapshots.current === routeSnapshotsJson) return;
+		if (!session.isCurrent() || !activeChat || session.loadedId !== activeChat.id || savedRouteSnapshots.current === routeSnapshotsJson) return;
 		savedRouteSnapshots.current = routeSnapshotsJson;
 		library.updateChat(activeChat.id, { routeSnapshots });
-	}, [activeChat?.id, session.loadedId, routeSnapshots, routeSnapshotsJson, library]);
+	}, [activeChat?.id, session.loadedId, routeSnapshots, routeSnapshotsJson, library, session.isCurrent]);
 	const routeEventsJson = useMemo(() => JSON.stringify(routeEvents), [routeEvents]);
 	const savedRouteEvents = useRef("");
-	useEffect(() => { savedRouteEvents.current = ""; }, [activeChat?.id]);
+	useEffect(() => { savedRouteEvents.current = ""; }, [session.owner]);
 	useEffect(() => {
-		if (!activeChat || session.loadedId !== activeChat.id || savedRouteEvents.current === routeEventsJson) return;
+		if (!session.isCurrent() || !activeChat || session.loadedId !== activeChat.id || savedRouteEvents.current === routeEventsJson) return;
 		savedRouteEvents.current = routeEventsJson;
 		library.updateChat(activeChat.id, { routeEvents });
-	}, [activeChat?.id, session.loadedId, routeEvents, routeEventsJson, library]);
+	}, [activeChat?.id, session.loadedId, routeEvents, routeEventsJson, library, session.isCurrent]);
 
 	// pi reads channel configuration at startup. Refresh idle sessions after
 	// migration or edits, preserving the current transcript and selected channel.
@@ -156,24 +158,34 @@ export default function App() {
 		}));
 	}, [orderedOffers, modelFamilies.fallback, state.availableModels]);
 	const selectModel = useCallback(async (model: ModelInfo) => {
+		if (!session.isCurrent()) return;
 		setRouteAuthorization((current) => ({ ...current, pending: undefined }));
 			const currentModel = state.model;
 			const sourceOffer = currentModel && modelFamilies.offers.find((item) => (currentModel.routeId && item.routeId === currentModel.routeId && item.modelId === currentModel.id) || (item.providerKey === currentModel.provider && item.modelId === currentModel.id));
 			const targetOffer = model.offerId ? modelFamilies.offers.find((item) => item.offerId === model.offerId) : modelFamilies.offers.find((item) => item.providerKey === model.provider && item.modelId === model.id);
 		const selected = await actions.setModel(model);
+			if (!session.isCurrent()) return;
 			if (selected && model.offerId) setRecentOfferIds((ids) => rememberOffer(ids, model.offerId ?? "", validOfferIds));
 			if (selected && sourceOffer && targetOffer && sourceOffer.offerId !== targetOffer.offerId) {
 				const source = routeFromOffer(sourceOffer);
 				const target = routeFromOffer(targetOffer);
 				setRouteEvents((events) => [...events, createRouteEvent({ sessionId: activeChat?.id ?? "", requestId: `manual:${Date.now()}`, source: { offerId: source.offerId, routeId: source.routeId, familyId: source.familyId, modelId: source.modelId, relayName: source.relayName, billingAccountId: source.billingAccountId ?? undefined }, target: { offerId: target.offerId, routeId: target.routeId, familyId: target.familyId, modelId: target.modelId, relayName: target.relayName, billingAccountId: target.billingAccountId ?? undefined }, authorization: "none", automatic: false, retried: false, result: "switched" })].slice(-100));
 			}
-		}, [actions, activeChat?.id, modelFamilies.offers, state.model, validOfferIds]);
+		}, [actions, activeChat?.id, modelFamilies.offers, state.model, validOfferIds, session.isCurrent, setRouteEvents, setRouteAuthorization]);
 	const displayState = { ...state, model: displayModel, availableModels: displayModels };
 
 	const openLauncher = useCallback(() => { if (library.workspace) { setView("launcher"); if (window.innerWidth <= 760) setSidebarOpen(false); } }, [library.workspace]);
 	const resumeChat = useCallback(() => { if (activeChat) setView("chat"); }, [activeChat]);
-	const selectChat = useCallback((id: string) => { library.selectChat(id); setView("chat"); if (window.innerWidth <= 760) setSidebarOpen(false); }, [library]);
+	const selectChat = useCallback((id: string) => {
+		if (navigationDisabled || !session.canNavigate()) return;
+		library.selectChat(id); setView("chat"); if (window.innerWidth <= 760) setSidebarOpen(false);
+	}, [library, navigationDisabled, session.canNavigate]);
+	const selectProject = useCallback((id: string) => {
+		if (navigationDisabled || !session.canNavigate()) return;
+		library.selectProject(id);
+	}, [library, navigationDisabled, session.canNavigate]);
 	const startLauncherChat = useCallback(async (offer: RuntimeOffer) => {
+		if (locked || !session.canNavigate()) return;
 		if (!activeProject) { setModelNotice("请先选择一个项目后再开始聊天"); return; }
 		// Reusing the active empty draft keeps its pi process alive. Apply the
 		// explicitly chosen offer there before entering chat, just as the picker does.
@@ -181,9 +193,10 @@ export default function App() {
 			const model = displayModels.find((item) => item.provider === offer.providerKey && item.id === offer.modelId);
 			if (!model || !await actions.setModel(model)) return;
 		}
+		if (!session.isCurrent()) return;
 		library.createChat(activeProject.id, { provider: offer.providerKey, id: offer.modelId, modelId: offer.modelId, ...(offer.routeId ? { routeId: offer.routeId } : {}), ...(offer.offerId ? { offerId: offer.offerId } : {}) });
 		setView("chat");
-	}, [activeChat, activeProject, actions, displayModels, library]);
+	}, [activeChat, activeProject, actions, displayModels, library, locked, session.canNavigate, session.isCurrent]);
 	useEffect(() => {
 		const onKeyDown = (event: KeyboardEvent) => {
 			if (document.querySelector("dialog[open]")) return;
@@ -201,6 +214,7 @@ export default function App() {
 		if (!modelFamilies.fallback && !displayModel) { setModelNotice("请先在中转上配置线路并启用后再发送消息"); return false; }
 		requestRequirements.current = { streaming: true, tools: state.model?.tools === true, reasoning: state.model?.reasoning === true, vision: !!images?.length || state.model?.vision === true };
 		const accepted = await actions.prompt(text, images);
+		if (!session.isCurrent()) return false;
 		if (!accepted) requestRequirements.current = {};
 		if (accepted && displayModel?.offerId) pendingRecentOffer.current = { id: displayModel.offerId, assistantCount: state.messages.filter((message) => message.role === "assistant").length };
 		if (accepted) library.updateChat(activeChat.id, { updatedAt: Date.now() });
@@ -240,12 +254,13 @@ export default function App() {
 	const auditRoute = (route: AuthorizationRoute): AuditRouteRef => ({ offerId: route.offerId, routeId: route.routeId, familyId: route.familyId, modelId: route.modelId, relayName: route.relayName, billingAccountId: route.billingAccountId ?? undefined });
 	const recordRouteEvent = useCallback((source: AuthorizationRoute | undefined, target: AuthorizationRoute | undefined, requestId: string, failureKind: ReturnType<typeof classifyProviderFailure> | undefined, authorization: RouteEvent["authorization"], automatic: boolean, result: RouteEvent["result"]) => {
 		setRouteEvents((events) => [...events, createRouteEvent({ sessionId: activeChat?.id ?? "", requestId, source: source ? auditRoute(source) : undefined, target: target ? auditRoute(target) : undefined, failureKind, authorization, automatic, retried: false, result })].slice(-100));
-	}, [activeChat?.id]);
+	}, [activeChat?.id, setRouteEvents]);
 	const applyAuthorizedSwitch = useCallback(async (target: AuthorizationRoute, model: ModelInfo, authorization: "same_route" | "same_account" | "session" | "once") => {
 		if (!await actions.setModel(model)) return false;
+		if (!session.isCurrent()) return false;
 		setModelNotice(authorization === "same_account" ? `已静默切换到 ${target.relayName}（同一扣费账户：${billingAccountLabel(target)}）` : `已切换到 ${target.relayName} · ${target.modelId}（已获得线路授权）`);
 		return true;
-	}, [actions]);
+	}, [actions, session.isCurrent, setModelNotice]);
 	const authorizeFailover = useCallback((offer: RuntimeOffer, automatic = false) => {
 		if (!sourceRoute) return;
 		const model = modelForOffer(offer);
@@ -310,7 +325,7 @@ export default function App() {
 		<div className={`app ${sidebarOpen ? "with-sidebar" : ""}`}>
 			<TitleBar />
 			<div className="app-body">
-			{sidebarOpen && <SidebarPresentation onClose={() => setSidebarOpen(false)}><Sidebar projects={library.workspace?.projects ?? []} chats={library.workspace?.chats ?? []} activeId={activeChat?.id} activeProjectId={activeProject?.id} homeActive={currentView === "launcher"} disabled={locked || !library.workspace} connected={connected} onHome={openLauncher} onNewChat={openLauncher} onSelectChat={selectChat} onSelectProject={library.selectProject} onAddProject={() => setProjectDialogOpen(true)} onClose={() => setSidebarOpen(false)} onRenameChat={library.renameChat} onRenameProject={library.renameProject} onDeleteChat={library.deleteChat} onDeleteProject={library.deleteProject} onTogglePinChat={(id, pinned) => library.updateChat(id, { pinned })} /></SidebarPresentation>}
+			{sidebarOpen && <SidebarPresentation onClose={() => setSidebarOpen(false)}><Sidebar projects={library.workspace?.projects ?? []} chats={library.workspace?.chats ?? []} activeId={activeChat?.id} activeProjectId={activeProject?.id} homeActive={currentView === "launcher"} disabled={locked} navigationDisabled={navigationDisabled} connected={connected} onHome={openLauncher} onNewChat={openLauncher} onSelectChat={selectChat} onSelectProject={selectProject} onAddProject={() => setProjectDialogOpen(true)} onClose={() => setSidebarOpen(false)} onRenameChat={library.renameChat} onRenameProject={library.renameProject} onDeleteChat={library.deleteChat} onDeleteProject={library.deleteProject} onTogglePinChat={(id, pinned) => library.updateChat(id, { pinned })} /></SidebarPresentation>}
 			<main className="workspace">
 				<header className="chat-header">
 					{!sidebarOpen && <Tooltip text="展开侧栏" align="start"><IconButton onClick={() => setSidebarOpen(true)} aria-label="展开侧栏"><Icon name="panel" /></IconButton></Tooltip>}
@@ -321,8 +336,9 @@ export default function App() {
 					<div className="header-actions">{busy && <span className="working"><span className="dot busy" />正在处理</span>}<ThemeToggle /><Tooltip text="系统提示词"><IconButton onClick={() => setPromptDialogOpen(true)} disabled={busy} aria-label="系统提示词"><Icon name="message" /></IconButton></Tooltip><Tooltip text="配置提供商"><IconButton onClick={() => setProviderDialogOpen(true)} disabled={busy} aria-label="配置提供商"><Icon name="settings" /></IconButton></Tooltip><Tooltip text="诊断日志"><IconButton className={`${rawOpen ? "active" : ""}`} onClick={() => setRawOpen((open) => !open)} aria-label="诊断日志" aria-pressed={rawOpen}><Icon name="code" /></IconButton></Tooltip></div>
 				</header>
 				{library.error && <div className="workspace-alert" role="alert"><span>{library.error}</span><Button variant="ghost" onClick={library.workspace ? library.clearError : () => void library.initialize()} disabled={library.loading}>{library.workspace ? "关闭" : "重试"}</Button></div>}
+				{currentView === "launcher" && (session.loading || (!connected && state.lastError)) && <div className="workspace-alert" role={session.loading ? "status" : "alert"} aria-label={session.loading ? "正在加载会话" : undefined}><span>{session.loading ? "正在加载会话…" : state.lastError}</span>{!session.loading && <Button variant="ghost" onClick={() => session.reconnect()}>重新连接</Button>}</div>}
 				<div className="body">
-					{currentView === "launcher" ? <LauncherView activeChat={activeChat} activeProject={activeProject} projects={library.workspace?.projects ?? []} chats={library.workspace?.chats ?? []} offers={modelFamilies.offers} recentOfferIds={recentOfferIds} familyDefaults={modelFamilies.families} disabled={locked} loading={modelFamilies.loading} error={modelFamilies.error} onResume={resumeChat} onSelectProject={library.selectProject} onAddProject={() => setProjectDialogOpen(true)} onManageProviders={() => setProviderDialogOpen(true)} onRetryModels={modelFamilies.refresh} onStartChat={startLauncherChat} onOpenChat={selectChat} /> : <VoyageWorkspace modelNotice={modelNotice} key={activeChat?.id ?? "loading"} state={displayState} connected={connected} pending={session.pending} actions={actions} onSend={send} onReconnect={session.reconnect} projectName={activeProject?.name} search={search} onConfigureSearch={() => setSearchDialogOpen(true)} failover={failover} routeAuthorization={routeAuthorizationPrompt} />}
+					{currentView === "launcher" ? <LauncherView activeChat={activeChat} activeProject={activeProject} projects={library.workspace?.projects ?? []} chats={library.workspace?.chats ?? []} offers={modelFamilies.offers} recentOfferIds={recentOfferIds} familyDefaults={modelFamilies.families} disabled={locked} navigationDisabled={navigationDisabled} loading={modelFamilies.loading} error={modelFamilies.error} onResume={resumeChat} onSelectProject={selectProject} onAddProject={() => setProjectDialogOpen(true)} onManageProviders={() => setProviderDialogOpen(true)} onRetryModels={modelFamilies.refresh} onStartChat={startLauncherChat} onOpenChat={selectChat} /> : <VoyageWorkspace modelNotice={modelNotice} key={`${session.owner.id ?? "loading"}:${session.owner.cwd ?? ""}`} state={displayState} loading={session.loading} connected={connected} pending={session.pending} actions={actions} onSend={send} onReconnect={session.reconnect} projectName={activeProject?.name} search={search} onConfigureSearch={() => setSearchDialogOpen(true)} failover={failover} routeAuthorization={routeAuthorizationPrompt} />}
 					{rawOpen && currentView === "chat" && <div className="raw-panel"><IconButton className="raw-close" onClick={() => setRawOpen(false)} aria-label="关闭诊断日志"><Icon name="close" /></IconButton><RawDrawer lines={rawLines} /></div>}
 				</div>
 			</main>

@@ -1,0 +1,1425 @@
+{
+  "query": "messages=100&chats=3000&expanded=0",
+  "samples": 4,
+  "sidebarRows": 3000,
+  "samplingWindow": [
+    4079.7000000029802,
+    12784.40000000596
+  ],
+  "commits": {
+    "count": 34,
+    "total": 3494.9999999552965,
+    "max": 201.9000000283122
+  },
+  "longTasks": {
+    "count": 18,
+    "total": 6909,
+    "max": 1408
+  },
+  "layout": {
+    "count": 20,
+    "total": 509.10800000000006,
+    "max": 75.123
+  },
+  "style": {
+    "count": 40,
+    "total": 2025.564,
+    "max": 287.286
+  },
+  "parseMessages": {
+    "count": 4,
+    "total": 0.10000000149011612,
+    "max": 0.10000000149011612
+  },
+  "jsonParse": {
+    "count": 30,
+    "total": 0.9999999850988388,
+    "max": 0.29999999701976776
+  },
+  "workspaceStringify": {
+    "count": 7,
+    "total": 31.99999999254942,
+    "max": 5.600000001490116
+  },
+  "workspaceStorage": {
+    "count": 7,
+    "total": 59.50000001490116,
+    "max": 9.800000004470348
+  },
+  "longCalls": [
+    {
+      "duration": 672.528,
+      "start": 39113006147,
+      "frame": {
+        "function": "",
+        "bundle": "session-switch-DEfPcYDg.js",
+        "line": 8,
+        "column": 37911,
+        "source": {
+          "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+          "line": 290,
+          "column": 250,
+          "name": null
+        }
+      }
+    },
+    {
+      "duration": 505.858,
+      "start": 39115601207,
+      "frame": {
+        "function": "",
+        "bundle": "session-switch-DEfPcYDg.js",
+        "line": 8,
+        "column": 37911,
+        "source": {
+          "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+          "line": 290,
+          "column": 250,
+          "name": null
+        }
+      }
+    },
+    {
+      "duration": 478.379,
+      "start": 39110639728,
+      "frame": {
+        "function": "",
+        "bundle": "session-switch-DEfPcYDg.js",
+        "line": 8,
+        "column": 37911,
+        "source": {
+          "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+          "line": 290,
+          "column": 250,
+          "name": null
+        }
+      }
+    },
+    {
+      "duration": 471.347,
+      "start": 39108399693,
+      "frame": {
+        "function": "",
+        "bundle": "session-switch-DEfPcYDg.js",
+        "line": 8,
+        "column": 37911,
+        "source": {
+          "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+          "line": 290,
+          "column": 250,
+          "name": null
+        }
+      }
+    },
+    {
+      "duration": 272.821,
+      "start": 39111905233,
+      "frame": {
+        "function": "F",
+        "bundle": "session-switch-DEfPcYDg.js",
+        "line": 1,
+        "column": 10276,
+        "source": {
+          "source": "../../../node_modules/scheduler/cjs/scheduler.production.min.js",
+          "line": 14,
+          "column": 62,
+          "name": "R"
+        }
+      }
+    },
+    {
+      "duration": 222.929,
+      "start": 39116874874,
+      "frame": {
+        "function": "F",
+        "bundle": "session-switch-DEfPcYDg.js",
+        "line": 1,
+        "column": 10276,
+        "source": {
+          "source": "../../../node_modules/scheduler/cjs/scheduler.production.min.js",
+          "line": 14,
+          "column": 62,
+          "name": "R"
+        }
+      }
+    },
+    {
+      "duration": 220.641,
+      "start": 39114637282,
+      "frame": {
+        "function": "F",
+        "bundle": "session-switch-DEfPcYDg.js",
+        "line": 1,
+        "column": 10276,
+        "source": {
+          "source": "../../../node_modules/scheduler/cjs/scheduler.production.min.js",
+          "line": 14,
+          "column": 62,
+          "name": "R"
+        }
+      }
+    },
+    {
+      "duration": 200.244,
+      "start": 39109697576,
+      "frame": {
+        "function": "F",
+        "bundle": "session-switch-DEfPcYDg.js",
+        "line": 1,
+        "column": 10276,
+        "source": {
+          "source": "../../../node_modules/scheduler/cjs/scheduler.production.min.js",
+          "line": 14,
+          "column": 62,
+          "name": "R"
+        }
+      }
+    },
+    {
+      "duration": 191.344,
+      "start": 39117477137,
+      "frame": {
+        "function": "F",
+        "bundle": "session-switch-DEfPcYDg.js",
+        "line": 1,
+        "column": 10276,
+        "source": {
+          "source": "../../../node_modules/scheduler/cjs/scheduler.production.min.js",
+          "line": 14,
+          "column": 62,
+          "name": "R"
+        }
+      }
+    },
+    {
+      "duration": 187.385,
+      "start": 39111419540,
+      "frame": {
+        "function": "",
+        "bundle": "session-switch-DEfPcYDg.js",
+        "line": 8,
+        "column": 37911,
+        "source": {
+          "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+          "line": 290,
+          "column": 250,
+          "name": null
+        }
+      }
+    },
+    {
+      "duration": 181.405,
+      "start": 39111127330,
+      "frame": {
+        "function": "",
+        "bundle": "session-switch-DEfPcYDg.js",
+        "line": 8,
+        "column": 37911,
+        "source": {
+          "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+          "line": 290,
+          "column": 250,
+          "name": null
+        }
+      }
+    },
+    {
+      "duration": 181.071,
+      "start": 39114380779,
+      "frame": {
+        "function": "F",
+        "bundle": "session-switch-DEfPcYDg.js",
+        "line": 1,
+        "column": 10276,
+        "source": {
+          "source": "../../../node_modules/scheduler/cjs/scheduler.production.min.js",
+          "line": 14,
+          "column": 62,
+          "name": "R"
+        }
+      }
+    },
+    {
+      "duration": 179.867,
+      "start": 39113684514,
+      "frame": {
+        "function": "",
+        "bundle": "session-switch-DEfPcYDg.js",
+        "line": 8,
+        "column": 37911,
+        "source": {
+          "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+          "line": 290,
+          "column": 250,
+          "name": null
+        }
+      }
+    },
+    {
+      "duration": 179.766,
+      "start": 39113864708,
+      "frame": {
+        "function": "",
+        "bundle": "session-switch-DEfPcYDg.js",
+        "line": 8,
+        "column": 37911,
+        "source": {
+          "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+          "line": 290,
+          "column": 250,
+          "name": null
+        }
+      }
+    },
+    {
+      "duration": 176.183,
+      "start": 39110307930,
+      "frame": {
+        "function": "F",
+        "bundle": "session-switch-DEfPcYDg.js",
+        "line": 1,
+        "column": 10276,
+        "source": {
+          "source": "../../../node_modules/scheduler/cjs/scheduler.production.min.js",
+          "line": 14,
+          "column": 62,
+          "name": "R"
+        }
+      }
+    },
+    {
+      "duration": 173.87,
+      "start": 39109454740,
+      "frame": {
+        "function": "F",
+        "bundle": "session-switch-DEfPcYDg.js",
+        "line": 1,
+        "column": 10276,
+        "source": {
+          "source": "../../../node_modules/scheduler/cjs/scheduler.production.min.js",
+          "line": 14,
+          "column": 62,
+          "name": "R"
+        }
+      }
+    },
+    {
+      "duration": 173.566,
+      "start": 39114044930,
+      "frame": {
+        "function": "",
+        "bundle": "session-switch-DEfPcYDg.js",
+        "line": 8,
+        "column": 37911,
+        "source": {
+          "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+          "line": 290,
+          "column": 250,
+          "name": null
+        }
+      }
+    },
+    {
+      "duration": 166.052,
+      "start": 39112557891,
+      "frame": {
+        "function": "F",
+        "bundle": "session-switch-DEfPcYDg.js",
+        "line": 1,
+        "column": 10276,
+        "source": {
+          "source": "../../../node_modules/scheduler/cjs/scheduler.production.min.js",
+          "line": 14,
+          "column": 62,
+          "name": "R"
+        }
+      }
+    },
+    {
+      "duration": 159.264,
+      "start": 39108881211,
+      "frame": {
+        "function": "",
+        "bundle": "session-switch-DEfPcYDg.js",
+        "line": 8,
+        "column": 37911,
+        "source": {
+          "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+          "line": 290,
+          "column": 250,
+          "name": null
+        }
+      }
+    },
+    {
+      "duration": 152.848,
+      "start": 39109040798,
+      "frame": {
+        "function": "",
+        "bundle": "session-switch-DEfPcYDg.js",
+        "line": 8,
+        "column": 37911,
+        "source": {
+          "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+          "line": 290,
+          "column": 250,
+          "name": null
+        }
+      }
+    },
+    {
+      "duration": 148.688,
+      "start": 39116376675,
+      "frame": {
+        "function": "",
+        "bundle": "session-switch-DEfPcYDg.js",
+        "line": 8,
+        "column": 37911,
+        "source": {
+          "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+          "line": 290,
+          "column": 250,
+          "name": null
+        }
+      }
+    },
+    {
+      "duration": 139.088,
+      "start": 39116237122,
+      "frame": {
+        "function": "",
+        "bundle": "session-switch-DEfPcYDg.js",
+        "line": 8,
+        "column": 37911,
+        "source": {
+          "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+          "line": 290,
+          "column": 250,
+          "name": null
+        }
+      }
+    },
+    {
+      "duration": 138.708,
+      "start": 39115258450,
+      "frame": {
+        "function": "F",
+        "bundle": "session-switch-DEfPcYDg.js",
+        "line": 1,
+        "column": 10276,
+        "source": {
+          "source": "../../../node_modules/scheduler/cjs/scheduler.production.min.js",
+          "line": 14,
+          "column": 62,
+          "name": "R"
+        }
+      }
+    },
+    {
+      "duration": 137.031,
+      "start": 39109194214,
+      "frame": {
+        "function": "",
+        "bundle": "session-switch-DEfPcYDg.js",
+        "line": 8,
+        "column": 37911,
+        "source": {
+          "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+          "line": 290,
+          "column": 250,
+          "name": null
+        }
+      }
+    },
+    {
+      "duration": 131.395,
+      "start": 39116663857,
+      "frame": {
+        "function": "F",
+        "bundle": "session-switch-DEfPcYDg.js",
+        "line": 1,
+        "column": 10276,
+        "source": {
+          "source": "../../../node_modules/scheduler/cjs/scheduler.production.min.js",
+          "line": 14,
+          "column": 62,
+          "name": "R"
+        }
+      }
+    },
+    {
+      "duration": 123.374,
+      "start": 39116113546,
+      "frame": {
+        "function": "",
+        "bundle": "session-switch-DEfPcYDg.js",
+        "line": 8,
+        "column": 37911,
+        "source": {
+          "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+          "line": 290,
+          "column": 250,
+          "name": null
+        }
+      }
+    },
+    {
+      "duration": 121.448,
+      "start": 39111714329,
+      "frame": {
+        "function": "F",
+        "bundle": "session-switch-DEfPcYDg.js",
+        "line": 1,
+        "column": 10276,
+        "source": {
+          "source": "../../../node_modules/scheduler/cjs/scheduler.production.min.js",
+          "line": 14,
+          "column": 62,
+          "name": "R"
+        }
+      }
+    },
+    {
+      "duration": 109.334,
+      "start": 39111308993,
+      "frame": {
+        "function": "",
+        "bundle": "session-switch-DEfPcYDg.js",
+        "line": 8,
+        "column": 37911,
+        "source": {
+          "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+          "line": 290,
+          "column": 250,
+          "name": null
+        }
+      }
+    }
+  ],
+  "longestCallStacks": [
+    {
+      "sampledMs": 362.756,
+      "stack": [
+        {
+          "codeType": "other",
+          "functionName": "(root)",
+          "scriptId": 0
+        },
+        {
+          "function": "",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 7,
+          "column": 37910,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 290,
+            "column": 250,
+            "name": null
+          }
+        },
+        {
+          "function": "Vr",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 5,
+          "column": 3177,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 142,
+            "column": 9,
+            "name": "xg"
+          }
+        },
+        {
+          "function": "nm",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 7,
+          "column": 40434,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 296,
+            "column": 145,
+            "name": "ql"
+          }
+        },
+        {
+          "function": "Ci",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 7,
+          "column": 44840,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 307,
+            "column": 58,
+            "name": "Cl"
+          }
+        },
+        {
+          "function": "M1",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 7,
+          "column": 44965,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 308,
+            "column": 9,
+            "name": "Jl"
+          }
+        },
+        {
+          "function": "Zy",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 4,
+          "column": 28749,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 111,
+            "column": 9,
+            "name": "bf"
+          }
+        }
+      ]
+    },
+    {
+      "sampledMs": 27.766,
+      "stack": [
+        {
+          "codeType": "other",
+          "functionName": "(root)",
+          "scriptId": 0
+        },
+        {
+          "function": "",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 7,
+          "column": 37910,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 290,
+            "column": 250,
+            "name": null
+          }
+        },
+        {
+          "function": "Vr",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 5,
+          "column": 3177,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 142,
+            "column": 9,
+            "name": "xg"
+          }
+        },
+        {
+          "function": "nm",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 7,
+          "column": 40434,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 296,
+            "column": 145,
+            "name": "ql"
+          }
+        },
+        {
+          "function": "Ci",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 7,
+          "column": 44840,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 307,
+            "column": 58,
+            "name": "Cl"
+          }
+        },
+        {
+          "function": "M1",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 7,
+          "column": 44965,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 308,
+            "column": 9,
+            "name": "Jl"
+          }
+        },
+        {
+          "function": "_1",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 7,
+          "column": 29670,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 272,
+            "column": 328,
+            "name": "Mk"
+          }
+        },
+        {
+          "function": "Jp",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 7,
+          "column": 30206,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 274,
+            "column": 9,
+            "name": "Nk"
+          }
+        },
+        {
+          "function": "or",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 7,
+          "column": 29718,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 273,
+            "column": 9,
+            "name": "Ok"
+          }
+        },
+        {
+          "function": "Jp",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 7,
+          "column": 30206,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 274,
+            "column": 9,
+            "name": "Nk"
+          }
+        },
+        {
+          "function": "or",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 7,
+          "column": 29718,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 273,
+            "column": 9,
+            "name": "Ok"
+          }
+        },
+        {
+          "function": "Jp",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 7,
+          "column": 30206,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 274,
+            "column": 9,
+            "name": "Nk"
+          }
+        },
+        {
+          "function": "or",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 7,
+          "column": 29718,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 273,
+            "column": 9,
+            "name": "Ok"
+          }
+        },
+        {
+          "function": "Jp",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 7,
+          "column": 30206,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 274,
+            "column": 9,
+            "name": "Nk"
+          }
+        },
+        {
+          "function": "or",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 7,
+          "column": 29718,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 273,
+            "column": 9,
+            "name": "Ok"
+          }
+        },
+        {
+          "function": "Jp",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 7,
+          "column": 30206,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 274,
+            "column": 9,
+            "name": "Nk"
+          }
+        },
+        {
+          "function": "or",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 7,
+          "column": 29718,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 273,
+            "column": 9,
+            "name": "Ok"
+          }
+        },
+        {
+          "function": "Jp",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 7,
+          "column": 30206,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 274,
+            "column": 9,
+            "name": "Nk"
+          }
+        },
+        {
+          "function": "or",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 7,
+          "column": 29718,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 273,
+            "column": 9,
+            "name": "Ok"
+          }
+        },
+        {
+          "function": "Jp",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 7,
+          "column": 30206,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 274,
+            "column": 9,
+            "name": "Nk"
+          }
+        },
+        {
+          "function": "or",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 7,
+          "column": 29718,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 273,
+            "column": 9,
+            "name": "Ok"
+          }
+        },
+        {
+          "function": "Jp",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 7,
+          "column": 30206,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 274,
+            "column": 9,
+            "name": "Nk"
+          }
+        },
+        {
+          "function": "or",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 7,
+          "column": 29718,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 273,
+            "column": 9,
+            "name": "Ok"
+          }
+        },
+        {
+          "function": "Jp",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 7,
+          "column": 30206,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 274,
+            "column": 9,
+            "name": "Nk"
+          }
+        },
+        {
+          "function": "or",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 7,
+          "column": 29718,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 273,
+            "column": 9,
+            "name": "Ok"
+          }
+        },
+        {
+          "function": "Jp",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 7,
+          "column": 30206,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 274,
+            "column": 9,
+            "name": "Nk"
+          }
+        },
+        {
+          "function": "or",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 7,
+          "column": 29718,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 273,
+            "column": 9,
+            "name": "Ok"
+          }
+        },
+        {
+          "function": "Jp",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 7,
+          "column": 30206,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 274,
+            "column": 9,
+            "name": "Nk"
+          }
+        },
+        {
+          "function": "or",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 7,
+          "column": 29718,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 273,
+            "column": 9,
+            "name": "Ok"
+          }
+        },
+        {
+          "function": "Jp",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 7,
+          "column": 30206,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 274,
+            "column": 9,
+            "name": "Nk"
+          }
+        },
+        {
+          "function": "or",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 7,
+          "column": 29718,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 273,
+            "column": 9,
+            "name": "Ok"
+          }
+        },
+        {
+          "function": "Jp",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 7,
+          "column": 30206,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 274,
+            "column": 9,
+            "name": "Nk"
+          }
+        },
+        {
+          "function": "or",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 7,
+          "column": 29718,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 273,
+            "column": 9,
+            "name": "Ok"
+          }
+        },
+        {
+          "function": "Jp",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 7,
+          "column": 30206,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 274,
+            "column": 9,
+            "name": "Nk"
+          }
+        },
+        {
+          "function": "or",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 7,
+          "column": 29718,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 273,
+            "column": 9,
+            "name": "Ok"
+          }
+        },
+        {
+          "function": "Jp",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 7,
+          "column": 30206,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 274,
+            "column": 9,
+            "name": "Nk"
+          }
+        },
+        {
+          "function": "or",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 7,
+          "column": 29718,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 273,
+            "column": 9,
+            "name": "Ok"
+          }
+        },
+        {
+          "function": "Jp",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 7,
+          "column": 30206,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 274,
+            "column": 9,
+            "name": "Nk"
+          }
+        },
+        {
+          "function": "or",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 7,
+          "column": 29718,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 273,
+            "column": 9,
+            "name": "Ok"
+          }
+        },
+        {
+          "function": "Jp",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 7,
+          "column": 30206,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 274,
+            "column": 9,
+            "name": "Nk"
+          }
+        },
+        {
+          "function": "or",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 7,
+          "column": 29718,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 273,
+            "column": 9,
+            "name": "Ok"
+          }
+        },
+        {
+          "function": "Jp",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 7,
+          "column": 30206,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 274,
+            "column": 9,
+            "name": "Nk"
+          }
+        },
+        {
+          "function": "D",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 0,
+          "column": 17393,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 35,
+            "column": 9,
+            "name": "ua"
+          }
+        },
+        {
+          "codeType": "JS",
+          "functionName": "setAttribute",
+          "scriptId": 0
+        }
+      ]
+    },
+    {
+      "sampledMs": 24.323,
+      "stack": [
+        {
+          "codeType": "other",
+          "functionName": "(root)",
+          "scriptId": 0
+        },
+        {
+          "function": "",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 7,
+          "column": 37910,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 290,
+            "column": 250,
+            "name": null
+          }
+        },
+        {
+          "function": "Vr",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 5,
+          "column": 3177,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 142,
+            "column": 9,
+            "name": "xg"
+          }
+        },
+        {
+          "function": "nm",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 7,
+          "column": 40434,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 296,
+            "column": 145,
+            "name": "ql"
+          }
+        },
+        {
+          "function": "Al",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 7,
+          "column": 43705,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 304,
+            "column": 9,
+            "name": "ul"
+          }
+        },
+        {
+          "function": "T1",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 7,
+          "column": 43989,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 304,
+            "column": 282,
+            "name": "Gl"
+          }
+        },
+        {
+          "function": "sm",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 7,
+          "column": 44070,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 305,
+            "column": 9,
+            "name": "Hl"
+          }
+        },
+        {
+          "function": "om",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 7,
+          "column": 44276,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 306,
+            "column": 9,
+            "name": "Fl"
+          }
+        },
+        {
+          "function": "Up",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 7,
+          "column": 15603,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 242,
+            "column": 9,
+            "name": "kk"
+          }
+        },
+        {
+          "function": "$p",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 7,
+          "column": 13017,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 236,
+            "column": 3,
+            "name": null
+          }
+        }
+      ]
+    },
+    {
+      "sampledMs": 13.583,
+      "stack": [
+        {
+          "codeType": "other",
+          "functionName": "(root)",
+          "scriptId": 0
+        },
+        {
+          "function": "",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 7,
+          "column": 37910,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 290,
+            "column": 250,
+            "name": null
+          }
+        },
+        {
+          "function": "Vr",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 5,
+          "column": 3177,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 142,
+            "column": 9,
+            "name": "xg"
+          }
+        },
+        {
+          "function": "nm",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 7,
+          "column": 40434,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 296,
+            "column": 145,
+            "name": "ql"
+          }
+        },
+        {
+          "function": "Al",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 7,
+          "column": 43705,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 304,
+            "column": 9,
+            "name": "ul"
+          }
+        },
+        {
+          "function": "T1",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 7,
+          "column": 43989,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 304,
+            "column": 282,
+            "name": "Gl"
+          }
+        },
+        {
+          "function": "sm",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 7,
+          "column": 44070,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 305,
+            "column": 9,
+            "name": "Hl"
+          }
+        },
+        {
+          "function": "Y1.e.unstable_now",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 0,
+          "column": 9057,
+          "source": {
+            "source": "../../../node_modules/scheduler/cjs/scheduler.production.min.js",
+            "line": 11,
+            "column": 181,
+            "name": null
+          }
+        },
+        {
+          "codeType": "JS",
+          "functionName": "now",
+          "scriptId": 0
+        }
+      ]
+    },
+    {
+      "sampledMs": 11.501,
+      "stack": [
+        {
+          "codeType": "other",
+          "functionName": "(root)",
+          "scriptId": 0
+        },
+        {
+          "function": "",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 7,
+          "column": 37910,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 290,
+            "column": 250,
+            "name": null
+          }
+        },
+        {
+          "function": "Vr",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 5,
+          "column": 3177,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 142,
+            "column": 9,
+            "name": "xg"
+          }
+        },
+        {
+          "function": "nm",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 7,
+          "column": 40434,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 296,
+            "column": 145,
+            "name": "ql"
+          }
+        },
+        {
+          "function": "Al",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 7,
+          "column": 43705,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 304,
+            "column": 9,
+            "name": "ul"
+          }
+        },
+        {
+          "function": "T1",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 7,
+          "column": 43989,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 304,
+            "column": 282,
+            "name": "Gl"
+          }
+        },
+        {
+          "function": "sm",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 7,
+          "column": 44070,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 305,
+            "column": 9,
+            "name": "Hl"
+          }
+        },
+        {
+          "function": "om",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 7,
+          "column": 44276,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 306,
+            "column": 9,
+            "name": "Fl"
+          }
+        },
+        {
+          "function": "Up",
+          "bundle": "session-switch-DEfPcYDg.js",
+          "line": 7,
+          "column": 15603,
+          "source": {
+            "source": "../../../node_modules/react-dom/cjs/react-dom.profiling.min.js",
+            "line": 242,
+            "column": 9,
+            "name": "kk"
+          }
+        }
+      ]
+    }
+  ]
+}

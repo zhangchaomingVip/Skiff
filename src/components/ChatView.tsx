@@ -16,6 +16,7 @@ import { billingAccountLabel, type RouteAuthorizationChoice, type RouteAuthoriza
 /** Transcript + notices + composer. */
 export function ChatView({
 	state,
+	loading = false,
 	connected,
 	actions,
 	pending,
@@ -28,6 +29,7 @@ export function ChatView({
 	routeAuthorization,
 }: {
 	state: SessionState;
+	loading?: boolean;
 	connected: boolean;
 	actions: PiSessionActions;
 	pending: boolean;
@@ -79,7 +81,7 @@ export function ChatView({
 
 	return (
 		<section className="chat">
-			<MessageList messages={state.messages} pendingPrompt={state.pendingPrompt} activeTurnId={state.activeRun?.turnId} projectName={projectName} running={state.isStreaming} models={state.availableModels} model={state.model} onSuggestion={(text) => { setDraft(text); setFocusSignal((n) => n + 1); }} followSignal={followSignal} disabled={disabled} onContinue={continueTurn} onEdit={edit} onRegenerate={regenerate} onDelete={setDeleting} />
+			{loading ? <div className="session-loading" role="status" aria-label="正在加载会话"><span className="dot busy" />正在加载会话…</div> : <MessageList messages={state.messages} pendingPrompt={state.pendingPrompt} activeTurnId={state.activeRun?.turnId} projectName={projectName} running={state.isStreaming} models={state.availableModels} model={state.model} onSuggestion={(text) => { setDraft(text); setFocusSignal((n) => n + 1); }} followSignal={followSignal} disabled={disabled} onContinue={continueTurn} onEdit={edit} onRegenerate={regenerate} onDelete={setDeleting} />}
 			{deleting && <ConfirmDialog title="删除本轮及后续消息" description="本轮提问及之后的所有消息将从当前聊天移除，原 pi 会话文件会保留。" onConfirm={() => void remove(deleting)} onClose={() => setDeleting(undefined)} />}
 			{alerts.length > 0 && (
 				<div className="notices">

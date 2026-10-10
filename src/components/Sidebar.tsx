@@ -51,13 +51,14 @@ export function SidebarCollapse({ open, id, children }: { open: boolean; id?: st
 	</div>;
 }
 
-export function Sidebar({ projects, chats, activeId, activeProjectId, homeActive, disabled, connected, onHome, onNewChat, onSelectChat, onSelectProject, onAddProject, onClose, onRenameChat, onRenameProject, onDeleteChat, onDeleteProject, onTogglePinChat }: {
+export function Sidebar({ projects, chats, activeId, activeProjectId, homeActive, disabled, navigationDisabled = disabled, connected, onHome, onNewChat, onSelectChat, onSelectProject, onAddProject, onClose, onRenameChat, onRenameProject, onDeleteChat, onDeleteProject, onTogglePinChat }: {
 	projects: Project[];
 	chats: Conversation[];
 	activeId?: string;
 	activeProjectId?: string;
 	homeActive: boolean;
 	disabled: boolean;
+	navigationDisabled?: boolean;
 	connected: boolean;
 	onHome: () => void;
 	onNewChat: () => void;
@@ -147,7 +148,7 @@ export function Sidebar({ projects, chats, activeId, activeProjectId, homeActive
 	}, [sortedChats, projects, search, activeId]);
 
 	const openChatMenu = (event: ReactMouseEvent, chat: Conversation, scope: string) => {
-		if (disabled) return;
+		if (navigationDisabled) return;
 		event.preventDefault();
 		setMenu({ x: Math.min(event.clientX, window.innerWidth - 170), y: Math.min(event.clientY, window.innerHeight - 190), chatId: chat.id, scope });
 	};
@@ -167,7 +168,7 @@ export function Sidebar({ projects, chats, activeId, activeProjectId, homeActive
 	const renderChatRow = (chat: Conversation, list: Conversation[], scope = chat.projectId) => {
 		const showDrop = !!dragId && dragId !== chat.id && dropTarget?.id === chat.id && dropTarget.scope === scope;
 		return <div key={chat.id} className={`chat-row ${chat.id === activeId ? "selected" : ""} ${showDrop ? (dropTarget.before ? "drop-above" : "drop-below") : ""}`} draggable={!disabled && !search && editing?.id !== chat.id} onDragStart={(event) => { setDragId(chat.id); event.dataTransfer.effectAllowed = "move"; }} onDragEnd={() => { setDragId(undefined); setDropTarget(undefined); }} onDragOver={(event) => { if (!dragId || dragId === chat.id) return; const source = list.find((item) => item.id === dragId); if (!source || !!source.pinned !== !!chat.pinned) return; event.preventDefault(); event.dataTransfer.dropEffect = "move"; const rect = event.currentTarget.getBoundingClientRect(); setDropTarget({ id: chat.id, before: event.clientY < rect.top + rect.height / 2, scope }); }} onDrop={(event) => { event.preventDefault(); handleDrop(list, chat.id, event.clientY < event.currentTarget.getBoundingClientRect().top + event.currentTarget.getBoundingClientRect().height / 2); }} onContextMenu={(event) => openChatMenu(event, chat, scope)}>
-			{editing?.id === chat.id && editing.scope === scope ? renameInput() : <button className="chat-link" disabled={disabled} onClick={() => onSelectChat(chat.id)} title={chat.title} aria-current={chat.id === activeId ? "page" : undefined}>
+			{editing?.id === chat.id && editing.scope === scope ? renameInput() : <button className="chat-link" disabled={navigationDisabled} onClick={() => onSelectChat(chat.id)} title={chat.title} aria-current={chat.id === activeId ? "page" : undefined}>
 				<span className="chat-title">{highlight(chat.title, search)}</span>
 				{chat.selectedModel && <span className="chat-model">{chat.selectedModel.id}</span>}
 				{!!search && <time dateTime={new Date(chat.updatedAt).toISOString()}>{dayLabel(chat.updatedAt)}</time>}
@@ -221,7 +222,7 @@ export function Sidebar({ projects, chats, activeId, activeProjectId, homeActive
 							return <div className="project-group" key={project.id}>
 								<div className={`project-row ${project.id === activeProjectId ? "current" : ""}`}>
 									<IconButton size="compact" className={`project-chevron ${!isCollapsed || search ? "expanded" : ""}`} onClick={() => setCollapsed((previous) => { const next = new Set(previous); if (next.has(project.id)) next.delete(project.id); else next.add(project.id); return next; })} aria-label={`${!isCollapsed || search ? "收起" : "展开"}${project.name}`} aria-expanded={!isCollapsed || !!search} aria-controls={`${projectsListId}-${project.id}`}><Icon name="chevron" size={13} /></IconButton>
-									{editing?.id === project.id ? renameInput() : <button className="project-select" disabled={disabled} onClick={() => onSelectProject(project.id)} title={project.path}><Icon name="folder" size={15} /><span>{project.name}</span><span className="project-count">{history.length}</span></button>}
+									{editing?.id === project.id ? renameInput() : <button className="project-select" disabled={navigationDisabled} onClick={() => onSelectProject(project.id)} title={project.path}><Icon name="folder" size={15} /><span>{project.name}</span><span className="project-count">{history.length}</span></button>}
 									<div className="sidebar-row-actions"><IconButton size="compact"  disabled={disabled} aria-label={`重命名项目 ${project.name}`} title="重命名项目（Enter 或失焦保存）" onClick={() => startEdit({ id: project.id, kind: "project", text: project.name })}><Icon name="edit" size={13} /></IconButton><IconButton size="compact"  disabled={disabled || projects.length <= 1} aria-label={`移除项目 ${project.name}`} title={projects.length <= 1 ? "至少保留一个项目" : "移除项目"} onClick={() => setDeleting({ id: project.id, kind: "project", name: project.name })}><Icon name="trash" size={13} /></IconButton></div>
 								</div>
 								<SidebarCollapse open={!isCollapsed || !!search} id={`${projectsListId}-${project.id}`}>
@@ -244,7 +245,7 @@ export function Sidebar({ projects, chats, activeId, activeProjectId, homeActive
 			</div>
 			<div className="sidebar-footer"><span className={`dot ${connected ? "on" : "off"}`} /><span>{connected ? "pi 已连接" : "pi 未连接"} · 本地工作区</span></div>
 			{menu && menuChat && <div className="sidebar-menu" ref={menuRef} style={{ left: menu.x, top: menu.y }} role="menu">
-				<button onClick={() => { onSelectChat(menu.chatId); closeMenu(); }}><Icon name="message" size={14} />打开</button>
+				<button disabled={navigationDisabled} onClick={() => { onSelectChat(menu.chatId); closeMenu(); }}><Icon name="message" size={14} />打开</button>
 				<button disabled={disabled} onClick={() => { startEdit({ id: menu.chatId, kind: "chat", text: menuChat.title, scope: menu.scope }); closeMenu(); }}><Icon name="edit" size={14} />重命名</button>
 				<button disabled={disabled} onClick={() => { onTogglePinChat(menu.chatId, !menuChat.pinned); closeMenu(); }}><Icon name="pin" size={14} />{menuChat.pinned ? "取消固定" : "固定到顶部"}</button>
 				<button className="danger" disabled={disabled} onClick={() => { setDeleting({ id: menu.chatId, kind: "chat", name: menuChat.title }); closeMenu(); }}><Icon name="trash" size={14} />删除</button>

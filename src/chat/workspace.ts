@@ -136,7 +136,7 @@ export function useWorkspace() {
 	};
 	const selectProject = (id: string) => {
 		const latest = workspace?.chats.filter((c) => c.projectId === id).sort((a, b) => b.updatedAt - a.updatedAt)[0];
-		if (latest) setWorkspace((w) => w ? { ...w, activeId: latest.id } : w);
+		if (latest) setWorkspace((w) => w && w.activeId !== latest.id ? { ...w, activeId: latest.id } : w);
 		else createChat(id);
 	};
 	const addProject = async (path: string) => {
@@ -159,7 +159,7 @@ export function useWorkspace() {
 
 	return {
 		workspace, activeChat, activeProject, error, loading, initialize, addProject, createChat, selectProject, updateChat,
-		selectChat: (id: string) => setWorkspace((w) => w ? { ...w, activeId: id } : w),
+		selectChat: (id: string) => setWorkspace((w) => w && w.activeId !== id && w.chats.some((chat) => chat.id === id) ? { ...w, activeId: id } : w),
 		clearError: () => setError(undefined),
 		renameChat: (id: string, title: string) => { if (title.trim()) updateChat(id, { title: title.trim().slice(0, 100), customTitle: true }); },
 		renameProject: (id: string, name: string) => setWorkspace((w) => w && name.trim() ? { ...w, projects: w.projects.map((p) => p.id === id ? { ...p, name: name.trim().slice(0, 100) } : p) } : w),
