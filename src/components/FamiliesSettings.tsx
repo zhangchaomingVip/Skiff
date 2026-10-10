@@ -1,4 +1,4 @@
-import { Dialog, Input, IconButton, Button, Select } from "./ui";
+import { Dialog, Input, IconButton, Button, Select, Tooltip } from "./ui";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { TestResult } from "../chat/useModelFamilies";
@@ -428,19 +428,18 @@ export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, o
 						<div className="editor-control">
 							<span className="editor-key-row">
 								<Input id="relay-key" type={reveal ? "text" : "password"} autoComplete="off" placeholder={draft.isNew ? (preset?.keyOptional ? "可选，本地服务可留空" : "粘贴 API 密钥") : "留空则保留原密钥"} value={relay.apiKey} onChange={(event) => patchRelay({ apiKey: event.target.value })} disabled={pending} />
-								<Button type="button" variant="ghost" size="compact" onClick={() => setReveal((value) => !value)} disabled={pending}>{reveal ? "隐藏" : "显示"}</Button>
-								{preset?.keysUrl && <Button type="button" variant="ghost" size="compact" onClick={() => openLink(preset.keysUrl)}>获取密钥 ↗</Button>}
+								<Tooltip text={reveal ? "隐藏密钥" : "显示密钥"}>
+									<IconButton type="button" variant="ghost" size="compact" aria-label={reveal ? "隐藏密钥" : "显示密钥"} aria-controls="relay-key" aria-pressed={reveal} onClick={() => setReveal((value) => !value)} disabled={pending}><Icon name={reveal ? "eye-off" : "eye"} /></IconButton>
+								</Tooltip>
 							</span>
 							<small>密钥在本机加密保存，列表仅显示后 4 位。</small>
+							{preset?.keysUrl && <Button type="button" variant="ghost" size="compact" className="editor-key-link" onClick={() => openLink(preset.keysUrl)}>获取密钥 ↗</Button>}
 						</div>
 					</div>
 					<div className="editor-field">
 						<label htmlFor="relay-base">端点</label>
 						<div className="editor-control">
-							<span className="editor-endpoint">
-								<span className="editor-protocol" title="OpenAI 兼容接口">OpenAI</span>
-								<Input id="relay-base" required placeholder="https://api.example.com/v1" value={relay.baseUrl} onChange={(event) => patchRelay({ baseUrl: event.target.value })} disabled={pending} />
-							</span>
+							<Input id="relay-base" required placeholder="https://api.example.com/v1" value={relay.baseUrl} onChange={(event) => patchRelay({ baseUrl: event.target.value })} disabled={pending} />
 							<small>OpenAI 兼容根地址，以 http:// 或 https:// 开头，包含 /v1 等前缀。</small>
 						</div>
 					</div>
@@ -506,7 +505,7 @@ export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, o
 					<div className="dialog-actions editor-actions">
 						{!draft.isNew && <Button type="button" variant="danger" onClick={() => setRemoving({ title: "删除供应商", description: `将删除供应商「${relay.name}」，其全部线路与密钥会一并删除。`, action: async () => { const ok = await onDeleteRelay(relay.id); if (ok) setDraft(undefined); return ok; } })} disabled={pending}>删除</Button>}
 						<span className="grow" />
-						<Button type="button" variant="ghost" onClick={closeDraft} disabled={pending}>取消</Button>
+						<Button type="button" variant="secondary" onClick={closeDraft} disabled={pending}>取消</Button>
 						<Button type="submit" variant="primary" size="primary" disabled={pending || testing || (draft.isNew && !connectionPassed)}>{pending ? "保存中…" : draft.isNew ? "添加" : "保存"}</Button>
 					</div>
 				</form>;
@@ -567,16 +566,16 @@ export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, o
 							{relays.length === 0 && <p className="family-empty">还没添加供应商，从下面的目录挑一个，或用自定义地址。</p>}
 							{relays.map((relay) => {
 								const preset = matchPreset(relay.baseUrl);
-								return <div className={`provider-row ${relay.enabled ? "" : "disabled"}`} key={relay.id}>
-									<Button type="button" className="provider-relay-btn" onClick={() => openRelay(relay, preset)} disabled={pending} aria-label={`编辑 ${relay.name}`}>
+								return <div className={`provider-row provider-relay-row ${relay.enabled ? "" : "disabled"}`} key={relay.id}>
+									<button type="button" className="provider-relay-btn" onClick={() => openRelay(relay, preset)} disabled={pending} aria-label={`编辑 ${relay.name}`}>
 										<ProviderIcon id={preset?.id ?? ""} name={relay.name} size={22} />
 										<span className="provider-row-text">
-											<span className="provider-row-title"><strong>{relay.name}</strong>{!relay.enabled && <span className="provider-tag muted-tag">已停用</span>}</span>
-											<small>{maskBaseUrl(relay.baseUrl)} · {relayModelCount(relay.id) ? `${relayModelCount(relay.id)} 个模型` : "未配置模型"}</small>
+											<span className="provider-row-title"><strong title={relay.name}>{relay.name}</strong>{!relay.enabled && <span className="provider-tag muted-tag">已停用</span>}</span>
+											<small className="provider-row-meta"><span className="provider-row-endpoint" title={maskBaseUrl(relay.baseUrl)}>{maskBaseUrl(relay.baseUrl)}</span><span className="provider-row-count">· {relayModelCount(relay.id) ? `${relayModelCount(relay.id)} 个模型` : "未配置模型"}</span></small>
 										</span>
-									</Button>
+									</button>
 									<div className="provider-row-side">
-										{relay.apiKey && <span className="provider-key" title="密钥已保存"><span className="dot ok" />{keyHint(relay.apiKey)}</span>}
+										<span className="provider-key" title={relay.apiKey ? "密钥已保存" : undefined}>{relay.apiKey && <><span className="dot ok" />{keyHint(relay.apiKey)}</>}</span>
 										<label className="switch" title={relay.enabled ? "停用" : "启用"}>
 											<input type="checkbox" checked={relay.enabled} disabled={pending} onChange={(event) => void mutate(() => onSetRelayEnabled(relay.id, event.target.checked))} aria-label={`${relay.enabled ? "停用" : "启用"} ${relay.name}`} />
 											<span className="slider" />

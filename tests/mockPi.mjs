@@ -241,13 +241,20 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 					emit(args.instanceId, { type: "message_start", message: { role: "assistant", provider: session.model.provider, model: session.model.id } });
 					emit(args.instanceId, { type: "message_update", assistantMessageEvent: { type: "text_start", contentIndex: 0 } });
 					respond({ disposition: "started" });
+					if (fixture === "voyage-fishing") break;
+					if (fixture === "voyage-tool") {
+						emit(args.instanceId, { type: "message_end", message: { role: "assistant", content: [{ type: "toolCall", id: "voyage-call", name: "read", arguments: { path: "README.md" } }] } });
+						break;
+					}
+					const thinking = fixture === "voyage-thinking";
+					if (thinking) emit(args.instanceId, { type: "message_update", assistantMessageEvent: { type: "thinking_start", contentIndex: 0 } });
 					const text = "我会先梳理项目结构，再检查核心模块之间的关系。\n\n项目采用 **React + TypeScript** 构建界面，通过 Tauri 与本地 pi 会话连接。\n\n接下来可以从 `src/chat/` 的会话管理入手。";
 					let offset = 0;
 					const stream = () => {
 						if (!processes.has(args.instanceId) || !session.isStreaming) return;
-						emit(args.instanceId, { type: "message_update", assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: text.slice(offset, offset + 8) } });
+						emit(args.instanceId, { type: "message_update", assistantMessageEvent: { type: thinking ? "thinking_delta" : "text_delta", contentIndex: 0, delta: text.slice(offset, offset + 8) } });
 						offset += 8;
-						if (offset < text.length) { session.timer = target.setTimeout(stream, 80); return; }
+						if (offset < text.length) { session.timer = target.setTimeout(stream, fixture?.startsWith("voyage-") ? 250 : 80); return; }
 						const assistant = { role: "assistant", provider: session.model.provider, model: session.model.id, content: [{ type: "text", text }], usage: { input: 77984, cacheRead: 715968, cacheWrite: 0, output: 12249, reasoning: 8035, totalTokens: 806201 } };
 						emit(args.instanceId, { type: "message_end", message: assistant });
 						session.messages.push(assistant);

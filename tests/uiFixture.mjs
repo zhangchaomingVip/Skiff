@@ -1,6 +1,6 @@
 import { seedPolishPreview } from "./polishFixture.mjs";
 
-export const fixtures = ["launcher", "single", "multi", "unknown", "empty", "loading", "error", "chat", "long", "settings", "picker", "voyage", "authorization", "sidebar"];
+export const fixtures = ["launcher", "single", "multi", "unknown", "empty", "loading", "error", "chat", "long", "settings", "picker", "voyage", "voyage-output", "voyage-thinking", "voyage-fishing", "voyage-tool", "voyage-moored", "voyage-high", "authorization", "sidebar"];
 
 // This entry runs only on the separate preview origin. It never uses real pi.
 export function preparePreview(target) {
@@ -36,7 +36,7 @@ export function preparePreview(target) {
 		storage.setItem("skiff.test.sessions", JSON.stringify(Object.fromEntries(chats.map((chat) => [chat.sessionFile, [{ role: "user", content: chat.title }, { role: "assistant", content: "预览任务已完成。" }]]))));
 		storage.setItem("skiff.sidebar.collapsed", JSON.stringify(projects.map((project) => project.id)));
 		storage.setItem("skiff.workspace.v1", JSON.stringify({ version: 1, projects, chats, activeId: chats[0].id }));
-	} else if (["chat", "long", "picker", "voyage", "authorization"].includes(fixture)) {
+	} else if (["chat", "long", "picker", "voyage", "authorization"].includes(fixture) || fixture.startsWith("voyage-")) {
 		seedPolishPreview(storage, fixture === "long");
 		const sessions = JSON.parse(storage.getItem("skiff.test.sessions"));
 		for (const messages of Object.values(sessions)) messages.forEach((message, index) => {
@@ -44,6 +44,13 @@ export function preparePreview(target) {
 			message.entryId = `preview-entry-${index}`;
 			if (message.role === "assistant") { message.provider = "skiff-relay-r1-deepseek"; message.model = "deepseek-chat"; }
 		});
+		if (fixture.startsWith("voyage-")) for (const messages of Object.values(sessions)) {
+			const last = messages.findLast((message) => message.role === "assistant");
+			if (last) {
+				last.usage = { input: fixture === "voyage-high" ? 121590 : 25000, cacheRead: 0, cacheWrite: 0, output: 10, totalTokens: fixture === "voyage-high" ? 121600 : 25010 };
+				last.durationMs = 2000;
+			}
+		}
 		storage.setItem("skiff.test.sessions", JSON.stringify(sessions));
 		const workspace = JSON.parse(storage.getItem("skiff.workspace.v1"));
 		workspace.chats[0].selectedModel = { provider: "skiff-relay-r1-deepseek", id: "deepseek-chat", modelId: "deepseek-chat", routeId: "route-deepseek-r1", offerId: "route-deepseek-r1/deepseek-chat" };

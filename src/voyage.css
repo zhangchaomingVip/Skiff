@@ -14,8 +14,8 @@
 .voyage-compact-text { color: var(--secondary); white-space: nowrap; }
 .voyage-status { display: inline-flex; align-items: center; gap: 7px; flex: 0 0 75px; color: var(--secondary); white-space: nowrap; }
 .voyage-status-dot { display: inline-block; width: 6px; height: 6px; flex: none; border-radius: var(--radius-full); background: var(--muted); }
-.voyage-running .voyage-status-dot { background: var(--accent); }
-.voyage-arrived .voyage-status-dot { background: var(--danger); }
+.voyage-sailing .voyage-status-dot { background: var(--accent); }
+.voyage-fishing .voyage-status-dot { background: var(--color-warning); }
 .voyage-speed { display: inline-flex; align-items: baseline; gap: 4px; min-width: 80px; color: var(--text); }
 .voyage-speed strong, .voyage-distance strong { font-size: var(--font-size-base); font-weight: 600; }
 .voyage-speed small, .voyage-distance small { color: var(--muted); font-size: var(--font-size-sm); }
@@ -37,8 +37,8 @@
 .voyage-rail-toggle { display: grid; place-items: center; width: 24px; height: 24px; flex: none; border: 0; border-radius: var(--radius-md); background: transparent; color: var(--secondary); font-size: var(--font-size-3xl); line-height: 1; }
 .voyage-rail-toggle:hover { background: var(--hover); color: var(--text); }
 .voyage-pill { display: inline-flex; align-items: center; gap: 7px; align-self: flex-start; max-width: 100%; margin-top: 7px; padding: 4px 8px; border: 1px solid var(--border); border-radius: var(--radius-full); color: var(--secondary); font-size: var(--font-size-sm); line-height: 1.35; }
-.voyage-running .voyage-pill { color: var(--accent); }
-.voyage-arrived .voyage-pill { color: var(--danger); }
+.voyage-sailing .voyage-pill { color: var(--accent); }
+.voyage-fishing .voyage-pill { color: var(--secondary); }
 .voyage-instrument { width: 100%; margin: 18px 0 15px; padding-top: 12px; }
 .voyage-gauge { display: block; width: min(100%, 210px); height: auto; margin: 0 auto; overflow: visible; }
 .voyage-gauge-track, .voyage-gauge-fill { fill: none; stroke-width: 7; stroke-linecap: round; }
@@ -53,14 +53,27 @@
 .voyage-gauge-needle { transform-origin: 110px 115px; transition: transform var(--transition-base) ease-out; }
 .voyage-gauge-needle line { stroke: var(--text); stroke-width: 2.5; stroke-linecap: round; }
 .voyage-gauge-hub { fill: var(--panel-2); stroke: var(--text); stroke-width: 1.5; }
-.voyage-sea { position: relative; width: 100%; height: 50px; overflow: hidden; }
-.voyage-scene-boat { position: absolute; z-index: 2; left: 50%; top: 0; width: 55px; height: 28px; color: var(--text); transform: translateX(-50%); }
-.voyage-wake { position: absolute; z-index: 1; left: calc(50% - 76px); top: 9px; width: 65px; height: 30px; fill: none; stroke: var(--secondary); stroke-width: 2; stroke-linecap: round; stroke-dasharray: 2 7; opacity: 0; }
-.voyage-waves { position: absolute; left: 0; top: 13px; width: 100%; height: 42px; fill: none; stroke: var(--border); stroke-width: 1.5; }
+.voyage-sea { position: relative; width: 100%; height: 65px; overflow: hidden; }
+.voyage-scene-boat { position: absolute; z-index: 2; left: 50%; top: 17px; width: 55px; height: 28px; color: var(--text); transform: translateX(-50%); }
+.voyage-wake { position: absolute; z-index: 1; left: calc(50% - 76px); top: 26px; width: 65px; height: 30px; fill: none; stroke: var(--secondary); stroke-width: 2; stroke-linecap: round; stroke-dasharray: 2 7; opacity: 0; }
+.voyage-waves { position: absolute; left: 0; top: 30px; width: 100%; height: 42px; fill: none; stroke: var(--border); stroke-width: 1.5; }
 .voyage-wave-two { stroke: var(--secondary); opacity: .55; }
-.voyage-running .voyage-scene-boat { animation: voyage-bob 1.8s ease-in-out infinite; }
-.voyage-running .voyage-wake { opacity: 1; animation: voyage-wake var(--wake-duration) linear infinite; }
-.voyage-running .voyage-wave { animation: voyage-wave var(--wave-duration) linear infinite; }
+.voyage-sailing .voyage-scene-boat { animation: voyage-bob 1.8s ease-in-out infinite; }
+.voyage-sailing .voyage-wake { opacity: 1; animation: voyage-wake var(--wake-duration) linear infinite; }
+.voyage-sailing .voyage-wave { animation: voyage-wave var(--wave-duration) linear infinite; }
+.voyage-fishing .voyage-scene-boat { top: 0; width: 85px; height: 45px; left: calc(50% + 15px); animation: voyage-bob 3.6s ease-in-out infinite; }
+.voyage-float { animation: voyage-float 2.8s ease-in-out infinite; }
+@keyframes voyage-float { 50% { transform: translateY(2px); } }
+.voyage-speed-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 10px 0; font-size: var(--font-size-sm); }
+.voyage-speed-stats > div { min-width: 0; }
+.voyage-speed-stats dt { color: var(--secondary); line-height: 1.5; }
+.voyage-speed-stats dd { margin: 4px 0 0; color: var(--text); font-weight: 600; overflow-wrap: anywhere; }
+.voyage-speed-stats small { font-size: var(--font-size-xs); font-weight: 400; color: var(--secondary); }
+.voyage > .voyage-speed-stats { margin: 6px 16px 0; }
+.voyage-context-reminder { display: flex; align-items: flex-start; gap: 7px; margin: 0 0 8px; padding: 8px 10px; border: 1px solid var(--voyage-progress); border-radius: var(--radius-md); background: color-mix(in srgb, var(--color-warning) 8%, var(--bg)); color: var(--color-warning); font-size: var(--font-size-sm); line-height: 1.5; overflow-wrap: anywhere; }
+.voyage-context-reminder svg { flex: none; margin-top: 2px; }
+.voyage-critical .voyage-context-reminder { color: var(--danger); }
+.voyage .model-status-notice { white-space: normal; overflow-wrap: anywhere; }
 @keyframes voyage-bob { 50% { transform: translate(-50%, -3px) rotate(2deg); } }
 @keyframes voyage-wake { to { stroke-dashoffset: -27; } }
 @keyframes voyage-wave { to { transform: translateX(-24px); } }
@@ -93,7 +106,7 @@
 .voyage-rail.collapsed small { color: var(--muted); font-size: var(--font-size-xs); line-height: 1; }
 
 @media (max-width: 760px) { .voyage { padding: 0 18px 10px; } }
-@media (max-width: 600px) { .voyage-summary { gap: 8px; } .voyage-status { flex-basis: auto; } .voyage-speed { min-width: auto; } .voyage-distance { min-width: auto; } .voyage-distance small, .voyage-route > .voyage-anchor, .voyage-route > .voyage-flag { display: none; } }
+@media (max-width: 600px) { .voyage-summary { gap: 8px; flex-wrap: wrap; } .voyage-status { flex-basis: auto; } .voyage-speed { min-width: auto; } .voyage-distance { min-width: auto; } .voyage-distance small, .voyage-route > .voyage-anchor, .voyage-route > .voyage-flag { display: none; } }
 @media (prefers-reduced-motion: reduce) { .voyage *, .voyage-rail * { animation: none !important; transition: none !important; } }
 
 @media (max-width: 760px) { .chat-and-rail { grid-template-columns: minmax(0, 1fr) 40px; } .voyage-dialog { width: min(380px, calc(100vw - 24px)); } .voyage-dialog .voyage-rail { border: 0; background: transparent; } }

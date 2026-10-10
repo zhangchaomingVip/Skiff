@@ -1,11 +1,9 @@
 import { useEffect, useMemo, useRef } from "react";
 import type { ChatMessage } from "../chat/types";
-import { formatCompletedAt, summarizeUsage } from "../chat/usage";
+import { formatCompletedAt, formatTokens, summarizeUsage } from "../chat/usage";
 import { Icon } from "./Icon";
 import { costTooltip, formatCosts, summarizeCosts } from "../chat/cost";
 import { useModelFamily } from "../chat/familyContext";
-
-const number = (value?: number) => value === undefined ? "未提供" : value.toLocaleString();
 
 /** Fixed usage shown once at the end of the conversation: tokens, cost and duration. */
 export function TurnUsage({ message, messages }: { message: ChatMessage; messages?: ChatMessage[] }) {
@@ -21,16 +19,16 @@ export function TurnUsage({ message, messages }: { message: ChatMessage; message
 	}, []);
 	return <>
 		<details className="usage-details" ref={root}>
-			<summary aria-label="本轮 Token 消耗明细"><Icon name="tokens" size={13} /> Tokens: {number(usage.total)} <Icon name="info" size={13} /></summary>
+			<summary aria-label="本轮 Token 消耗明细"><Icon name="tokens" size={13} /> Tokens: {formatTokens(usage.total)} <Icon name="info" size={13} /></summary>
 			<div className="usage-popover">
-				<div className="usage-heading"><strong>最后一轮 Token 消耗</strong><span>总计 <b>{number(usage.total)}</b></span></div>
-				<dl><div className="usage-row"><dt><i className="swatch input" />输入</dt><dd>{number(usage.inputTotal)}</dd></div>
-					<div className="usage-row sub"><dt><i className="swatch hit" />缓存命中</dt><dd>{number(usage.cacheRead)}</dd></div>
-					<div className="usage-row sub"><dt><i className="swatch miss" />缓存未命中</dt><dd>{number(usage.input)}</dd></div>
-					<div className="usage-row sub"><dt><i className="swatch write" />缓存写入</dt><dd>{number(usage.cacheWrite)}</dd></div>
-					<div className="usage-row output-row"><dt><i className="swatch output" />输出</dt><dd>{number(usage.output)}</dd></div>
-					<div className="usage-row sub"><dt>思考过程</dt><dd>{number(usage.reasoning)}</dd></div>
-					<div className="usage-row sub"><dt>回复内容</dt><dd>{number(usage.answer)}</dd></div>
+				<div className="usage-heading"><strong>最后一轮 Token 消耗</strong><span>总计 <b>{formatTokens(usage.total)}</b></span></div>
+				<dl><div className="usage-row"><dt><i className="swatch input" />输入</dt><dd>{formatTokens(usage.inputTotal)}</dd></div>
+					<div className="usage-row sub"><dt><i className="swatch hit" />缓存命中</dt><dd>{formatTokens(usage.cacheRead)}</dd></div>
+					<div className="usage-row sub"><dt><i className="swatch miss" />缓存未命中</dt><dd>{formatTokens(usage.input)}</dd></div>
+					<div className="usage-row sub"><dt><i className="swatch write" />缓存写入</dt><dd>{formatTokens(usage.cacheWrite)}</dd></div>
+					<div className="usage-row output-row"><dt><i className="swatch output" />输出</dt><dd>{formatTokens(usage.output)}</dd></div>
+					<div className="usage-row sub"><dt>思考过程</dt><dd>{formatTokens(usage.reasoning)}</dd></div>
+					<div className="usage-row sub"><dt>回复内容</dt><dd>{formatTokens(usage.answer)}</dd></div>
 				</dl>
 				<div className="usage-rate"><span>缓存命中率</span><b>{(usage.hitRate * 100).toFixed(1)}%</b></div>
 				<div className="cache-bar" aria-label={`缓存命中率 ${(usage.hitRate * 100).toFixed(1)}%`}><i className="hit" style={{ width: `${usage.hitRate * 100}%` }} /><i className="write" style={{ width: `${usage.inputTotal ? usage.cacheWrite / usage.inputTotal * 100 : 0}%` }} /><i className="miss" style={{ flex: 1 }} /></div>

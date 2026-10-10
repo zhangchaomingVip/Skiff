@@ -2,6 +2,13 @@ import type { ChatMessage } from "./types";
 
 const count = (value: unknown): number => typeof value === "number" && Number.isFinite(value) ? Math.max(0, value) : 0;
 
+export function formatTokens(value?: number): string {
+	if (value === undefined) return "未提供";
+	if (value >= 1_000_000) return `${Number((value / 1_000_000).toFixed(2))}M`;
+	if (value >= 1_000) return `${Number((value / 1_000).toFixed(2))}k`;
+	return value.toLocaleString("zh-CN");
+}
+
 export function summarizeUsage(messages: ChatMessage[]) {
 	const usages = messages.filter((m) => m.role === "assistant" && m.usage).map((m) => m.usage!);
 	const input = usages.reduce((sum, u) => sum + count(u.input), 0);

@@ -1,11 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { contextPressure, currentTurnStats, estimateOutputTokens, outputSpeed, voyageStatus } from "./sailing";
+import { averageOutputSpeed, contextPressure, contextReminder, currentTurnMessages, currentTurnStats, pendingToolCallId, sampleVoyage, startVoyage, turnOutput, visibleOutputUnits, voyagePhase, voyageStatus, type VoyageActivity, type VoyageSample } from "./sailing";
 import type { ChatMessage, ModelInfo, SessionState } from "./types";
 import { summarizeUsage } from "./usage";
 import { summarizeCosts, type CostSummary } from "./cost";
 
 export interface VoyageMetrics {
 	speed: number;
+	averageSpeed?: number;
+	peakSpeed?: number;
+	averageEstimated: boolean;
+	activity: VoyageActivity;
+	reminder?: string;
 	streaming: boolean;
 	context?: number;
 	limit?: number;
@@ -13,6 +18,7 @@ export interface VoyageMetrics {
 	overhead?: number;
 	conversation?: number;
 	status: string;
+	statusDurationMs?: number;
 	arrived: boolean;
 	pressure: "normal" | "warning" | "critical";
 	turn: { durationMs?: number; output?: number; cost?: CostSummary };
@@ -30,47 +36,50 @@ const estimateTokens = (text: string): number => {
 };
 
 export function useVoyageMetrics(messages: ChatMessage[], model: ModelInfo | undefined, streaming: boolean, pricingModels: ModelInfo[] = [], activeRun?: SessionState["activeRun"]): VoyageMetrics {
-	const liveTokens = useMemo(() => estimateOutputTokens(messages), [messages]);
-	const liveTokensRef = useRef(liveTokens);
-	liveTokensRef.current = liveTokens;
-	const samples = useRef<{ at: number; tokens: number }[]>([]);
-	const [speed, setSpeed] = useState(0);
-	const [now, setNow] = useState(Date.now);
-	const startedAt = activeRun?.startedAt;
-
-	useEffect(() => {
-		if (!streaming) {
-			samples.current = [];
-			setSpeed(0);
-			return;
+	const user = [...messages].reverse().find((message) => message.role === "user");
+	const transcriptId = `turn:${user?.id ?? messages[0]?.id ?? "empty"}`;
+	const run = useRef<{ key: string; turnId?: string; baseline: string }>();
+	const runKey = activeRun ? `run:${activeRun.startedAt}:${activeRun.promptId ?? ""}` : transcriptId;
+	if (streaming) {
+		if (run.current?.key !== runKey) run.current = { key: runKey, turnId: activeRun?.turnId, baseline: transcriptId };
+		else run.current.turnId = activeRun?.turnId ?? transcriptId;
+	}
+	const retained = run.current && (run.current.turnId === transcriptId || run.current.baseline === transcriptId);
+	const key = streaming ? runKey : retained ? run.current!.key : `history:${transcriptId}`;
+	const belongs = streaming ? !activeRun || activeRun.turnId === transcriptId : !retained || !run.current?.turnId || run.current.turnId === transcriptId;
+	const turnMessages = useMemo(() => belongs ? currentTurnMessages(messages, streaming ? activeRun : undefined) : [], [messages, belongs, streaming, activeRun]);
+	const tokens = useMemo(() => visibleOutputUnits(turnMessages), [turnMessages]);
+	const input = useRef({ key, tokens, streaming, activeRun });
+	input.current = { key, tokens, streaming, activeRun };
+	const sampler = useRef<VoyageSample>();
+	const [sample, setSample] = useState<VoyageSample>();
+	const tick = () => {
+		const current = input.current;
+		const now = Date.now();
+		const fresh = startVoyage(current.key, now, current.activeRun?.startedAt);
+		// A restored running transcript is a baseline, not a fresh burst of output.
+		if (current.streaming && !current.activeRun?.promptId) {
+			fresh.tokens = current.tokens;
+			fresh.samples = [{ at: now, tokens: current.tokens }];
 		}
-		let previousTick = performance.now();
-		const tick = () => {
-			setNow(Date.now());
-			const now = performance.now();
-			const elapsed = now - previousTick;
-			previousTick = now;
-			const tokens = liveTokensRef.current;
-			const previous = samples.current[samples.current.length - 1];
-			if (!previous || tokens < previous.tokens) samples.current = [{ at: now, tokens }];
-			else samples.current.push({ at: now, tokens });
-			samples.current = samples.current.filter((sample) => sample.at >= now - 600);
-			const target = outputSpeed(samples.current, now, 500);
-			setSpeed((previousSpeed) => {
-				const next = previousSpeed + (target - previousSpeed) * Math.min(1, elapsed / 300);
-				return next < .05 ? 0 : next;
-			});
-		};
-		tick();
+		const previous = sampler.current?.key === current.key ? sampler.current : fresh;
+		const next = sampleVoyage(previous, current.tokens, now, current.streaming);
+		sampler.current = next;
+		setSample(next);
+	};
+	useEffect(() => { tick(); }, [key, tokens, streaming]);
+	useEffect(() => {
+		if (!streaming) return;
 		const timer = window.setInterval(tick, 100);
 		return () => window.clearInterval(timer);
-	}, [streaming, startedAt]);
-
+	}, [streaming, key]);
+	const currentSample = sample?.key === key ? sample : undefined;
+	const activity = streaming ? currentSample?.activity ?? "fishing" : "moored";
 	const data = useMemo(() => {
 		const assistants = messages.filter((message) => message.role === "assistant" && message.usage && !message.streaming);
 		const last = assistants[assistants.length - 1];
 		const limit = model?.contextWindow;
-		if (!last?.usage || !limit || limit <= 0) return undefined;
+		if (!last?.usage || !limit || !Number.isFinite(limit) || limit <= 0 || ![last.usage.input, last.usage.output, last.usage.cacheRead, last.usage.cacheWrite].every((value) => Number.isFinite(value) && value >= 0)) return undefined;
 		const context = summarizeUsage([last]).total;
 		const first = assistants[0];
 		const firstUser = messages.find((message) => message.role === "user");
@@ -81,26 +90,35 @@ export function useVoyageMetrics(messages: ChatMessage[], model: ModelInfo | und
 
 	const ratio = data ? data.context / data.limit : 0;
 	const arrived = ratio >= 1;
-	const turn = useMemo(() => {
-		const user = [...messages].reverse().find((message) => message.role === "user");
-		// Before pi confirms the new user, the transcript still contains the preceding turn.
-		if (activeRun?.promptId && activeRun.turnId !== `turn:${user?.id}`) return {};
-		return currentTurnStats(messages, pricingModels, model);
-	}, [messages, pricingModels, model, activeRun?.promptId, activeRun?.turnId]);
-	const liveTurn = useMemo(() => streaming && startedAt !== undefined ? { turnId: activeRun?.turnId, durationMs: Math.max(0, now - startedAt) } : undefined, [streaming, startedAt, activeRun?.turnId, now]);
+	const turn = useMemo(() => belongs ? currentTurnStats(messages, pricingModels, model) : {}, [messages, pricingModels, model, belongs]);
+	const durationMs = streaming ? currentSample?.durationMs ?? (activeRun ? Math.max(0, Date.now() - activeRun.startedAt) : undefined) : turn.durationMs ?? currentSample?.durationMs;
+	const output = turnOutput(turnMessages, streaming);
+	const phase = voyagePhase(turnMessages);
+	const pendingToolId = streaming && phase === "tool" ? pendingToolCallId(turnMessages) : undefined;
+	const toolTimer = useRef<{ key: string; startedAt: number }>();
+	const toolKey = pendingToolId ? `${key}:${pendingToolId}` : undefined;
+	if (toolTimer.current?.key !== toolKey) toolTimer.current = toolKey ? { key: toolKey, startedAt: Date.now() } : undefined;
+	const statusDurationMs = streaming && phase === "tool" && toolTimer.current ? Math.max(0, (currentSample?.at ?? Date.now()) - toolTimer.current.startedAt) : durationMs;
+	const liveTurn = useMemo(() => streaming && durationMs !== undefined ? { turnId: activeRun?.turnId, durationMs } : undefined, [streaming, durationMs, activeRun?.turnId]);
 	const sessionCost = useMemo(() => summarizeCosts(messages, pricingModels, model), [messages, pricingModels, model]);
 	return {
-		speed,
+		speed: activity === "sailing" ? currentSample?.speed ?? 0 : 0,
+		averageSpeed: averageOutputSpeed(output.output, durationMs),
+		peakSpeed: currentSample?.peak,
+		averageEstimated: output.estimated,
+		activity,
+		reminder: contextReminder(data?.context, data?.limit),
 		streaming,
 		context: data?.context,
 		limit: model?.contextWindow,
 		ratio,
 		overhead: data?.overhead,
 		conversation: data?.conversation,
-		status: voyageStatus(ratio, streaming),
+		status: voyageStatus(activity, phase),
+		statusDurationMs,
 		arrived,
 		pressure: contextPressure(ratio),
-		turn: liveTurn ? { ...turn, durationMs: liveTurn.durationMs } : turn,
+		turn: { ...turn, durationMs },
 		liveTurn,
 		sessionCost,
 	};
