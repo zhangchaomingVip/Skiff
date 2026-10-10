@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<title>Skiff 首页重构稿 v2 · 分组列表 + 可折叠（默认全展开）</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  /* ===== Design Token（对齐 src/tokens.css 语义，暗色默认 + 亮色覆盖） ===== */
+  :root{
+    --bg:#15171c; --panel:#1c1f26; --panel-2:#22262f; --hover:#2a2f3a;
+    --border:#31363f; --border-strong:#3d434e;
+    --text:#e8eaee; --text-2:#a7aeba; --text-3:#6f7784;
+    --accent:#6b8afd; --accent-soft:rgba(107,138,253,.14);
+    --ok:#3ecf9a; --ok-soft:rgba(62,207,154,.14);
+    --danger:#e5646c;
+    --radius-sm:6px; --radius-md:8px; --radius-lg:12px;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 4px 16px rgba(0,0,0,.25);
+  }
+  [data-theme="light"]{
+    --bg:#f7f8fa; --panel:#ffffff; --panel-2:#f4f6f9; --hover:#eef1f5;
+    --border:#e5e7eb; --border-strong:#d8dbe0;
+    --text:#1a1d23; --text-2:#5b6470; --text-3:#9aa3ae;
+    --accent:#4f6ef7; --accent-soft:rgba(79,110,247,.1);
+    --ok:#1d9e6f; --ok-soft:rgba(34,176,125,.12);
+    --danger:#d64550;
+    --shadow:0 1px 2px rgba(16,24,40,.05),0 4px 16px rgba(16,24,40,.05);
+  }
+  body{ font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif; background:var(--bg); color:var(--text); height:100vh; display:flex; overflow:hidden; }
+  button{ font:inherit; color:inherit; background:none; border:none; cursor:pointer; }
+
+  /* ===== 左侧栏（沿用现有结构，未改动） ===== */
+  .sidebar{ width:236px; flex-shrink:0; background:var(--panel); border-right:1px solid var(--border); display:flex; flex-direction:column; }
+  .side-head{ display:flex; align-items:center; gap:10px; padding:18px 16px; font-weight:700; font-size:17px; }
+  .side-head .logo{ width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,#4f6ef7,#8b5cf6); }
+  .nav-item{ display:flex;align-items:center;gap:10px; padding:9px 16px; margin:2px 10px; border-radius:8px; color:var(--text-2); font-size:14px; cursor:pointer; }
+  .nav-item:hover{ background:var(--hover); }
+  .nav-item.active{ background:var(--accent-soft); color:var(--accent); font-weight:600; }
+  .nav-sec{ padding:16px 16px 6px; font-size:12px; color:var(--text-3); display:flex; justify-content:space-between; }
+  .conv{ padding:8px 16px; font-size:13px; color:var(--text-2); cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .conv.active{ background:var(--accent-soft); color:var(--accent); border-radius:0 8px 8px 0; border-left:2px solid var(--accent); }
+  .side-foot{ margin-top:auto; padding:12px 16px; font-size:12px; color:var(--text-3); border-top:1px solid var(--border); }
+  .side-foot .dot{ display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--ok);margin-right:6px; }
+
+  /* ===== 主区 ===== */
+  .main{ flex:1; overflow-y:auto; padding:36px 48px 64px; }
+  .topbar{ display:flex; justify-content:space-between; align-items:flex-start; gap:16px; }
+  .crumb{ font-size:12px; letter-spacing:.14em; color:var(--text-3); }
+  h1{ font-size:26px; margin:10px 0 6px; }
+  .sub{ color:var(--text-2); font-size:14px; margin-bottom:22px; }
+
+  /* 工作区 chip：降级但保留功能（切换/添加/警示态在 Popover 内） */
+  .ws-wrap{ position:relative; flex-shrink:0; }
+  .ws-chip{ display:inline-flex; align-items:center; gap:8px; padding:7px 12px; border:1px solid var(--border); border-radius:999px; background:var(--panel); font-size:13px; color:var(--text-2); cursor:pointer; box-shadow:var(--shadow); }
+  .ws-chip:hover{ border-color:var(--accent); color:var(--accent); }
+  .ws-chip .path{ color:var(--text-3); font-size:12px; }
+  .ws-pop{ position:absolute; right:0; top:calc(100% + 8px); width:260px; background:var(--panel); border:1px solid var(--border); border-radius:var(--radius-lg); box-shadow:var(--shadow); padding:6px; display:none; z-index:10; }
+  .ws-pop.open{ display:block; }
+  .ws-item{ display:flex; align-items:center; gap:8px; width:100%; text-align:left; padding:8px 10px; border-radius:var(--radius-md); font-size:13px; color:var(--text-2); }
+  .ws-item:hover{ background:var(--hover); color:var(--text); }
+  .ws-item.active{ color:var(--accent); font-weight:600; }
+  .ws-item .p{ margin-left:auto; font-size:11px; color:var(--text-3); max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .ws-add{ border-top:1px solid var(--border); margin-top:4px; padding-top:4px; color:var(--accent); }
+
+  /* ===== 工具行：分段 + 搜索（保留现状能力） ===== */
+  .tools{ display:flex; align-items:center; gap:14px; margin-bottom:18px; flex-wrap:wrap; }
+  .seg{ display:inline-flex; background:var(--panel-2); border:1px solid var(--border); border-radius:var(--radius-md); padding:3px; }
+  .seg button{ padding:5px 14px; font-size:13px; color:var(--text-2); border-radius:6px; }
+  .seg button.active{ background:var(--panel); color:var(--text); font-weight:600; box-shadow:var(--shadow); }
+  .search{ display:inline-flex; align-items:center; gap:8px; flex:1; min-width:220px; max-width:360px; background:var(--panel-2); border:1px solid var(--border); border-radius:var(--radius-md); padding:7px 12px; }
+  .search:focus-within{ border-color:var(--accent); }
+  .search input{ flex:1; background:none; border:none; outline:none; color:var(--text); font-size:13px; }
+  .search input::placeholder{ color:var(--text-3); }
+  .theme-toggle{ margin-left:auto; font-size:12px; color:var(--text-3); border:1px solid var(--border); border-radius:999px; padding:5px 12px; }
+  .theme-toggle:hover{ color:var(--accent); border-color:var(--accent); }
+
+  /* ===== 提供商分组：可折叠、多开、默认全展开 ===== */
+  .group{ background:var(--panel); border:1px solid var(--border); border-radius:var(--radius-lg); margin-bottom:12px; box-shadow:var(--shadow); overflow:hidden; }
+  .group > summary{ display:flex; align-items:center; gap:14px; padding:14px 18px; cursor:pointer; user-select:none; list-style:none; }
+  .group > summary::-webkit-details-marker{ display:none; }
+  .group > summary:hover{ background:var(--hover); }
+  .p-logo{ width:36px; height:36px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:19px; flex-shrink:0; background:var(--panel-2); border:1px solid var(--border); }
+  .p-title{ flex:1; min-width:0; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .p-name{ font-weight:650; font-size:15px; }
+  .badge{ font-size:11px; color:var(--ok); background:var(--ok-soft); padding:2px 8px; border-radius:999px; font-weight:500; white-space:nowrap; }
+  .badge.recent{ color:var(--accent); background:var(--accent-soft); }
+  .badge.dim{ color:var(--text-2); background:var(--panel-2); border:1px solid var(--border); }
+  .p-range{ margin-left:auto; font-size:12.5px; color:var(--text-3); font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .chev{ width:26px;height:26px;border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--text-3); transition:transform .2s; font-size:12px; flex-shrink:0; }
+  .group[open] .chev{ transform:rotate(180deg); }
+
+  /* 模型行：完整展示 offer 级信息（线路、扣费账户留在这一层） */
+  .rows{ border-top:1px solid var(--border); }
+  .row{ display:flex; align-items:center; gap:16px; padding:12px 18px 12px 24px; border-top:1px solid var(--border); flex-wrap:wrap; }
+  .row:first-child{ border-top:none; }
+  .row:hover{ background:var(--accent-soft); }
+  .m-name{ font-size:14px; font-weight:550; min-width:200px; }
+  .m-name .rec{ font-size:11px; color:var(--accent); background:var(--accent-soft); border:1px solid var(--accent); border-radius:5px; padding:1px 6px; margin-left:8px; font-weight:500; }
+  .m-name .rec.cheap{ color:var(--ok); background:var(--ok-soft); border-color:var(--ok); }
+  .m-attrs{ flex:1; display:flex; gap:8px; flex-wrap:wrap; min-width:200px; }
+  .tag{ font-size:11.5px; color:var(--text-2); border:1px solid var(--border); border-radius:6px; padding:2px 7px; white-space:nowrap; }
+  .m-line{ font-size:12px; color:var(--text-3); white-space:nowrap; }
+  .m-line b{ color:var(--text-2); font-weight:500; }
+  .m-price{ font-size:12.5px; color:var(--text-2); font-variant-numeric:tabular-nums; min-width:170px; text-align:right; white-space:nowrap; }
+  .btn{ font-size:12.5px; font-weight:600; padding:6px 14px; border-radius:var(--radius-md); border:1px solid var(--border-strong); color:var(--text-2); background:var(--panel-2); white-space:nowrap; }
+  .btn:hover{ border-color:var(--accent); color:var(--accent); }
+  .btn.primary{ background:var(--accent); border-color:var(--accent); color:#fff; }
+  .row:hover .btn:not(.primary){ border-color:var(--accent); color:var(--accent); }
+
+  /* 单模型提供商：退化为单行，头部与模型行合并 */
+  .group.solo > summary{ pointer-events:none; }
+  .group.solo .chev{ display:none; }
+  .group.solo .p-range{ display:none; }
+  .group.solo .rows{ border-top:none; }
+  .group.solo .row{ padding-left:68px; padding-top:0; }
+
+  mark{ background:var(--accent-soft); color:var(--accent); border-radius:3px; padding:0 1px; }
+
+  /* 空态 */
+  .empty{ padding:32px; text-align:center; color:var(--text-3); font-size:13px; border:1px dashed var(--border); border-radius:var(--radius-lg); }
+
+  /* 最近会话（保留现状能力） */
+  .sec-title{ font-size:15px; font-weight:650; margin:26px 0 4px; }
+  .sec-sub{ font-size:12.5px; color:var(--text-3); margin-bottom:12px; }
+  .chat-row{ display:flex; align-items:center; gap:12px; padding:11px 16px; background:var(--panel); border:1px solid var(--border); border-radius:var(--radius-lg); margin-bottom:8px; cursor:pointer; box-shadow:var(--shadow); }
+  .chat-row:hover{ border-color:var(--accent); }
+  .chat-row .t{ font-size:13.5px; font-weight:550; }
+  .chat-row .m{ font-size:12px; color:var(--text-3); margin-top:2px; }
+  .chat-row .go{ margin-left:auto; font-size:12.5px; color:var(--text-3); }
+  .chat-row:hover .go{ color:var(--accent); }
+
+  .hint{ margin-top:22px; font-size:12.5px; color:var(--text-3); line-height:1.9; }
+  .hint b{ color:var(--text-2); font-weight:600; }
+
+  @media (max-width:720px){
+    .main{ padding:24px 20px 48px; }
+    .m-name{ min-width:0; width:100%; }
+    .m-price{ min-width:0; text-align:left; }
+    .group.solo .row{ padding-left:18px; }
+  }
+</style>
+</head>
+<body>
+
+  <aside class="sidebar">
+    <div class="side-head"><div class="logo"></div>Skiff</div>
+    <div class="nav-item active">✎&nbsp;&nbsp;新聊天</div>
+    <div class="nav-item">⌂&nbsp;&nbsp;主页</div>
+    <div class="nav-sec"><span>项目</span><span>＋</span></div>
+    <div class="conv">&nbsp;&nbsp;Skiff <span style="float:right;color:var(--text-3)">21</span></div>
+    <div class="conv">&nbsp;&nbsp;aiagent <span style="float:right;color:var(--text-3)">6</span></div>
+    <div class="nav-sec"><span>最近</span></div>
+    <div class="conv">实现医标云项目，方案设计…</div>
+    <div class="conv active">背一下三字经，不用思考，直…</div>
+    <div class="side-foot"><span class="dot"></span>pi 已连接 · 本地工作区</div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <div>
+        <div class="crumb">START A TASK</div>
+        <h1>选择一个模型，开始工作</h1>
+        <div class="sub">模型负责执行，项目负责上下文，会话保留完整历史。</div>
+      </div>
+      <div class="ws-wrap">
+        <button class="ws-chip" id="wsChip">📁 <span id="wsName">aiagent</span>&nbsp;<span class="path" id="wsPath">D:\workspace\aiagent</span>&nbsp;▾</button>
+        <div class="ws-pop" id="wsPop">
+          <button class="ws-item active" data-name="aiagent" data-path="D:\workspace\aiagent">📁 aiagent <span class="p">D:\workspace\aiagent</span></button>
+          <button class="ws-item" data-name="Skiff" data-path="D:\workspace\Skiff">📁 Skiff <span class="p">D:\workspace\Skiff</span></button>
+          <button class="ws-item ws-add">＋ 添加项目</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="tools">
+      <div class="seg" id="scopeSeg">
+        <button data-scope="recent" class="active">最近使用</button>
+        <button data-scope="all">全部模型</button>
+      </div>
+      <label class="search">🔍 <input id="searchInput" placeholder="搜索模型、提供商或线路" aria-label="搜索模型"></label>
+      <button class="theme-toggle" id="themeToggle">切换亮/暗</button>
+    </div>
+
+    <div id="groups"></div>
+    <div class="empty" id="emptyState" hidden>没有匹配的模型</div>
+
+    <h2 class="sec-title">最近会话</h2>
+    <p class="sec-sub">显示最后一次完成回复的实际线路。</p>
+    <div class="chat-row"><div><div class="t">背一下三字经，不用思考，直接输出</div><div class="m">aiagent · 10 分钟前 · deepseek-v4-pro-0813 · 基元律动</div></div><span class="go">继续 →</span></div>
+    <div class="chat-row"><div><div class="t">实现医标云项目，方案设计</div><div class="m">Skiff · 2 小时前 · kimi-k2.6 · 基元律动</div></div><span class="go">继续 →</span></div>
+
+    <div class="hint">
+      <b>设计说明（v2 改进方案）：</b><br>
+      ① 分组列表<b>默认全展开</b>、多开，折叠状态持久化（localStorage），放弃单开手风琴——提供商可并排对比；<br>
+      ② 最近使用的提供商<b>置顶 + 角标</b>（DeepSeek），替代"默认展开"；<br>
+      ③ 扣费账户、默认线路保留在<b>模型行（offer 级）</b>——数据上它们挂在 relay 上，不能上提到提供商头；头部只聚合模型数与同币种价格区间；<br>
+      ④ 单模型提供商（MiniMax）<b>退化为单行</b>，不产生多余层级；<br>
+      ⑤ 搜索命中时自动展开对应分组并高亮；多线路模型行按钮为"选择线路"，单线路为"开始聊天"（与现状 OfferPickerDialog 行为一致）。
+    </div>
+  </main>
+
+<script>
+  /* ===== 数据（对应 RuntimeOffer 拍平后的分组结构） ===== */
+  const DATA = [
+    { id:"deepseek", name:"DeepSeek", icon:"🐳", recent:true, currency:"¥", models:[
+      { name:"deepseek-v4-pro-0813", badge:"推荐", recent:true,  tags:["工具","流式","1M 上下文"], line:"基元律动", lines:3, account:"公司主账号", price:"输入 ¥1.5 · 输出 ¥4.5" },
+      { name:"deepseek-v4-flash-0731", tags:["工具","流式","1M 上下文"], line:"基元律动", lines:2, account:"公司主账号", price:"输入 ¥1.5 · 输出 ¥4.5" },
+      { name:"deepseek-flash", badge:"最低", cheap:true, tags:["工具","流式","1M 上下文"], line:"官方直连", lines:1, account:"个人", price:"输入 ¥1 · 输出 ¥4" },
+    ], range:"输入 ¥1–1.5 · 输出 ¥4–4.5 / 百万 token" },
+    { id:"kimi", name:"Kimi", icon:"🌙", models:[
+      { name:"kimi-k2.6", recent:true, tags:["工具","视觉","流式","262K 上下文"], line:"基元律动", lines:2, account:"公司主账号", price:"输入 ¥4 · 输出 ¥16" },
+      { name:"kimi-k2.6-turbo", tags:["视觉","256K 上下文"], line:"官方直连", lines:1, account:"个人", price:"输入 ¥8 · 输出 ¥32" },
+    ], range:"输入 ¥4–8 · 输出 ¥16–32 / 百万 token" },
+    { id:"glm", name:"GLM", icon:"🤖", models:[
+      { name:"glm-5", tags:["工具","视觉","流式","1M 上下文"], line:"基元律动", lines:1, account:"公司主账号", price:"输入 ¥5 · 输出 ¥20" },
+      { name:"glm-5-air", badge:"便宜", cheap:true, tags:["工具","流式","128K 上下文"], line:"基元律动", lines:1, account:"公司主账号", price:"输入 ¥2 · 输出 ¥8" },
+    ], range:"输入 ¥2–5 · 输出 ¥8–20 / 百万 token" },
+    { id:"minimax", name:"MiniMax", icon:"⚡", models:[
+      { name:"minimax-m2", tags:["工具","流式","200K 上下文"], line:"官方直连", lines:1, account:"未标注", price:"输入 ¥2.1 · 输出 ¥8.4" },
+    ], range:null },
+  ];
+
+  const COLLAPSE_KEY = "skiff-mock.collapsed.v1";
+  const collapsed = new Set(JSON.parse(localStorage.getItem(COLLAPSE_KEY) || "[]"));
+  const saveCollapse = () => localStorage.setItem(COLLAPSE_KEY, JSON.stringify([...collapsed]));
+
+  let scope = "recent", query = "";
+  const groupsEl = document.getElementById("groups");
+  const emptyEl = document.getElementById("emptyState");
+
+  const hi = (text) => {
+    if (!query) return text;
+    const i = text.toLowerCase().indexOf(query);
+    return i < 0 ? text : text.slice(0, i) + "<mark>" + text.slice(i, i + query.length) + "</mark>" + text.slice(i + query.length);
+  };
+
+  function render(){
+    const q = query.trim().toLowerCase();
+    // 最近使用的提供商置顶
+    const sorted = [...DATA].sort((a, b) => (b.recent ? 1 : 0) - (a.recent ? 1 : 0));
+    let visibleCount = 0;
+    groupsEl.innerHTML = "";
+    for (const p of sorted){
+      let models = p.models;
+      if (scope === "recent" && !q) models = models.filter((m) => m.recent);
+      if (q) models = models.filter((m) => `${p.name} ${m.name} ${m.line} ${m.tags.join(" ")}`.toLowerCase().includes(q));
+      if (!models.length) continue;
+      visibleCount++;
+
+      const solo = p.models.length === 1 && !q; // 单模型退化（搜索时保持分组便于定位）
+      const el = document.createElement("details");
+      el.className = "group" + (solo ? " solo" : "");
+      // 默认全展开；搜索命中强制展开（不写入持久化）
+      el.open = q ? true : !collapsed.has(p.id);
+      el.addEventListener("toggle", () => {
+        if (q) return;
+        if (el.open) collapsed.delete(p.id); else collapsed.add(p.id);
+        saveCollapse();
+      });
+
+      const badge = p.recent
+        ? '<span class="badge recent">最近使用</span><span class="badge">可用 · ' + p.models.length + ' 个模型</span>'
+        : '<span class="badge">可用 · ' + p.models.length + ' 个模型</span>';
+      el.innerHTML =
+        '<summary>' +
+          '<div class="p-logo">' + p.icon + '</div>' +
+          '<div class="p-title"><span class="p-name">' + hi(p.name) + '</span>' + badge + '</div>' +
+          (p.range ? '<span class="p-range">' + p.range + '</span>' : '') +
+          '<span class="chev">▾</span>' +
+        '</summary>' +
+        '<div class="rows">' + models.map((m) =>
+          '<div class="row">' +
+            '<div class="m-name">' + hi(m.name) + (m.badge ? '<span class="rec' + (m.cheap ? " cheap" : "") + '">' + m.badge + '</span>' : '') + '</div>' +
+            '<div class="m-attrs">' + m.tags.map((t) => '<span class="tag">' + t + '</span>').join("") + '</div>' +
+            '<span class="m-line">默认线路 <b>' + hi(m.line) + '</b> · ' + m.lines + ' 条线路 · 扣费 <b>' + m.account + '</b></span>' +
+            '<span class="m-price">' + m.price + '</span>' +
+            '<button class="btn' + (m.recent ? " primary" : "") + '">' + (m.lines > 1 ? "选择线路" : "开始聊天") + '</button>' +
+          '</div>'
+        ).join("") + '</div>';
+      groupsEl.appendChild(el);
+    }
+    emptyEl.hidden = visibleCount > 0;
+  }
+
+  /* 分段控制 */
+  document.getElementById("scopeSeg").addEventListener("click", (e) => {
+    const btn = e.target.closest("button"); if (!btn) return;
+    scope = btn.dataset.scope;
+    document.querySelectorAll("#scopeSeg button").forEach((b) => b.classList.toggle("active", b === btn));
+    render();
+  });
+
+  /* 搜索 */
+  document.getElementById("searchInput").addEventListener("input", (e) => { query = e.target.value; render(); });
+
+  /* 工作区 chip popover */
+  const wsPop = document.getElementById("wsPop");
+  document.getElementById("wsChip").addEventListener("click", (e) => { e.stopPropagation(); wsPop.classList.toggle("open"); });
+  document.addEventListener("click", () => wsPop.classList.remove("open"));
+  wsPop.addEventListener("click", (e) => {
+    const item = e.target.closest(".ws-item[data-name]"); if (!item) return;
+    document.getElementById("wsName").textContent = item.dataset.name;
+    document.getElementById("wsPath").textContent = item.dataset.path;
+    wsPop.querySelectorAll(".ws-item").forEach((i) => i.classList.toggle("active", i === item));
+  });
+
+  /* 主题切换（演示双主题，默认暗色与项目一致） */
+  document.getElementById("themeToggle").addEventListener("click", () => {
+    const html = document.documentElement;
+    html.dataset.theme = html.dataset.theme === "dark" ? "light" : "dark";
+  });
+
+  render();
+</script>
+</body>
+</html>

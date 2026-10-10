@@ -21,7 +21,7 @@ struct Proc {
 
 #[derive(Default)]
 struct AppState {
-	sessions: Mutex<HashMap<String, Proc>>,
+	sessions: Arc<Mutex<HashMap<String, Proc>>>,
 }
 
 #[derive(Deserialize)]
@@ -115,7 +115,13 @@ fn find_on_path(name: &str) -> Option<PathBuf> {
 }
 
 #[tauri::command]
-fn rpc_start(app: AppHandle, state: State<AppState>, options: RpcStartOptions) -> Result<(), String> {
+async fn rpc_start(app: AppHandle, state: State<'_, AppState>, options: RpcStartOptions) -> Result<(), String> {
+	let sessions = Arc::clone(&state.sessions);
+	tauri::async_runtime::spawn_blocking(move || start_session(app, &sessions, options))
+		.await.map_err(|e| e.to_string())?
+}
+
+fn start_session(app: AppHandle, sessions: &Mutex<HashMap<String, Proc>>, options: RpcStartOptions) -> Result<(), String> {
 	let instance_id = options.instance_id.unwrap_or_else(|| "main".to_string());
 	if let Some(cwd) = &options.cwd {
 		if !PathBuf::from(cwd).is_dir() {
@@ -125,20 +131,7 @@ fn rpc_start(app: AppHandle, state: State<AppState>, options: RpcStartOptions) -
 
 	// Replace any existing session for this id. Dev reloads / StrictMode
 	// remounts would otherwise orphan the previous `pi` process tree.
-	if let Ok(mut sessions) = state.sessions.lock() {
-		if let Some(previous) = sessions.remove(&instance_id) {
-			if let Ok(mut child) = previous.child.lock() {
-				#[cfg(windows)]
-				{
-					let pid = child.id().to_string();
-					let _ = Command::new("taskkill")
-						.args(["/F", "/T", "/PID", &pid])
-						.output();
-				}
-				let _ = child.kill();
-			}
-		}
-	}
+	stop_session(sessions, &instance_id)?;
 
 	let (program, prefix_args) = resolve_pi(options.pi_path.as_deref());
 
@@ -205,23 +198,34 @@ fn rpc_start(app: AppHandle, state: State<AppState>, options: RpcStartOptions) -
 		}
 	});
 
-	state
-		.sessions
+	let previous = sessions
 		.lock()
 		.map_err(|_| "session lock poisoned".to_string())?
 		.insert(instance_id, Proc { child: Mutex::new(child), stdin });
+	if let Some(previous) = previous { terminate_process(previous)?; }
 
 	Ok(())
 }
 
 #[tauri::command]
-fn rpc_send(state: State<AppState>, instance_id: String, message: String) -> Result<(), String> {
-	let guard = state
-		.sessions
+async fn rpc_send(state: State<'_, AppState>, instance_id: String, message: String) -> Result<(), String> {
+	let sessions = Arc::clone(&state.sessions);
+	tauri::async_runtime::spawn_blocking(move || send_message(&sessions, &instance_id, &message))
+		.await.map_err(|e| e.to_string())?
+}
+
+fn session_stdin(sessions: &Mutex<HashMap<String, Proc>>, instance_id: &str) -> Result<Arc<Mutex<ChildStdin>>, String> {
+	let guard = sessions
 		.lock()
 		.map_err(|_| "session lock poisoned".to_string())?;
-	let proc = guard.get(&instance_id).ok_or_else(|| "no such session".to_string())?;
-	let mut stdin = proc.stdin.lock().map_err(|_| "stdin lock poisoned".to_string())?;
+	let proc = guard.get(instance_id).ok_or_else(|| "no such session".to_string())?;
+	Ok(Arc::clone(&proc.stdin))
+}
+
+fn send_message(sessions: &Mutex<HashMap<String, Proc>>, instance_id: &str, message: &str) -> Result<(), String> {
+	// A slow pipe write must not lock out stop or other conversations.
+	let input = session_stdin(sessions, instance_id)?;
+	let mut stdin = input.lock().map_err(|_| "stdin lock poisoned".to_string())?;
 	stdin
 		.write_all(message.as_bytes())
 		.map_err(|e| e.to_string())?;
@@ -231,28 +235,37 @@ fn rpc_send(state: State<AppState>, instance_id: String, message: String) -> Res
 }
 
 #[tauri::command]
-fn rpc_stop(state: State<AppState>, instance_id: String) -> Result<(), String> {
-	let mut guard = state
-		.sessions
+async fn rpc_stop(state: State<'_, AppState>, instance_id: String) -> Result<(), String> {
+	let sessions = Arc::clone(&state.sessions);
+	tauri::async_runtime::spawn_blocking(move || stop_session(&sessions, &instance_id))
+		.await.map_err(|e| e.to_string())?
+}
+
+fn stop_session(sessions: &Mutex<HashMap<String, Proc>>, instance_id: &str) -> Result<(), String> {
+	let proc = sessions
 		.lock()
-		.map_err(|_| "session lock poisoned".to_string())?;
-	if let Some(proc) = guard.remove(&instance_id) {
-		let mut child = proc
-			.child
-			.lock()
-			.map_err(|_| "child lock poisoned".to_string())?;
-		#[cfg(windows)]
-		{
-			// Kill the whole tree: `pi` may be a `cmd /C` wrapper around node.
-			let pid = child.id().to_string();
-			let mut kill = Command::new("taskkill");
-			use std::os::windows::process::CommandExt;
-			kill.creation_flags(0x08000000);
-			let _ = kill.args(["/F", "/T", "/PID", &pid]).output();
-		}
-		let _ = child.kill();
-		let _ = child.wait();
+		.map_err(|_| "session lock poisoned".to_string())?
+		.remove(instance_id);
+	if let Some(proc) = proc { terminate_process(proc)?; }
+	Ok(())
+}
+
+fn terminate_process(proc: Proc) -> Result<(), String> {
+	let mut child = proc
+		.child
+		.lock()
+		.map_err(|_| "child lock poisoned".to_string())?;
+	#[cfg(windows)]
+	{
+		// Kill the whole tree: `pi` may be a `cmd /C` wrapper around node.
+		let pid = child.id().to_string();
+		let mut kill = Command::new("taskkill");
+		use std::os::windows::process::CommandExt;
+		kill.creation_flags(0x08000000);
+		let _ = kill.args(["/F", "/T", "/PID", &pid]).output();
 	}
+	let _ = child.kill();
+	let _ = child.wait();
 	Ok(())
 }
 
@@ -432,9 +445,11 @@ pub fn run() {
 		])
 		.on_window_event(|window, event| {
 			if matches!(event, tauri::WindowEvent::Destroyed) {
-				let state = window.state::<AppState>();
-				let ids = state.sessions.lock().map(|s| s.keys().cloned().collect::<Vec<_>>()).unwrap_or_default();
-				for id in ids { let _ = rpc_stop(window.state::<AppState>(), id); }
+				let sessions = Arc::clone(&window.state::<AppState>().sessions);
+				// Finish shutdown before the application exits; a detached cleanup
+				// thread could be terminated with its children still running.
+				let ids = sessions.lock().map(|s| s.keys().cloned().collect::<Vec<_>>()).unwrap_or_default();
+				for id in ids { let _ = stop_session(&sessions, &id); }
 			}
 		})
 		.run(tauri::generate_context!())
@@ -444,6 +459,33 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	#[test]
+	fn stopping_a_session_does_not_wait_for_its_stdin_lock() {
+		#[cfg(windows)]
+		let mut command = {
+			use std::os::windows::process::CommandExt;
+			let mut command = Command::new("cmd");
+			command.args(["/C", "more"]).creation_flags(0x08000000);
+			command
+		};
+		#[cfg(not(windows))]
+		let mut command = Command::new("cat");
+		let mut child = command.stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::null()).spawn().unwrap();
+		let stdin = Arc::new(Mutex::new(child.stdin.take().unwrap()));
+		let sessions = Arc::new(Mutex::new(HashMap::from([("test".to_string(), Proc { child: Mutex::new(child), stdin: Arc::clone(&stdin) })])));
+		let input = session_stdin(&sessions, "test").unwrap();
+		assert!(sessions.try_lock().is_ok());
+		let locked_input = input.lock().unwrap();
+		let (sender, receiver) = std::sync::mpsc::channel();
+		let worker_sessions = Arc::clone(&sessions);
+		let worker = std::thread::spawn(move || { sender.send(stop_session(&worker_sessions, "test")).unwrap(); });
+		let stopped = receiver.recv_timeout(std::time::Duration::from_secs(10));
+		drop(locked_input);
+		worker.join().unwrap();
+		stopped.expect("stop must not wait for a blocked pipe writer").unwrap();
+		assert!(sessions.lock().unwrap().is_empty());
+	}
 
 	#[test]
 	fn rejects_relative_and_file_project_paths() {

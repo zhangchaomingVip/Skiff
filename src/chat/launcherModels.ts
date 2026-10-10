@@ -38,6 +38,49 @@ export function recentLauncherOfferIds(chats: Conversation[], offers: RuntimeOff
 	return recent;
 }
 
+export interface LauncherFamily {
+	familyId: string;
+	familyName: string;
+	models: LauncherModel[];
+	/** Any model in this family was used recently. */
+	recent: boolean;
+	/** Same-currency price range across all offers; undefined when mixed or unpriced. */
+	priceRange?: string;
+}
+
+const rangePart = (values: number[], symbol: string) => {
+	const min = Math.min(...values);
+	const max = Math.max(...values);
+	return min === max ? `${symbol}${min}` : `${symbol}${min}–${max}`;
+};
+
+/** Aggregates a family price range only when every offer is priced in one currency. */
+function familyPriceRange(models: LauncherModel[]): string | undefined {
+	const offers = models.flatMap((model) => model.offers);
+	if (!offers.length) return undefined;
+	const priced = offers.every((offer) => offer.currency && Number.isFinite(offer.inputCost) && offer.inputCost >= 0 && Number.isFinite(offer.outputCost) && offer.outputCost >= 0);
+	if (!priced) return undefined;
+	const currencies = new Set(offers.map((offer) => offer.currency));
+	if (currencies.size !== 1) return undefined;
+	const symbol = offers[0].currency === "USD" ? "$" : "¥";
+	return `输入 ${rangePart(offers.map((offer) => offer.inputCost), symbol)} · 输出 ${rangePart(offers.map((offer) => offer.outputCost), symbol)} / 每百万 token`;
+}
+
+/** Groups launcher models by family, pinning recently used families first. */
+export function groupLauncherFamilies(models: LauncherModel[], recentIds: ReadonlySet<string> = new Set()): LauncherFamily[] {
+	const groups = new Map<string, LauncherFamily>();
+	for (const model of models) {
+		const existing = groups.get(model.familyId);
+		if (existing) existing.models.push(model);
+		else groups.set(model.familyId, { familyId: model.familyId, familyName: model.familyName, models: [model], recent: false });
+	}
+	return [...groups.values()].map((family) => ({
+		...family,
+		recent: family.models.some((model) => model.offers.some((offer) => !!offer.offerId && recentIds.has(offer.offerId))),
+		priceRange: familyPriceRange(family.models),
+	})).sort((a, b) => Number(b.recent) - Number(a.recent));
+}
+
 /** Groups runtime offers for the Launcher while preserving every route. */
 export function groupLauncherOffers(offers: RuntimeOffer[], defaults: LauncherFamilyDefault[] = []): LauncherModel[] {
 	const unique = new Map<string, RuntimeOffer>();

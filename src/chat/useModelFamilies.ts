@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { RuntimeOffer } from "./modelFamilies";
 import type { Currency } from "./types";
@@ -153,7 +153,7 @@ export function useModelFamilies() {
 
 	// A missing or malformed payload falls back to pi's own model list rather
 	// than blanking the composer.
-	const families = FAMILY_IDS.map((id) => config?.families?.find((family) => family.id === id) ?? { id, displayName: FAMILY_LABELS[id], routes: [], defaultRouteId: null });
+	const families = useMemo(() => FAMILY_IDS.map((id) => config?.families?.find((family) => family.id === id) ?? { id, displayName: FAMILY_LABELS[id], routes: [], defaultRouteId: null }), [config]);
 	const complete = FAMILY_IDS.every((id) => hasFamily(config, id));
 
 	return {

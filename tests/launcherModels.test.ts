@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { groupLauncherOffers, recentLauncherOfferIds } from "../src/chat/launcherModels.ts";
+import { groupLauncherOffers, groupLauncherFamilies, recentLauncherOfferIds } from "../src/chat/launcherModels.ts";
 import type { RuntimeOffer } from "../src/chat/modelFamilies.ts";
 
 const offer = (patch: Partial<RuntimeOffer> = {}): RuntimeOffer => ({
@@ -36,4 +36,27 @@ test("Launcher recovers legacy recent selections by provider and model", () => {
 	const current = offer({ providerKey: "skiff-glm", familyId: "glm", familyName: "GLM", modelId: "glm-5.3-flash", offerId: "route-glm/glm-5.3-flash" });
 	const ids = recentLauncherOfferIds([{ id: "chat-1", projectId: "project", title: "旧会话", updatedAt: 1, hasMessages: true, selectedModel: { provider: "skiff-glm", id: "glm-5.3-flash" } }], [current]);
 	assert.deepEqual([...ids], ["route-glm/glm-5.3-flash"]);
+});
+
+test("Launcher families group models, pin recents first and aggregate same-currency ranges", () => {
+	const models = groupLauncherOffers([
+		offer({ familyId: "kimi", familyName: "Kimi", modelId: "kimi-k2.6", offerId: "route-k/kimi-k2.6", inputCost: 4, outputCost: 16 }),
+		offer({ offerId: "route-a/model-a", inputCost: 1, outputCost: 2 }),
+		offer({ offerId: "route-b/model-b", modelId: "model-b", inputCost: 1.5, outputCost: 4.5 }),
+	]);
+	const families = groupLauncherFamilies(models, new Set(["route-b/model-b"]));
+	assert.equal(families.length, 2);
+	assert.equal(families[0].familyId, "deepseek");
+	assert.equal(families[0].recent, true);
+	assert.equal(families[0].models.length, 2);
+	assert.equal(families[0].priceRange, "输入 ¥1–1.5 · 输出 ¥2–4.5 / 每百万 token");
+	assert.equal(families[1].recent, false);
+	assert.equal(families[1].priceRange, "输入 ¥4 · 输出 ¥16 / 每百万 token");
+});
+
+test("Launcher families omit the range for mixed currencies or unpriced offers", () => {
+	const mixed = groupLauncherOffers([offer(), offer({ offerId: "route-b/model-b", modelId: "model-b", currency: "USD" })]);
+	assert.equal(groupLauncherFamilies(mixed)[0].priceRange, undefined);
+	const unpriced = groupLauncherOffers([offer({ inputCost: NaN })]);
+	assert.equal(groupLauncherFamilies(unpriced)[0].priceRange, undefined);
 });

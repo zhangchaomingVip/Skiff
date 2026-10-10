@@ -2,6 +2,7 @@ import { memo, useEffect, useState } from "react";
 import type { ImageAttachment, SessionState } from "../chat/types";
 import type { PiSessionActions } from "../chat/usePiSession";
 import { useVoyageMetrics } from "../chat/useVoyageMetrics";
+import { LiveTurnContext } from "../chat/liveTurnContext";
 import type { WebSearchControls } from "../chat/webSearch";
 import { ChatView } from "./ChatView";
 import { ContextUsage } from "./ContextUsage";
@@ -27,7 +28,7 @@ export function VoyageWorkspace({ state, connected, pending, actions, onSend, on
 	routeAuthorization?: { request: RouteAuthorizationRequest; onChoice: (choice: RouteAuthorizationChoice) => void };
 }) {
 	const { pricingModels } = useModelFamily();
-	const metrics = useVoyageMetrics(state.messages, state.model, state.isStreaming, pricingModels ?? state.availableModels);
+	const metrics = useVoyageMetrics(state.messages, state.model, state.isStreaming, pricingModels ?? state.availableModels, state.activeRun);
 	const [expanded, setExpanded] = useState(() => window.innerWidth >= 1200);
 	const [narrow, setNarrow] = useState(() => window.innerWidth <= 760);
 	useEffect(() => {
@@ -43,7 +44,9 @@ export function VoyageWorkspace({ state, connected, pending, actions, onSend, on
 
 	return <div className={`chat-and-rail ${expanded ? "rail-expanded" : "rail-collapsed"}`}>
 		<div className="chat-column">
-			<StableChatView state={state} connected={connected} pending={pending} actions={actions} onSend={onSend} onReconnect={onReconnect} projectName={projectName} search={search} onConfigureSearch={onConfigureSearch} failover={failover} routeAuthorization={routeAuthorization} />
+			<LiveTurnContext.Provider value={metrics.liveTurn}>
+				<StableChatView state={state} connected={connected} pending={pending} actions={actions} onSend={onSend} onReconnect={onReconnect} projectName={projectName} search={search} onConfigureSearch={onConfigureSearch} failover={failover} routeAuthorization={routeAuthorization} />
+			</LiveTurnContext.Provider>
 			<ContextUsage notice={modelNotice} metrics={metrics} expanded={expanded} onToggle={toggle} />
 		</div>
 		{narrow && expanded ? <Dialog className="voyage-dialog" aria-label="航行台详情" returnFocusSelector=".voyage-summary" onClose={() => setExpanded(false)}><VoyageRail metrics={metrics} expanded onToggle={toggle} /></Dialog> : <VoyageRail metrics={metrics} expanded={expanded} onToggle={toggle} />}

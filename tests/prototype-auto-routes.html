@@ -1,0 +1,526 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Skiff · 自动线路原型</title>
+<style>
+:root {
+	--bg: #101318; --surface: #1b222d; --subtle: #222c39; --hover: #2b394b;
+	--text: #edf2f9; --text2: #bdc9db; --muted: #a5b4cb;
+	--accent: #91baff; --action: #2458be; --action-hover: #1d4ca8;
+	--border: #354154; --boundary: #73859f;
+	--success: #79dda3; --warning: #f4cd76; --danger: #ff9ca5;
+	--selected: #263e62;
+	--r-md: 6px; --r-lg: 8px; --r-xl: 12px; --r-full: 999px;
+}
+* { box-sizing: border-box; margin: 0; }
+body { background: #0b0e12; color: var(--text); font: 13px/1.4 "Segoe UI Variable","Microsoft YaHei UI","PingFang SC",sans-serif; padding: 32px; }
+button, input, select { font: inherit; }
+.stage { display: flex; gap: 24px; max-width: 1240px; margin: 0 auto; align-items: flex-start; }
+
+/* ---- 左侧产品决策注释 ---- */
+.notes { width: 300px; flex-shrink: 0; position: sticky; top: 24px; }
+.notes h1 { font-size: 16px; margin-bottom: 4px; }
+.notes .sub { color: var(--muted); font-size: 12px; margin-bottom: 16px; }
+.note { border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: var(--r-lg); background: var(--surface); padding: 10px 12px; margin-bottom: 10px; }
+.note b { display: block; font-size: 12.5px; margin-bottom: 3px; }
+.note p { color: var(--text2); font-size: 12px; line-height: 1.55; }
+.note code { background: var(--subtle); border-radius: 3px; padding: 0 4px; font-size: 11px; }
+.notes-actions { display: flex; gap: 8px; margin-top: 14px; }
+
+/* ---- 对话框 ---- */
+.dialog { flex: 1; min-width: 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-xl); box-shadow: 0 8px 20px rgba(0,0,0,.35); overflow: hidden; }
+.dialog-head { padding: 20px 24px 0; }
+.dialog-head h2 { font-size: 18px; }
+.dialog-head .hint { color: var(--muted); margin-top: 6px; }
+.dialog-head .hint em { color: var(--accent); font-style: normal; }
+.tabs { display: flex; gap: 20px; padding: 14px 24px 0; border-bottom: 1px solid var(--border); }
+.tab { padding: 8px 2px 10px; border: 0; background: none; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; font-weight: 500; }
+.tab.on { color: var(--accent); border-bottom-color: var(--accent); }
+.tab .n { font-size: 11px; opacity: .8; }
+.body { padding: 18px 24px 24px; min-height: 420px; }
+
+/* ---- 通用控件 ---- */
+.btn { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border: 1px solid var(--boundary); border-radius: var(--r-md); background: var(--surface); color: var(--text); cursor: pointer; font-weight: 500; white-space: nowrap; }
+.btn:hover { background: var(--hover); }
+.btn.primary { background: var(--action); border-color: var(--action); color: #fff; height: 34px; }
+.btn.primary:hover { background: var(--action-hover); }
+.btn.ghost { border-color: transparent; background: none; color: var(--text2); }
+.btn.ghost:hover { background: var(--hover); color: var(--text); }
+.btn.sm { height: 24px; padding: 0 8px; font-size: 12px; }
+.btn:disabled { opacity: .5; cursor: default; }
+.input { width: 100%; height: 30px; padding: 0 8px; border: 1px solid var(--boundary); border-radius: var(--r-md); background: var(--surface); color: var(--text); }
+.input::placeholder { color: var(--muted); }
+.chip { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border: 1px solid var(--border); border-radius: var(--r-full); background: var(--subtle); color: var(--text2); font-size: 11px; white-space: nowrap; }
+.chip.ok { color: var(--success); } .chip.warn { color: var(--warning); }
+.chip.accent { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
+.muted { color: var(--muted); font-size: 12px; }
+
+/* ---- 供应商列表 ---- */
+.relay-card { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--surface); margin-bottom: 10px; }
+.relay-card .dot { width: 30px; height: 30px; border-radius: var(--r-md); display: grid; place-items: center; font-weight: 700; color: #fff; flex-shrink: 0; }
+.relay-card .meta { flex: 1; min-width: 0; }
+.relay-card .meta b { display: block; }
+.relay-card .meta span { color: var(--muted); font-size: 12px; }
+.relay-card.add { justify-content: center; color: var(--accent); border-style: dashed; cursor: pointer; }
+.relay-card.add:hover { background: var(--hover); border-color: var(--accent); }
+
+/* ---- 表单 ---- */
+.field { margin-bottom: 14px; }
+.field label { display: block; font-size: 12px; margin-bottom: 5px; color: var(--text2); }
+.field small { display: block; color: var(--muted); font-size: 11.5px; margin-top: 4px; }
+.form-actions { display: flex; gap: 8px; margin-top: 18px; align-items: center; }
+
+/* ---- 发现预览 ---- */
+.scan-line { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border)); border-radius: var(--r-lg); background: color-mix(in srgb, var(--accent) 8%, var(--surface)); margin-bottom: 16px; }
+.spinner { width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; flex-shrink: 0; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.scan-line .step { color: var(--text2); }
+.scan-line .step b { color: var(--accent); }
+.fam-group { border: 1px solid var(--border); border-radius: var(--r-lg); margin-bottom: 12px; overflow: hidden; }
+.fam-group > header { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: var(--subtle); }
+.fam-group .f-dot { width: 22px; height: 22px; border-radius: 5px; display: grid; place-items: center; font-size: 11px; font-weight: 700; color: #fff; }
+.fam-group > header b { font-size: 13px; }
+.fam-group > header .cnt { color: var(--muted); font-size: 12px; }
+.model-row { display: flex; align-items: center; gap: 10px; padding: 8px 14px; border-top: 1px solid color-mix(in srgb, var(--border) 50%, transparent); }
+.model-row label { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; cursor: pointer; }
+.model-row .mid { font-family: "Cascadia Code",Consolas,monospace; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.model-row input[type=checkbox] { accent-color: var(--accent); width: 14px; height: 14px; }
+.fam-note { padding: 7px 14px; border-top: 1px dashed var(--border); color: var(--warning); font-size: 11.5px; background: color-mix(in srgb, var(--warning) 6%, transparent); }
+.unmatched { border: 1px dashed var(--border); border-radius: var(--r-lg); padding: 10px 14px; color: var(--muted); font-size: 12px; }
+.unmatched summary { cursor: pointer; }
+.unmatched .ids { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; }
+.preview-foot { display: flex; align-items: center; gap: 10px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
+
+/* ---- 模型选择（家族卡片） ---- */
+.fam-card { border: 1px solid var(--border); border-radius: var(--r-xl); margin-bottom: 14px; background: var(--surface); }
+.fam-card > header { display: flex; align-items: center; gap: 10px; padding: 14px 16px 10px; }
+.fam-card > header b { font-size: 15px; }
+.fam-card > header .cnt { color: var(--muted); }
+.fam-card > header .grow { flex: 1; }
+.route { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-top: 1px solid var(--border); }
+.route .r-main { flex: 1; min-width: 0; }
+.route .r-name { font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.route .r-models { color: var(--muted); font-size: 12px; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.badge-default { padding: 1px 7px; border: 1px solid var(--boundary); border-radius: var(--r-full); font-size: 11px; color: var(--text2); }
+.badge-new { padding: 1px 7px; border-radius: var(--r-full); font-size: 11px; color: var(--success); border: 1px solid color-mix(in srgb, var(--success) 50%, var(--border)); background: color-mix(in srgb, var(--success) 10%, transparent); }
+.r-ops { display: flex; gap: 2px; color: var(--muted); }
+.r-ops button { border: 0; background: none; color: var(--muted); cursor: pointer; padding: 4px 6px; border-radius: 4px; font-size: 13px; }
+.r-ops button:hover { background: var(--hover); color: var(--text); }
+.fam-card > footer { padding: 8px 16px 12px; }
+
+/* ---- 模型选择：家族侧栏 ---- */
+.fam-layout { display: flex; gap: 18px; align-items: flex-start; }
+.fam-nav { width: 160px; flex-shrink: 0; display: flex; flex-direction: column; gap: 3px; }
+.fam-nav-item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid transparent; border-radius: var(--r-md); background: none; color: var(--text2); cursor: pointer; text-align: left; font-size: 13px; }
+.fam-nav-item:hover { background: var(--hover); }
+.fam-nav-item.on { background: var(--selected); color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
+.fam-nav-item .n { margin-left: auto; font-size: 11px; color: var(--muted); }
+.fam-nav-item .f-dot { width: 18px; height: 18px; border-radius: 4px; display: grid; place-items: center; font-size: 10px; font-weight: 700; color: #fff; flex-shrink: 0; }
+.fam-nav-item .nav-ico { width: 18px; text-align: center; flex-shrink: 0; }
+.fam-content { flex: 1; min-width: 0; }
+
+/* ---- 启用开关 ---- */
+.switch { position: relative; width: 32px; height: 18px; flex-shrink: 0; cursor: pointer; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.switch .track { position: absolute; inset: 0; border-radius: var(--r-full); background: var(--border); transition: .15s; }
+.switch .track::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--text2); transition: .15s; }
+.switch input:checked + .track { background: var(--action); }
+.switch input:checked + .track::after { transform: translateX(14px); background: #fff; }
+.route.off .r-main { opacity: .45; }
+
+/* ---- 横幅 & toast ---- */
+.banner { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border: 1px solid color-mix(in srgb, var(--success) 45%, var(--border)); border-radius: var(--r-lg); background: color-mix(in srgb, var(--success) 8%, var(--surface)); color: var(--text2); margin-bottom: 16px; font-size: 12.5px; }
+.banner b { color: var(--success); }
+#toast { position: fixed; left: 50%; bottom: 36px; transform: translateX(-50%) translateY(20px); background: var(--surface); border: 1px solid var(--boundary); border-radius: var(--r-lg); box-shadow: 0 8px 20px rgba(0,0,0,.5); padding: 10px 16px; display: flex; gap: 14px; align-items: center; opacity: 0; pointer-events: none; transition: .25s; z-index: 50; }
+#toast.show { opacity: 1; transform: translateX(-50%) translateY(0); pointer-events: auto; }
+#toast .undo { color: var(--accent); cursor: pointer; font-weight: 600; background: none; border: 0; }
+.hidden { display: none !important; }
+.fail-hint { border: 1px dashed var(--warning); border-radius: var(--r-lg); padding: 12px 14px; color: var(--warning); font-size: 12.5px; margin-top: 14px; line-height: 1.6; }
+.fail-hint b { color: var(--warning); }
+</style>
+</head>
+<body>
+<div class="stage">
+
+	<!-- ============ 产品决策注释 ============ -->
+	<aside class="notes">
+		<h1>自动线路 · 原型说明</h1>
+		<p class="sub">对应评估「第一档」：机器做映射，人做确认</p>
+
+		<div class="note"><b>1 · 保存即发现</b>
+			<p>保存中转后后台自动调 <code>GET /v1/models</code>（现有 <code>discover()</code>），按家族关键词匹配，结果以<b>待确认预览</b>呈现，不静默生效。</p></div>
+		<div class="note"><b>2 · 只绑元数据，不绑价格</b>
+			<p>上下文窗口 / 视觉能力来自 models.dev 目录；<b>价格留空</b>，标注"以中转实际计费为准"，避免官方价污染用量统计。</p></div>
+		<div class="note"><b>3 · 追加末尾，不抢默认</b>
+			<p>新线路自动追加到各家族<b>末尾</b>（routes 顺序即优先级），默认线路不被变更；切换选择权留给用户。</p></div>
+		<div class="note"><b>4 · 未识别模型可忽略</b>
+			<p>匹配不上三大家族的模型默认忽略，归入 <code>excluded_model_ids</code>，作为手动纠偏出口。</p></div>
+		<div class="note"><b>5 · 失败可降级</b>
+			<p>中转站不支持 /models 时，退回现有手动流程。表单里勾选"模拟发现失败"可体验。</p></div>
+		<div class="note"><b>6 · 侧栏按家族切换</b>
+			<p>「模型选择」内左侧栏 = 全部线路 / DeepSeek / Kimi / GLM（带线路数角标）。开关为行内交互：<b>toggle = 启用</b>（多选），<b>✓ = 默认</b>（单选），两者不合并。</p></div>
+
+		<div class="notes-actions">
+			<button class="btn sm" onclick="resetDemo()">重置演示</button>
+			<button class="btn sm" onclick="scenarioSecond()">跳过：直接看第二家中转</button>
+		</div>
+	</aside>
+
+	<!-- ============ 模型配置对话框 ============ -->
+	<div class="dialog">
+		<div class="dialog-head">
+			<h2>模型配置</h2>
+			<p class="hint" id="headHint">保存中转后<em>自动发现模型并推荐线路</em>；默认线路不会被自动变更。</p>
+		</div>
+		<div class="tabs">
+			<button class="tab on" id="tabRelays" onclick="showTab('relays')">供应商 <span class="n" id="relayCnt"></span></button>
+			<button class="tab" id="tabFams" onclick="showTab('fams')">模型选择 <span class="n" id="routeCnt"></span></button>
+		</div>
+		<div class="body">
+
+			<!-- 供应商列表 -->
+			<section id="vRelays"></section>
+
+			<!-- 添加供应商表单 -->
+			<section id="vForm" class="hidden">
+				<div class="field"><label>名称</label><input class="input" id="fName" value="基元律动"></div>
+				<div class="field"><label>API 密钥</label><input class="input" type="password" value="sk-••••••••••••3f2a"><small>密钥在本机加密保存。</small></div>
+				<div class="field"><label>端点</label><input class="input" id="fBase" value="https://api.jiyuan-ai.example/v1"><small>OpenAI 兼容根地址。</small></div>
+				<div class="field"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="fFail" style="accent-color:var(--warning)"> 模拟该站不支持 /models 接口（体验降级路径）</label></div>
+				<div class="form-actions">
+					<button class="btn ghost" onclick="showTab('relays')">返回</button>
+					<span style="flex:1"></span>
+					<button class="btn">测试连接</button>
+					<button class="btn primary" onclick="saveRelay()">保存</button>
+				</div>
+				<div id="failHint" class="fail-hint hidden">
+					<b>自动发现不可用。</b>该站未实现 OpenAI 兼容的 <code style="background:var(--subtle);padding:0 4px;border-radius:3px">/models</code> 接口（HTTP 404）。<br>
+					已保存中转。你可以到「模型选择」手动添加线路，或在此手动录入模型 ID。<br><br>
+					<button class="btn sm" onclick="showTab('fams')">去手动添加线路 →</button>
+				</div>
+			</section>
+
+			<!-- 自动发现预览 -->
+			<section id="vPreview" class="hidden">
+				<div class="scan-line" id="scanLine">
+					<div class="spinner"></div>
+					<div class="step" id="scanText">正在调用 <b>GET /v1/models</b> …</div>
+				</div>
+				<div id="previewContent" class="hidden">
+					<p class="muted" style="margin-bottom:14px">发现 <b id="foundTotal" style="color:var(--accent)"></b> 个模型，已按家族匹配。勾选后一键创建线路；价格不绑定，以中转实际计费为准。</p>
+					<div id="previewGroups"></div>
+					<details class="unmatched">
+						<summary>忽略 <span id="unmatchedCnt"></span> 个未识别模型（claude / gpt / qwen 等，不在三大家族内）</summary>
+						<div class="ids" id="unmatchedIds"></div>
+					</details>
+					<div class="preview-foot">
+						<button class="btn ghost" onclick="showTab('fams')">稍后手动配置</button>
+						<span style="flex:1"></span>
+						<span class="muted" id="createHint"></span>
+						<button class="btn primary" id="btnCreate" onclick="createRoutes()"></button>
+					</div>
+				</div>
+			</section>
+
+			<!-- 模型选择（侧栏布局） -->
+			<section id="vFams" class="hidden">
+				<div id="famBanner"></div>
+				<div class="fam-layout">
+					<nav class="fam-nav" id="famNav"></nav>
+					<div class="fam-content" id="famCards"></div>
+				</div>
+			</section>
+
+		</div>
+	</div>
+</div>
+
+<div id="toast"><span id="toastText"></span><button class="undo" onclick="undoCreate()">撤销</button></div>
+
+<script>
+/* ================= 模拟数据 ================= */
+const FAMILIES = {
+	deepseek: { label: "DeepSeek", color: "#4d8dff", kw: ["deepseek"] },
+	kimi:     { label: "Kimi",     color: "#9b6dff", kw: ["kimi", "moonshot"] },
+	glm:      { label: "GLM",      color: "#3fbf8f", kw: ["glm"] },
+};
+/* models.dev 目录（模拟）：context / vision 元数据 */
+const CATALOG = {
+	"deepseek-flash":            { ctx: "128K", vision: false },
+	"deepseek-v4-flash-0731":    { ctx: "128K", vision: true },
+	"deepseek-v4-pro-0813":      { ctx: "256K", vision: true },
+	"kimi-k2.6":                 { ctx: "256K", vision: true },
+	"kimi-k2.7-code":            { ctx: "256K", vision: false },
+	"kimi-k2.7-code-highspeed":  { ctx: "256K", vision: false },
+	"kimi-k3":                   { ctx: "256K", vision: true },
+	"glm-5.3":                   { ctx: "200K", vision: true },
+	"glm-5.3-flash":             { ctx: "200K", vision: false },
+};
+const RELAY_MODELS = {
+	"基元律动": ["deepseek-flash","deepseek-v4-flash-0731","deepseek-v4-pro-0813",
+		"kimi-k2.6","kimi-k2.7-code","kimi-k2.7-code-highspeed","kimi-k3",
+		"glm-5.3","glm-5.3-flash","claude-sonnet-4.5","gpt-5.2","qwen3-235b-a22b"],
+	"crouter": ["moonshotai/Kimi-K2.6","moonshotai/Kimi-K3","gpt-5.2","meta-llama/Llama-4"],
+};
+
+/* ================= 状态 ================= */
+let relays, routes, pendingRelay, lastCreated, previewChecked;
+
+function initialState() {
+	relays = [{ name: "Kimi（月之暗面）", base: "https://api.moonshot.cn/v1" }];
+	routes = {
+		deepseek: [],
+		kimi: [{ relay: "Kimi（月之暗面）", models: ["kimi-k2.6","kimi-k2.7-code","kimi-k2.7-code-highspeed","kimi-k3"], isDefault: true, fresh: false, enabled: true }],
+		glm: [],
+	};
+	pendingRelay = null; lastCreated = null; previewChecked = {};
+}
+initialState();
+
+/* ================= 视图切换 ================= */
+const views = { relays: "vRelays", form: "vForm", preview: "vPreview", fams: "vFams" };
+function show(name) {
+	Object.values(views).forEach(id => document.getElementById(id).classList.add("hidden"));
+	document.getElementById(views[name]).classList.remove("hidden");
+}
+function showTab(tab) {
+	document.getElementById("tabRelays").classList.toggle("on", tab === "relays");
+	document.getElementById("tabFams").classList.toggle("on", tab === "fams");
+	if (tab === "relays") { renderRelays(); show("relays"); }
+	else { renderFams(); show("fams"); }
+	refreshCounts();
+}
+function refreshCounts() {
+	document.getElementById("relayCnt").textContent = relays.length + " 个";
+	const n = Object.values(routes).reduce((s, r) => s + r.length, 0);
+	document.getElementById("routeCnt").textContent = n + " 条线路";
+}
+
+/* ================= 供应商列表 ================= */
+function renderRelays() {
+	const el = document.getElementById("vRelays");
+	el.innerHTML = relays.map((r, i) => `
+		<div class="relay-card">
+			<div class="dot" style="background:${["#2458be","#7a4fd0","#0f7a5c"][i % 3]}">${r.name[0]}</div>
+			<div class="meta"><b>${r.name}</b><span>${r.base}</span></div>
+			<span class="chip ok">已启用</span>
+			<button class="btn sm ghost">编辑</button>
+		</div>`).join("") +
+		`<div class="relay-card add" onclick="openForm()">＋ 添加供应商</div>`;
+}
+function openForm() {
+	document.getElementById("fFail").checked = false;
+	document.getElementById("failHint").classList.add("hidden");
+	show("form");
+}
+
+/* ================= 保存 → 自动发现 ================= */
+function matchFamily(id) {
+	const low = id.toLowerCase();
+	for (const [fid, fam] of Object.entries(FAMILIES))
+		if (fam.kw.some(k => low.includes(k))) return fid;
+	return null;
+}
+function saveRelay() {
+	const name = document.getElementById("fName").value.trim() || "新中转";
+	const base = document.getElementById("fBase").value.trim();
+	const fail = document.getElementById("fFail").checked;
+	pendingRelay = { name, base };
+	relays.push({ name, base });
+	refreshCounts();
+
+	if (fail) { /* 降级路径 */
+		document.getElementById("failHint").classList.remove("hidden");
+		return;
+	}
+	/* 扫描动画 */
+	show("preview");
+	document.getElementById("scanLine").classList.remove("hidden");
+	document.getElementById("previewContent").classList.add("hidden");
+	const steps = ["正在调用 <b>GET /v1/models</b> …", "匹配家族关键词（deepseek / kimi / glm）…", "对照 models.dev 目录补全元数据…"];
+	steps.forEach((s, i) => setTimeout(() => document.getElementById("scanText").innerHTML = s, i * 700));
+	setTimeout(renderPreview, steps.length * 700 + 300);
+}
+
+function renderPreview() {
+	const ids = RELAY_MODELS[pendingRelay.name] ?? RELAY_MODELS["基元律动"];
+	const groups = { deepseek: [], kimi: [], glm: [] };
+	const unmatched = [];
+	ids.forEach(id => {
+		const fid = matchFamily(id);
+		if (fid) groups[fid].push(id); else unmatched.push(id);
+	});
+	previewChecked = {};
+	Object.values(groups).flat().forEach(id => previewChecked[id] = true);
+
+	document.getElementById("scanLine").classList.add("hidden");
+	document.getElementById("previewContent").classList.remove("hidden");
+	document.getElementById("foundTotal").textContent = ids.length;
+	document.getElementById("unmatchedCnt").textContent = unmatched.length;
+	document.getElementById("unmatchedIds").innerHTML = unmatched.map(id => `<span class="chip">${id}</span>`).join("");
+
+	const famCount = Object.values(groups).filter(g => g.length).length;
+	document.getElementById("previewGroups").innerHTML = Object.entries(groups)
+		.filter(([, ms]) => ms.length)
+		.map(([fid, ms]) => {
+			const fam = FAMILIES[fid];
+			return `<div class="fam-group">
+				<header>
+					<div class="f-dot" style="background:${fam.color}">${fam.label[0]}</div>
+					<b>${fam.label}</b><span class="cnt">${ms.length} 个模型</span>
+					<span style="flex:1"></span>
+					<span class="chip accent">将创建 1 条线路</span>
+				</header>
+				${ms.map(id => {
+					const meta = CATALOG[id.toLowerCase().replace(/^.*\//, "")] || CATALOG[id.toLowerCase()];
+					return `<div class="model-row">
+						<label><input type="checkbox" checked onchange="previewChecked['${id}']=this.checked;updateCreateBtn()"><span class="mid">${id}</span></label>
+						${meta ? `<span class="chip">${meta.ctx}</span>` : `<span class="chip warn">目录无此模型</span>`}
+						${meta?.vision ? `<span class="chip">视觉</span>` : ""}
+					</div>`;
+				}).join("")}
+				<div class="fam-note">价格未绑定 · 以中转实际计费为准，创建后可在线路中导入定价</div>
+			</div>`;
+		}).join("");
+	updateCreateBtn(famCount);
+}
+function updateCreateBtn(famCount) {
+	const n = Object.values(previewChecked).filter(Boolean).length;
+	const fams = famCount ?? new Set(Object.keys(previewChecked).filter(id => previewChecked[id]).map(matchFamily)).size;
+	const btn = document.getElementById("btnCreate");
+	btn.textContent = `创建 ${fams} 条线路（${n} 个模型）`;
+	btn.disabled = n === 0;
+	document.getElementById("createHint").textContent = "追加到各家族末尾，不影响默认线路";
+}
+
+/* ================= 创建线路 ================= */
+function createRoutes() {
+	lastCreated = [];
+	for (const fid of Object.keys(FAMILIES)) {
+		const models = Object.keys(previewChecked).filter(id => previewChecked[id] && matchFamily(id) === fid);
+		if (!models.length) continue;
+		const route = { relay: pendingRelay.name, models, isDefault: routes[fid].length === 0, fresh: true, enabled: true };
+		routes[fid].push(route);   /* 追加到末尾，不抢默认 */
+		lastCreated.push({ fid, route });
+	}
+	toast(`已为「${pendingRelay.name}」创建 ${lastCreated.length} 条线路 · 默认线路未变更`);
+	showTab("fams");
+}
+function undoCreate() {
+	if (!lastCreated) return;
+	lastCreated.forEach(({ fid, route }) => {
+		routes[fid] = routes[fid].filter(r => r !== route);
+	});
+	lastCreated = null;
+	hideToast();
+	renderFams(); refreshCounts();
+}
+
+/* ================= 模型选择（侧栏） ================= */
+let selectedFam = "all";
+function selectFam(fid) { selectedFam = fid; renderFams(); }
+function renderFams() {
+	const nav = document.getElementById("famNav");
+	const total = Object.values(routes).reduce((s, rs) => s + rs.length, 0);
+	nav.innerHTML =
+		`<button class="fam-nav-item ${selectedFam === "all" ? "on" : ""}" onclick="selectFam('all')"><span class="nav-ico">☰</span>全部线路<span class="n">${total}</span></button>` +
+		Object.entries(FAMILIES).map(([fid, fam]) =>
+			`<button class="fam-nav-item ${selectedFam === fid ? "on" : ""}" onclick="selectFam('${fid}')"><span class="f-dot" style="background:${fam.color}">${fam.label[0]}</span>${fam.label}<span class="n">${routes[fid].length}</span></button>`).join("");
+
+	const detail = selectedFam !== "all";
+	const fids = detail ? [selectedFam] : Object.keys(FAMILIES);
+	document.getElementById("famCards").innerHTML = fids.map(fid => {
+		const fam = FAMILIES[fid], rs = routes[fid];
+		return `<div class="fam-card">
+			<header>
+				<div class="f-dot" style="width:26px;height:26px;border-radius:6px;display:grid;place-items:center;color:#fff;font-weight:700;background:${fam.color}">${fam.label[0]}</div>
+				<b>${fam.label}</b><span class="cnt">${rs.length} 条线路</span>
+				<span class="grow"></span>
+				${detail ? `<button class="btn sm">添加线路</button>` : `<button class="btn sm ghost" onclick="selectFam('${fid}')">管理 →</button>`}
+			</header>
+			${rs.length ? rs.map(r => `
+				<div class="route ${r.enabled ? "" : "off"}">
+					<label class="switch" title="${r.enabled ? "点击禁用线路" : "点击启用线路"}"><input type="checkbox" ${r.enabled ? "checked" : ""} onchange="toggleRoute('${fid}','${r.relay}',this.checked)"><span class="track"></span></label>
+					<div class="r-main">
+						<div class="r-name">${r.relay}
+							${r.isDefault ? `<span class="badge-default">默认</span>` : ""}
+							${r.fresh ? `<span class="badge-new">自动创建</span>` : ""}
+						</div>
+						<div class="r-models">${r.models.length} 个模型：${r.models.join("、")}</div>
+					</div>
+					<div class="r-ops">
+						<button title="上移">↑</button><button title="下移">↓</button>
+						${!r.isDefault ? `<button title="设为默认" onclick="setDefault('${fid}','${r.relay}')">✓</button>` : `<button title="默认线路" style="color:var(--success)">✓</button>`}
+						<button title="编辑">✎</button><button title="删除" onclick="delRoute('${fid}','${r.relay}')">🗑</button>
+					</div>
+				</div>`).join("")
+			: `<div class="route"><span class="muted">暂无线路，添加中转后将自动推荐。</span></div>`}
+			${detail ? `<footer><button class="btn sm ghost" style="color:var(--muted)">清空 ${fam.label} 默认线路</button></footer>` : ""}
+		</div>`;
+	}).join("");
+
+	/* 新线路横幅 */
+	const fresh = Object.values(routes).flat().some(r => r.fresh);
+	document.getElementById("famBanner").innerHTML = fresh
+		? `<div class="banner"><b>✓</b><span>新线路已<b>追加到末尾</b>，默认线路未变更。需要时点击 ✓ 手动设为默认。</span></div>`
+		: "";
+}
+function toggleRoute(fid, relay, on) {
+	const r = routes[fid].find(r => r.relay === relay);
+	if (!r) return;
+	r.enabled = on;
+	if (!on && r.isDefault) r.isDefault = false; /* 禁用默认线路时清除默认，实际产品应回落到下一条 */
+	renderFams();
+}
+function setDefault(fid, relay) {
+	routes[fid].forEach(r => { r.isDefault = r.relay === relay; r.fresh = false; });
+	renderFams();
+}
+function delRoute(fid, relay) {
+	routes[fid] = routes[fid].filter(r => r.relay !== relay);
+	renderFams(); refreshCounts();
+}
+
+/* ================= 场景 & 工具 ================= */
+function scenarioSecond() {
+	resetDemo(true);
+	/* 预置基元律动已建好 */
+	relays.push({ name: "基元律动", base: "https://api.jiyuan-ai.example/v1" });
+	routes.deepseek.push({ relay: "基元律动", models: RELAY_MODELS["基元律动"].filter(id => matchFamily(id) === "deepseek"), isDefault: true, fresh: false, enabled: true });
+	routes.kimi.push({ relay: "基元律动", models: RELAY_MODELS["基元律动"].filter(id => matchFamily(id) === "kimi"), isDefault: false, fresh: false, enabled: true });
+	routes.glm.push({ relay: "基元律动", models: RELAY_MODELS["基元律动"].filter(id => matchFamily(id) === "glm"), isDefault: true, fresh: false, enabled: true });
+	/* 直接模拟添加第二家 crouter */
+	document.getElementById("fName").value = "crouter";
+	document.getElementById("fBase").value = "https://api.crouter.example/v1";
+	pendingRelay = { name: "crouter" };
+	relays.push({ name: "crouter", base: "https://api.crouter.example/v1" });
+	refreshCounts();
+	show("preview");
+	document.getElementById("scanLine").classList.remove("hidden");
+	document.getElementById("previewContent").classList.add("hidden");
+	document.getElementById("scanText").innerHTML = "正在调用 <b>GET /v1/models</b> …";
+	setTimeout(renderPreview, 900);
+}
+function resetDemo(silent) {
+	initialState();
+	selectedFam = "all";
+	hideToast();
+	showTab("relays");
+	if (!silent) toast("已重置演示数据", true);
+}
+let toastTimer;
+function toast(text, noUndo) {
+	const t = document.getElementById("toast");
+	document.getElementById("toastText").textContent = text;
+	t.querySelector(".undo").style.display = noUndo ? "none" : "";
+	t.classList.add("show");
+	clearTimeout(toastTimer);
+	toastTimer = setTimeout(hideToast, 5000);
+}
+function hideToast() { document.getElementById("toast").classList.remove("show"); }
+
+renderRelays(); refreshCounts();
+</script>
+</body>
+</html>

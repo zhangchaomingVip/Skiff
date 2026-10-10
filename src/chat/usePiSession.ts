@@ -8,6 +8,7 @@ import { loadAppendPrompt } from "./prompt";
 import { initialSessionState, type ImageAttachment, type ModelInfo, type SessionState } from "./types";
 import type { RuntimeOffer } from "./modelFamilies";
 import { attachHistoricalSnapshots } from "./routeSnapshot";
+import type { FamiliesConfig } from "./useModelFamilies";
 
 export interface SessionTarget {
 	id: string;
@@ -56,7 +57,7 @@ function parseCommands(raw: unknown): PiCommand[] {
 let previousTeardown: Promise<void> = Promise.resolve();
 
 /** A real pi session per conversation; transcripts stay in pi's files. */
-export function usePiSession(target?: SessionTarget, runtimeOffers: readonly RuntimeOffer[] = []) {
+export function usePiSession(target?: SessionTarget, runtimeOffers: readonly RuntimeOffer[] = [], configuration?: { config?: FamiliesConfig; ready: boolean }) {
 	const rpcRef = useRef<PiRpc | null>(null);
 	const busyRef = useRef(false);
 	const streamingRef = useRef(false);
@@ -65,18 +66,25 @@ export function usePiSession(target?: SessionTarget, runtimeOffers: readonly Run
 	stateRef.current = state;
 	const [readyId, setReadyId] = useState<string>();
 	const [loadedId, setLoadedId] = useState<string>();
+	const [loadedConfig, setLoadedConfig] = useState<FamiliesConfig>();
 	const [sessionFile, setSessionFile] = useState<string>();
 	const [rawLines, setRawLines] = useState<string[]>([]);
 	const [revision, setRevision] = useState(0);
 	const [pending, setPending] = useState(false);
 	const [elapsedMs, setElapsedMs] = useState(0);
 	const runStarted = useRef<number>();
-	const preferredModel = useRef<ModelInfo>();
+	const promptRef = useRef<{ id: string; cancelled: boolean }>();
+	const preferredModel = useRef<{ chatId?: string; model?: ModelInfo }>();
 	const runtimeOffersRef = useRef(runtimeOffers);
 	runtimeOffersRef.current = runtimeOffers;
 	// Saving a newly assigned pi file must not restart the running session.
 	const targetRef = useRef(target);
 	targetRef.current = target;
+	const configurationRef = useRef(configuration);
+	configurationRef.current = configuration;
+	// Finish initial migration before spawning. Refreshes with an existing
+	// configuration leave the current conversation running until it is idle.
+	const configurationReady = !configuration || configuration.ready || !!configuration.config;
 	const connected = !!target && readyId === target.id;
 
 	const fail = useCallback((error: unknown) => {
@@ -85,7 +93,7 @@ export function usePiSession(target?: SessionTarget, runtimeOffers: readonly Run
 
 	useEffect(() => {
 		const selected = targetRef.current;
-		if (!selected) return;
+		if (!selected || !configurationReady) return;
 		const rpc = new PiRpc(`chat_${crypto.randomUUID()}`);
 		rpcRef.current = rpc;
 		let cancelled = false;
@@ -95,20 +103,23 @@ export function usePiSession(target?: SessionTarget, runtimeOffers: readonly Run
 		});
 		setReadyId(undefined);
 		setLoadedId(undefined);
+		setLoadedConfig(undefined);
 		setSessionFile(undefined);
 		setState(initialSessionState);
 		setRawLines([]);
 		setPending(false);
 		setElapsedMs(selected.elapsedMs ?? 0);
 		runStarted.current = undefined;
+		promptRef.current = undefined;
 		busyRef.current = false;
 		streamingRef.current = false;
 		const offEvent = rpc.onEvent((event: RpcEvent) => {
 			if (cancelled) return;
-			if (event.type === "agent_start" && runStarted.current === undefined) runStarted.current = Date.now();
+			const now = Date.now();
+			if (event.type === "agent_start" && runStarted.current === undefined) runStarted.current = now;
 			let duration: number | undefined;
 			if (["agent_end", "agent_settled", "bridge_exit"].includes(String(event.type)) && runStarted.current !== undefined) {
-				duration = Math.max(0, Date.now() - runStarted.current);
+				duration = Math.max(0, now - runStarted.current);
 				setElapsedMs((ms) => ms + (duration ?? 0));
 				runStarted.current = undefined;
 			}
@@ -116,33 +127,35 @@ export function usePiSession(target?: SessionTarget, runtimeOffers: readonly Run
 				setReadyId(undefined);
 				setPending(false);
 				streamingRef.current = false;
-				setState((s) => ({ ...s, isStreaming: false, lastError: String(event.message) }));
-				return;
 			}
 			if (event.type === "agent_start") streamingRef.current = true;
 			if (event.type === "agent_end" || event.type === "agent_settled") streamingRef.current = false;
-			const settled = duration;
+			const timedEvent = { ...event, ...(event.type === "agent_start" ? { startedAt: runStarted.current } : {}), ...(duration === undefined ? {} : { durationMs: duration, completedAt: now }) };
 			setState((s) => {
 				const options = { offers: runtimeOffersRef.current };
-				const next = reduce(s, event, options);
-				return settled === undefined ? next : reduce(next, { type: "turn_duration", durationMs: settled, completedAt: Date.now() }, options);
+				return reduce(s, timedEvent, options);
 			});
 		});
 		const offLine = rpc.onLine((line) => {
 			if (!cancelled) setRawLines((prev) => [...prev.slice(-499), line]);
 		});
 		const preceding = previousTeardown;
-		const starting = (async () => {
+		let startupConfig: FamiliesConfig | undefined;
+		const spawned = preceding.then(async () => {
+			if (cancelled) return;
+			startupConfig = configurationRef.current?.config;
+			await rpc.start({ cwd: selected.cwd, appendSystemPrompt: loadAppendPrompt() });
+		});
+		void (async () => {
 			try {
-				await preceding;
-				if (cancelled) return;
-				await rpc.start({ cwd: selected.cwd, appendSystemPrompt: loadAppendPrompt() });
+				await spawned;
 				if (cancelled) return;
 				if (selected.sessionFile) {
 					const result = await rpc.request<{ cancelled?: boolean }>({ type: "switch_session", sessionPath: selected.sessionFile });
 					if (result.cancelled) throw new Error("pi 扩展取消了聊天切换，未载入该聊天。");
 				}
-				const preferred = preferredModel.current ?? selected.model;
+				if (cancelled) return;
+				const preferred = preferredModel.current?.chatId === selected.id ? preferredModel.current.model ?? selected.model : selected.model;
 				preferredModel.current = undefined;
 				let unavailableModel: ModelInfo | undefined;
 				let selectionError: unknown;
@@ -150,6 +163,7 @@ export function usePiSession(target?: SessionTarget, runtimeOffers: readonly Run
 					try { await rpc.request({ type: "set_model", provider: preferred.provider, modelId: preferred.id }); }
 					catch (error) { unavailableModel = preferred; selectionError = error; } // The app resolves removed/disabled models after loading configuration.
 				}
+				if (cancelled) return;
 				const [data, models, transcript, levels] = await Promise.all([
 					rpc.request<Record<string, unknown>>({ type: "get_state" }),
 					rpc.request<{ models?: unknown }>({ type: "get_available_models" }),
@@ -161,16 +175,22 @@ export function usePiSession(target?: SessionTarget, runtimeOffers: readonly Run
 				if (unavailableModel && availableModels.some((model) => model.provider === unavailableModel.provider && model.id === unavailableModel.id)) throw selectionError;
 				const parsedModel = parseModels([data.model])[0];
 				const restoredModel = unavailableModel ?? (parsedModel && preferred ? { ...parsedModel, offerId: preferred.offerId, routeId: preferred.routeId, modelId: preferred.modelId, familyId: preferred.familyId, familyName: preferred.familyName, relayId: preferred.relayId } : parsedModel);
+				const messages = attachHistoricalSnapshots(parseMessages(transcript.messages), selected.routeSnapshots);
+				const user = [...messages].reverse().find((message) => message.role === "user");
+				const startedAt = Boolean(data.isStreaming) ? runStarted.current ?? user?.timestamp ?? Date.now() : undefined;
+				runStarted.current = startedAt;
 				setState({
 					...initialSessionState, model: restoredModel,
 					thinkingLevel: typeof data.thinkingLevel === "string" ? data.thinkingLevel : undefined,
 					thinkingLevels: levels.levels ?? [],
-						availableModels, messages: attachHistoricalSnapshots(parseMessages(transcript.messages), selected.routeSnapshots),
+						availableModels, messages,
 					isStreaming: Boolean(data.isStreaming),
+					activeRun: startedAt === undefined ? undefined : { startedAt, turnId: user ? `turn:${user.id}` : undefined },
 				});
 				streamingRef.current = Boolean(data.isStreaming);
 				setSessionFile(typeof data.sessionFile === "string" ? data.sessionFile : undefined);
 				setLoadedId(selected.id);
+				setLoadedConfig(startupConfig);
 				setReadyId(selected.id);
 			} catch (error) {
 				if (!cancelled) fail(error);
@@ -179,14 +199,17 @@ export function usePiSession(target?: SessionTarget, runtimeOffers: readonly Run
 		return () => {
 			cancelled = true;
 			runStarted.current = undefined;
+			promptRef.current = undefined;
 			void offStderr.then((off) => off());
 			offEvent();
 			offLine();
 			// A late spawn must not become an orphan after switching conversations.
-			previousTeardown = starting.then(() => rpc.stop()).catch(() => {});
+			// Wait only for the spawn, then stop immediately to reject outstanding
+			// initialization requests instead of waiting for their RPC timeout.
+			previousTeardown = spawned.catch(() => {}).then(() => rpc.stop()).catch(() => {});
 			if (rpcRef.current === rpc) rpcRef.current = null;
 		};
-	}, [target?.id, target?.cwd, revision, fail]);
+	}, [target?.id, target?.cwd, revision, configurationReady, fail]);
 
 	const actions = useMemo<PiSessionActions>(() => ({
 		getCommands: async () => {
@@ -218,27 +241,59 @@ export function usePiSession(target?: SessionTarget, runtimeOffers: readonly Run
 		},
 		prompt: async (text, images = []) => {
 			const rpc = rpcRef.current;
-			if (!connected || !rpc || busyRef.current || streamingRef.current || (!text.trim() && !images.length)) return false;
+			if (!connected || !rpc || busyRef.current || streamingRef.current || runStarted.current !== undefined || (!text.trim() && !images.length)) return false;
 			busyRef.current = true;
 			setPending(true);
+			const prompt = { id: crypto.randomUUID(), cancelled: false };
+			promptRef.current = prompt;
+			const startedAt = Date.now();
+			runStarted.current = startedAt;
+			setState((s) => reduce(s, {
+				type: "prompt_start", promptId: prompt.id, startedAt,
+				message: { id: `pending_${prompt.id}`, role: "user", timestamp: startedAt, blocks: [...(text.trim() ? [{ kind: "text", text: text.trim() }] : []), ...images.map(({ data, mimeType }) => ({ kind: "image", data, mimeType }))] },
+			}));
 			try {
 				await rpc.request({ type: "prompt", message: text.trim(), ...(images.length ? { images: images.map(({ data, mimeType }) => ({ type: "image", data, mimeType })) } : {}) });
-				if (rpcRef.current !== rpc) return false;
+				if (rpcRef.current !== rpc || promptRef.current !== prompt || prompt.cancelled) return false;
 				// pi may assign its file lazily on the first message.
 				try {
 					const data = await rpc.request<Record<string, unknown>>({ type: "get_state" });
-					if (rpcRef.current === rpc) setSessionFile(typeof data.sessionFile === "string" ? data.sessionFile : undefined);
-				} catch (error) { if (rpcRef.current === rpc) fail(error); }
-				return true;
+					if (rpcRef.current === rpc && promptRef.current === prompt && !prompt.cancelled) {
+						setSessionFile(typeof data.sessionFile === "string" ? data.sessionFile : undefined);
+						// Extension commands may complete without starting an agent run.
+						if (text.trim().startsWith("/") && !data.isStreaming && !streamingRef.current) {
+							runStarted.current = undefined;
+							setState((s) => reduce(s, { type: "prompt_cancel", promptId: prompt.id }));
+						}
+					}
+				} catch (error) { if (rpcRef.current === rpc && promptRef.current === prompt && !prompt.cancelled) fail(error); }
+				return rpcRef.current === rpc && promptRef.current === prompt && !prompt.cancelled;
 			} catch (error) {
-				if (rpcRef.current === rpc) fail(error);
+				if (rpcRef.current === rpc && promptRef.current === prompt && !prompt.cancelled) {
+					if (!streamingRef.current) {
+						runStarted.current = undefined;
+						setState((s) => reduce(s, { type: "prompt_cancel", promptId: prompt.id }));
+					}
+					fail(error);
+				}
 				return false;
 			} finally {
-				if (rpcRef.current === rpc) { setPending(false); busyRef.current = false; }
+				if (rpcRef.current === rpc && promptRef.current === prompt) { setPending(false); busyRef.current = false; }
 			}
 		},
 		abort: async () => {
-			try { await rpcRef.current?.request({ type: "abort" }); } catch (error) { fail(error); }
+			const rpc = rpcRef.current;
+			const prompt = promptRef.current;
+			try {
+				await rpc?.request({ type: "abort" });
+				if (rpcRef.current === rpc && promptRef.current === prompt && prompt && !streamingRef.current) {
+					prompt.cancelled = true;
+					runStarted.current = undefined;
+					busyRef.current = false;
+					setPending(false);
+					setState((s) => reduce(s, { type: "prompt_cancel", promptId: prompt.id }));
+				}
+			} catch (error) { if (rpcRef.current === rpc) fail(error); }
 		},
 		setModel: async (model) => {
 			const rpc = rpcRef.current;
@@ -284,9 +339,10 @@ export function usePiSession(target?: SessionTarget, runtimeOffers: readonly Run
 	// Stable identity: callers restart the session from effects and must not
 	// re-trigger on every render.
 	const reconnect = useCallback((model?: ModelInfo) => {
-		preferredModel.current = model;
+		preferredModel.current = { chatId: targetRef.current?.id, model };
+		setReadyId(undefined);
 		setRevision((revision) => revision + 1);
 	}, []);
 
-	return { state, connected, rawLines, actions, sessionFile, loadedId, pending, elapsedMs, reconnect };
+	return { state, connected, rawLines, actions, sessionFile, loadedId, loadedConfig, pending, elapsedMs, reconnect };
 }

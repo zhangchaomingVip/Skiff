@@ -40,23 +40,48 @@ export interface ReducerOptions {
 
 export function reduce(state: SessionState, event: RpcEvent, options: ReducerOptions = {}): SessionState {
 	switch (event.type) {
-		case "agent_start":
-			return { ...state, isStreaming: true, lastError: undefined };
+		case "prompt_start": {
+			const startedAt = timestamp(event.startedAt);
+			const message = event.message as ChatMessage | undefined;
+			if (startedAt === undefined || typeof event.promptId !== "string" || message?.role !== "user" || typeof message.id !== "string") return state;
+			return {
+				...state, isStreaming: true, lastError: undefined,
+				activeRun: { startedAt, turnId: `turn:${message.id}`, promptId: event.promptId },
+				pendingPrompt: { id: event.promptId, userMessage: message },
+			};
+		}
+
+		case "prompt_cancel":
+			if (state.activeRun?.promptId !== event.promptId) return state;
+			return { ...state, isStreaming: false, activeRun: undefined, pendingPrompt: undefined };
+
+		case "agent_start": {
+			const startedAt = timestamp(event.startedAt);
+			return { ...state, isStreaming: true, lastError: undefined, activeRun: state.activeRun ?? (startedAt === undefined ? undefined : { startedAt }) };
+		}
 
 		case "agent_settled":
 		case "agent_end":
+		case "bridge_exit": {
+			const settled = state.activeRun?.turnId && typeof event.durationMs === "number"
+				? reduce(state, { type: "turn_duration", turnId: state.activeRun.turnId, durationMs: event.durationMs, completedAt: event.completedAt }, options)
+				: state;
 			return {
-				...state,
+				...settled,
 				isStreaming: false,
-				messages: state.messages.map((m) => (m.streaming ? { ...m, streaming: false } : m)),
+				activeRun: undefined,
+				pendingPrompt: undefined,
+				messages: settled.messages.map((m) => (m.streaming ? { ...m, streaming: false } : m)),
+				...(event.type === "bridge_exit" ? { lastError: String(event.message) } : {}),
 			};
+		}
 
 		case "message_start": {
 			const message = event.message as Record<string, unknown> | undefined;
 			const role = message?.role;
 			if (role !== "user" && role !== "assistant") return state; // drop system prompt
 			const chat: ChatMessage = {
-				id: nextId(role),
+				id: role === "user" ? state.pendingPrompt?.userMessage?.id ?? nextId(role) : nextId(role),
 				role,
 				blocks: role === "assistant" ? [] : parseBlocks(message?.content),
 				streaming: role === "assistant",
@@ -67,7 +92,9 @@ export function reduce(state: SessionState, event: RpcEvent, options: ReducerOpt
 				stopReason: typeof message?.stopReason === "string" ? message.stopReason : undefined,
 				timestamp: timestamp(message?.timestamp),
 			};
-			return { ...state, messages: [...state.messages, chat] };
+			const activeRun = state.activeRun && (role === "user" || state.messages.length === 0) ? { ...state.activeRun, turnId: `turn:${chat.id}` } : state.activeRun;
+			const pendingPrompt = role === "assistant" ? undefined : state.pendingPrompt ? { ...state.pendingPrompt, userMessage: undefined } : undefined;
+			return { ...state, activeRun, pendingPrompt, messages: [...state.messages, chat] };
 		}
 
 		case "message_update": {
@@ -175,7 +202,10 @@ export function reduce(state: SessionState, event: RpcEvent, options: ReducerOpt
 		case "turn_duration": {
 			const durationMs = typeof event.durationMs === "number" ? Math.max(0, event.durationMs) : 0;
 			const index = lastAssistantIndex(state.messages);
-			if (index < 0) return state;
+			const userIndex = lastIndexOfRole(state.messages, "user");
+			if (index < 0 || index < userIndex) return state;
+			const turnId = `turn:${state.messages[userIndex >= 0 ? userIndex : 0].id}`;
+			if (typeof event.turnId === "string" && event.turnId !== turnId) return state;
 			const messages = [...state.messages];
 			const completedAt = typeof event.completedAt === "number" ? event.completedAt : messages[index].timestamp;
 			messages[index] = { ...messages[index], durationMs, timestamp: completedAt };

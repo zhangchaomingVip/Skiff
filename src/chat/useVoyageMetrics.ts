@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { contextPressure, currentTurnStats, estimateOutputTokens, outputSpeed, voyageStatus } from "./sailing";
-import type { ChatMessage, ModelInfo } from "./types";
+import type { ChatMessage, ModelInfo, SessionState } from "./types";
 import { summarizeUsage } from "./usage";
 import { summarizeCosts, type CostSummary } from "./cost";
 
@@ -16,6 +16,7 @@ export interface VoyageMetrics {
 	arrived: boolean;
 	pressure: "normal" | "warning" | "critical";
 	turn: { durationMs?: number; output?: number; cost?: CostSummary };
+	liveTurn?: { turnId?: string; durationMs: number };
 	sessionCost: CostSummary;
 }
 
@@ -28,12 +29,14 @@ const estimateTokens = (text: string): number => {
 	return Math.ceil(units);
 };
 
-export function useVoyageMetrics(messages: ChatMessage[], model: ModelInfo | undefined, streaming: boolean, pricingModels: ModelInfo[] = []): VoyageMetrics {
-	const liveTokens = estimateOutputTokens(messages);
+export function useVoyageMetrics(messages: ChatMessage[], model: ModelInfo | undefined, streaming: boolean, pricingModels: ModelInfo[] = [], activeRun?: SessionState["activeRun"]): VoyageMetrics {
+	const liveTokens = useMemo(() => estimateOutputTokens(messages), [messages]);
 	const liveTokensRef = useRef(liveTokens);
 	liveTokensRef.current = liveTokens;
 	const samples = useRef<{ at: number; tokens: number }[]>([]);
 	const [speed, setSpeed] = useState(0);
+	const [now, setNow] = useState(Date.now);
+	const startedAt = activeRun?.startedAt;
 
 	useEffect(() => {
 		if (!streaming) {
@@ -43,6 +46,7 @@ export function useVoyageMetrics(messages: ChatMessage[], model: ModelInfo | und
 		}
 		let previousTick = performance.now();
 		const tick = () => {
+			setNow(Date.now());
 			const now = performance.now();
 			const elapsed = now - previousTick;
 			previousTick = now;
@@ -60,7 +64,7 @@ export function useVoyageMetrics(messages: ChatMessage[], model: ModelInfo | und
 		tick();
 		const timer = window.setInterval(tick, 100);
 		return () => window.clearInterval(timer);
-	}, [streaming]);
+	}, [streaming, startedAt]);
 
 	const data = useMemo(() => {
 		const assistants = messages.filter((message) => message.role === "assistant" && message.usage && !message.streaming);
@@ -77,7 +81,13 @@ export function useVoyageMetrics(messages: ChatMessage[], model: ModelInfo | und
 
 	const ratio = data ? data.context / data.limit : 0;
 	const arrived = ratio >= 1;
-	const turn = useMemo(() => currentTurnStats(messages, pricingModels, model), [messages, pricingModels, model]);
+	const turn = useMemo(() => {
+		const user = [...messages].reverse().find((message) => message.role === "user");
+		// Before pi confirms the new user, the transcript still contains the preceding turn.
+		if (activeRun?.promptId && activeRun.turnId !== `turn:${user?.id}`) return {};
+		return currentTurnStats(messages, pricingModels, model);
+	}, [messages, pricingModels, model, activeRun?.promptId, activeRun?.turnId]);
+	const liveTurn = useMemo(() => streaming && startedAt !== undefined ? { turnId: activeRun?.turnId, durationMs: Math.max(0, now - startedAt) } : undefined, [streaming, startedAt, activeRun?.turnId, now]);
 	const sessionCost = useMemo(() => summarizeCosts(messages, pricingModels, model), [messages, pricingModels, model]);
 	return {
 		speed,
@@ -90,7 +100,8 @@ export function useVoyageMetrics(messages: ChatMessage[], model: ModelInfo | und
 		status: voyageStatus(ratio, streaming),
 		arrived,
 		pressure: contextPressure(ratio),
-		turn,
+		turn: liveTurn ? { ...turn, durationMs: liveTurn.durationMs } : turn,
+		liveTurn,
 		sessionCost,
 	};
 }

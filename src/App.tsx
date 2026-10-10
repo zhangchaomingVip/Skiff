@@ -38,7 +38,7 @@ export default function App() {
 	}, [activeChat?.hasMessages, library.workspace, view]);
 	const currentView = view ?? (library.workspace ? "launcher" : "chat");
 	const modelFamilies = useModelFamilies();
-	const session = usePiSession(activeChat && activeProject ? { id: activeChat.id, cwd: activeProject.path, sessionFile: activeChat.hasMessages ? activeChat.sessionFile : undefined, elapsedMs: activeChat.elapsedMs, model: activeChat.selectedModel, routeSnapshots: activeChat.routeSnapshots } : undefined, modelFamilies.offers);
+	const session = usePiSession(activeChat && activeProject ? { id: activeChat.id, cwd: activeProject.path, sessionFile: activeChat.hasMessages ? activeChat.sessionFile : undefined, elapsedMs: activeChat.elapsedMs, model: activeChat.selectedModel, routeSnapshots: activeChat.routeSnapshots } : undefined, modelFamilies.offers, { config: modelFamilies.config, ready: !modelFamilies.loading });
 	const { state, connected, rawLines, actions } = session;
 	const [modelNotice, setModelNotice] = useState<string>();
 	const [routeAuthorization, setRouteAuthorization] = useState(() => createRouteAuthorizationState("none"));
@@ -139,8 +139,12 @@ export default function App() {
 				setModelNotice(selected ? `当前模型已失效，已切换到 ${selected.familyName} · ${selected.relayName} · ${selected.modelId}` : "当前模型已失效，请先在中转上配置线路");
 			}
 		} else fallbackNoticeRef.current = "";
-		session.reconnect(selected ? { provider: selected.providerKey, id: selected.modelId, modelId: selected.modelId, routeId: selected.routeId, offerId: selected.offerId, familyId: selected.familyId, familyName: selected.familyName, relayId: selected.relayId } : state.model && !familyFromProvider(state.model.provider) ? state.model : undefined);
-	}, [activeChat?.id, connected, busy, modelFamilies.loading, modelFamilies.config, modelFamilies.offers, modelFamilies.families, state.model, session.reconnect]);
+		const model = selected ? { provider: selected.providerKey, id: selected.modelId, modelId: selected.modelId, routeId: selected.routeId, offerId: selected.offerId, familyId: selected.familyId, familyName: selected.familyName, relayId: selected.relayId } : state.model && !familyFromProvider(state.model.provider) ? state.model : undefined;
+		// A newly selected chat already read this configuration at startup.
+		// Only edits made since that startup require another process.
+		if (session.loadedConfig !== modelFamilies.config) session.reconnect(model);
+		else if (selected && model && (state.model?.provider !== selected.providerKey || state.model.id !== selected.modelId)) void actions.setModel(model);
+	}, [activeChat?.id, connected, busy, modelFamilies.loading, modelFamilies.config, modelFamilies.offers, modelFamilies.families, state.model, session.loadedConfig, session.reconnect, actions]);
 
 	const displayModels = useMemo(() => modelFamilies.fallback ? state.availableModels : orderedOffers.length ? reconcile(state.model, orderedOffers, state.availableModels, modelFamilies.families) : [], [state.model, state.availableModels, orderedOffers, modelFamilies.families, modelFamilies.fallback]);
 	const displayModel = displayModels.find((model) => model.provider === state.model?.provider && model.id === state.model?.id) ?? (modelFamilies.fallback ? state.model : undefined);

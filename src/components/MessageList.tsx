@@ -1,19 +1,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ChatMessage, ModelInfo } from "../chat/types";
+import type { ChatMessage, ModelInfo, SessionState } from "../chat/types";
 import { groupTurns } from "../chat/turns";
 import { modelDisplay } from "../chat/modelDisplay";
 import { MessageItem, type MessageAction } from "./MessageItem";
 import { Icon } from "./Icon";
+import { WaitingReply } from "./WaitingReply";
 
 /** Scrolling transcript with an auto-follow anchor at the bottom. */
-export function MessageList({ messages, projectName, running, models, model, onSuggestion, followSignal, disabled, onContinue, onEdit, onRegenerate, onDelete }: { messages: ChatMessage[]; projectName?: string; running: boolean; models: ModelInfo[]; model?: ModelInfo; onSuggestion: (text: string) => void; followSignal: number; disabled: boolean; onContinue: () => void; onEdit: MessageAction; onRegenerate: MessageAction; onDelete: MessageAction }) {
+export function MessageList({ messages, pendingPrompt, activeTurnId, projectName, running, models, model, onSuggestion, followSignal, disabled, onContinue, onEdit, onRegenerate, onDelete }: { messages: ChatMessage[]; pendingPrompt?: SessionState["pendingPrompt"]; activeTurnId?: string; projectName?: string; running: boolean; models: ModelInfo[]; model?: ModelInfo; onSuggestion: (text: string) => void; followSignal: number; disabled: boolean; onContinue: () => void; onEdit: MessageAction; onRegenerate: MessageAction; onDelete: MessageAction }) {
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const followingRef = useRef(true);
 	const [away, setAway] = useState(false);
 	const [unread, setUnread] = useState(false);
 	const [collapsedTurns, setCollapsedTurns] = useState<string[]>([]);
-	const turns = useMemo(() => groupTurns(messages), [messages]);
-	const lastTurnMessages = useMemo(() => messages.filter((_, index) => turns[index].turnId === turns[turns.length - 1]?.turnId), [messages, turns]);
+	const displayMessages = useMemo(() => pendingPrompt?.userMessage ? [...messages, pendingPrompt.userMessage] : messages, [messages, pendingPrompt?.userMessage]);
+	const turns = useMemo(() => groupTurns(displayMessages), [displayMessages]);
+	const lastTurnMessages = useMemo(() => displayMessages.filter((_, index) => turns[index].turnId === turns[turns.length - 1]?.turnId), [displayMessages, turns]);
+	const waitingForAssistant = running && activeTurnId !== undefined && (pendingPrompt !== undefined || (displayMessages[displayMessages.length - 1]?.role === "user" && turns[turns.length - 1]?.turnId === activeTurnId));
 	const toggleTurn = useCallback((turnId: string) => setCollapsedTurns((list) => list.includes(turnId) ? list.filter((id) => id !== turnId) : [...list, turnId]), []);
 	const scrollBottom = () => {
 		followingRef.current = true; setAway(false); setUnread(false);
@@ -27,9 +30,9 @@ export function MessageList({ messages, projectName, running, models, model, onS
 		// One update per frame; smooth animation is reserved for explicit jumps.
 		const frame = requestAnimationFrame(() => { const el = scrollRef.current; if (el) el.scrollTo({ top: el.scrollHeight, behavior: "instant" }); });
 		return () => cancelAnimationFrame(frame);
-	}, [messages]);
+	}, [displayMessages, waitingForAssistant]);
 
-	if (messages.length === 0) {
+	if (displayMessages.length === 0 && !waitingForAssistant) {
 		return (
 			<div className="messages">
 				<div className="empty">
@@ -52,12 +55,13 @@ export function MessageList({ messages, projectName, running, models, model, onS
 	return (
 		<div className="transcript">
 		<div className="messages" ref={scrollRef} onScroll={() => { const el = scrollRef.current; if (el) { followingRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80; setAway(!followingRef.current); if (followingRef.current) setUnread(false); } }}>
-			{messages.map((message, index) => (
-				<MessageItem key={message.id} message={message} turnMessages={index === messages.length - 1 ? lastTurnMessages : undefined} showRole={index === 0 || messages[index - 1].role !== message.role} roleDisplay={message.role === "user" ? { label: "你" } : modelDisplay(message, models, model)} compact={message.role === "assistant" && messages[index + 1]?.role === "assistant"} running={running} turnId={turns[index].turnId} turnHead={turns[index].head} turnSteps={turns[index].stepCount} turnDuration={turns[index].durationMs} turnOpen={!collapsedTurns.includes(turns[index].turnId)} onToggleTurn={toggleTurn} disabled={disabled} isLast={index === messages.length - 1} onContinue={onContinue} onEdit={onEdit} onRegenerate={onRegenerate} onDelete={onDelete} />
+			{displayMessages.map((message, index) => (
+				<MessageItem key={message.id} message={message} turnMessages={index === displayMessages.length - 1 ? lastTurnMessages : undefined} showRole={index === 0 || displayMessages[index - 1].role !== message.role} roleDisplay={message.role === "user" ? { label: "你" } : modelDisplay(message, models, model)} compact={message.role === "assistant" && displayMessages[index + 1]?.role === "assistant"} running={running} turnRunning={running && turns[index].turnId === activeTurnId} turnId={turns[index].turnId} turnHead={turns[index].head} turnSteps={turns[index].stepCount} turnDuration={turns[index].durationMs} turnOpen={!collapsedTurns.includes(turns[index].turnId)} onToggleTurn={toggleTurn} disabled={disabled} isLast={index === displayMessages.length - 1} onContinue={onContinue} onEdit={onEdit} onRegenerate={onRegenerate} onDelete={onDelete} />
 			))}
+			{waitingForAssistant && <WaitingReply turnId={activeTurnId} roleDisplay={modelDisplay({ id: "waiting", role: "assistant", blocks: [] }, models, model)} />}
 		</div>
 		{away && <button className="back-bottom" aria-label="回到底部" onClick={scrollBottom}><Icon name="down" size={15} />{unread ? "有新内容 · 回到底部" : "回到底部"}</button>}
-		<span className="sr-only" role="status">{messages.some((m) => m.streaming) ? "Skiff 正在生成回复" : "回复已就绪"}</span>
+		<span className="sr-only" role="status">{running ? "Skiff 正在生成回复" : "回复已就绪"}</span>
 		</div>
 	);
 }

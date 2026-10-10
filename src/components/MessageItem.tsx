@@ -2,7 +2,7 @@ import { Button } from "./ui";
 import { memo } from "react";
 import type { ChatMessage, ContentBlock } from "../chat/types";
 import { splitAttachments } from "../chat/textAttachments";
-import { formatDuration } from "../chat/usage";
+import { TurnSummary } from "./TurnSummary";
 import { shouldShowThinking } from "../chat/thinking";
 import type { ModelDisplay } from "../chat/modelDisplay";
 import type { ToolRunItem } from "../chat/toolRuns";
@@ -30,8 +30,9 @@ const formatMessageTime = (ts?: number): string | undefined => {
 type Tool = Extract<ContentBlock, { kind: "tool" }>;
 type Result = Extract<ContentBlock, { kind: "toolResult" }>;
 
-export const MessageItem = memo(function MessageItem({ message, turnMessages, showRole, roleDisplay, compact, running, turnId, turnHead, turnSteps, turnDuration, turnOpen, onToggleTurn, disabled, isLast, onContinue, onEdit, onRegenerate, onDelete }: {
+export const MessageItem = memo(function MessageItem({ message, turnMessages, showRole, roleDisplay, compact, running, turnRunning = false, turnId, turnHead, turnSteps, turnDuration, turnOpen, onToggleTurn, disabled, isLast, onContinue, onEdit, onRegenerate, onDelete }: {
 	turnMessages?: ChatMessage[];
+	turnRunning?: boolean;
 	message: ChatMessage; showRole: boolean; roleDisplay: ModelDisplay; compact: boolean; running: boolean; turnId: string; turnHead: boolean; turnSteps: number; turnDuration?: number; turnOpen: boolean; onToggleTurn: (turnId: string) => void; disabled: boolean; isLast: boolean; onContinue: () => void; onEdit: MessageAction; onRegenerate: MessageAction; onDelete: MessageAction;
 }) {
 	const isUser = message.role === "user";
@@ -74,17 +75,17 @@ export const MessageItem = memo(function MessageItem({ message, turnMessages, sh
 	}
 	// Copy / regenerate / delete only sit on the newest message; earlier assistant steps stay clean.
 	const showActions = isUser || isLast;
-	const showHeader = !isUser && turnHead && turnSteps > 0;
+	const showHeader = !isUser && turnHead && (turnSteps > 0 || turnRunning);
 	// Intermediate process-only messages vanish when the turn is collapsed.
 	if (!nodes.length && !showHeader && !message.streaming) return null;
 	return <article className={`msg ${isUser ? "user" : "assistant"}${compact ? " compact" : ""}`} aria-label={isUser ? "你的消息" : "Skiff 的消息"}>
 		{showRole && <div className="msg-role">{roleDisplay.brand && <BrandIcon name={roleDisplay.brand} size={14} />}{roleDisplay.label}{message.timestamp !== undefined && <span className="msg-time">{formatMessageTime(message.timestamp)}</span>}</div>}
 		<div className="msg-body">
 			{showHeader && <div className="turn-header">
-				<button className="thinking-toggle" onClick={() => onToggleTurn(turnId)} aria-expanded={turnOpen} aria-label={turnOpen ? "收起本轮执行过程" : "展开本轮执行过程"} title={turnOpen ? "收起本轮执行过程" : "展开本轮执行过程"}>
+				{turnSteps > 0 ? <button className="thinking-toggle" onClick={() => onToggleTurn(turnId)} aria-expanded={turnOpen} aria-label={turnOpen ? "收起本轮执行过程" : "展开本轮执行过程"} title={turnOpen ? "收起本轮执行过程" : "展开本轮执行过程"}>
 					<Icon name="chevron" size={14} />
-					<span>{turnDuration !== undefined ? `耗时${formatDuration(turnDuration)} ` : ""}{turnSteps}步</span>
-				</button>
+					<TurnSummary turnId={turnId} durationMs={turnDuration} steps={turnSteps} />
+				</button> : <TurnSummary turnId={turnId} durationMs={turnDuration} steps={0} />}
 			</div>}
 			{!nodes.length && message.streaming ? <span className="typing">正在思考…</span> : nodes}
 		</div>

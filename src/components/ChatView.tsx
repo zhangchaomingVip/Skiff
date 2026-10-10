@@ -62,24 +62,24 @@ export function ChatView({
 		const content = turnDraft(user);
 		if (content.images.length && !latest.current.model?.input?.includes("image")) { edit(user); return; }
 		if (!await actions.rewind(message.id)) return;
-		if (await latest.current.onSend(appendTextFiles(content.text, content.files), content.images)) setFollowSignal((n) => n + 1);
-		else { setDraft(content.text); setRestoredImages(content.images); setRestoredFiles(content.files); }
+		setFollowSignal((n) => n + 1);
+		if (!await latest.current.onSend(appendTextFiles(content.text, content.files), content.images)) { setDraft(content.text); setRestoredImages(content.images); setRestoredFiles(content.files); }
 	}, [actions, edit]);
 	const remove = useCallback(async (message: ChatMessage) => {
 		if (await actions.rewind(message.id)) { setEditing(undefined); setDraft(""); setRestoredImages([]); setRestoredFiles([]); }
 	}, [actions]);
 	const send = async (text: string, images?: ImageAttachment[]) => {
 		if (editing) { if (!await actions.rewind(editing.id)) return false; setEditing(undefined); }
+		setFollowSignal((n) => n + 1);
 		const accepted = await onSend(text, images);
-		if (accepted) setFollowSignal((n) => n + 1);
 		return accepted;
 	};
-	const continueTurn = useCallback(async () => { if (await onSend("继续")) setFollowSignal((n) => n + 1); }, [onSend]);
+	const continueTurn = useCallback(async () => { setFollowSignal((n) => n + 1); await onSend("继续"); }, [onSend]);
 	const alerts = state.notices.filter((notice) => notice.kind !== "info");
 
 	return (
 		<section className="chat">
-			<MessageList messages={state.messages} projectName={projectName} running={state.isStreaming} models={state.availableModels} model={state.model} onSuggestion={(text) => { setDraft(text); setFocusSignal((n) => n + 1); }} followSignal={followSignal} disabled={disabled} onContinue={continueTurn} onEdit={edit} onRegenerate={regenerate} onDelete={setDeleting} />
+			<MessageList messages={state.messages} pendingPrompt={state.pendingPrompt} activeTurnId={state.activeRun?.turnId} projectName={projectName} running={state.isStreaming} models={state.availableModels} model={state.model} onSuggestion={(text) => { setDraft(text); setFocusSignal((n) => n + 1); }} followSignal={followSignal} disabled={disabled} onContinue={continueTurn} onEdit={edit} onRegenerate={regenerate} onDelete={setDeleting} />
 			{deleting && <ConfirmDialog title="删除本轮及后续消息" description="本轮提问及之后的所有消息将从当前聊天移除，原 pi 会话文件会保留。" onConfirm={() => void remove(deleting)} onClose={() => setDeleting(undefined)} />}
 			{alerts.length > 0 && (
 				<div className="notices">

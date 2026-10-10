@@ -87,6 +87,10 @@ export interface Notice {
 export interface SessionState {
 	messages: ChatMessage[];
 	isStreaming: boolean;
+	/** Ephemeral run timing; message durations are written only when the run settles. */
+	activeRun?: { startedAt: number; turnId?: string; promptId?: string };
+	/** Optimistic display only; pi events remain the source of transcript messages. */
+	pendingPrompt?: { id: string; userMessage?: ChatMessage };
 	model?: ModelInfo;
 	availableModels: ModelInfo[];
 	thinkingLevel?: string;
