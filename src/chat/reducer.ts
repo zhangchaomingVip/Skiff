@@ -3,6 +3,7 @@ import type { ChatMessage, ContentBlock, SessionState } from "./types";
 import type { RpcEvent } from "../rpc/RpcClient";
 import type { RuntimeOffer } from "./modelFamilies";
 import { snapshotForResponse } from "./routeSnapshot";
+import { processEvent, type VoyageEvent } from "./voyageTimeline";
 
 let seq = 0;
 const nextId = (prefix: string): string => `${prefix}_${++seq}_${Date.now().toString(36)}`;
@@ -38,7 +39,7 @@ export interface ReducerOptions {
 	offers?: readonly RuntimeOffer[];
 }
 
-export function reduce(state: SessionState, event: RpcEvent, options: ReducerOptions = {}): SessionState {
+function reduceChat(state: SessionState, event: RpcEvent, options: ReducerOptions = {}): SessionState {
 	switch (event.type) {
 		case "prompt_start": {
 			const startedAt = timestamp(event.startedAt);
@@ -64,7 +65,7 @@ export function reduce(state: SessionState, event: RpcEvent, options: ReducerOpt
 		case "agent_end":
 		case "bridge_exit": {
 			const settled = state.activeRun?.turnId && typeof event.durationMs === "number"
-				? reduce(state, { type: "turn_duration", turnId: state.activeRun.turnId, durationMs: event.durationMs, completedAt: event.completedAt }, options)
+				? reduceChat(state, { type: "turn_duration", turnId: state.activeRun.turnId, durationMs: event.durationMs, completedAt: event.completedAt }, options)
 				: state;
 			return {
 				...settled,
@@ -235,4 +236,102 @@ export function reduce(state: SessionState, event: RpcEvent, options: ReducerOpt
 		default:
 			return state;
 	}
+}
+
+const finite = (value: unknown): number | undefined => typeof value === "number" && Number.isFinite(value) ? value : undefined;
+const record = (value: unknown): Record<string, unknown> | undefined => value && typeof value === "object" ? value as Record<string, unknown> : undefined;
+const textTokens = (value: unknown): number => {
+	if (typeof value !== "string") return 0;
+	let units = 0;
+	for (const char of value) {
+		if (/\s/.test(char)) continue;
+		units += /[\u2e80-\u9fff\uf900-\ufaff\uff00-\uffef]/.test(char) ? 1 : .25;
+	}
+	return Math.ceil(units);
+};
+const atOf = (state: SessionState, event: RpcEvent): number => finite(event.voyageAt) ?? finite(event.startedAt) ?? finite(event.completedAt) ?? state.voyageTimeline?.at ?? state.activeRun?.startedAt ?? 0;
+
+function usageEvent(at: number, value: unknown): VoyageEvent | undefined {
+	const usage = record(value);
+	if (!usage) return undefined;
+	const output = finite(usage.output);
+	const reportedContext = finite(usage.totalTokens);
+	const channels = [usage.input, usage.cacheRead, usage.cacheWrite, usage.output].map(finite);
+	const context = reportedContext ?? (channels.every((item) => item !== undefined) ? channels.reduce((sum, item) => sum + (item ?? 0), 0) : undefined);
+	if (output === undefined && context === undefined) return undefined;
+	return { type: "usage", at, ...(output === undefined ? {} : { output }), ...(context === undefined ? {} : { context }) };
+}
+
+/** Translate pi's wire events into the small, independently testable voyage protocol. */
+function voyageEventsFor(state: SessionState, event: RpcEvent): VoyageEvent[] {
+	const at = atOf(state, event);
+	if (event.type === "tool_start" || event.type === "tool_use") {
+		const tool = record(event.tool) ?? record(event.tool_use) ?? event;
+		const id = String(tool.id ?? tool.toolCallId ?? `tool:${at}`);
+		return [{ type: "tool_start", id, name: String(tool.name ?? tool.toolName ?? "tool"), summary: typeof tool.arguments === "string" ? tool.arguments : JSON.stringify(tool.arguments ?? ""), at }];
+	}
+	if (event.type === "tool_result" || event.type === "tool_complete") {
+		const id = event.id ?? event.toolCallId;
+		if (typeof id !== "string") return [];
+		return [{ type: "tool_complete", id, result: typeof event.result === "string" ? event.result : typeof event.text === "string" ? event.text : undefined, success: event.success !== false && event.isError !== true, at }];
+	}
+	if (event.type === "text_delta") return [{ type: "output_delta", at, estimatedTokens: textTokens(event.delta) }];
+	if (event.type === "stop") return [{ type: "run_end", at, status: event.reason === "aborted" ? "aborted" : event.reason === "error" ? "failed" : "completed" }];
+	if (event.type === "prompt_start") {
+		return [{ type: "run_start", key: `run:${String(event.promptId ?? at)}`, at, phase: "thinking" }];
+	}
+	if (event.type === "agent_start") {
+		const run = state.activeRun;
+		return [{ type: "run_start", key: `run:${run?.promptId ?? run?.startedAt ?? at}`, at, phase: "thinking" }];
+	}
+	if (event.type === "prompt_cancel") return state.activeRun?.promptId === event.promptId ? [{ type: "run_end", at, status: "aborted" }] : [];
+	if (event.type === "agent_end" || event.type === "agent_settled") return [{ type: "run_end", at, status: "completed" }];
+	if (event.type === "bridge_exit") return [{ type: "run_end", at, status: "failed" }];
+	if (event.type === "error") return [{ type: "run_end", at, status: "failed" }];
+	if (event.type === "message_update") {
+		const delta = record(event.assistantMessageEvent);
+		if (!delta) return [];
+		const type = String(delta.type ?? "");
+		const events: VoyageEvent[] = [];
+		if (type === "thinking_start" || type === "thinking_delta" || type === "thinking_end") events.push({ type: "phase", phase: "thinking", at });
+		if (type === "toolcall_start") events.push({ type: "tool_start", id: String(delta.id ?? `tool:${at}`), name: String(delta.toolName ?? "tool"), at });
+		if (type === "text_delta") events.push({ type: "output_delta", at, estimatedTokens: textTokens(delta.delta) });
+		const usage = usageEvent(at, event.usage ?? delta.usage);
+		if (usage) events.push(usage);
+		return events;
+	}
+	if (event.type === "message_end") {
+		const message = record(event.message);
+		if (!message) return [];
+		const events: VoyageEvent[] = [];
+		if (message.role === "toolResult") {
+			const id = message.toolCallId ?? message.id;
+			const content = Array.isArray(message.content) ? message.content : [];
+			const result = content.map((item) => { const part = record(item); return typeof part?.text === "string" ? part.text : ""; }).filter(Boolean).join(" ") || (typeof message.content === "string" ? message.content : undefined);
+			if (typeof id === "string") events.push({ type: "tool_complete", id, result, success: message.isError !== true, at });
+		} else if (message.role === "assistant") {
+			for (const block of (Array.isArray(message.content) ? message.content : [])) {
+				const item = record(block);
+				if (item?.type === "toolCall" || item?.type === "tool_call") events.push({ type: "tool_start", id: String(item.id ?? `tool:${at}`), name: String(item.name ?? "tool"), summary: typeof item.arguments === "string" ? item.arguments : JSON.stringify(item.arguments ?? ""), at });
+			}
+			const usage = usageEvent(at, message.usage);
+			if (usage) events.push(usage);
+			const stop = String(message.stopReason ?? "");
+			if (["stop", "length", "error", "aborted"].includes(stop)) events.push({ type: "run_end", at, status: stop === "aborted" ? "aborted" : stop === "error" ? "failed" : "completed" });
+		}
+		return events;
+	}
+	return [];
+}
+
+export function reduce(state: SessionState, event: RpcEvent, options: ReducerOptions = {}): SessionState {
+	const next = reduceChat(state, event, options);
+	const events = voyageEventsFor(state, event);
+	if (!events.length) return next;
+	let timeline = state.voyageTimeline;
+	for (const voyageEvent of events) {
+		if (!timeline && voyageEvent.type !== "run_start") timeline = processEvent(undefined, { type: "run_start", key: `run:${state.activeRun?.promptId ?? state.activeRun?.startedAt ?? voyageEvent.at}`, at: voyageEvent.at, phase: "thinking" });
+		timeline = processEvent(timeline, voyageEvent);
+	}
+	return { ...next, voyageTimeline: timeline };
 }

@@ -1,0 +1,1070 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Skiff 航行仪表盘原型 - 交互演示</title>
+	<style>
+		:root {
+			--accent: #0066ff;
+			--text: #1a1a1a;
+			--secondary: #666;
+			--muted: #999;
+			--bg: #ffffff;
+			--panel-2: #f8f9fa;
+			--border: #e0e0e0;
+			--color-warning: #f59e0b;
+			--color-success: #10b981;
+			--danger: #ef4444;
+			--radius-md: 6px;
+			--radius-full: 9999px;
+			--font-size-xs: 11px;
+			--font-size-sm: 13px;
+			--font-size-base: 14px;
+			--font-size-md: 15px;
+		}
+
+		body {
+			margin: 0;
+			padding: 20px;
+			font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+			background: #f0f0f0;
+			color: var(--text);
+		}
+
+		.container {
+			max-width: 320px;
+			margin: 0 auto;
+			background: var(--panel-2);
+			border: 1px solid var(--border);
+			border-radius: 8px;
+			padding: 16px 12px;
+		}
+
+		.header {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			margin-bottom: 12px;
+		}
+
+		.header strong {
+			font-size: var(--font-size-md);
+			font-weight: 600;
+		}
+
+		.status-pill {
+			display: inline-flex;
+			align-items: center;
+			gap: 7px;
+			padding: 4px 8px;
+			border: 1px solid var(--border);
+			border-radius: var(--radius-full);
+			color: var(--secondary);
+			font-size: var(--font-size-sm);
+			margin-bottom: 12px;
+		}
+
+		.status-dot {
+			width: 6px;
+			height: 6px;
+			border-radius: var(--radius-full);
+			background: var(--accent);
+		}
+
+		.status-dot.thinking {
+			background: var(--secondary);
+		}
+
+		.status-dot.tool {
+			background: var(--color-warning);
+		}
+
+		/* Gauge styles */
+		.gauge-container {
+			margin: 18px 0;
+		}
+
+		.gauge {
+			display: block;
+			width: 210px;
+			margin: 0 auto;
+		}
+
+		.gauge-track {
+			fill: none;
+			stroke: var(--border);
+			stroke-width: 7;
+			stroke-linecap: round;
+		}
+
+		.gauge-fill {
+			fill: none;
+			stroke: var(--accent);
+			stroke-width: 7;
+			stroke-linecap: round;
+			transition: stroke-dasharray 0.3s ease-out;
+		}
+
+		.gauge-fill.thinking {
+			stroke: var(--secondary);
+			stroke-dasharray: 70 999 !important;
+			animation: phase-sweep 1.6s linear infinite;
+		}
+
+		.gauge-fill.tool {
+			stroke: var(--color-warning);
+			stroke-dasharray: 70 999 !important;
+			animation: phase-sweep 1.6s linear infinite;
+		}
+
+		@keyframes phase-sweep {
+			to { stroke-dashoffset: -283; }
+		}
+
+		.gauge-tick {
+			stroke: var(--secondary);
+			stroke-width: 1.2;
+		}
+
+		.gauge-label {
+			text-anchor: middle;
+			fill: var(--secondary);
+			font-size: 9px;
+			letter-spacing: 1.5px;
+		}
+
+		.gauge-number {
+			text-anchor: middle;
+			fill: var(--text);
+			font-size: 24px;
+			font-weight: 600;
+		}
+
+		.gauge-unit {
+			text-anchor: middle;
+			fill: var(--secondary);
+			font-size: 9px;
+		}
+
+		.gauge-limit {
+			text-anchor: middle;
+			fill: var(--secondary);
+			font-size: 8px;
+		}
+
+		.gauge-needle {
+			transform-origin: 110px 115px;
+			transition: transform 0.3s ease-out;
+		}
+
+		.gauge-needle line {
+			stroke: var(--text);
+			stroke-width: 2.5;
+			stroke-linecap: round;
+		}
+
+		.gauge-hub {
+			fill: var(--panel-2);
+			stroke: var(--text);
+			stroke-width: 1.5;
+		}
+
+		/* Phase bar */
+		.phase-section {
+			margin: 12px 0;
+		}
+
+		.phase-bar {
+			display: flex;
+			height: 6px;
+			border-radius: var(--radius-md);
+			background: var(--border);
+			overflow: hidden;
+			margin-bottom: 7px;
+		}
+
+		.phase-segment {
+			flex: none;
+			transition: width 0.12s linear;
+		}
+
+		.phase-segment.response {
+			background: var(--accent);
+		}
+
+		.phase-segment.thinking {
+			background: var(--secondary);
+		}
+
+		.phase-segment.tool {
+			background: var(--color-warning);
+		}
+
+		.phase-legend {
+			display: grid;
+			grid-template-columns: repeat(3, 1fr);
+			gap: 6px;
+			font-size: var(--font-size-sm);
+		}
+
+		.phase-legend-item {
+			display: flex;
+			flex-direction: column;
+		}
+
+		.phase-legend-item.current .phase-legend-label {
+			color: var(--text);
+			font-weight: 600;
+		}
+
+		.phase-legend-label {
+			display: flex;
+			align-items: center;
+			gap: 5px;
+			color: var(--secondary);
+		}
+
+		.phase-legend-dot {
+			width: 6px;
+			height: 6px;
+			border-radius: var(--radius-full);
+		}
+
+		.phase-legend-value {
+			margin-top: 4px;
+		}
+
+		/* Tool waterfall */
+		.tools-section {
+			margin: 14px 0;
+			padding-top: 10px;
+			border-top: 1px solid var(--border);
+			font-size: var(--font-size-sm);
+		}
+
+		.tools-title {
+			display: flex;
+			align-items: baseline;
+			justify-content: space-between;
+			margin-bottom: 8px;
+		}
+
+		.tools-title strong {
+			font-weight: 600;
+		}
+
+		.tools-title span {
+			color: var(--secondary);
+			font-size: var(--font-size-xs);
+		}
+
+		.tool-list {
+			display: flex;
+			flex-direction: column;
+			gap: 6px;
+			max-height: 200px;
+			overflow-y: auto;
+		}
+
+		.tool-card {
+			padding: 7px 8px;
+			border: 1px solid var(--border);
+			border-left: 2px solid var(--accent);
+			border-radius: var(--radius-md);
+			background: var(--bg);
+			animation: tool-enter 0.25s ease-out both;
+		}
+
+		.tool-card.running {
+			border-left-color: var(--accent);
+		}
+
+		.tool-card.long-running {
+			border-left-color: var(--color-warning);
+			background: color-mix(in srgb, var(--accent) 4%, var(--bg));
+		}
+
+		.tool-card.completed {
+			border-left-color: var(--color-success);
+			opacity: 0.8;
+		}
+
+		.tool-card.exiting {
+			animation: tool-exit 0.32s ease-out both;
+		}
+
+		@keyframes tool-enter {
+			from {
+				opacity: 0;
+				transform: translateY(-16px);
+			}
+			to {
+				opacity: 1;
+				transform: translateY(0);
+			}
+		}
+
+		@keyframes tool-exit {
+			to {
+				opacity: 0;
+				transform: translateY(8px) scale(0.95);
+				margin-bottom: -40px;
+			}
+		}
+
+		.tool-header {
+			display: flex;
+			align-items: baseline;
+			gap: 6px;
+		}
+
+		.tool-icon {
+			flex: none;
+			color: var(--secondary);
+			font-size: 11px;
+		}
+
+		.tool-name {
+			font-weight: 600;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		}
+
+		.tool-status {
+			margin-left: auto;
+			flex: none;
+			color: var(--secondary);
+			font-size: var(--font-size-xs);
+		}
+
+		.tool-batch {
+			color: var(--muted);
+			font-size: var(--font-size-xs);
+			font-style: normal;
+		}
+
+		.tool-desc {
+			margin: 4px 0 0;
+			color: var(--secondary);
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		}
+
+		.tool-footer {
+			display: flex;
+			align-items: baseline;
+			justify-content: space-between;
+			gap: 5px;
+			margin-top: 4px;
+			color: var(--secondary);
+			font-size: var(--font-size-xs);
+		}
+
+		.tool-result {
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		}
+
+		.tool-time {
+			margin-left: auto;
+			flex: none;
+			color: var(--text);
+		}
+
+		/* Progress section */
+		.progress-section {
+			margin: 14px 0;
+			padding-top: 10px;
+			border-top: 1px solid var(--border);
+		}
+
+		.progress-title {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			font-size: var(--font-size-sm);
+			margin-bottom: 12px;
+		}
+
+		.progress-title strong {
+			font-weight: 600;
+		}
+
+		.progress-percent {
+			color: var(--accent);
+		}
+
+		.progress-track-container {
+			display: flex;
+			align-items: center;
+			gap: 6px;
+			margin-bottom: 10px;
+		}
+
+		.progress-icon {
+			flex: none;
+			color: var(--secondary);
+		}
+
+		.progress-track {
+			position: relative;
+			flex: 1;
+			height: 5px;
+			border-radius: var(--radius-md);
+			background: var(--border);
+		}
+
+		.progress-fill {
+			position: absolute;
+			inset: 0;
+			border-radius: inherit;
+			background: var(--accent);
+			transform-origin: left center;
+			transition: transform 0.3s ease-out;
+		}
+
+		.progress-boat {
+			position: absolute;
+			top: -19px;
+			width: 25px;
+			height: 15px;
+			transform: translateX(-50%);
+			transition: left 0.3s ease-out;
+		}
+
+		.progress-caption {
+			font-size: var(--font-size-sm);
+		}
+
+		.progress-caption strong {
+			font-weight: 600;
+		}
+
+		.progress-caption span {
+			color: var(--secondary);
+		}
+
+		/* Controls */
+		.controls {
+			position: fixed;
+			bottom: 20px;
+			right: 20px;
+			display: flex;
+			flex-direction: column;
+			gap: 10px;
+		}
+
+		.control-btn {
+			padding: 12px 20px;
+			border: 1px solid var(--border);
+			border-radius: var(--radius-md);
+			background: var(--bg);
+			color: var(--text);
+			font-size: var(--font-size-sm);
+			font-weight: 600;
+			cursor: pointer;
+			box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+		}
+
+		.control-btn:hover {
+			background: var(--panel-2);
+		}
+
+		.control-btn:active {
+			transform: translateY(1px);
+		}
+
+		.control-btn.primary {
+			background: var(--accent);
+			color: white;
+			border-color: var(--accent);
+		}
+
+		.control-btn.primary:hover {
+			background: color-mix(in srgb, var(--accent) 90%, black);
+		}
+
+		.timeline-display {
+			position: fixed;
+			top: 20px;
+			right: 20px;
+			padding: 12px 16px;
+			border: 1px solid var(--border);
+			border-radius: var(--radius-md);
+			background: var(--bg);
+			font-size: var(--font-size-sm);
+			box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+			min-width: 200px;
+		}
+
+		.timeline-display strong {
+			display: block;
+			margin-bottom: 8px;
+			font-weight: 600;
+		}
+
+		.timeline-display div {
+			display: flex;
+			justify-content: space-between;
+			margin: 4px 0;
+			color: var(--secondary);
+		}
+
+		.timeline-display span {
+			color: var(--text);
+		}
+	</style>
+</head>
+<body>
+	<div class="timeline-display">
+		<strong>模拟时间轴</strong>
+		<div>当前阶段: <span id="current-phase">-</span></div>
+		<div>总用时: <span id="total-time">0.0s</span></div>
+	</div>
+
+	<div class="container">
+		<div class="header">
+			<strong>Skiff 航行台</strong>
+		</div>
+
+		<div class="status-pill">
+			<span class="status-dot" id="status-dot"></span>
+			<span id="status-text">航行中</span>
+		</div>
+
+		<div class="gauge-container">
+			<svg class="gauge" viewBox="0 0 220 142" id="gauge-svg">
+				<path d="M20 115 A90 90 0 0 1 200 115" class="gauge-track" />
+				<path d="M20 115 A90 90 0 0 1 200 115" class="gauge-fill" id="gauge-fill" stroke-dasharray="0 283" />
+
+				<!-- Tick marks -->
+				<line x1="36" y1="110" x2="36" y2="99" class="gauge-tick"/>
+				<line x1="51" y1="82" x2="51" y2="76" class="gauge-tick"/>
+				<line x1="64" y1="61" x2="64" y2="51" class="gauge-tick"/>
+				<line x1="81" y1="42" x2="81" y2="37" class="gauge-tick"/>
+				<line x1="101" y1="29" x2="101" y2="19" class="gauge-tick"/>
+				<line x1="119" y1="29" x2="119" y2="19" class="gauge-tick"/>
+				<line x1="139" y1="42" x2="139" y2="37" class="gauge-tick"/>
+				<line x1="156" y1="61" x2="156" y2="51" class="gauge-tick"/>
+				<line x1="169" y1="82" x2="169" y2="76" class="gauge-tick"/>
+				<line x1="184" y1="110" x2="184" y2="99" class="gauge-tick"/>
+
+				<text x="110" y="14" class="gauge-label" id="gauge-label">船速 · 输出</text>
+				<text x="110" y="79" class="gauge-number" id="gauge-number">0.0</text>
+				<text x="110" y="94" class="gauge-unit" id="gauge-unit">tok/s · 估算</text>
+				<text x="32" y="131" class="gauge-limit">0</text>
+				<text x="188" y="131" class="gauge-limit">300+</text>
+
+				<g class="gauge-needle" id="gauge-needle">
+					<line x1="110" y1="124" x2="110" y2="31" />
+				</g>
+
+				<circle cx="110" cy="115" r="6" class="gauge-hub" />
+				<circle cx="110" cy="115" r="2.5" fill="var(--accent)" />
+			</svg>
+		</div>
+
+		<div class="phase-section">
+			<div class="phase-bar" id="phase-bar"></div>
+			<div class="phase-legend">
+				<div class="phase-legend-item" id="phase-response">
+					<div class="phase-legend-label">
+						<span class="phase-legend-dot" style="background: var(--accent);"></span>
+						<span>航行</span>
+					</div>
+					<div class="phase-legend-value" id="response-time">0.0s</div>
+				</div>
+				<div class="phase-legend-item" id="phase-thinking">
+					<div class="phase-legend-label">
+						<span class="phase-legend-dot" style="background: var(--secondary);"></span>
+						<span>思考</span>
+					</div>
+					<div class="phase-legend-value" id="thinking-time">0.0s</div>
+				</div>
+				<div class="phase-legend-item" id="phase-tool">
+					<div class="phase-legend-label">
+						<span class="phase-legend-dot" style="background: var(--color-warning);"></span>
+						<span>工具</span>
+					</div>
+					<div class="phase-legend-value" id="tool-time">0.0s</div>
+				</div>
+			</div>
+		</div>
+
+		<div class="tools-section" id="tools-section" style="display: none;">
+			<div class="tools-title">
+				<strong>工具航迹</strong>
+				<span id="tools-summary">0 项执行中 · 0 批</span>
+			</div>
+			<div class="tool-list" id="tool-list"></div>
+		</div>
+
+		<div class="progress-section">
+			<div class="progress-title">
+				<strong>航程 · 当前上下文</strong>
+				<span class="progress-percent" id="progress-percent">0.0%</span>
+			</div>
+			<div class="progress-track-container">
+				<span class="progress-icon">⚓</span>
+				<div class="progress-track">
+					<div class="progress-fill" id="progress-fill" style="transform: scaleX(0);"></div>
+					<svg class="progress-boat" id="progress-boat" viewBox="-34 -13 65 29" style="left: 0%;">
+						<path d="M-30 2 L6 2 L22 -6 Q25.5 -8 24.5 -3.5 Q18 12 -14 12 Q-30 12 -30 2 Z" fill="currentColor" />
+						<path d="M-8 2 L-4 -8 L8 -8 L12 2 Z" fill="var(--accent)" />
+					</svg>
+				</div>
+				<span class="progress-icon">🚩</span>
+			</div>
+			<div class="progress-caption">
+				<strong id="context-used">0</strong>
+				<span> / <span id="context-limit">200000</span> tok</span>
+			</div>
+		</div>
+	</div>
+
+	<div class="controls">
+		<button class="control-btn primary" id="start-btn">开始模拟</button>
+		<button class="control-btn" id="reset-btn">重置</button>
+	</div>
+
+	<script>
+		// Simulation script configuration
+		const SIMULATION_SCRIPT = [
+			{ time: 0, action: "start", phase: "thinking" },
+			{ time: 3000, action: "phase", phase: "tool" },
+			{ time: 3100, action: "tool_start", tool: { id: "tool-1", name: "Read", desc: "src/components/VoyageRail.tsx", batch: 1 } },
+			{ time: 3200, action: "tool_start", tool: { id: "tool-2", name: "Grep", desc: "pattern: useVoyageMetrics", batch: 1 } },
+			{ time: 5500, action: "tool_complete", id: "tool-1", result: "172 行" },
+			{ time: 6200, action: "tool_complete", id: "tool-2", result: "3 个匹配" },
+			{ time: 6300, action: "phase", phase: "response" },
+			{ time: 6300, action: "output_start", speed: 45 },
+			{ time: 7000, action: "output_speed", speed: 120 },
+			{ time: 8500, action: "output_speed", speed: 180 },
+			{ time: 10000, action: "phase", phase: "tool" },
+			{ time: 10100, action: "tool_start", tool: { id: "tool-3", name: "Edit", desc: "file_path: src/voyage.css", batch: 2 } },
+			{ time: 10200, action: "tool_start", tool: { id: "tool-4", name: "Write", desc: "file_path: tests/prototype.html", batch: 2 } },
+			{ time: 10300, action: "tool_start", tool: { id: "tool-5", name: "Bash", desc: "command: npm test", batch: 2 } },
+			{ time: 12000, action: "tool_complete", id: "tool-3", result: "已修改" },
+			{ time: 13500, action: "tool_complete", id: "tool-4", result: "已写入" },
+			{ time: 17800, action: "tool_complete", id: "tool-5", result: "测试通过" },
+			{ time: 17900, action: "phase", phase: "response" },
+			{ time: 17900, action: "output_start", speed: 60 },
+			{ time: 19000, action: "output_speed", speed: 150 },
+			{ time: 21000, action: "output_speed", speed: 200 },
+			{ time: 23000, action: "output_speed", speed: 85 },
+			{ time: 24000, action: "complete" }
+		];
+
+		// State
+		let simulationStartTime = 0;
+		let animationFrame = null;
+		let isRunning = false;
+		let currentTools = new Map();
+		let completedTools = [];
+		let phaseSegments = [];
+		let currentPhase = "response";
+		let totalThinking = 0;
+		let totalTool = 0;
+		let totalResponse = 0;
+		let contextTokens = 0;
+		const contextLimit = 200000;
+
+		// DOM elements
+		const statusDot = document.getElementById("status-dot");
+		const statusText = document.getElementById("status-text");
+		const gaugeFill = document.getElementById("gauge-fill");
+		const gaugeNumber = document.getElementById("gauge-number");
+		const gaugeLabel = document.getElementById("gauge-label");
+		const gaugeUnit = document.getElementById("gauge-unit");
+		const gaugeNeedle = document.getElementById("gauge-needle");
+		const phaseBar = document.getElementById("phase-bar");
+		const responseTime = document.getElementById("response-time");
+		const thinkingTime = document.getElementById("thinking-time");
+		const toolTime = document.getElementById("tool-time");
+		const phaseResponseItem = document.getElementById("phase-response");
+		const phaseThinkingItem = document.getElementById("phase-thinking");
+		const phaseToolItem = document.getElementById("phase-tool");
+		const toolsSection = document.getElementById("tools-section");
+		const toolsSummary = document.getElementById("tools-summary");
+		const toolList = document.getElementById("tool-list");
+		const progressPercent = document.getElementById("progress-percent");
+		const progressFill = document.getElementById("progress-fill");
+		const progressBoat = document.getElementById("progress-boat");
+		const contextUsed = document.getElementById("context-used");
+		const contextLimitSpan = document.getElementById("context-limit");
+		const currentPhaseDisplay = document.getElementById("current-phase");
+		const totalTimeDisplay = document.getElementById("total-time");
+		const startBtn = document.getElementById("start-btn");
+		const resetBtn = document.getElementById("reset-btn");
+
+		// Utility functions
+		function formatDuration(ms) {
+			return (ms / 1000).toFixed(1) + "s";
+		}
+
+		function formatTokens(tokens) {
+			return tokens.toLocaleString();
+		}
+
+		function gaugePosition(speed) {
+			// Map 0-300+ tok/s to 0-1
+			return Math.min(1, speed / 300);
+		}
+
+		function updateGauge(speed, phase) {
+			const fill = gaugeFill;
+
+			if (phase === "thinking" || phase === "tool") {
+				// Show phase timer
+				fill.classList.add(phase);
+				gaugeLabel.textContent = phase === "thinking" ? "思考中" : "工具执行中";
+				const elapsed = getCurrentElapsed();
+				const phaseStart = phaseSegments[phaseSegments.length - 1]?.startTime || 0;
+				const phaseDuration = elapsed - phaseStart;
+				gaugeNumber.textContent = formatDuration(phaseDuration);
+				gaugeUnit.textContent = "本阶段用时";
+				gaugeNeedle.style.display = "none";
+			} else {
+				// Show speedometer
+				fill.classList.remove("thinking", "tool");
+				gaugeLabel.textContent = "船速 · 输出";
+				gaugeNumber.textContent = speed.toFixed(1);
+				gaugeUnit.textContent = "tok/s · 估算";
+				gaugeNeedle.style.display = "block";
+
+				const position = gaugePosition(speed);
+				const angle = -90 + position * 180;
+				const arcLength = 283 * position;
+
+				fill.setAttribute("stroke-dasharray", `${arcLength.toFixed(1)} 283`);
+				gaugeNeedle.style.transform = `rotate(${angle}deg)`;
+			}
+		}
+
+		function updatePhaseBar() {
+			const elapsed = getCurrentElapsed();
+			phaseBar.innerHTML = "";
+
+			for (const segment of phaseSegments) {
+				const endTime = segment.endTime || elapsed;
+				const duration = endTime - segment.startTime;
+				const width = (duration / elapsed) * 100;
+
+				if (width > 0) {
+					const span = document.createElement("span");
+					span.className = `phase-segment ${segment.phase}`;
+					span.style.width = `${width}%`;
+					phaseBar.appendChild(span);
+				}
+			}
+		}
+
+		function updatePhaseTimes() {
+			const elapsed = getCurrentElapsed();
+
+			// Calculate totals
+			let thinking = 0;
+			let tool = 0;
+			let response = 0;
+
+			for (const segment of phaseSegments) {
+				const endTime = segment.endTime || elapsed;
+				const duration = endTime - segment.startTime;
+
+				if (segment.phase === "thinking") thinking += duration;
+				else if (segment.phase === "tool") tool += duration;
+				else if (segment.phase === "response") response += duration;
+			}
+
+			totalThinking = thinking;
+			totalTool = tool;
+			totalResponse = response;
+
+			responseTime.textContent = formatDuration(response);
+			thinkingTime.textContent = formatDuration(thinking);
+			toolTime.textContent = formatDuration(tool);
+
+			// Update current phase highlight
+			phaseResponseItem.classList.toggle("current", currentPhase === "response");
+			phaseThinkingItem.classList.toggle("current", currentPhase === "thinking");
+			phaseToolItem.classList.toggle("current", currentPhase === "tool");
+		}
+
+		function setPhase(phase) {
+			const elapsed = getCurrentElapsed();
+
+			// End previous segment
+			if (phaseSegments.length > 0) {
+				const last = phaseSegments[phaseSegments.length - 1];
+				if (!last.endTime) {
+					last.endTime = elapsed;
+				}
+			}
+
+			// Start new segment
+			phaseSegments.push({
+				phase: phase,
+				startTime: elapsed,
+				endTime: null
+			});
+
+			currentPhase = phase;
+
+			// Update status
+			if (phase === "thinking") {
+				statusDot.className = "status-dot thinking";
+				statusText.textContent = "思考中";
+			} else if (phase === "tool") {
+				statusDot.className = "status-dot tool";
+				statusText.textContent = "工具执行中";
+			} else {
+				statusDot.className = "status-dot";
+				statusText.textContent = "航行中";
+			}
+
+			currentPhaseDisplay.textContent = {
+				thinking: "思考",
+				tool: "工具",
+				response: "输出"
+			}[phase];
+		}
+
+		function createToolCard(tool) {
+			const card = document.createElement("div");
+			card.className = "tool-card running";
+			card.id = tool.id;
+
+			const elapsed = getCurrentElapsed();
+			tool.startTime = elapsed;
+			tool.element = card;
+
+			card.innerHTML = `
+				<div class="tool-header">
+					<span class="tool-icon">📄</span>
+					<span class="tool-name">${tool.name}</span>
+					${tool.batch ? `<em class="tool-batch">本批 ${tool.batchPos || ""}</em>` : ""}
+					<span class="tool-status">执行中</span>
+				</div>
+				<div class="tool-desc">${tool.desc}</div>
+				<div class="tool-footer">
+					<span class="tool-result"></span>
+					<span class="tool-time"></span>
+				</div>
+			`;
+
+			return card;
+		}
+
+		function startTool(tool) {
+			const card = createToolCard(tool);
+			toolList.insertBefore(card, toolList.firstChild);
+			currentTools.set(tool.id, tool);
+			updateToolsSummary();
+
+			if (toolsSection.style.display === "none") {
+				toolsSection.style.display = "block";
+			}
+		}
+
+		function completeTool(id, result) {
+			const tool = currentTools.get(id);
+			if (!tool) return;
+
+			const elapsed = getCurrentElapsed();
+			tool.endTime = elapsed;
+			tool.result = result;
+
+			const card = tool.element;
+			const duration = elapsed - tool.startTime;
+
+			// Update card
+			card.querySelector(".tool-status").textContent = "已完成";
+			card.querySelector(".tool-result").textContent = result;
+
+			if (duration >= 5000) {
+				card.classList.add("long-running");
+				card.querySelector(".tool-time").textContent = formatDuration(duration);
+			}
+
+			card.classList.add("completed");
+
+			// Move to completed and remove from active
+			currentTools.delete(id);
+			completedTools.push(tool);
+			updateToolsSummary();
+
+			// Exit animation
+			setTimeout(() => {
+				card.classList.add("exiting");
+				setTimeout(() => {
+					card.remove();
+				}, 320);
+			}, 800);
+		}
+
+		function updateToolTimes() {
+			const elapsed = getCurrentElapsed();
+
+			for (const [id, tool] of currentTools) {
+				const duration = elapsed - tool.startTime;
+				if (duration >= 5000) {
+					const timeSpan = tool.element.querySelector(".tool-time");
+					timeSpan.textContent = formatDuration(duration);
+					tool.element.classList.add("long-running");
+				}
+			}
+		}
+
+		function updateToolsSummary() {
+			const activeBatches = new Set();
+			for (const [, tool] of currentTools) {
+				if (tool.batch) activeBatches.add(tool.batch);
+			}
+
+			toolsSummary.textContent = `${currentTools.size} 项执行中 · ${activeBatches.size} 批`;
+		}
+
+		function updateProgress() {
+			// Simulate context growth
+			const elapsed = getCurrentElapsed();
+			contextTokens = Math.min(contextLimit, Math.floor(5000 + elapsed * 2.5));
+
+			const ratio = contextTokens / contextLimit;
+			const percent = (ratio * 100).toFixed(1);
+
+			progressPercent.textContent = `${percent}%`;
+			progressFill.style.transform = `scaleX(${ratio})`;
+			progressBoat.style.left = `${ratio * 100}%`;
+			contextUsed.textContent = formatTokens(contextTokens);
+		}
+
+		function getCurrentElapsed() {
+			if (!simulationStartTime) return 0;
+			return Date.now() - simulationStartTime;
+		}
+
+		function processEvent(event) {
+			switch (event.action) {
+				case "start":
+					setPhase(event.phase);
+					break;
+				case "phase":
+					setPhase(event.phase);
+					updateGauge(0, event.phase);
+					break;
+				case "tool_start":
+					startTool(event.tool);
+					break;
+				case "tool_complete":
+					completeTool(event.id, event.result);
+					break;
+				case "output_start":
+				case "output_speed":
+					updateGauge(event.speed, currentPhase);
+					break;
+				case "complete":
+					isRunning = false;
+					statusText.textContent = "已完成";
+					statusDot.className = "status-dot";
+					break;
+			}
+		}
+
+		let lastEventIndex = 0;
+
+		function animate() {
+			if (!isRunning) return;
+
+			const elapsed = getCurrentElapsed();
+
+			// Process events
+			while (lastEventIndex < SIMULATION_SCRIPT.length) {
+				const event = SIMULATION_SCRIPT[lastEventIndex];
+				if (event.time <= elapsed) {
+					processEvent(event);
+					lastEventIndex++;
+				} else {
+					break;
+				}
+			}
+
+			// Update displays
+			updatePhaseBar();
+			updatePhaseTimes();
+			updateToolTimes();
+			updateProgress();
+			totalTimeDisplay.textContent = formatDuration(elapsed);
+
+			// Update gauge for phase timers
+			if (currentPhase === "thinking" || currentPhase === "tool") {
+				updateGauge(0, currentPhase);
+			}
+
+			animationFrame = requestAnimationFrame(animate);
+		}
+
+		function startSimulation() {
+			if (isRunning) return;
+
+			isRunning = true;
+			simulationStartTime = Date.now();
+			lastEventIndex = 0;
+
+			startBtn.textContent = "运行中...";
+			startBtn.disabled = true;
+
+			animate();
+		}
+
+		function resetSimulation() {
+			isRunning = false;
+			if (animationFrame) {
+				cancelAnimationFrame(animationFrame);
+				animationFrame = null;
+			}
+
+			simulationStartTime = 0;
+			lastEventIndex = 0;
+			currentTools.clear();
+			completedTools = [];
+			phaseSegments = [];
+			currentPhase = "response";
+			totalThinking = 0;
+			totalTool = 0;
+			totalResponse = 0;
+			contextTokens = 0;
+
+			// Reset UI
+			toolList.innerHTML = "";
+			toolsSection.style.display = "none";
+			statusDot.className = "status-dot";
+			statusText.textContent = "航行中";
+			updateGauge(0, "response");
+			phaseBar.innerHTML = "";
+			responseTime.textContent = "0.0s";
+			thinkingTime.textContent = "0.0s";
+			toolTime.textContent = "0.0s";
+			progressPercent.textContent = "0.0%";
+			progressFill.style.transform = "scaleX(0)";
+			progressBoat.style.left = "0%";
+			contextUsed.textContent = "0";
+			currentPhaseDisplay.textContent = "-";
+			totalTimeDisplay.textContent = "0.0s";
+			phaseResponseItem.classList.remove("current");
+			phaseThinkingItem.classList.remove("current");
+			phaseToolItem.classList.remove("current");
+
+			startBtn.textContent = "开始模拟";
+			startBtn.disabled = false;
+		}
+
+		// Event listeners
+		startBtn.addEventListener("click", startSimulation);
+		resetBtn.addEventListener("click", resetSimulation);
+	</script>
+</body>
+</html>

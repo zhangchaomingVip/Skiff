@@ -40,12 +40,13 @@ const send = (text, images) => latest.actions.prompt(text, images);
 const intervals = new Set();
 const originalInterval = window.setInterval;
 const originalClear = window.clearInterval;
-window.setInterval = (...args) => { const id = originalInterval(...args); intervals.add(id); return id; };
+// Track the unified voyage clock separately from Vite's WebSocket heartbeat.
+window.setInterval = (...args) => { const id = originalInterval(...args); if (args[1] === 100) intervals.add(id); return id; };
 window.clearInterval = (id) => { intervals.delete(id); originalClear(id); };
 
 function Harness() {
 	latest = usePiSession(target);
-	return React.createElement(VoyageWorkspace, { state: latest.state, connected: latest.connected, pending: latest.pending, actions: latest.actions, onSend: send, onReconnect: latest.reconnect, search, onConfigureSearch: noop });
+	return React.createElement(VoyageWorkspace, { key: `${latest.owner.id ?? "loading"}:${latest.owner.cwd ?? ""}`, state: latest.state, connected: latest.connected, pending: latest.pending, actions: latest.actions, onSend: send, onReconnect: latest.reconnect, search, onConfigureSearch: noop });
 }
 function render() { root.render(React.createElement(StrictMode, null, React.createElement(Harness))); }
 function assert(value, message) { if (!value) throw new Error(message); }
@@ -264,10 +265,13 @@ try {
 	assert(latest.state.messages.at(-1).durationMs === 6100, "Empty run overwrote history");
 	record("新 run 尚无消息时，上一轮徽章和最终耗时不变");
 	begin();
+	emit({ type: "message_end", message: { role: "assistant", content: [{ type: "toolCall", id: "abort-tool", name: "read", arguments: { path: "README.md" } }] } });
+	await until(() => document.querySelector('.voyage-tool-active [data-tool-id="abort-tool"]'), "Abort tool did not enter the activity band");
 	await advance(2400);
-	await latest.actions.abort();
+	document.querySelector('[aria-label="停止生成"]').click();
 	await until(() => intervals.size === 0, "Abort did not stop the clock");
 	assert(rail() === "2s" && header()?.includes("耗时2s"), "Abort duration missing");
+	assert(document.querySelector('.voyage-tool-log .tool-interrupted[data-tool-id="abort-tool"]'), "Explicit abort without stopReason lost the tool's terminal state");
 	record("中止后计时停止并固定读数");
 	begin();
 	await advance(1200);

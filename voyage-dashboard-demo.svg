@@ -1,0 +1,218 @@
+<svg width="240" height="580" viewBox="0 0 240 580" xmlns="http://www.w3.org/2000/svg">
+  <style>
+    :root {
+      --accent: #3b82f6;
+      --text: #1f2937;
+      --secondary: #6b7280;
+      --muted: #9ca3af;
+      --border: #e5e7eb;
+      --bg: #ffffff;
+      --panel: #f9fafb;
+      --warning: #f59e0b;
+      --success: #10b981;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --accent: #60a5fa;
+        --text: #f9fafb;
+        --secondary: #9ca3af;
+        --muted: #6b7280;
+        --border: #374151;
+        --bg: #111827;
+        --panel: #1f2937;
+        --warning: #fbbf24;
+        --success: #34d399;
+      }
+    }
+
+    .gauge-needle {
+      transform-origin: 120px 120px;
+      animation: needleMove 3s ease-in-out infinite alternate;
+    }
+
+    .status-pulse {
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    .progress-arc {
+      stroke-dasharray: 283;
+      stroke-dashoffset: 141.5;
+      animation: progressFill 3s ease-out forwards;
+    }
+
+    .boat-bob {
+      animation: boatBob 1.8s ease-in-out infinite;
+    }
+
+    .wave-move {
+      animation: waveSlide 2.5s linear infinite;
+    }
+
+    .wake-dash {
+      animation: wakeDash 1.2s linear infinite;
+    }
+
+    @keyframes needleMove {
+      0% { transform: rotate(-75deg); }
+      100% { transform: rotate(45deg); }
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    @keyframes progressFill {
+      0% { stroke-dashoffset: 283; }
+      100% { stroke-dashoffset: 70; }
+    }
+
+    @keyframes boatBob {
+      0%, 100% { transform: translate(0, 0); }
+      50% { transform: translate(0, -3px); }
+    }
+
+    @keyframes waveSlide {
+      to { transform: translateX(-24px); }
+    }
+
+    @keyframes wakeDash {
+      to { stroke-dashoffset: -27; }
+    }
+  </style>
+
+  <defs>
+    <linearGradient id="speedGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:var(--accent);stop-opacity:0.3" />
+      <stop offset="100%" style="stop-color:var(--accent);stop-opacity:1" />
+    </linearGradient>
+
+    <filter id="gaugeShadow">
+      <feDropShadow dx="0" dy="1" stdDeviation="2" flood-opacity="0.15"/>
+    </filter>
+  </defs>
+
+  <!-- 背景 -->
+  <rect width="240" height="160" fill="var(--bg)"/>
+
+  <!-- 外圈装饰 -->
+  <circle cx="120" cy="120" r="95" fill="none" stroke="var(--border)" stroke-width="0.5" opacity="0.3"/>
+
+  <!-- 主刻度圆弧背景 -->
+  <path d="M 30 120 A 90 90 0 0 1 210 120"
+        fill="none"
+        stroke="var(--border)"
+        stroke-width="8"
+        stroke-linecap="round"
+        opacity="0.2"/>
+
+  <!-- 进度圆弧（动画） -->
+  <path d="M 30 120 A 90 90 0 0 1 210 120"
+        class="progress-arc"
+        fill="none"
+        stroke="url(#speedGradient)"
+        stroke-width="8"
+        stroke-linecap="round"/>
+
+  <!-- 主刻度标记 -->
+  <g stroke="var(--secondary)" stroke-width="1.5" opacity="0.6">
+    <!-- 0 -->
+    <line x1="35" y1="115" x2="35" y2="108"/>
+    <text x="30" y="105" font-size="9" fill="var(--secondary)" text-anchor="end" font-family="system-ui, -apple-system, sans-serif">0</text>
+
+    <!-- 100 -->
+    <line x1="85" y1="45" x2="88" y2="52"/>
+    <text x="85" y="35" font-size="9" fill="var(--secondary)" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif">100</text>
+
+    <!-- 150 -->
+    <line x1="120" y1="30" x2="120" y2="37"/>
+
+    <!-- 200 -->
+    <line x1="155" y1="45" x2="152" y2="52"/>
+    <text x="155" y="35" font-size="9" fill="var(--secondary)" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif">200</text>
+
+    <!-- 300+ -->
+    <line x1="205" y1="115" x2="205" y2="108"/>
+    <text x="210" y="105" font-size="9" fill="var(--secondary)" text-anchor="start" font-family="system-ui, -apple-system, sans-serif">300+</text>
+  </g>
+
+  <!-- 次要刻度 -->
+  <g stroke="var(--border)" stroke-width="1" opacity="0.4">
+    <line x1="43" y1="92" x2="46" y2="96"/>
+    <line x1="52" y1="73" x2="57" y2="78"/>
+    <line x1="66" y1="58" x2="70" y2="63"/>
+    <line x1="103" y1="37" x2="105" y2="43"/>
+    <line x1="137" y1="37" x2="135" y2="43"/>
+    <line x1="174" y1="58" x2="170" y2="63"/>
+    <line x1="188" y1="73" x2="183" y2="78"/>
+    <line x1="197" y1="92" x2="194" y2="96"/>
+  </g>
+
+  <!-- 中心标签 -->
+  <text x="120" y="75"
+        font-size="10"
+        fill="var(--secondary)"
+        text-anchor="middle"
+        letter-spacing="1.2"
+        opacity="0.8"
+        font-family="system-ui, -apple-system, sans-serif">船速 · SPEED</text>
+
+  <!-- 速度数值 -->
+  <text x="120" y="105"
+        font-size="32"
+        font-weight="600"
+        fill="var(--text)"
+        text-anchor="middle"
+        font-family="system-ui, -apple-system, sans-serif">127.3</text>
+
+  <!-- 单位 -->
+  <text x="120" y="120"
+        font-size="10"
+        fill="var(--secondary)"
+        text-anchor="middle"
+        font-family="system-ui, -apple-system, sans-serif">tok/s · 估算</text>
+
+  <!-- 指针组（动画旋转） -->
+  <g class="gauge-needle">
+    <!-- 指针阴影 -->
+    <line x1="120" y1="120" x2="120" y2="42"
+          stroke="var(--bg)"
+          stroke-width="4"
+          stroke-linecap="round"
+          opacity="0.3"
+          transform="translate(1, 1)"/>
+
+    <!-- 主指针 -->
+    <line x1="120" y1="120" x2="120" y2="42"
+          stroke="var(--accent)"
+          stroke-width="3"
+          stroke-linecap="round"/>
+
+    <!-- 指针三角 -->
+    <path d="M 120 42 L 116 52 L 124 52 Z" fill="var(--accent)"/>
+  </g>
+
+  <!-- 中心轴 -->
+  <circle cx="120" cy="120" r="8" fill="var(--bg)" stroke="var(--border)" stroke-width="2"/>
+  <circle cx="120" cy="120" r="4" fill="var(--accent)"/>
+
+  <!-- 状态指示灯 -->
+  <g>
+    <circle cx="120" cy="145" r="5" fill="var(--accent)" opacity="0.2"/>
+    <circle cx="120" cy="145" r="3" fill="var(--accent)" class="status-pulse"/>
+    <text x="120" y="158"
+          font-size="9"
+          fill="var(--secondary)"
+          text-anchor="middle"
+          font-family="system-ui, -apple-system, sans-serif">航行中 · 2.3s</text>
+  </g>
+
+  <!-- 装饰性罗盘刻线 -->
+  <g opacity="0.15" stroke="var(--secondary)" stroke-width="0.5">
+    <line x1="120" y1="25" x2="120" y2="30"/>
+    <line x1="120" y1="210" x2="120" y2="215"/>
+    <line x1="25" y1="120" x2="30" y2="120"/>
+    <line x1="210" y1="120" x2="215" y2="120"/>
+  </g>
+</svg>

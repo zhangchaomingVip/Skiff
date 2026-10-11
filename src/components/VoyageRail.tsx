@@ -1,92 +1,78 @@
 import { IconButton } from "./ui";
 import { Icon } from "./Icon";
-import type { CSSProperties } from "react";
-import { gaugePosition, type VoyageActivity } from "../chat/sailing";
+import { gaugePosition, type VoyagePhase } from "../chat/sailing";
 import type { VoyageMetrics } from "../chat/useVoyageMetrics";
 import { formatDuration, formatTokens } from "../chat/usage";
-import { costTooltip, formatCosts } from "../chat/cost";
+import { toolTargetText, type VoyageTimeline, type VoyageTool } from "../chat/voyageTimeline";
+import { toolKind, toolKindLabel } from "../chat/toolRuns";
+import { TOOL_ICONS } from "./toolIcons";
 
+const GAUGE_LENGTH = 283;
 const number = (value: number) => formatTokens(Math.round(value));
-const contextLabel = (ratio: number, context?: number) => context === undefined ? "—" : `${(ratio * 100).toFixed(1)}%`;
-const GAUGE_RADIUS = 90;
-const GAUGE_LENGTH = Math.PI * GAUGE_RADIUS;
+const contextLabel = (ratio: number, context?: number) => context === undefined ? "0.0%" : `${(ratio * 100).toFixed(1)}%`;
 
-function activityLabel(metrics: VoyageMetrics): string {
-	if (!metrics.streaming || metrics.statusDurationMs === undefined) return metrics.status;
-	return `${metrics.status} · ${formatDuration(metrics.statusDurationMs)}`;
+export function Boat({ className = "", position }: { className?: string; position?: number }) {
+	return <svg className={className} style={position === undefined ? undefined : { left: `${position}%` }} viewBox="-34 -13 65 29" aria-hidden="true"><path d="M-30 2 L6 2 L22 -6 Q25.5 -8 24.5 -3.5 Q18 12 -14 12 Q-30 12 -30 2 Z" fill="currentColor" opacity=".7" /><path d="M-8 2 L-4 -8 L8 -8 L12 2 Z" fill="var(--accent)" /></svg>;
 }
 
-export function Boat({ className = "", position, fishing = false }: { className?: string; position?: number; fishing?: boolean }) {
-	return <svg className={className} style={position === undefined ? undefined : { left: `${position}%` }} viewBox={fishing ? "-34 -35 100 53" : "-34 -13 65 29"} aria-hidden="true">
-		<path d="M-30 2 L6 2 L22 -6 Q25.5 -8 24.5 -3.5 Q18 12 -14 12 Q-30 12 -30 2 Z" fill="currentColor" />
-		<path d="M-8 2 L-4 -8 L8 -8 L12 2 Z" fill="var(--accent)" />
-		{fishing && <g className="voyage-fisher" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-			<circle cx="0" cy="-22" r="3.5" fill="currentColor" stroke="none" />
-			<path d="M-1 -17 L1 -9 L10 -9 L13 -2 M0 -16 L9 -12 L16 -16" />
-			<path d="M13 -12 Q25 -32 40 -29" stroke="var(--accent)" />
-			<path d="M40 -29 Q55 -17 55 8" strokeWidth=".8" />
-			<g className="voyage-float"><path d="M55 6 v8" stroke="var(--accent)" /><ellipse cx="55" cy="11" rx="2" ry="3" fill="var(--accent)" stroke="none" /></g>
-		</g>}
-	</svg>;
+function statusText(metrics: VoyageMetrics): string {
+	if (!metrics.streaming) return metrics.timeline?.endedAt !== undefined ? "已完成" : "就绪";
+	if (metrics.phase === "thinking") return "思考中";
+	if (metrics.phase === "tool") return "工具执行中";
+	return "航行中";
 }
 
-function Speedometer({ speed }: { speed: number }) {
-	const shownSpeed = speed;
-	const position = gaugePosition(shownSpeed);
+function Gauge({ metrics }: { metrics: VoyageMetrics }) {
+	const phaseTimer = metrics.streaming && (metrics.phase === "thinking" || metrics.phase === "tool");
+	const position = gaugePosition(metrics.speed);
 	const angle = -90 + position * 180;
-	return <svg className="voyage-gauge" viewBox="0 0 220 142" role="img" aria-label={`船速约 ${shownSpeed.toFixed(1)} token 每秒`}>
-		<path d="M20 115 A90 90 0 0 1 200 115" className="voyage-gauge-track" />
-		<path d="M20 115 A90 90 0 0 1 200 115" className="voyage-gauge-fill" strokeDasharray={`${(GAUGE_LENGTH * position).toFixed(1)} ${GAUGE_LENGTH.toFixed(1)}`} />
-		{Array.from({ length: 11 }, (_, index) => {
-			const radians = Math.PI - index * Math.PI / 10;
-			const inner = index % 2 === 0 ? 74 : 79;
-			return <line key={index} x1={110 + Math.cos(radians) * inner} y1={115 - Math.sin(radians) * inner} x2={110 + Math.cos(radians) * 84} y2={115 - Math.sin(radians) * 84} className="voyage-gauge-tick" />;
-		})}
-		<text x="110" y="14" className="voyage-gauge-label">船速 · 输出</text>
-		<text x="110" y="79" className="voyage-gauge-number">{shownSpeed.toFixed(1)}</text>
-		<text x="110" y="94" className="voyage-gauge-unit">tok/s · 估算</text>
-		<text x="32" y="131" className="voyage-gauge-limit">0</text>
-		<text x="188" y="131" className="voyage-gauge-limit">300+</text>
-		{shownSpeed > 0 && <g className="voyage-gauge-needle" style={{ transform: `rotate(${angle}deg)` }}><line x1="110" y1="124" x2="110" y2="31" /></g>}
-		<circle cx="110" cy="115" r="6" className="voyage-gauge-hub" />
-		<circle cx="110" cy="115" r="2.5" fill="var(--accent)" />
-	</svg>;
+	const phaseLabel = metrics.phase === "thinking" ? "思考中" : "工具执行中";
+	const gaugeNumber = phaseTimer ? formatDuration(metrics.statusDurationMs ?? 0) : metrics.speed.toFixed(1);
+	const speedUnit = metrics.speedEstimated ? "tok/s · 估算" : "tok/s · 实测";
+	return <div className="voyage-gauge-scene"><svg className="voyage-gauge-svg" viewBox="0 0 260 180" role="img" aria-label={phaseTimer ? `${phaseLabel}，已用时 ${gaugeNumber}` : `船速 ${gaugeNumber} token 每秒`}>
+		<g className="voyage-wave-move voyage-wave" opacity=".15"><path d="M0 155 Q12 151 24 155 T48 155 T72 155 T96 155 T120 155 T144 155 T168 155 T192 155 T216 155 T240 155 T264 155" fill="none" stroke="var(--accent)" strokeWidth="1.5" /><path d="M0 162 Q12 158 24 162 T48 162 T72 162 T96 162 T120 162 T144 162 T168 162 T192 162 T216 162 T240 162 T264 162" fill="none" stroke="var(--accent)" strokeWidth="1.5" /></g>
+		<path d="M40 130 A90 90 0 0 1 220 130" className="voyage-gauge-track" /><path d="M40 130 A90 90 0 0 1 220 130" className={`voyage-gauge-fill ${phaseTimer ? `timer-${metrics.phase}` : ""}`} strokeDasharray={phaseTimer ? undefined : `${(GAUGE_LENGTH * position).toFixed(1)} ${GAUGE_LENGTH}`} />
+		<g className="voyage-gauge-ticks" stroke="var(--secondary)" strokeWidth="1.2" opacity=".5"><line x1="45" y1="125" x2="45" y2="118" /><line x1="75" y1="75" x2="78" y2="82" /><line x1="110" y1="45" x2="110" y2="52" /><line x1="150" y1="45" x2="150" y2="52" /><line x1="185" y1="75" x2="182" y2="82" /><line x1="215" y1="125" x2="215" y2="118" /></g>
+		<text x="42" y="115" className="voyage-gauge-limit" textAnchor="end">0</text><text x="130" y="35" className="voyage-gauge-limit" textAnchor="middle">150</text><text x="218" y="115" className="voyage-gauge-limit" textAnchor="start">300+</text><text x="130" y="85" className="voyage-gauge-label" textAnchor="middle">{phaseTimer ? phaseLabel : "船速 · 输出"}</text><text x="130" y="115" className="voyage-gauge-number" textAnchor="middle">{gaugeNumber}</text><text x="130" y="128" className="voyage-gauge-unit" textAnchor="middle">{phaseTimer ? "本阶段用时" : speedUnit}</text>
+		{!phaseTimer && <g className="voyage-gauge-needle" style={{ transform: `rotate(${angle}deg)` }}><line x1="130" y1="130" x2="130" y2="50" /><path d="M130 50 L126 58 L134 58 Z" fill="var(--text)" /></g>}<circle cx="130" cy="130" r="7" className="voyage-gauge-hub" /><circle cx="130" cy="130" r="3.5" fill="var(--accent)" />
+		<path className="voyage-wake" d="M75 145 L95 145 M75 150 L95 150" fill="none" stroke="var(--accent)" strokeWidth="1" opacity=".4" /><g className="voyage-float" opacity="0"><circle cx="55" cy="11" r="2" fill="var(--accent)" /></g><g className="voyage-boat-bob voyage-scene-boat"><path className="voyage-wake-dash" d="M75 145 L95 145 M75 150 L95 150" fill="none" stroke="var(--accent)" strokeWidth="1" opacity=".4" /><path d="M95 143 L115 143 L120 139 Q122 137 121 141 Q117 150 100 150 Q92 150 92 145 Z" fill="var(--text)" opacity=".8" /><path d="M103 143 L106 133 L113 133 L115 143 Z" fill="var(--accent)" /></g>
+	</svg></div>;
 }
 
-function Sea({ speed, activity }: { speed: number; activity: VoyageActivity }) {
-	const pace = Math.min(1, speed / 300);
-	return <div className="voyage-sea" style={{ "--wave-duration": `${(3 - pace * 2.1).toFixed(2)}s`, "--wake-duration": `${(1.3 - pace * .9).toFixed(2)}s` } as CSSProperties} aria-hidden="true">
-		<svg className="voyage-wake" viewBox="0 0 90 34"><path d="M85 15 C60 13 40 18 3 20 M75 8 C50 5 32 8 10 7" /></svg>
-		<Boat className="voyage-scene-boat" fishing={activity === "fishing"} />
-		<svg className="voyage-waves" viewBox="0 0 280 48" preserveAspectRatio="none"><g className="voyage-wave voyage-wave-one"><path d="M-48 12 Q-36 3 -24 12 T0 12 T24 12 T48 12 T72 12 T96 12 T120 12 T144 12 T168 12 T192 12 T216 12 T240 12 T264 12 T288 12" /></g><g className="voyage-wave voyage-wave-two"><path d="M-48 31 Q-36 22 -24 31 T0 31 T24 31 T48 31 T72 31 T96 31 T120 31 T144 31 T168 31 T192 31 T216 31 T240 31 T264 31 T288 31" /></g></svg>
-	</div>;
+const PHASE_LEGEND: { phase: VoyagePhase; label: string }[] = [{ phase: "response", label: "航行" }, { phase: "thinking", label: "思考" }, { phase: "tool", label: "工具" }];
+
+function PhaseBar({ timeline }: { timeline: VoyageTimeline }) {
+	const total = Math.max(1, timeline.durationMs);
+	const totals: Record<VoyagePhase, number> = { response: timeline.segments.filter((item) => item.phase === "response").reduce((sum, item) => sum + (item.endedAt ?? timeline.at) - item.startedAt, 0), thinking: timeline.thinkingMs, tool: timeline.toolMs };
+	return <div className="voyage-phase-section"><div className="voyage-phase-bar" aria-hidden="true">{timeline.segments.map((segment, index) => <span key={index} className={`phase-${segment.phase}`} style={{ width: `${Math.max(0, ((segment.endedAt ?? timeline.at) - segment.startedAt) / total * 100)}%` }} />)}</div><div className="voyage-phase-legend">{PHASE_LEGEND.map(({ phase, label }) => <div key={phase} className={timeline.endedAt === undefined && timeline.phase === phase ? "current" : ""}><div className="voyage-phase-label"><i className={`phase-${phase}`} />{label}</div><div className="voyage-phase-value">{formatDuration(totals[phase])}</div></div>)}</div></div>;
 }
 
-export function VoyageRail({ metrics, expanded, onToggle }: { metrics: VoyageMetrics; expanded: boolean; onToggle: () => void }) {
-	const progress = Math.min(100, metrics.ratio * 100);
-	const remaining = metrics.context === undefined || metrics.limit === undefined ? "剩余额度待首次回复后计算" : `剩余 ${number(Math.max(0, metrics.limit - metrics.context))} tokens`;
-	return <aside id="voyage-rail" className={`voyage-rail ${expanded ? "expanded" : "collapsed"} voyage-${metrics.pressure} voyage-${metrics.activity}`} aria-label="Skiff 航行台">
-		{expanded ? <>
-			<div className="voyage-rail-header"><strong>Skiff 航行台</strong><IconButton type="button" className="voyage-rail-toggle" onClick={onToggle} aria-label="收起航行台" aria-expanded="true"><Icon name="chevron" size={16} /></IconButton></div>
-			<span className="voyage-pill"><span className="voyage-status-dot" />{activityLabel(metrics)}</span>
-			<div className="voyage-instrument"><Speedometer speed={metrics.speed} /><SpeedStats metrics={metrics} /><Sea speed={metrics.speed} activity={metrics.activity} /></div>
-			{metrics.reminder && <p className="voyage-context-reminder"><Icon name="info" /><span>{metrics.reminder}</span></p>}
-			<div className="voyage-mileage"><div className="voyage-mileage-title"><strong>航程 · 当前上下文</strong><span>{contextLabel(metrics.ratio, metrics.context)}</span></div><div className="voyage-mileage-route" title={remaining}><span className="voyage-anchor" aria-hidden="true"><Icon name="anchor" size={16} /></span><div className="voyage-mileage-track"><span style={{ transform: `scaleX(${progress / 100})` }} /><Boat className="voyage-mileage-boat" position={progress} /></div><span className="voyage-flag" aria-hidden="true"><Icon name="flag" size={16} /></span></div><div className="voyage-mileage-caption"><strong>{metrics.context === undefined ? "—" : number(metrics.context)}</strong><span> / {metrics.limit ? number(metrics.limit) : "—"} tok</span></div><p className="voyage-meter-note">已航行 {metrics.context === undefined ? "—" : number(metrics.context)} m · 1 tok = 1 m</p></div>
-			{metrics.context !== undefined && <dl className="voyage-breakdown"><div><dt>系统提示词与工具定义</dt><dd>~{number(metrics.overhead ?? 0)}</dd></div><div><dt>对话消息</dt><dd>~{number(metrics.conversation ?? 0)}</dd></div></dl>}
-			<div className="voyage-turn"><strong>本次航行记录</strong><dl><div><dt>本轮耗时</dt><dd>{metrics.turn.durationMs === undefined ? "—" : formatDuration(metrics.turn.durationMs)}</dd></div><div><dt>输出 tokens</dt><dd>{metrics.turn.output === undefined ? "—" : number(metrics.turn.output)}</dd></div><div><dt>费用</dt><dd title={costTooltip(metrics.turn.cost)}>{formatCosts(metrics.turn.cost)}</dd></div><div><dt>会话累计</dt><dd title={costTooltip(metrics.sessionCost)}>{formatCosts(metrics.sessionCost)}</dd></div></dl></div>
-			<p className="voyage-note">船速与最高速度按思考及回复文字估算；平均速度包含等待与工具执行时间。{metrics.streaming ? "航程在本轮完成后更新。" : ""}</p>
-		</> : <>
-			<IconButton type="button" className="voyage-rail-toggle collapsed-toggle" onClick={onToggle} aria-label="展开航行台" aria-expanded="false"><Icon name="chevron" size={16} /></IconButton>
-			<span className="voyage-status-dot" title={metrics.status} />
-			<strong className="voyage-collapsed-speed" title={`${metrics.speed.toFixed(1)} tok/s`}>{metrics.speed.toFixed(1)}</strong>
-			<small>tok/s</small>
-		</>}
-	</aside>;
+function toolIcon(tool: VoyageTool): string {
+	if (tool.status === "completed") return "✓";
+	if (tool.status === "failed" || tool.status === "timeout") return "✗";
+	return TOOL_ICONS[toolKind(tool.name)] ?? "⚡";
+}
+
+function ToolTraceRow({ tool }: { tool: VoyageTool }) {
+	const target = toolTargetText(tool.summary);
+	const caption = target || (tool.summary ? toolKindLabel(tool.name) : "等待参数");
+	return <li className={`voyage-tool-row tool-${tool.status} ${tool.showDuration ? "tool-long" : "tool-short"}`} data-tool-id={tool.id}><span className="voyage-tool-icon" aria-hidden="true">{toolIcon(tool)}</span><strong className="voyage-tool-name" title={tool.name}>{tool.name}</strong><span className="voyage-tool-desc" title={tool.summary}>{caption}</span>{tool.showDuration && <time className="voyage-tool-time">{formatDuration(tool.durationMs)}</time>}{tool.status !== "running" && tool.result && <span className="voyage-tool-result" title={tool.result}>{tool.result}</span>}</li>;
+}
+
+function ToolWaterfall({ metrics }: { metrics: VoyageMetrics }) {
+	if (!metrics.activeTools.length && !metrics.toolLog.length) return null;
+	const active = metrics.activeTools.length;
+	return <section className="voyage-tools" aria-label="工具航迹"><div className="voyage-tools-header"><strong>工具航迹</strong><span>{active ? `${active} 执行中` : "空闲"}</span></div><span className="voyage-tool-announcement" role="status" aria-live="polite">{metrics.activeTools.map((tool) => `${tool.name}，执行中`).join("；") || "工具已入日志"}</span>{active > 0 && <ol className="voyage-tool-stream voyage-tool-active" aria-label="活动工具" aria-live="off" tabIndex={0}>{[...metrics.activeTools].reverse().map((tool) => <ToolTraceRow key={tool.id} tool={tool} />)}</ol>}{metrics.toolLog.length > 0 && <details className="voyage-tool-log"><summary>航海日志 · {metrics.toolLog.length} 项已入日志</summary><ol className="voyage-tool-stream" aria-label="工具完成日志" aria-live="polite" aria-relevant="additions" tabIndex={0}>{metrics.toolLog.map((tool) => <ToolTraceRow key={tool.id} tool={tool} />)}</ol></details>}</section>;
 }
 
 export function SpeedStats({ metrics }: { metrics: VoyageMetrics }) {
-	return <dl className="voyage-speed-stats">
-		<div><dt>本轮平均{metrics.averageEstimated ? " · 估算" : ""}</dt><dd>{metrics.averageSpeed?.toFixed(1) ?? "—"}<small> tok/s</small></dd></div>
-		<div><dt>本轮最高 · 估算</dt><dd>{metrics.peakSpeed?.toFixed(1) ?? "—"}<small> tok/s</small></dd></div>
-	</dl>;
+	return <dl className="voyage-speed-stats"><div><dt>本轮平均</dt><dd>{metrics.averageSpeed?.toFixed(1) ?? "—"}<small> tok/s</small></dd></div><div><dt>本轮最高</dt><dd>{metrics.peakSpeed?.toFixed(1) ?? "—"}<small> tok/s</small></dd></div></dl>;
+}
+
+export function VoyageRail({ metrics, expanded, onToggle }: { metrics: VoyageMetrics; expanded: boolean; onToggle: () => void }) {
+	const progress = Math.min(1, Math.max(0, metrics.ratio));
+	const titleStatus = statusText(metrics);
+	const limit = metrics.limit ?? metrics.timeline?.contextLimit;
+	const context = metrics.context ?? metrics.timeline?.contextUsed;
+	return <aside id="voyage-rail" className={`voyage-rail ${expanded ? "expanded" : "collapsed"} voyage-${metrics.pressure} voyage-${metrics.activity}`} aria-label="Skiff 航行台">{expanded ? <div className="voyage-dashboard"><header className="voyage-dashboard-header voyage-rail-header"><h1>⛵ Skiff 航行台</h1><div className="voyage-status-pill voyage-pill"><span className={`voyage-status-dot ${metrics.phase}`} />{titleStatus}{metrics.streaming && <span> · {formatDuration(metrics.statusDurationMs ?? 0)}</span>}</div></header><Gauge metrics={metrics} /><SpeedStats metrics={metrics} />{metrics.timeline && <PhaseBar timeline={metrics.timeline} />}<ToolWaterfall metrics={metrics} /><section className="voyage-progress-section"><div className="voyage-progress-header"><strong>航程 · 上下文</strong><span>{contextLabel(metrics.ratio, context)}</span></div><div className="voyage-progress-track-wrapper"><div className="voyage-progress-track"><span style={{ transform: `scaleX(${progress})` }} /></div><Boat className="voyage-progress-boat" position={progress * 100} /></div><div className="voyage-progress-caption"><strong>{context === undefined ? "0" : number(context)}</strong> / <span>{limit === undefined ? "—" : number(limit)}</span> tok{metrics.contextEstimated && <small title="未收到 API usage，按本地消息估算"> · 估算</small>}</div></section><section className="voyage-turn"><strong>本次航行记录</strong><dl><div><dt>本轮耗时</dt><dd>{metrics.turn.durationMs === undefined ? "—" : formatDuration(metrics.turn.durationMs)}</dd></div><div><dt>输出 tokens</dt><dd>{metrics.turn.output === undefined ? "—" : number(metrics.turn.output)}</dd></div></dl></section><IconButton type="button" className="voyage-rail-toggle voyage-collapse" onClick={onToggle} aria-label="收起航行台" aria-expanded="true"><Icon name="chevron" size={16} /></IconButton></div> : <div className="voyage-collapsed-content"><IconButton type="button" className="voyage-rail-toggle collapsed-toggle" onClick={onToggle} aria-label="展开航行台" aria-expanded="false"><Icon name="chevron" size={16} /></IconButton><span className={`voyage-status-dot ${metrics.phase}`} title={titleStatus} /><strong>{metrics.streaming && metrics.phase !== "response" ? formatDuration(metrics.statusDurationMs ?? 0) : metrics.speed.toFixed(1)}</strong><small>{metrics.streaming && metrics.phase !== "response" ? "本阶段" : "tok/s"}</small></div>}</aside>;
 }

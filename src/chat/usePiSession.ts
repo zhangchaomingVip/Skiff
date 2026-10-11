@@ -174,7 +174,7 @@ export function usePiSession(target?: SessionTarget, runtimeOffers: readonly Run
 			}
 			if (event.type === "agent_start") streamingRef.current = true;
 			if (event.type === "agent_end" || event.type === "agent_settled") streamingRef.current = false;
-			const timedEvent = { ...event, ...(event.type === "agent_start" ? { startedAt: runStarted.current } : {}), ...(duration === undefined ? {} : { durationMs: duration, completedAt: now }) };
+			const timedEvent = { ...event, voyageAt: now, ...(event.type === "agent_start" ? { startedAt: runStarted.current } : {}), ...(duration === undefined ? {} : { durationMs: duration, completedAt: now }) };
 			setState((s) => {
 				const options = { offers: runtimeOffersRef.current };
 				return reduce(s, timedEvent, options);

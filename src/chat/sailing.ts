@@ -23,6 +23,12 @@ export function visibleOutputUnits(messages: ChatMessage[]): number {
 	return units;
 }
 
+/** Speed accepts assistant reply text only. Keep turnOutput's existing estimate
+ * (including reasoning) for average/usage compatibility. */
+export function visibleReplyUnits(messages: ChatMessage[]): number {
+	return visibleOutputUnits(messages.map((message) => message.role === "assistant" ? { ...message, blocks: message.blocks.filter((block) => block.kind === "text") } : message));
+}
+
 export function outputSpeed(samples: { at: number; tokens: number }[], now: number, windowMs = 500): number {
 	const recent = samples.filter((sample) => sample.at >= now - windowMs);
 	if (recent.length < 2) return 0;
@@ -107,11 +113,12 @@ export function startVoyage(key: string, now: number, startedAt?: number): Voyag
 }
 
 /** Only visible text enters this sampler; usage correction cannot create a peak. */
-export function sampleVoyage(previous: VoyageSample, tokens: number, now: number, running: boolean): VoyageSample {
+export function sampleVoyage(previous: VoyageSample, tokens: number, now: number, running: boolean, outputPhase = true): VoyageSample {
 	if (!running && previous.activity === "moored") return previous;
-	const lastOutputAt = running && tokens > previous.tokens ? now : previous.lastOutputAt;
+	now = Math.max(previous.at, Number.isFinite(now) ? now : previous.at);
+	const lastOutputAt = outputPhase ? running && tokens > previous.tokens ? now : previous.lastOutputAt : undefined;
 	const activity: VoyageActivity = !running ? "moored" : lastOutputAt !== undefined && now - lastOutputAt < 800 ? "sailing" : "fishing";
-	const samples = tokens < previous.tokens ? [{ at: now, tokens }] : [...previous.samples.filter((sample) => sample.at >= now - 600), { at: now, tokens }];
+	const samples = !outputPhase || tokens < previous.tokens ? [{ at: now, tokens }] : [...previous.samples.filter((sample) => sample.at >= now - 600), { at: now, tokens }];
 	const target = outputSpeed(samples, now);
 	const speed = activity === "sailing" ? Math.max(0, previous.speed + (target - previous.speed) * Math.min(1, Math.max(0, now - previous.at) / 300)) : 0;
 	return { ...previous, at: now, tokens, samples: running ? samples : [], lastOutputAt, activity, speed,

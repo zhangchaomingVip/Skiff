@@ -1,0 +1,143 @@
+// Run against a separate Vite preview. Controlled time; no real pi or credentials.
+import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
+import assert from "node:assert/strict";
+import fs from "node:fs/promises";
+const { chromium } = createRequire(import.meta.url)("playwright");
+const browser = await chromium.launch({ headless: true, channel: process.env.SKIFF_BROWSER_CHANNEL ?? "msedge" });
+const base = process.argv[2] ?? "http://localhost:1424";
+const screenshots = new URL("../features/013-voyage-tool-waterfall/screenshots/", import.meta.url);
+await fs.mkdir(screenshots, { recursive: true });
+const page = await browser.newPage({ viewport: { width: 1200, height: 800 } });
+const errors = [];
+page.on("pageerror", (error) => errors.push(error.message));
+const user = { id: "user", role: "user", blocks: [], timestamp: 1000 };
+const call = (id, name = "read", argsText = "src/chat/voyageTimeline.ts") => ({ kind: "tool", id, name, argsText, done: true });
+const result = (id, text = "读取完成", isError = false) => ({ kind: "toolResult", id, name: "read", text, isError });
+const step = (blocks, extra = {}) => ({ id: "step", role: "assistant", streaming: true, blocks, ...extra });
+let state;
+const read = () => page.evaluate(() => window.voyageHarness.metrics);
+const render = async () => { await page.evaluate((state) => window.voyageHarness.render(state), state); await page.waitForTimeout(30); };
+const advance = async (ms) => { await page.evaluate((ms) => window.voyageHarness.advance(ms), ms); await page.waitForTimeout(30); };
+const screenshot = (name) => page.screenshot({ path: fileURLToPath(new URL(name, screenshots)), fullPage: true, animations: "disabled" });
+try {
+	await page.goto(`${base}/tests/voyage.html`);
+	await page.waitForFunction(() => window.voyageHarness?.render);
+	state = { messages: [], isStreaming: true, activeRun: { startedAt: 1000, promptId: "prompt", turnId: "turn:user" } };
+	await render(); await advance(1000);
+	assert.deepEqual([(await read()).timeline.durationMs, (await read()).timeline.thinkingMs, (await read()).timeline.toolMs], [1000, 0, 0]);
+	state.messages = [user, step([{ kind: "thinking", text: "分析路线" }])]; await render(); await advance(1000);
+	assert.equal((await read()).speed, 0); assert.equal((await read()).activity, "fishing");
+	assert.equal((await read()).timeline.thinkingMs, 1000);
+	const longName = "inspect_repository_and_validate_tool_waterfall_in_parallel";
+	state.messages = [user, step([call("a", longName, "D:/workspace/Skiff/".repeat(15)), call("b", "检查配置", "读取项目配置与模型线路"), call("failure", "检查权限")])];
+	await render();
+	assert.deepEqual((await read()).activeTools.map((tool) => tool.id), ["a", "b", "failure"]);
+	assert.deepEqual(await page.locator(".voyage-tool-active li").evaluateAll((rows) => rows.map((row) => row.dataset.toolId)), ["failure", "b", "a"]);
+	assert.equal(await page.locator(".voyage-tool-active time").count(), 0);
+	await advance(1000);
+	state.messages[1].blocks.push(result("failure", "权限不足，调用失败", true)); await render();
+	assert.equal((await read()).toolLog[0].status, "failed");
+	assert.equal(await page.locator(".voyage-tool-log time").count(), 0);
+	await advance(3999); assert.equal(await page.locator(".voyage-tool-active time").count(), 0);
+	assert.equal((await read()).activeTools[0].durationMs, 4999);
+	await advance(1); assert.equal(await page.locator(".voyage-tool-active time").count(), 2);
+	assert.equal((await read()).activeTools[0].durationMs, 5000);
+	assert.equal((await read()).timeline.toolMs, 5000);
+	assert.equal((await read()).speed, 0);
+	assert.equal(await page.locator(".voyage-wave").first().evaluate((element) => getComputedStyle(element).animationName), "none");
+	for (const theme of ["light", "dark"]) for (const [width, height] of [[1200, 800], [900, 700], [600, 400], [360, 640]]) {
+		await page.evaluate((theme) => { document.documentElement.dataset.theme = theme; }, theme);
+		await page.setViewportSize({ width, height });
+		await page.waitForTimeout(60);
+		await page.locator(".voyage-tools").scrollIntoViewIfNeeded();
+		assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+		for (const selector of [".voyage-tools", ".voyage-tool-active", ".voyage-tool-log ol"]) {
+			const bounds = await page.locator(selector).evaluate((element) => ({ scroll: element.scrollWidth, client: element.clientWidth }));
+			assert(bounds.scroll <= bounds.client, `${theme} ${width} ${selector}: ${JSON.stringify(bounds)}`);
+		}
+		await screenshot(`${theme}-${width}-parallel-failure.png`);
+	}
+	await page.setViewportSize({ width: 1200, height: 800 });
+	await page.waitForTimeout(60);
+	await page.emulateMedia({ reducedMotion: "reduce" });
+	for (const selector of [".voyage-tool-active li", ".voyage-tool-log li", ".voyage-scene-boat"]) assert.equal(await page.locator(selector).first().evaluate((element) => getComputedStyle(element).animationName), "none");
+	await screenshot("dark-1200-reduced.png");
+	await page.emulateMedia({ reducedMotion: "no-preference" });
+	await advance(1000); state.messages[1].blocks.push(result("b")); await render();
+	await advance(1000); state.messages[1].blocks.push(result("a", "timeout: execution expired", true)); await render();
+	assert.deepEqual((await read()).toolLog.map((tool) => tool.id), ["failure", "b", "a"]);
+	assert.equal((await read()).toolLog[2].status, "timeout");
+	assert.equal((await read()).timeline.toolMs, 7000);
+	await advance(500); assert.equal((await read()).timeline.toolMs, 7000);
+	assert.deepEqual((await read()).toolLog.map((tool) => tool.durationMs), [1000, 6000, 7000]);
+	state.messages.push(step([{ kind: "thinking", text: "继续思考" }], { id: "second" })); await render(); await advance(1000);
+	assert.equal((await read()).timeline.thinkingMs, 2000); assert.equal((await read()).speed, 0);
+	state.messages[2].blocks.push({ kind: "text", text: "开始输出回复" }); await render(); await advance(100);
+	state.messages[2].blocks[1].text += "更多回复文字"; await render();
+	assert((await read()).speed > 0); assert.equal((await read()).activity, "sailing");
+	const peak = (await read()).peakSpeed;
+	state.messages[2].usage = { input: 0, output: 100000, cacheRead: 0, cacheWrite: 0, totalTokens: 100000 }; await render();
+	assert.equal((await read()).peakSpeed, peak);
+	await advance(799); assert.equal((await read()).activity, "sailing");
+	await advance(1); assert.equal((await read()).activity, "fishing");
+	state.messages[2].blocks.push(call("missing", "未返回结果")); await render(); await advance(1000);
+	state.isStreaming = false; delete state.activeRun; await render();
+	const settled = (await read()).timeline;
+	assert.equal((await read()).toolLog.at(-1).status, "missing");
+	assert.equal(await page.evaluate(() => window.voyageHarness.intervalCount()), 0);
+	state.messages[2].blocks.push(result("missing")); await render(); await advance(10000);
+	assert.deepEqual((await read()).timeline, settled);
+	// New run, old results, and clock rollback must not leak time or tool rows.
+	state.messages.push({ ...user, id: "next" });
+	state.isStreaming = true; state.activeRun = { startedAt: 1000, promptId: "next", turnId: "turn:next" }; await render();
+	assert.equal((await read()).activeTools.length, 0); assert.equal((await read()).toolLog.length, 0);
+	await advance(100); const beforeRollback = (await read()).timeline.durationMs; await advance(-1000);
+	assert.equal((await read()).timeline.durationMs, beforeRollback);
+	// Same transcript identifiers across a session remount still start fresh.
+	state.sessionId = "other"; state.messages.push(step([call("session-tool")])); await render();
+	assert.equal((await read()).activeTools.length, 1); assert.equal((await read()).timeline.toolMs, 0);
+	for (const [reason, stopReason, error] of [["cancel", "aborted"], ["failure", "error", "provider failure"], ["bridge", undefined, "bridge exited"], ["timeout", undefined, "timeout"]]) {
+		state.sessionId = reason; state.messages = [user, step([call(reason)])]; state.activeRun = { startedAt: 1000, turnId: "turn:user", promptId: reason }; state.isStreaming = true; delete state.lastError; await render(); await advance(100);
+		state.messages[1].stopReason = stopReason; state.lastError = error; state.isStreaming = false; delete state.activeRun; await render();
+		assert.equal((await read()).activeTools.length, 0); assert.equal((await read()).toolLog[0].status, reason === "cancel" ? "interrupted" : reason === "timeout" ? "timeout" : "failed");
+		assert.equal(await page.evaluate(() => window.voyageHarness.intervalCount()), 0);
+	}
+	state.sessionId = "abort-without-stop-reason"; state.isStreaming = true; delete state.lastError;
+	state.messages = [user, step([call("aborted-tool")])]; state.activeRun = { startedAt: 1000, turnId: "turn:user", promptId: "abort" }; await render();
+	state.abortedRunKey = (await read()).timeline.key; await render(); await advance(100);
+	state.isStreaming = false; delete state.activeRun; await render();
+	assert.equal((await read()).toolLog[0].status, "interrupted");
+	state.sessionId = "provisional"; state.isStreaming = true;
+	state.messages = [user, step([call("")])]; state.activeRun = { startedAt: 1000, turnId: "turn:user", promptId: "provisional" }; await render();
+	const stableId = (await read()).activeTools[0].id;
+	await advance(5000); state.messages[1].blocks[0] = call("late-id"); await render();
+	assert.equal((await read()).activeTools.length, 1); assert.equal((await read()).activeTools[0].id, stableId);
+	assert.equal(await page.locator(".voyage-tool-active li").getAttribute("data-tool-id"), stableId);
+	state.messages[1].blocks.push(result("late-id")); await render();
+	assert.equal((await read()).toolLog[0].durationMs, 5000);
+	assert.equal((await read()).toolLog[0].status, "completed");
+	state.isStreaming = false; delete state.activeRun; await render();
+	const previousKey = (await read()).timeline.key;
+	state.messages = [{ ...user, id: "other-turn" }, step([call("other-turn-tool")])];
+	state.isStreaming = true; state.activeRun = { startedAt: 1000, turnId: "turn:other-turn", promptId: "provisional" }; await render();
+	assert.notEqual((await read()).timeline.key, previousKey);
+	assert.equal((await read()).toolLog.length, 0); assert.equal((await read()).timeline.toolMs, 0);
+	// Large batches stay within the fixed scroll regions and retain all failures.
+	state.sessionId = "many"; state.isStreaming = true; state.lastError = undefined; state.activeRun = { startedAt: 1000, turnId: "turn:user", promptId: "many" };
+	state.messages = [user, step(Array.from({ length: 30 }, (_, index) => call(`many-${index}`)))]; await render();
+	assert(await page.locator(".voyage-tool-active").evaluate((element) => element.scrollHeight > element.clientHeight && element.clientHeight <= 200));
+	state.messages[1].blocks.push(...Array.from({ length: 30 }, (_, index) => result(`many-${index}`, `result ${index}`, index % 3 === 0))); await render();
+	assert.equal((await read()).toolLog.length, 30);
+	// The log is collapsed by default; open it before checking its scroll bounds.
+	await page.locator(".voyage-tool-log summary").click(); await page.waitForTimeout(60);
+	assert(await page.locator(".voyage-tool-log ol").evaluate((element) => element.scrollHeight > element.clientHeight && element.clientHeight <= 160));
+	assert.equal(await page.locator('.voyage-tool-log [aria-live="polite"]').getAttribute("aria-relevant"), "additions");
+	assert.equal(await page.locator('.voyage-tool-active').count(), 0);
+	assert.equal(await page.evaluate(() => window.voyageHarness.maxIntervalCount()), 1);
+	await page.evaluate(() => window.voyageHarness.unmount());
+	assert.equal(await page.evaluate(() => window.voyageHarness.intervalCount()), 0);
+	assert.deepEqual(errors, []);
+	console.log("PASS waterfall: 4999/5000ms, parallel wall clock, order/logs, failure/timeout, phase accumulation, speed boundaries, frozen/late results, clock rollback, run/session isolation, StrictMode/cleanup, 30-call bounds; 9 screenshots");
+	console.log(`Browser: ${browser.version()}`);
+} finally { await browser.close(); }

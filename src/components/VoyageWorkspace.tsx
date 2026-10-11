@@ -1,4 +1,4 @@
-import { memo, useEffect, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import type { ImageAttachment, SessionState } from "../chat/types";
 import type { PiSessionActions } from "../chat/usePiSession";
 import { useVoyageMetrics } from "../chat/useVoyageMetrics";
@@ -29,7 +29,15 @@ export function VoyageWorkspace({ state, loading = false, connected, pending, ac
 	routeAuthorization?: { request: RouteAuthorizationRequest; onChoice: (choice: RouteAuthorizationChoice) => void };
 }) {
 	const { pricingModels } = useModelFamily();
-	const metrics = useVoyageMetrics(state.messages, state.model, state.isStreaming, pricingModels ?? state.availableModels, state.activeRun);
+	const [abortedRunKey, setAbortedRunKey] = useState<string>();
+	const metrics = useVoyageMetrics(state.messages, state.model, state.isStreaming, pricingModels ?? state.availableModels, state.activeRun, state.lastError, abortedRunKey, state.voyageTimeline);
+	const timelineKey = metrics.timeline?.key;
+	const voyageActions = useMemo(() => ({ ...actions, abort: async () => {
+		// Some bridges end without an assistant stopReason. Retain the user's
+		// explicit abort intent for this timeline only, without persisting it.
+		setAbortedRunKey(timelineKey);
+		await actions.abort();
+	} }), [actions, timelineKey]);
 	const [expanded, setExpanded] = useState(() => window.innerWidth >= 1200);
 	const [narrow, setNarrow] = useState(() => window.innerWidth <= 760);
 	useEffect(() => {
@@ -46,7 +54,7 @@ export function VoyageWorkspace({ state, loading = false, connected, pending, ac
 	return <div className={`chat-and-rail ${expanded ? "rail-expanded" : "rail-collapsed"}`}>
 		<div className="chat-column">
 			<LiveTurnContext.Provider value={metrics.liveTurn}>
-				<StableChatView state={state} loading={loading} connected={connected} pending={pending} actions={actions} onSend={onSend} onReconnect={onReconnect} projectName={projectName} search={search} onConfigureSearch={onConfigureSearch} failover={failover} routeAuthorization={routeAuthorization} />
+				<StableChatView state={state} loading={loading} connected={connected} pending={pending} actions={voyageActions} onSend={onSend} onReconnect={onReconnect} projectName={projectName} search={search} onConfigureSearch={onConfigureSearch} failover={failover} routeAuthorization={routeAuthorization} />
 			</LiveTurnContext.Provider>
 			<ContextUsage notice={modelNotice} metrics={metrics} expanded={expanded} onToggle={toggle} />
 		</div>

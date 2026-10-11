@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { averageOutputSpeed, contextPressure, contextReminder, currentTurnMessages, currentTurnStats, pendingToolCallId, sampleVoyage, startVoyage, turnOutput, visibleOutputUnits, voyagePhase, voyageStatus, type VoyageActivity, type VoyageSample } from "./sailing";
+import { averageOutputSpeed, contextPressure, contextReminder, currentTurnMessages, currentTurnStats, sampleVoyage, startVoyage, turnOutput, visibleReplyUnits, voyageStatus, type VoyageActivity, type VoyagePhase, type VoyageSample } from "./sailing";
+import { advanceTimeline, refreshTimeline, startTimeline, toolFailureStatus, type VoyageTimeline, type VoyageTool } from "./voyageTimeline";
 import type { ChatMessage, ModelInfo, SessionState } from "./types";
 import { summarizeUsage } from "./usage";
 import { summarizeCosts, type CostSummary } from "./cost";
@@ -19,11 +20,17 @@ export interface VoyageMetrics {
 	conversation?: number;
 	status: string;
 	statusDurationMs?: number;
+	phase: VoyagePhase;
 	arrived: boolean;
 	pressure: "normal" | "warning" | "critical";
 	turn: { durationMs?: number; output?: number; cost?: CostSummary };
 	liveTurn?: { turnId?: string; durationMs: number };
 	sessionCost: CostSummary;
+	timeline?: VoyageTimeline;
+	activeTools: VoyageTool[];
+	toolLog: VoyageTool[];
+	contextEstimated: boolean;
+	speedEstimated: boolean;
 }
 
 const estimateTokens = (text: string): number => {
@@ -35,24 +42,26 @@ const estimateTokens = (text: string): number => {
 	return Math.ceil(units);
 };
 
-export function useVoyageMetrics(messages: ChatMessage[], model: ModelInfo | undefined, streaming: boolean, pricingModels: ModelInfo[] = [], activeRun?: SessionState["activeRun"]): VoyageMetrics {
+export function useVoyageMetrics(messages: ChatMessage[], model: ModelInfo | undefined, streaming: boolean, pricingModels: ModelInfo[] = [], activeRun?: SessionState["activeRun"], error?: string, abortedRunKey?: string, eventTimeline?: VoyageTimeline): VoyageMetrics {
 	const user = [...messages].reverse().find((message) => message.role === "user");
 	const transcriptId = `turn:${user?.id ?? messages[0]?.id ?? "empty"}`;
-	const run = useRef<{ key: string; turnId?: string; baseline: string }>();
-	const runKey = activeRun ? `run:${activeRun.startedAt}:${activeRun.promptId ?? ""}` : transcriptId;
+	const run = useRef<{ key: string; identity: string; turnId?: string; baseline: string }>();
+	const identity = activeRun ? `run:${activeRun.startedAt}:${activeRun.promptId ?? ""}` : transcriptId;
 	if (streaming) {
-		if (run.current?.key !== runKey) run.current = { key: runKey, turnId: activeRun?.turnId, baseline: transcriptId };
+		const changedTurn = activeRun?.turnId && run.current?.turnId && activeRun.turnId !== run.current.turnId;
+		if (run.current?.identity !== identity || changedTurn) run.current = { key: `${identity}:${activeRun?.turnId ?? transcriptId}`, identity, turnId: activeRun?.turnId, baseline: transcriptId };
 		else run.current.turnId = activeRun?.turnId ?? transcriptId;
 	}
 	const retained = run.current && (run.current.turnId === transcriptId || run.current.baseline === transcriptId);
-	const key = streaming ? runKey : retained ? run.current!.key : `history:${transcriptId}`;
+	const key = eventTimeline?.key ?? (streaming || retained ? run.current!.key : `history:${transcriptId}`);
 	const belongs = streaming ? !activeRun || activeRun.turnId === transcriptId : !retained || !run.current?.turnId || run.current.turnId === transcriptId;
 	const turnMessages = useMemo(() => belongs ? currentTurnMessages(messages, streaming ? activeRun : undefined) : [], [messages, belongs, streaming, activeRun]);
-	const tokens = useMemo(() => visibleOutputUnits(turnMessages), [turnMessages]);
-	const input = useRef({ key, tokens, streaming, activeRun });
-	input.current = { key, tokens, streaming, activeRun };
+	const tokens = useMemo(() => visibleReplyUnits(turnMessages), [turnMessages]);
+	const input = useRef({ key, tokens, streaming, activeRun, turnMessages, error, abortedRunKey, eventTimeline });
+	input.current = { key, tokens, streaming, activeRun, turnMessages, error, abortedRunKey, eventTimeline };
 	const sampler = useRef<VoyageSample>();
-	const [sample, setSample] = useState<VoyageSample>();
+	const ledger = useRef<VoyageTimeline>();
+	const [reading, setReading] = useState<{ sample: VoyageSample; timeline?: VoyageTimeline }>();
 	const tick = () => {
 		const current = input.current;
 		const now = Date.now();
@@ -63,63 +72,81 @@ export function useVoyageMetrics(messages: ChatMessage[], model: ModelInfo | und
 			fresh.samples = [{ at: now, tokens: current.tokens }];
 		}
 		const previous = sampler.current?.key === current.key ? sampler.current : fresh;
-		const next = sampleVoyage(previous, current.tokens, now, current.streaming);
+		const aborted = current.abortedRunKey === current.key || current.turnMessages.some((message) => message.stopReason === "aborted");
+		const failed = current.error || current.turnMessages.some((message) => message.stopReason === "error");
+		const sourceTimeline = current.eventTimeline?.key === current.key ? current.eventTimeline : undefined;
+		const interruptedSource = sourceTimeline && aborted && sourceTimeline.endedAt !== undefined && sourceTimeline.tools.some((tool) => tool.status === "missing" || tool.status === "running");
+		const timeline = interruptedSource ? { ...sourceTimeline, tools: sourceTimeline.tools.map((tool) => tool.status === "missing" || tool.status === "running" ? { ...tool, status: "interrupted" as const } : tool) } : sourceTimeline ? refreshTimeline(sourceTimeline, now) : ledger.current?.key === current.key ? ledger.current : current.streaming ? startTimeline(current.key, now, current.activeRun?.startedAt) : undefined;
+		const nextTimeline = sourceTimeline ? timeline : timeline ? advanceTimeline(timeline, { key: current.key, now, messages: current.turnMessages, running: current.streaming,
+			unresolvedStatus: aborted ? "interrupted" : failed ? toolFailureStatus(current.error ?? "error") : "missing" }) : undefined;
+		const next = sampleVoyage(previous, current.tokens, now, current.streaming, nextTimeline?.phase === "response");
 		sampler.current = next;
-		setSample(next);
+		ledger.current = nextTimeline;
+		setReading({ sample: next, timeline: nextTimeline });
 	};
-	useEffect(() => { tick(); }, [key, tokens, streaming]);
+	useEffect(() => { tick(); }, [key, tokens, streaming, turnMessages, error, abortedRunKey, eventTimeline]);
 	useEffect(() => {
 		if (!streaming) return;
 		const timer = window.setInterval(tick, 100);
 		return () => window.clearInterval(timer);
 	}, [streaming, key]);
-	const currentSample = sample?.key === key ? sample : undefined;
-	const activity = streaming ? currentSample?.activity ?? "fishing" : "moored";
+	const currentSample = reading?.sample.key === key ? reading.sample : undefined;
+	const timeline = reading?.timeline?.key === key ? reading.timeline : undefined;
+	const phase = timeline?.phase ?? "response";
+	const activity = streaming ? phase === "response" ? currentSample?.activity ?? "fishing" : "fishing" : "moored";
 	const data = useMemo(() => {
 		const assistants = messages.filter((message) => message.role === "assistant" && message.usage && !message.streaming);
 		const last = assistants[assistants.length - 1];
 		const limit = model?.contextWindow;
-		if (!last?.usage || !limit || !Number.isFinite(limit) || limit <= 0 || ![last.usage.input, last.usage.output, last.usage.cacheRead, last.usage.cacheWrite].every((value) => Number.isFinite(value) && value >= 0)) return undefined;
-		const context = summarizeUsage([last]).total;
-		const first = assistants[0];
-		const firstUser = messages.find((message) => message.role === "user");
-		const firstUserText = firstUser?.blocks.map((block) => block.kind === "text" ? block.text : "").join("") ?? "";
-		const overhead = Math.min(context, first ? Math.max(0, summarizeUsage([first]).inputTotal - estimateTokens(firstUserText)) : 0);
-		return { context, limit, overhead, conversation: Math.max(0, context - overhead) };
-	}, [messages, model]);
+		if (eventTimeline?.contextUsed !== undefined) return { context: eventTimeline.contextUsed, limit: eventTimeline.contextLimit ?? model?.contextWindow, overhead: undefined, conversation: undefined, estimated: eventTimeline.contextEstimated ?? false };
+		if (last?.usage && limit && Number.isFinite(limit) && limit > 0 && [last.usage.input, last.usage.output, last.usage.cacheRead, last.usage.cacheWrite].every((value) => Number.isFinite(value) && value >= 0)) {
+			const context = summarizeUsage([last]).total;
+			const first = assistants[0];
+			const firstUser = messages.find((message) => message.role === "user");
+			const firstUserText = firstUser?.blocks.map((block) => block.kind === "text" ? block.text : "").join("") ?? "";
+			const overhead = Math.min(context, first ? Math.max(0, summarizeUsage([first]).inputTotal - estimateTokens(firstUserText)) : 0);
+			return { context, limit, overhead, conversation: Math.max(0, context - overhead), estimated: false };
+		}
+		const estimated = messages.reduce((sum, message) => sum + message.blocks.reduce((total, block) => total + (block.kind === "text" || block.kind === "thinking" ? estimateTokens(block.text) : 0), 0), 0);
+		return estimated > 0 && limit && limit > 0 ? { context: estimated, limit, estimated: true } : undefined;
+	}, [messages, model, eventTimeline]);
 
-	const ratio = data ? data.context / data.limit : 0;
+	const ratio = data?.limit && data.limit > 0 ? data.context / data.limit : 0;
 	const arrived = ratio >= 1;
 	const turn = useMemo(() => belongs ? currentTurnStats(messages, pricingModels, model) : {}, [messages, pricingModels, model, belongs]);
-	const durationMs = streaming ? currentSample?.durationMs ?? (activeRun ? Math.max(0, Date.now() - activeRun.startedAt) : undefined) : turn.durationMs ?? currentSample?.durationMs;
+	const durationMs = timeline?.durationMs ?? turn.durationMs;
 	const output = turnOutput(turnMessages, streaming);
-	const phase = voyagePhase(turnMessages);
-	const pendingToolId = streaming && phase === "tool" ? pendingToolCallId(turnMessages) : undefined;
-	const toolTimer = useRef<{ key: string; startedAt: number }>();
-	const toolKey = pendingToolId ? `${key}:${pendingToolId}` : undefined;
-	if (toolTimer.current?.key !== toolKey) toolTimer.current = toolKey ? { key: toolKey, startedAt: Date.now() } : undefined;
-	const statusDurationMs = streaming && phase === "tool" && toolTimer.current ? Math.max(0, (currentSample?.at ?? Date.now()) - toolTimer.current.startedAt) : durationMs;
+	const statusDurationMs = timeline ? phase === "tool" ? timeline.toolMs : phase === "thinking" ? timeline.thinkingMs : timeline.durationMs : undefined;
+	const exactSpeed = timeline?.outputStartedAt !== undefined && timeline.outputTokens !== undefined && timeline.outputTokensEstimated === false
+		? timeline.outputTokens * 1000 / Math.max(1, (timeline.at - timeline.outputStartedAt)) : undefined;
+	const speedEstimated = exactSpeed === undefined;
 	const liveTurn = useMemo(() => streaming && durationMs !== undefined ? { turnId: activeRun?.turnId, durationMs } : undefined, [streaming, durationMs, activeRun?.turnId]);
 	const sessionCost = useMemo(() => summarizeCosts(messages, pricingModels, model), [messages, pricingModels, model]);
 	return {
-		speed: activity === "sailing" ? currentSample?.speed ?? 0 : 0,
-		averageSpeed: averageOutputSpeed(output.output, durationMs),
+		speed: activity === "sailing" ? exactSpeed ?? currentSample?.speed ?? 0 : 0,
+		averageSpeed: averageOutputSpeed(output.output, streaming ? durationMs : turn.durationMs ?? durationMs),
 		peakSpeed: currentSample?.peak,
 		averageEstimated: output.estimated,
 		activity,
 		reminder: contextReminder(data?.context, data?.limit),
 		streaming,
 		context: data?.context,
-		limit: model?.contextWindow,
+		limit: data?.limit,
 		ratio,
 		overhead: data?.overhead,
 		conversation: data?.conversation,
 		status: voyageStatus(activity, phase),
 		statusDurationMs,
+		phase,
 		arrived,
 		pressure: contextPressure(ratio),
 		turn: { ...turn, durationMs },
 		liveTurn,
 		sessionCost,
+		timeline,
+		activeTools: timeline?.tools.filter((tool) => tool.status === "running") ?? [],
+		toolLog: timeline?.tools.filter((tool) => tool.status !== "running").sort((a, b) => a.completionOrder! - b.completionOrder!) ?? [],
+		contextEstimated: data?.estimated ?? true,
+		speedEstimated,
 	};
 }

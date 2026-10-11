@@ -45,7 +45,7 @@ test("average includes submission wait, tools and all assistant steps; incomplet
 	assert.deepEqual(turnOutput([], false), { output: undefined, estimated: true });
 });
 
-test("sampler waits immediately, sails for thinking and handles the exact 800ms boundary and restart", () => {
+test("sampler waits immediately, sails for output and handles the exact 800ms boundary and restart", () => {
 	let sample = sampleVoyage(startVoyage("run", 1000, 1000), 0, 1100, true);
 	assert.equal(sample.activity, "fishing");
 	sample = sampleVoyage(sample, 2, 1200, true);

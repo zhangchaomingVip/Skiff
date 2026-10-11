@@ -1,3 +1,5 @@
+import type { VoyageTimeline } from "./voyageTimeline";
+
 /** Model descriptor as reported by pi's `get_available_models` / `get_state`. */
 export type Currency = "CNY" | "USD";
 
@@ -87,6 +89,8 @@ export interface Notice {
 export interface SessionState {
 	messages: ChatMessage[];
 	isStreaming: boolean;
+	/** Ephemeral event ledger for the current run; reset on every prompt/session. */
+	voyageTimeline?: VoyageTimeline;
 	/** Ephemeral run timing; message durations are written only when the run settles. */
 	activeRun?: { startedAt: number; turnId?: string; promptId?: string };
 	/** Optimistic display only; pi events remain the source of transcript messages. */
