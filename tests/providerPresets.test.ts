@@ -18,6 +18,16 @@ test("matchPreset treats localhost and 127.0.0.1 as the same host", () => {
 	assert.equal(matchPreset("http://127.0.0.1:11434/v1")?.id, "ollama");
 });
 
+test("Bailian presets recognise regional and workspace endpoints with host boundaries", () => {
+	for (const url of [
+		"https://dashscope.aliyuncs.com/compatible-mode/v1",
+		"https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+		"https://ws-example.cn-beijing.maas.aliyuncs.com/compatible-mode/v1/",
+	]) assert.equal(matchPreset(url)?.id, "bailian");
+	assert.equal(matchPreset("https://dashscope.aliyuncs.com.evil.example/compatible-mode/v1"), undefined);
+	assert.ok(filterPresets("百炼").some((preset) => preset.id === "bailian"));
+});
+
 test("matchPreset returns nothing for custom or malformed relays", () => {
 	assert.equal(matchPreset("https://api.example.com/v1"), undefined);
 	assert.equal(matchPreset("not a url"), undefined);

@@ -172,6 +172,7 @@
 	.voyage-status-dot.thinking { background: var(--secondary); animation: voyage-pulse 2s ease-in-out infinite; }
 	.voyage-status-dot.tool { background: var(--color-warning); animation: voyage-pulse 2s ease-in-out infinite; }
 	.voyage-status-dot.response { background: var(--accent); }
+	.voyage-status-pill .voyage-status-dot.stopped { background: var(--secondary); }
 	@keyframes voyage-pulse { 50% { opacity: .4; } }
 	.voyage-gauge-scene { position: relative; width: 100%; height: 180px; margin: 16px 0; }
 	.voyage-gauge-svg { display: block; width: 100%; height: 100%; overflow: visible; }

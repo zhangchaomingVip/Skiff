@@ -3,6 +3,8 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { TestResult } from "../chat/useModelFamilies";
 import { slowOrFailedModels, testModelsConcurrently } from "../chat/providerConnection";
+import { buildDiscoveredRoutes, discoveredFamily } from "../chat/providerRoutes";
+import type { RelayRouteSpec } from "../chat/useModelFamilies";
 import { FAMILY_LABELS, blankRelay, blankRoute, blankModel, validateModels, maskBaseUrl, maskKey, type ModelFamily, type ModelSpec, type RelaySpec, type RouteSpec } from "../chat/useModelFamilies";
 import { filterPresets, hostOf, matchPreset, PRESET_KINDS, type ProviderPreset } from "../chat/providerPresets";
 import type { PricedModel } from "../chat/pricingPage";
@@ -40,7 +42,7 @@ export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, o
 	onSaveRate: (rate: number) => Promise<boolean>;
 	configError?: string;
 	onClose: () => void;
-	onSaveRelay: (relay: RelaySpec) => Promise<RelaySpec | undefined>;
+	onSaveRelay: (relay: RelaySpec, routes?: RelayRouteSpec[]) => Promise<RelaySpec | undefined>;
 	onDeleteRelay: (relayId: string) => Promise<boolean>;
 	onSetRelayEnabled: (relayId: string, enabled: boolean) => Promise<boolean>;
 	onSaveRoute: (familyId: string, route: RouteSpec) => Promise<boolean>;
@@ -58,6 +60,7 @@ export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, o
 	const [draft, setDraft] = useState<Draft>();
 	const [query, setQuery] = useState("");
 	const [added, setAdded] = useState<{ relayId: string; relayName: string; familyId: string }>();
+	const [routeNotice, setRouteNotice] = useState<string>();
 	const [removing, setRemoving] = useState<{ title: string; description: string; action: () => Promise<boolean> }>();
 	const [pending, setPending] = useState(false);
 	const [error, setError] = useState<string>();
@@ -135,11 +138,13 @@ export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, o
 
 	const openPick = () => {
 		resetConnectionTest();
+		setRouteNotice(undefined); setAdded(undefined);
 		setError(undefined); setReveal(false); setQuery("");
 		setDraft({ kind: "pick" });
 	};
 	const openRelay = (relay?: RelaySpec, preset?: ProviderPreset) => {
 		resetConnectionTest();
+		setRouteNotice(undefined); setAdded(undefined);
 		setError(undefined); setReveal(false);
 		if (relay) {
 			setDraft({ kind: "relay", relay: { ...relay }, isNew: false, preset: preset ?? matchPreset(relay.baseUrl) });
@@ -251,7 +256,9 @@ export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, o
 			if (request !== testRequest.current) return;
 			if (!models.length) { setError("接口未返回模型，无法测试连接"); return; }
 			setTestModels(models);
-			const batch = all ? models : selected ? models.filter((model) => selected.includes(model)) : [testModel ?? models.find((model) => !excludedTestModels.includes(model)) ?? models[0]];
+			const available = models.filter((model) => !excludedTestModels.includes(model));
+			const preferred = testModel && available.includes(testModel) ? testModel : available.find((model) => discoveredFamily(model)) ?? available[0];
+			const batch = all ? available : selected ? available.filter((model) => selected.includes(model)) : [preferred].filter((model): model is string => !!model);
 			if (!batch.length) { setError("请至少选择一个模型"); return; }
 			setTestBatch(batch);
 			await testModelsConcurrently(batch, {
@@ -293,12 +300,18 @@ export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, o
 		if (draft.isNew && !connectionPassed) { setError("请先通过连接测试再保存"); return; }
 		setPending(true); setError(undefined);
 		try {
-			const saved = await onSaveRelay(relay);
+			const failedModels = testResults.filter((item) => !item.ok).map((item) => item.modelId);
+			const routes = buildDiscoveredRoutes(connectionPassed ? testModels.filter((id) => !failedModels.includes(id)) : [], relay, families, fillFromCatalog);
+			const saved = await onSaveRelay(relay, routes);
 			if (saved) {
-				// 保存成功后回到列表；有默认家族的预设引导去配置线路。
-				if (draft.preset?.familyId) {
+				if (routes.length) {
+					setAdded(undefined); setSelectedFamily(undefined); setTab("families");
+					setRouteNotice(`已为「${saved.name}」自动添加 ${routes.length} 条线路，包含 ${routes.reduce((sum, item) => sum + item.route.models.length, 0)} 个模型。`);
+				} else if (draft.preset?.familyId) {
 					setAdded({ relayId: saved.id, relayName: saved.name, familyId: draft.preset.familyId });
 					setTab("families");
+				} else if (testModels.length && !testModels.some((id) => discoveredFamily(id))) {
+					setRouteNotice(`已保存「${saved.name}」，未发现支持的 DeepSeek、Kimi 或 GLM 模型，请手动配置线路。`);
 				}
 				setDraft(undefined);
 			} else {
@@ -416,7 +429,7 @@ export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, o
 						{site && <button type="button" className="editor-site" onClick={() => openLink(site)} title={site}>{hostOf(site)} ↗</button>}
 						<IconButton type="button"  onClick={closeDraft} disabled={pending} aria-label="返回列表"><Icon name="close" /></IconButton>
 					</div>
-					{draft.isNew && preset && <p className="muted">地址已按预设填好，粘贴密钥并通过连接测试即可；保存后到「模型选择」为它配置线路。</p>}
+					<p className="muted">{draft.isNew && preset ? "地址已按预设填好，粘贴密钥并通过连接测试即可。" : "通过连接测试后保存可补齐缺失线路。"}保存时自动为发现的 DeepSeek、Kimi 和 GLM 模型添加线路，已有线路保留。</p>
 					<div className="editor-field">
 						<label htmlFor="relay-name">名称</label>
 						<div className="editor-control">
@@ -554,7 +567,8 @@ export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, o
 		) : (
 			<>
 				<div className="dialog-heading"><h2 id="families-title">模型配置</h2><IconButton type="button"  onClick={onClose} aria-label="关闭设置"><Icon name="close" /></IconButton></div>
-				<p className="muted">先从供应商目录添加地址与密钥，再在家族卡片里为它配置线路；共 {`${total}`} 条线路。</p>
+				<p className="muted">添加供应商并通过连接测试后，保存会自动生成支持的模型线路；共 {`${total}`} 条线路。</p>
+				{routeNotice && <p className="family-added-hint" role="status">{routeNotice}</p>}
 				<div className="dialog-tabs" role="tablist" aria-label="模型配置分类">
 					<button type="button" role="tab" id="families-tab-relays" aria-selected={tab === "relays"} aria-controls="families-panel-relays" className={`dialog-tab ${tab === "relays" ? "active" : ""}`} onClick={() => setTab("relays")}>供应商<small>{relays.length} 个</small></button>
 					<button type="button" role="tab" id="families-tab-models" aria-selected={tab === "families"} aria-controls="families-panel-models" className={`dialog-tab ${tab === "families" ? "active" : ""}`} onClick={() => setTab("families")}>模型选择<small>{total} 条线路</small></button>

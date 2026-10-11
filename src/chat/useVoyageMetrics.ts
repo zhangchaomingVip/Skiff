@@ -98,13 +98,12 @@ export function useVoyageMetrics(messages: ChatMessage[], model: ModelInfo | und
 	const durationMs = timeline?.durationMs ?? turn.durationMs;
 	const output = turnOutput(turnMessages, streaming);
 	const statusDurationMs = timeline ? phase === "tool" ? timeline.toolMs : phase === "thinking" ? timeline.thinkingMs : timeline.durationMs : undefined;
-	const exactSpeed = timeline?.outputStartedAt !== undefined && timeline.outputTokens !== undefined && timeline.outputTokensEstimated === false
-		? timeline.outputTokens * 1000 / Math.max(1, (timeline.at - timeline.outputStartedAt)) : undefined;
-	const speedEstimated = exactSpeed === undefined;
+	// Cumulative usage (often zero while streaming) cannot measure instantaneous speed.
+	const speedEstimated = streaming || output.estimated;
 	const liveTurn = useMemo(() => streaming && durationMs !== undefined ? { turnId: activeRun?.turnId, durationMs } : undefined, [streaming, durationMs, activeRun?.turnId]);
 	const sessionCost = useMemo(() => summarizeCosts(messages, pricingModels, model), [messages, pricingModels, model]);
 	return {
-		speed: activity === "sailing" ? exactSpeed ?? currentSample?.speed ?? 0 : 0,
+		speed: activity === "sailing" ? currentSample?.speed ?? 0 : 0,
 		averageSpeed: averageOutputSpeed(output.output, streaming ? durationMs : turn.durationMs ?? durationMs),
 		peakSpeed: currentSample?.peak,
 		averageEstimated: output.estimated,

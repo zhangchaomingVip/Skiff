@@ -106,6 +106,12 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 				incoming.timeoutSeconds = Math.min(600, Math.max(5, incoming.timeoutSeconds ?? 60));
 				const index = relays.findIndex((relay) => relay.id === incoming.id);
 				if (index < 0) relays.push(incoming); else relays[index] = incoming;
+				for (const item of args.routes ?? []) {
+					const family = families.find((family) => family.id === item.familyId);
+					if (!family || family.routes.some((route) => route.relayId === incoming.id)) continue;
+					const models = item.route.models.filter((model) => !incoming.excludedModelIds?.includes(model.modelId));
+					if (models.length) family.routes.push({ ...item.route, id: `route-${item.familyId}-${incoming.id}`, relayId: incoming.id, models });
+				}
 				return familiesConfig();
 			}
 			if (command === "delete_relay") {

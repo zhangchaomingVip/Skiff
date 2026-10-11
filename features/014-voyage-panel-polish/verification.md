@@ -55,3 +55,25 @@ $env:NODE_PATH = "C:\Users\49772\.cache\codex-runtimes\codex-primary-runtime\dep
 - `npm run build`、`npm run test:styles`、`git diff --check`：通过。
 - `node tests/voyage.browser.mjs http://127.0.0.1:1424 ../features/014-voyage-panel-polish/screenshots/regression/`：通过，包含原有动画与减少动态效果回归，以及 timing preview 的 20 个场景。
 - 四张截图在 `screenshots/boat/`；人工检查 `light-1200-moored.png`，小船位于仪表内部，未与读数重叠。
+
+## 顶部状态简化
+
+2026-10-11 将右上角状态统一为运行时“航行中”、结束或空闲时“已停止”，移除该处的阶段文字与计时。状态圆点只区分运行/停止，不随思考或工具阶段切换。仪表盘保留阶段状态和计时。
+
+`npm run build`、`npm run test:styles`、`git diff --check` 和两组浏览器验证 `voyage-boat.browser.mjs`、`voyage.browser.mjs` 均通过。五种状态、桌面/窄屏及浅深色主题断言了顶部准确文案和状态圆点；现有预览同时验证思考与工具状态仍显示在仪表盘中。截图已更新。
+
+## 流式 usage 导致指针归零修复
+
+2026-10-11 根据输出期间指针仍在零位的新截图复现问题：流式 `text_delta` 携带的 usage 可能全为零，事件时间线将其标为实测输出。此前 `exactSpeed` 用该累计输出覆盖可见文本采样，造成当前速度为 0，而平均/最高速度仍为正。首次指针测试未携带流式 usage，因此漏掉了这一场景。
+
+修复 `useVoyageMetrics`：实时速度始终使用可见回复增量的平滑采样，累计 usage 不驱动实时仪表；流式速度明确标记为估算。结束后的 usage 统计、等待/思考/工具阶段归零以及历史峰值保持既有行为。
+
+扩展 `node tests/voyage-needle.browser.mjs http://127.0.0.1:1424`，从真实 reducer 的模拟 pi 事件路径向顶层 usage 和 delta usage 分别注入零值，另注入较大的累计输出 usage。修复前稳定失败：当前船速 0、指针 -90°、峰值 28.9 且错误标记实测；修复后测试通过：思考阶段显示计时，零 usage 输出 28.9 tok/s 时指针为 -72.7°，加速至 75.3 tok/s 时转至 -44.8°，累计 usage 更新不改变即时船速或峰值，结束后回到 0 tok/s、-90°。三张截图在 `screenshots/needle/`，人工检查了 `faster-output.png`。
+
+- `npm test`：149/149 通过。
+- `npm run build`、`npm run check:ui`、`npm run test:styles`：通过，仍有既有 Vite chunk 大小提示。
+- `voyage-polish.browser.mjs`：通过；`voyage-waterfall.browser.mjs`：单独重跑通过。瀑布并发初跑在 600px 视口的动画期间出现 1px 溢出断言，未修改相关样式。
+- 原有航行台回归初跑因 Windows 无法写入已有 `regression/voyage-tool.png` 中断，使用独立 `screenshots/needle-regression/` 目录重跑通过，包括 3 种视口、浅深色主题、阶段展示、减少动态效果和 timing preview 的 20 个场景。
+- `git diff --check`：通过。
+
+此验证使用浏览器模拟事件，未连接真实 pi/provider 或 Tauri/WebView2。

@@ -33,7 +33,8 @@ try {
 	state.messages[state.messages.length - 1] = reply("思考", { blocks: [{ kind: "thinking", text: "思考" }] }); await render();
 	assert.equal((await read()).activity, "fishing");
 	assert.equal((await read()).status, "思考中");
-	assert((await page.locator(".voyage-pill").textContent()).includes("思考中 · 0s"));
+	assert.equal(await page.locator(".voyage-pill").textContent(), "航行中");
+	assert.equal(await page.locator(".voyage-gauge-label").textContent(), "思考中");
 	await advance(100);
 	assert.equal((await read()).speed, 0);
 	await advance(699); assert.equal((await read()).activity, "fishing");
@@ -133,8 +134,9 @@ try {
 		const activity = fixture === "voyage-output" ? "sailing" : "fishing";
 		await page.locator(`.voyage-rail.voyage-${activity}`).waitFor();
 		await page.waitForTimeout(350);
-		if (fixture === "voyage-tool") assert((await page.locator(".voyage-pill").textContent()).includes("工具执行中"));
-		if (fixture === "voyage-thinking") assert((await page.locator(".voyage-pill").textContent()).includes("思考中"));
+		assert.equal(await page.locator(".voyage-pill").textContent(), "航行中");
+		if (fixture === "voyage-tool") assert.equal(await page.locator(".voyage-gauge-label").textContent(), "工具执行中");
+		if (fixture === "voyage-thinking") assert.equal(await page.locator(".voyage-gauge-label").textContent(), "思考中");
 		await page.screenshot({ path: new URL(`${fixture}.png`, screenshots).pathname.replace(/^\/(\w:)/, "$1"), fullPage: true, animations: "disabled" });
 		if (activity === "fishing") {
 			assert.equal(await page.locator(".voyage-wake").evaluate((element) => getComputedStyle(element).opacity), "0");

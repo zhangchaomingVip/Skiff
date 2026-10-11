@@ -40,6 +40,8 @@ try {
 			await page.locator(".voyage-gauge-svg").scrollIntoViewIfNeeded();
 			const activity = phase === "moored" ? "moored" : phase === "sailing" ? "sailing" : "fishing";
 			assert.equal(await page.evaluate(() => window.voyageHarness.metrics.activity), activity);
+			assert.equal(await page.locator(".voyage-status-pill").textContent(), phase === "moored" ? "已停止" : "航行中");
+			assert.equal(await page.locator(".voyage-status-pill .voyage-status-dot").getAttribute("class"), `voyage-status-dot ${phase === "moored" ? "stopped" : "running"}`);
 			const samples = await sampleBoat();
 			const drift = Math.max(...samples.map((sample) => sample.x)) - Math.min(...samples.map((sample) => sample.x));
 			assert(drift < .1, `${theme} ${width} ${phase}: horizontal drift ${drift}px`);

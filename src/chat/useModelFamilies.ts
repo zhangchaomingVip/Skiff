@@ -70,6 +70,11 @@ export interface ModelFamily {
 	defaultRouteId: string | null;
 }
 
+export interface RelayRouteSpec {
+	familyId: string;
+	route: RouteSpec;
+}
+
 export interface FamiliesConfig {
 	version: number;
 	relays: RelaySpec[];
@@ -164,10 +169,10 @@ export function useModelFamilies() {
 		clearError: () => setError(undefined),
 		// Resolves to the saved relay (its id is minted server-side) so the
 		// settings page can point follow-up route editing at it.
-		saveRelay: async (relay: RelaySpec) => {
+		saveRelay: async (relay: RelaySpec, routes: RelayRouteSpec[] = []) => {
 			setError(undefined);
 			try {
-				const next = await invoke<FamiliesConfig>("save_relay", { relay });
+				const next = await invoke<FamiliesConfig>("save_relay", { relay, routes });
 				const runtime = await invoke<RuntimeOffer[]>("list_model_runtime");
 				setConfig(next); setOffers(runtime);
 				return next.relays.find((item) => item.name.trim().toLowerCase() === relay.name.trim().toLowerCase());

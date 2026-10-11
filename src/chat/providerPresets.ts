@@ -37,6 +37,7 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
 	{ id: "zai", name: "Z.ai", kind: "vendor", baseUrl: "https://api.z.ai/api/paas/v4", website: "https://z.ai", keysUrl: "https://z.ai/manage-apikey/apikey-list", familyId: "glm" },
 
 	// --- relays: one key for many vendors -----------------------------------
+	{ id: "bailian", name: "阿里云百炼", kind: "relay", baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1", website: "https://bailian.console.aliyun.com", keysUrl: "https://bailian.console.aliyun.com/?apiKey=1" },
 	{ id: "openrouter", name: "OpenRouter", kind: "relay", baseUrl: "https://openrouter.ai/api/v1", website: "https://openrouter.ai", keysUrl: "https://openrouter.ai/keys" },
 	{ id: "siliconflow", name: "硅基流动", kind: "relay", baseUrl: "https://api.siliconflow.cn/v1", website: "https://cloud.siliconflow.cn", keysUrl: "https://cloud.siliconflow.cn/account/ak" },
 	{ id: "modelscope", name: "魔搭 ModelScope", kind: "relay", baseUrl: "https://api-inference.modelscope.cn/v1", website: "https://modelscope.cn", keysUrl: "https://modelscope.cn/my/myaccesstoken" },
@@ -82,6 +83,10 @@ function normalize(url: string): string | undefined {
 export function matchPreset(baseUrl: string): ProviderPreset | undefined {
 	const actual = normalize(baseUrl);
 	if (!actual) return undefined;
+	const hostname = new URL(baseUrl.trim()).hostname.toLowerCase();
+	if (hostname === "dashscope.aliyuncs.com" || /^dashscope-(?:intl|us)\.aliyuncs\.com$/.test(hostname) || /^[a-z0-9-]+\.cn-[a-z0-9-]+\.maas\.aliyuncs\.com$/.test(hostname)) {
+		return PROVIDER_PRESETS.find((preset) => preset.id === "bailian");
+	}
 	return PROVIDER_PRESETS.find((preset) => {
 		const expected = normalize(preset.baseUrl);
 		// Mutual prefix: a relay typed without /v1 still matches, and a plan

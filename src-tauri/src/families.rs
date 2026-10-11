@@ -129,6 +129,13 @@ pub struct RouteSpec {
 	pub reasoning: bool,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RelayRouteSpec {
+	pub family_id: String,
+	pub route: RouteSpec,
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ModelFamily {
@@ -752,20 +759,31 @@ fn upsert_relay(config: &mut FamiliesConfig, relay: RelaySpec) {
 	}
 }
 
-pub fn save_relay_in(dir: &Path, relay: RelaySpec) -> Result<FamiliesConfig, String> {
+/// Commit the relay and discovered routes together, avoiding a saved provider
+/// with no routes if any model fails validation. Discovery never replaces edits.
+pub fn save_relay_with_routes_in(dir: &Path, relay: RelaySpec, routes: Vec<RelayRouteSpec>) -> Result<FamiliesConfig, String> {
 	apply(dir, |config| {
-		let normalized = normalize_relay(relay, config)?;
+		let mut normalized = normalize_relay(relay, config)?;
 		// A blank key on an edit means "keep the stored one".
 		if normalized.api_key.trim().is_empty() {
 			let Some(existing) = config.relays.iter().find(|existing| existing.id == normalized.id) else {
 				return Err("新中转需要 API Key".into());
 			};
-			let mut with_key = normalized;
-			with_key.api_key = existing.api_key.clone();
-			upsert_relay(config, with_key);
-			return Ok(());
+			normalized.api_key = existing.api_key.clone();
 		}
+		let relay_id = normalized.id.clone();
+		let excluded = normalized.excluded_model_ids.clone();
 		upsert_relay(config, normalized);
+		for mut item in routes {
+			let family = family_mut(config, &item.family_id)?;
+			if family.routes.iter().any(|route| route.relay_id == relay_id) { continue; }
+			item.route.id.clear();
+			item.route.relay_id = relay_id.clone();
+			item.route.models.retain(|model| !excluded.contains(&model.model_id.trim().to_string()));
+			if item.route.models.is_empty() { continue; }
+			let route = normalize_route(&item.route, config, &item.family_id, None)?;
+			family_mut(config, &item.family_id)?.routes.push(route);
+		}
 		Ok(())
 	})
 }
@@ -917,9 +935,9 @@ pub fn list_model_runtime() -> Result<Vec<RuntimeOffer>, String> {
 }
 
 #[tauri::command]
-pub fn save_relay(relay: RelaySpec) -> Result<FamiliesConfig, String> {
+pub fn save_relay(relay: RelaySpec, routes: Option<Vec<RelayRouteSpec>>) -> Result<FamiliesConfig, String> {
 	let _guard = providers::CONFIG_LOCK.lock().map_err(|_| "配置锁异常")?;
-	save_relay_in(&agent_dir()?, relay)
+	save_relay_with_routes_in(&agent_dir()?, relay, routes.unwrap_or_default())
 }
 
 #[tauri::command]
@@ -982,6 +1000,58 @@ pub fn set_usd_cny_rate(rate: f64) -> Result<FamiliesConfig, String> {
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	#[test]
+	fn relay_and_discovered_routes_save_together_and_preserve_existing_settings() {
+		let dir = std::env::temp_dir().join(format!("skiff-discovered-routes-test-{}", std::process::id()));
+		std::fs::create_dir_all(&dir).unwrap();
+		let relay: RelaySpec = serde_json::from_value(json!({
+			"id": "", "name": "Bailian", "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+			"apiKey": "sk-test-discovery", "excludedModelIds": ["kimi-k3"]
+		})).unwrap();
+		let routes = || -> Vec<RelayRouteSpec> {
+			["deepseek", "kimi", "glm"].iter().map(|id| serde_json::from_value(json!({
+				"familyId": id, "route": { "relayId": "", "tools": true, "models": [{
+					"modelId": if *id == "kimi" { "kimi-k3".to_string() } else { format!("vendor/{id}-chat") },
+					"inputCost": 1.5, "contextWindow": 128000, "maxTokens": 8192
+				}] }
+			})).unwrap()).collect()
+		};
+		let saved = save_relay_with_routes_in(&dir, relay, routes()).unwrap();
+		let relay = saved.relays[0].clone();
+		assert!(!relay.id.is_empty());
+		assert_eq!(runtime_offers(&saved).len(), 2);
+		let projected = providers::read_config(&dir.join("models.json")).unwrap();
+		assert_eq!(projected["providers"][provider_key("glm", &relay.id)]["models"][0]["id"], "vendor/glm-chat");
+		assert!(!std::fs::read_to_string(config_path(&dir)).unwrap().contains("sk-test-discovery"));
+
+		// Retesting must preserve manual edits and explicit defaults.
+		let mut edited = saved.families[0].routes[0].clone();
+		edited.models[0].input_cost = 7.0;
+		save_route_in(&dir, "deepseek", edited.clone()).unwrap();
+		set_default_route_in(&dir, "deepseek", Some(&edited.id)).unwrap();
+		let mut edit_relay = relay.clone();
+		edit_relay.api_key.clear();
+		edit_relay.excluded_model_ids.clear();
+		let repaired = save_relay_with_routes_in(&dir, edit_relay, routes()).unwrap();
+		assert_eq!(repaired.relays[0].api_key, "sk-test-discovery");
+		assert_eq!(repaired.families[0].routes.len(), 1);
+		assert_eq!(repaired.families[0].routes[0].models[0].input_cost, 7.0);
+		assert_eq!(repaired.families[0].default_route_id.as_deref(), Some(edited.id.as_str()));
+		assert_eq!(runtime_offers(&repaired).len(), 3);
+
+		// A malformed discovered route must not leave a partially saved relay.
+		let before = std::fs::read(config_path(&dir)).unwrap();
+		let models_before = std::fs::read(dir.join("models.json")).unwrap();
+		let mut invalid_relay = relay;
+		invalid_relay.id.clear(); invalid_relay.name = "Invalid relay".into();
+		let mut invalid_routes = routes();
+		invalid_routes[2].route.models[0].max_tokens = 0;
+		assert!(save_relay_with_routes_in(&dir, invalid_relay, invalid_routes).is_err());
+		assert_eq!(std::fs::read(config_path(&dir)).unwrap(), before);
+		assert_eq!(std::fs::read(dir.join("models.json")).unwrap(), models_before);
+		std::fs::remove_dir_all(dir).unwrap();
+	}
 
 	#[test]
 	fn model_vision_survives_save_and_controls_projection_and_runtime_independently() {
