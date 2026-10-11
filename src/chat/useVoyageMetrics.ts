@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { averageOutputSpeed, contextPressure, contextReminder, currentTurnMessages, currentTurnStats, sampleVoyage, startVoyage, turnOutput, visibleReplyUnits, voyageStatus, type VoyageActivity, type VoyagePhase, type VoyageSample } from "./sailing";
+import { advanceVoyageContext, averageOutputSpeed, contextPressure, contextReminder, currentTurnMessages, currentTurnStats, sampleVoyage, startVoyage, turnOutput, visibleReplyUnits, voyageStatus, type VoyageActivity, type VoyageContext, type VoyagePhase, type VoyageSample } from "./sailing";
 import { advanceTimeline, refreshTimeline, startTimeline, toolFailureStatus, type VoyageTimeline, type VoyageTool } from "./voyageTimeline";
 import type { ChatMessage, ModelInfo, SessionState } from "./types";
-import { summarizeUsage } from "./usage";
 import { summarizeCosts, type CostSummary } from "./cost";
 
 export interface VoyageMetrics {
@@ -23,7 +22,7 @@ export interface VoyageMetrics {
 	phase: VoyagePhase;
 	arrived: boolean;
 	pressure: "normal" | "warning" | "critical";
-	turn: { durationMs?: number; output?: number; cost?: CostSummary };
+	turn: { durationMs?: number; input?: number; output?: number; reasoning?: number; cost?: CostSummary };
 	liveTurn?: { turnId?: string; durationMs: number };
 	sessionCost: CostSummary;
 	timeline?: VoyageTimeline;
@@ -32,15 +31,6 @@ export interface VoyageMetrics {
 	contextEstimated: boolean;
 	speedEstimated: boolean;
 }
-
-const estimateTokens = (text: string): number => {
-	let units = 0;
-	for (const char of text) {
-		if (/\s/.test(char)) continue;
-		units += /[\u2e80-\u9fff\uf900-\ufaff\uff00-\uffef]/.test(char) ? 1 : 0.25;
-	}
-	return Math.ceil(units);
-};
 
 export function useVoyageMetrics(messages: ChatMessage[], model: ModelInfo | undefined, streaming: boolean, pricingModels: ModelInfo[] = [], activeRun?: SessionState["activeRun"], error?: string, abortedRunKey?: string, eventTimeline?: VoyageTimeline): VoyageMetrics {
 	const user = [...messages].reverse().find((message) => message.role === "user");
@@ -61,6 +51,7 @@ export function useVoyageMetrics(messages: ChatMessage[], model: ModelInfo | und
 	input.current = { key, tokens, streaming, activeRun, turnMessages, error, abortedRunKey, eventTimeline };
 	const sampler = useRef<VoyageSample>();
 	const ledger = useRef<VoyageTimeline>();
+	const contextLedger = useRef<VoyageContext>();
 	const [reading, setReading] = useState<{ sample: VoyageSample; timeline?: VoyageTimeline }>();
 	const tick = () => {
 		const current = input.current;
@@ -95,23 +86,13 @@ export function useVoyageMetrics(messages: ChatMessage[], model: ModelInfo | und
 	const phase = timeline?.phase ?? "response";
 	const activity = streaming ? phase === "response" ? currentSample?.activity ?? "fishing" : "fishing" : "moored";
 	const data = useMemo(() => {
-		const assistants = messages.filter((message) => message.role === "assistant" && message.usage && !message.streaming);
-		const last = assistants[assistants.length - 1];
-		const limit = model?.contextWindow;
-		if (eventTimeline?.contextUsed !== undefined) return { context: eventTimeline.contextUsed, limit: eventTimeline.contextLimit ?? model?.contextWindow, overhead: undefined, conversation: undefined, estimated: eventTimeline.contextEstimated ?? false };
-		if (last?.usage && limit && Number.isFinite(limit) && limit > 0 && [last.usage.input, last.usage.output, last.usage.cacheRead, last.usage.cacheWrite].every((value) => Number.isFinite(value) && value >= 0)) {
-			const context = summarizeUsage([last]).total;
-			const first = assistants[0];
-			const firstUser = messages.find((message) => message.role === "user");
-			const firstUserText = firstUser?.blocks.map((block) => block.kind === "text" ? block.text : "").join("") ?? "";
-			const overhead = Math.min(context, first ? Math.max(0, summarizeUsage([first]).inputTotal - estimateTokens(firstUserText)) : 0);
-			return { context, limit, overhead, conversation: Math.max(0, context - overhead), estimated: false };
-		}
-		const estimated = messages.reduce((sum, message) => sum + message.blocks.reduce((total, block) => total + (block.kind === "text" || block.kind === "thinking" ? estimateTokens(block.text) : 0), 0), 0);
-		return estimated > 0 && limit && limit > 0 ? { context: estimated, limit, estimated: true } : undefined;
-	}, [messages, model, eventTimeline]);
+		const limit = eventTimeline?.contextLimit ?? model?.contextWindow;
+		const next = advanceVoyageContext(contextLedger.current, key, belongs ? messages : []);
+		contextLedger.current = next;
+		return { ...next, limit: limit && Number.isFinite(limit) && limit > 0 ? limit : undefined };
+	}, [key, messages, model, belongs, eventTimeline]);
 
-	const ratio = data?.limit && data.limit > 0 ? data.context / data.limit : 0;
+	const ratio = data.limit && data.context !== undefined ? data.context / data.limit : 0;
 	const arrived = ratio >= 1;
 	const turn = useMemo(() => belongs ? currentTurnStats(messages, pricingModels, model) : {}, [messages, pricingModels, model, belongs]);
 	const durationMs = timeline?.durationMs ?? turn.durationMs;
@@ -133,14 +114,12 @@ export function useVoyageMetrics(messages: ChatMessage[], model: ModelInfo | und
 		context: data?.context,
 		limit: data?.limit,
 		ratio,
-		overhead: data?.overhead,
-		conversation: data?.conversation,
 		status: voyageStatus(activity, phase),
 		statusDurationMs,
 		phase,
 		arrived,
 		pressure: contextPressure(ratio),
-		turn: { ...turn, durationMs },
+		turn: { ...turn, input: data.input, durationMs },
 		liveTurn,
 		sessionCost,
 		timeline,

@@ -6,7 +6,7 @@ import fs from "node:fs/promises";
 const { chromium } = createRequire(import.meta.url)("playwright");
 const browser = await chromium.launch({ headless: true, channel: process.env.SKIFF_BROWSER_CHANNEL ?? "msedge" });
 const base = process.argv[2] ?? "http://localhost:1424";
-const screenshots = new URL("../features/013-voyage-tool-waterfall/screenshots/", import.meta.url);
+const screenshots = new URL(process.argv[3] ?? "../features/013-voyage-tool-waterfall/screenshots/", import.meta.url);
 await fs.mkdir(screenshots, { recursive: true });
 const page = await browser.newPage({ viewport: { width: 1200, height: 800 } });
 const errors = [];
@@ -14,6 +14,7 @@ page.on("pageerror", (error) => errors.push(error.message));
 const user = { id: "user", role: "user", blocks: [], timestamp: 1000 };
 const call = (id, name = "read", argsText = "src/chat/voyageTimeline.ts") => ({ kind: "tool", id, name, argsText, done: true });
 const result = (id, text = "读取完成", isError = false) => ({ kind: "toolResult", id, name: "read", text, isError });
+const usage = (input, cacheRead, cacheWrite, output, reasoning) => ({ input, cacheRead, cacheWrite, output, totalTokens: input + cacheRead + cacheWrite + output, ...(reasoning === undefined ? {} : { reasoning }) });
 const step = (blocks, extra = {}) => ({ id: "step", role: "assistant", streaming: true, blocks, ...extra });
 let state;
 const read = () => page.evaluate(() => window.voyageHarness.metrics);
@@ -23,6 +24,25 @@ const screenshot = (name) => page.screenshot({ path: fileURLToPath(new URL(name,
 try {
 	await page.goto(`${base}/tests/voyage.html`);
 	await page.waitForFunction(() => window.voyageHarness?.render);
+	state = { sessionId: "context-ledger", messages: [
+		{ ...user, id: "context-user" },
+		{ id: "context-step-1", role: "assistant", streaming: false, blocks: [], usage: usage(100, 40, 10, 20, 8) },
+	], isStreaming: false, model: { id: "preview", provider: "mock", contextWindow: 1000 } };
+	await render();
+	assert.equal((await read()).context, 150);
+	state.messages.push({ id: "context-step-2", role: "assistant", streaming: false, blocks: [], usage: usage(60, 15, 5, 10, 4) });
+	await render();
+	assert.equal((await read()).context, 230);
+	assert.equal((await read()).turn.input, 230);
+	assert.equal((await read()).turn.reasoning, 12);
+	state.messages[1].usage = usage(1, 0, 0, 1, 1);
+	state.messages[2].usage = usage(1, 0, 0, 1, 1);
+	await render();
+	assert.equal((await read()).context, 230);
+	assert((await page.locator(".voyage-turn").textContent()).includes("输入 tokens"));
+	assert((await page.locator(".voyage-turn").textContent()).includes("思考 tokens"));
+	state = { sessionId: "context-reset", messages: [], isStreaming: false, model: { id: "preview", provider: "mock", contextWindow: 1000 } };
+	await render();
 	state = { messages: [], isStreaming: true, activeRun: { startedAt: 1000, promptId: "prompt", turnId: "turn:user" } };
 	await render(); await advance(1000);
 	assert.deepEqual([(await read()).timeline.durationMs, (await read()).timeline.thinkingMs, (await read()).timeline.toolMs], [1000, 0, 0]);
@@ -38,6 +58,9 @@ try {
 	await advance(1000);
 	state.messages[1].blocks.push(result("failure", "权限不足，调用失败", true)); await render();
 	assert.equal((await read()).toolLog[0].status, "failed");
+	assert((await page.locator(".voyage-tool-log summary").textContent()).includes("（1 次失败）"));
+	assert.equal(await page.locator(".voyage-tool-log .tool-failed .voyage-tool-state").textContent(), "失败");
+	assert(!(await page.locator("body").textContent()).includes("等待参数"));
 	assert.equal(await page.locator(".voyage-tool-log time").count(), 0);
 	await advance(3999); assert.equal(await page.locator(".voyage-tool-active time").count(), 0);
 	assert.equal((await read()).activeTools[0].durationMs, 4999);

@@ -141,6 +141,20 @@ test("context warning thresholds and current-turn records use only the latest pr
 		{ id: "step", role: "assistant", blocks: [], usage: usage(10, .1) },
 		{ id: "final", role: "assistant", blocks: [], usage: usage(20, .2), durationMs: 2000 },
 	];
-	assert.deepEqual(currentTurnStats(messages), { durationMs: 2000, output: 30, cost: { totals: {}, unconfigured: true } });
+	assert.deepEqual(currentTurnStats(messages), { durationMs: 2000, input: 0, output: 30, cost: { totals: {}, unconfigured: true } });
 	assert.deepEqual(currentTurnStats([...messages, { id: "next", role: "user", blocks: [] }]), {});
+});
+
+test("current-turn records sum complete input channels and available reasoning across assistant steps", () => {
+	const usage = (input: number, cacheRead: number, cacheWrite: number, output: number, reasoning?: number) => ({ input, cacheRead, cacheWrite, output, totalTokens: input + cacheRead + cacheWrite + output, ...(reasoning === undefined ? {} : { reasoning }) });
+	const messages: ChatMessage[] = [
+		{ ...user, id: "token-user" },
+		{ id: "first-step", role: "assistant", blocks: [{ kind: "tool", id: "call", name: "bash", argsText: "{}", done: true }], streaming: false, usage: usage(100, 20, 5, 30, 10) },
+		{ id: "second-step", role: "assistant", blocks: [{ kind: "text", text: "完成" }], streaming: false, usage: usage(60, 15, 5, 25, 5) },
+	];
+	assert.deepEqual(currentTurnStats(messages), { durationMs: undefined, input: 205, output: 55, reasoning: 15, cost: { totals: {}, unconfigured: true } });
+	const missingReasoning = currentTurnStats(messages.map((message) => message.id === "second-step" ? { ...message, usage: usage(60, 15, 5, 25) } : message));
+	assert.equal(missingReasoning.input, 205);
+	assert.equal(missingReasoning.output, 55);
+	assert.equal(missingReasoning.reasoning, undefined);
 });

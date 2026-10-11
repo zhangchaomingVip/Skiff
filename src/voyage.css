@@ -192,9 +192,10 @@
 	.voyage-wave { animation: none; }
 	.voyage-sailing .voyage-wave { animation: voyage-wave-slide 2.5s linear infinite; }
 	.voyage-wave-move path { animation: voyage-wave-slide 2.5s linear infinite; }
-	.voyage-boat-bob { animation: voyage-boat-bob 1.8s ease-in-out infinite; }
+	/* SVG coordinates already place the boat; legacy HTML centering must not apply. */
+	.voyage-gauge-svg .voyage-scene-boat { position: static; transform: none; animation: voyage-boat-bob 1.8s ease-in-out infinite; }
 	.voyage-wake-dash { stroke-dasharray: 9 18; animation: voyage-wake-dash 1.2s linear infinite; }
-	@keyframes voyage-boat-bob { 50% { transform: translateY(-3px); } }
+	@keyframes voyage-boat-bob { from, to { transform: translateY(0); } 50% { transform: translateY(-3px); } }
 	@keyframes voyage-wave-slide { to { transform: translateX(-24px); } }
 	@keyframes voyage-wake-dash { to { stroke-dashoffset: -27px; } }
 	.voyage-phase-section { margin: 16px 0; }
@@ -218,9 +219,16 @@
 	.voyage-tool-log { max-height: 240px; overflow-y: auto; overflow-x: hidden; }
 	.voyage-tool-stream { display: flex; flex-direction: column; gap: 0; margin: 0; padding: 0; list-style: none; }
 	.voyage-tool-row { display: flex; align-items: center; min-width: 0; gap: 8px; padding: 6px 8px; border-left: 2px solid transparent; font-size: var(--font-size-sm); animation: voyage-tool-fall .28s cubic-bezier(.34,1.56,.64,1) both; transform-origin: top center; }
-	.voyage-tool-icon { flex: none; min-width: 14px; color: var(--secondary); font-size: var(--font-size-md); text-align: center; }
+	.voyage-tool-icon { display: flex; flex: none; min-width: 14px; color: var(--secondary); font-size: var(--font-size-md); text-align: center; }
 	.voyage-tool-name { flex: none; max-width: 55px; overflow: hidden; color: var(--text); font-weight: var(--font-weight-semibold); text-overflow: ellipsis; white-space: nowrap; }
 	.voyage-tool-desc { flex: 1; min-width: 0; overflow: hidden; color: var(--secondary); text-overflow: ellipsis; white-space: nowrap; }
+	.voyage-tool-state { flex: none; margin-left: auto; padding: 1px 5px; border: 1px solid currentColor; border-radius: var(--radius-full); color: var(--secondary); font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); line-height: 1.35; white-space: nowrap; }
+	.voyage-tool-row.tool-failed .voyage-tool-state, .voyage-tool-row.tool-timeout .voyage-tool-state { color: var(--danger); background: color-mix(in srgb, var(--danger) 10%, transparent); }
+	.voyage-tool-row.tool-interrupted .voyage-tool-state, .voyage-tool-row.tool-missing .voyage-tool-state { color: var(--color-warning); background: color-mix(in srgb, var(--color-warning) 10%, transparent); }
+	.voyage-tool-row:has(.voyage-tool-state) { flex-wrap: wrap; opacity: 1; }
+	.voyage-tool-row:has(.voyage-tool-state) .voyage-tool-desc { flex-basis: 100%; order: 1; padding-left: 22px; }
+	.voyage-tool-row:not(:has(.voyage-tool-desc)) .voyage-tool-name { flex: 1; min-width: 0; max-width: none; }
+	.voyage-tool-log summary { overflow-wrap: anywhere; line-height: 1.6; }
 	.voyage-tool-time { flex: none; min-width: 32px; color: var(--color-warning); font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); text-align: right; }
 	.voyage-tool-result { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 	.voyage-tool-row.tool-running { border-left-color: var(--accent); background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--accent) 6%, transparent)); }
@@ -243,6 +251,8 @@
 	.voyage-progress-caption { color: var(--secondary); font-size: var(--font-size-sm); text-align: center; }
 	.voyage-progress-caption strong { color: var(--text); font-weight: var(--font-weight-semibold); }
 	.voyage-progress-caption small { color: var(--secondary); }
+	.voyage-turn dl > div { min-width: 0; flex-wrap: wrap; }
+	.voyage-turn dd { max-width: 100%; overflow-wrap: anywhere; white-space: normal; }
 	.voyage-collapse { position: absolute; top: 10px; right: 8px; }
 	.voyage-dashboard .voyage-collapse { color: var(--secondary); }
 	.voyage-rail.collapsed { align-items: center; gap: 9px; padding: 10px 0; overflow: hidden; background: var(--panel-2); }

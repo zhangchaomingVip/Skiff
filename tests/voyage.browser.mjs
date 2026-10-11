@@ -41,7 +41,7 @@ try {
 	state.messages[state.messages.length - 1] = reply("思考回复"); await render();
 	assert.equal((await read()).activity, "sailing");
 	const peak = (await read()).peakSpeed;
-	state.messages[state.messages.length - 1] = reply("思考回复", { streaming: false, usage: usage(100, 800), durationMs: 1000 });
+	state.messages[state.messages.length - 1] = reply("思考回复", { streaming: false, usage: usage(100, 900), durationMs: 1000 });
 	state.isStreaming = false; delete state.activeRun; await render();
 	assert.equal((await read()).activity, "moored");
 	assert.equal((await read()).averageSpeed, 100);

@@ -50,7 +50,7 @@ function MetricsView({ state }) {
 		query.addEventListener("change", update);
 		return () => query.removeEventListener("change", update);
 	}, []);
-	const metrics = useVoyageMetrics(state.messages, state.model, state.isStreaming, [], state.activeRun, state.lastError, state.abortedRunKey);
+	const metrics = useVoyageMetrics(state.messages, state.model, state.isStreaming, [], state.activeRun, state.lastError, state.abortedRunKey, state.voyageTimeline);
 	harness.metrics = metrics;
 	const toggle = () => setExpanded((value) => !value);
 	return React.createElement("div", { className: `chat-and-rail ${expanded ? "rail-expanded" : "rail-collapsed"}`, style: { height: "100vh" } },

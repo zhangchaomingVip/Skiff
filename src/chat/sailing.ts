@@ -139,8 +139,47 @@ export function contextPressure(ratio: number): "normal" | "warning" | "critical
 	return ratio > .95 ? "critical" : ratio >= .8 ? "warning" : "normal";
 }
 
+export interface VoyageContext {
+	key: string;
+	inputs: ReadonlyMap<string, number>;
+	input?: number;
+	context?: number;
+	estimated: boolean;
+}
+
+export function estimateContextTokens(messages: ChatMessage[]): number {
+	return messages.reduce((sum, message) => sum + message.blocks.reduce((total, block) => {
+		const text = block.kind === "text" || block.kind === "thinking" || block.kind === "toolResult" ? block.text : block.kind === "tool" ? block.argsText : "";
+		let units = 0;
+		for (const char of text) {
+			if (/\s/.test(char)) continue;
+			units += /[\u2e80-\u9fff\uf900-\ufaff\uff00-\uffef]/.test(char) ? 1 : 0.25;
+		}
+		return total + Math.ceil(units);
+	}, 0), 0);
+}
+
+/** Keep each request's largest input so repeated usage cannot erase a tool round trip. */
+export function advanceVoyageContext(previous: VoyageContext | undefined, key: string, messages: ChatMessage[]): VoyageContext {
+	const retained = previous?.key === key ? previous : undefined;
+	const inputs = new Map(retained?.inputs);
+	for (const message of currentTurnMessages(messages)) {
+		const usage = message.usage;
+		if (!usage || ![usage.input, usage.cacheRead, usage.cacheWrite].every((value) => Number.isFinite(value) && value >= 0)) continue;
+		const input = usage.input + usage.cacheRead + usage.cacheWrite;
+		if (Number.isFinite(input)) inputs.set(message.id, Math.max(inputs.get(message.id) ?? 0, input));
+	}
+	const input = inputs.size ? [...inputs.values()].reduce((sum, value) => sum + value, 0) : undefined;
+	const userIndex = messages.map((message) => message.role).lastIndexOf("user");
+	const estimate = input === undefined ? estimateContextTokens(messages.slice(Math.max(0, userIndex))) : 0;
+	const observed = input ?? (estimate > 0 ? estimate : undefined);
+	const context = observed === undefined ? retained?.context : Math.max(retained?.context ?? 0, observed);
+	const estimated = input === undefined || (context !== undefined && context > input);
+	return { key, inputs, input, context, estimated };
+}
+
 /** Usage belongs to the most recent user prompt, including any intermediate assistant steps. */
-export function currentTurnStats(messages: ChatMessage[], models: ModelInfo[] = [], current?: ModelInfo): { durationMs?: number; output?: number; cost?: CostSummary } {
+export function currentTurnStats(messages: ChatMessage[], models: ModelInfo[] = [], current?: ModelInfo): { durationMs?: number; input?: number; output?: number; reasoning?: number; cost?: CostSummary } {
 	let userIndex = -1;
 	for (let index = messages.length - 1; index >= 0; index--) {
 		if (messages[index].role === "user") { userIndex = index; break; }
@@ -151,11 +190,13 @@ export function currentTurnStats(messages: ChatMessage[], models: ModelInfo[] = 
 	const measured = [...assistants].reverse().find((message) => typeof message.durationMs === "number")?.durationMs;
 	const finished = [...assistants].reverse().find((message) => typeof message.timestamp === "number")?.timestamp;
 	const started = messages[userIndex].timestamp;
-	const usageMessages = assistants.filter((message) => message.usage && !message.streaming);
+	const usageMessages = assistants.filter((message) => message.usage);
 	const usage = usageMessages.length ? summarizeUsage(usageMessages) : undefined;
 	return {
 		durationMs: measured ?? (started !== undefined && finished !== undefined ? Math.max(0, finished - started) : undefined),
+		input: usage?.inputTotal,
 		output: usage?.output,
+		...(usage?.reasoning === undefined ? {} : { reasoning: usage.reasoning }),
 		cost: usage ? summarizeCosts(usageMessages, models, current) : undefined,
 	};
 }
