@@ -17,6 +17,8 @@ import { Icon } from "./Icon";
 import { ModelIdField } from "./ModelIdField";
 import { PriceImport, type ExtractorPick } from "./PriceImport";
 import { ProviderIcon } from "./ProviderIcon";
+import { ArchivedSessions } from "./ArchivedSessions";
+import type { Conversation, Project } from "../chat/workspace";
 
 const BRANDABLE = ["deepseek", "kimi", "glm"] as const;
 const brand = (familyId: string): BrandName | undefined => BRANDABLE.find((name) => name === familyId);
@@ -34,13 +36,18 @@ type Draft =
  * over the preset's endpoint. Forms take over the dialog body so the lists
  * stay uncluttered.
  */
-export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, onSaveRate, onClose, onSaveRelay, onDeleteRelay, onSetRelayEnabled, onSaveRoute, onDeleteRoute, onReorderRoutes, onSetDefaultRoute, onAutoFailover, onTest, onCancelTest, onDiscover, configError }: {
+export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, onSaveRate, onClose, onSaveRelay, onDeleteRelay, onSetRelayEnabled, onSaveRoute, onDeleteRoute, onReorderRoutes, onSetDefaultRoute, onAutoFailover, onTest, onCancelTest, onDiscover, configError, chats = [], projects = [], navigationBusy = false, onRestoreArchive = () => {}, onDeleteArchive = () => {} }: {
 	families: ModelFamily[];
 	relays: RelaySpec[];
 	autoFailover: boolean;
 	usdCnyRate: number;
 	onSaveRate: (rate: number) => Promise<boolean>;
 	configError?: string;
+	chats?: Conversation[];
+	projects?: Project[];
+	navigationBusy?: boolean;
+	onRestoreArchive?: (id: string) => void;
+	onDeleteArchive?: (id: string) => void;
 	onClose: () => void;
 	onSaveRelay: (relay: RelaySpec, routes?: RelayRouteSpec[]) => Promise<RelaySpec | undefined>;
 	onDeleteRelay: (relayId: string) => Promise<boolean>;
@@ -54,7 +61,7 @@ export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, o
 	onCancelTest: (requestId: string) => Promise<unknown>;
 	onDiscover: (baseUrl: string, apiKey: string) => Promise<string[]>;
 }) {
-	const [tab, setTab] = useState<"relays" | "families">(relays.length ? "families" : "relays");
+	const [tab, setTab] = useState<"relays" | "families" | "archives">(relays.length ? "families" : "relays");
 	// 模型选择 tab 内的家族筛选：undefined 表示「全部线路」。
 	const [selectedFamily, setSelectedFamily] = useState<string>();
 	const [draft, setDraft] = useState<Draft>();
@@ -566,15 +573,16 @@ export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, o
 			</form>
 		) : (
 			<>
-				<div className="dialog-heading"><h2 id="families-title">模型配置</h2><IconButton type="button"  onClick={onClose} aria-label="关闭设置"><Icon name="close" /></IconButton></div>
-				<p className="muted">添加供应商并通过连接测试后，保存会自动生成支持的模型线路；共 {`${total}`} 条线路。</p>
+				<div className="dialog-heading"><h2 id="families-title">设置</h2><IconButton type="button"  onClick={onClose} aria-label="关闭设置"><Icon name="close" /></IconButton></div>
+				{tab === "archives" ? <p className="muted">管理已归档的会话。</p> : <p className="muted">添加供应商并通过连接测试后，保存会自动生成支持的模型线路；共 {`${total}`} 条线路。</p>}
 				{routeNotice && <p className="family-added-hint" role="status">{routeNotice}</p>}
 				<div className="dialog-tabs" role="tablist" aria-label="模型配置分类">
 					<button type="button" role="tab" id="families-tab-relays" aria-selected={tab === "relays"} aria-controls="families-panel-relays" className={`dialog-tab ${tab === "relays" ? "active" : ""}`} onClick={() => setTab("relays")}>供应商<small>{relays.length} 个</small></button>
 					<button type="button" role="tab" id="families-tab-models" aria-selected={tab === "families"} aria-controls="families-panel-models" className={`dialog-tab ${tab === "families" ? "active" : ""}`} onClick={() => setTab("families")}>模型选择<small>{total} 条线路</small></button>
+					<button type="button" role="tab" id="families-tab-archives" aria-selected={tab === "archives"} aria-controls="families-panel-archives" className={`dialog-tab ${tab === "archives" ? "active" : ""}`} onClick={() => setTab("archives")}>归档会话<small>{chats.filter((chat) => typeof chat.archivedAt === "number").length} 条</small></button>
 				</div>
 				<div className="family-tab-content">
-					{tab === "relays" ? (
+					{tab === "archives" ? <ArchivedSessions chats={chats} projects={projects} busy={navigationBusy} onRestore={onRestoreArchive} onDelete={onDeleteArchive} /> : tab === "relays" ? (
 						<>
 						<section className="family-card" id="families-panel-relays" role="tabpanel" aria-labelledby="families-tab-relays">
 							{relays.length === 0 && <p className="family-empty">还没添加供应商，从下面的目录挑一个，或用自定义地址。</p>}

@@ -1,16 +1,18 @@
 import { seedPolishPreview } from "./polishFixture.mjs";
 
-export const fixtures = ["launcher", "single", "multi", "unknown", "empty", "loading", "error", "chat", "long", "settings", "picker", "voyage", "voyage-output", "voyage-thinking", "voyage-fishing", "voyage-tool", "voyage-moored", "voyage-high", "authorization", "sidebar"];
+export const fixtures = ["launcher", "single", "multi", "unknown", "empty", "loading", "error", "chat", "long", "settings", "picker", "voyage", "voyage-output", "voyage-thinking", "voyage-fishing", "voyage-tool", "voyage-moored", "voyage-high", "authorization", "sidebar", "archive"];
 
 // This entry runs only on the separate preview origin. It never uses real pi.
 export function preparePreview(target) {
 	const params = new URLSearchParams(target.location.search);
 	const fixture = params.get("fixture") || "launcher";
 	const storage = target.localStorage;
+	const preservedPreferences = params.get("persist") === "1" ? ["skiff.sidebar.width", "skiff.voyage.width", "skiff.sidebar.recent-expanded"].map((key) => [key, storage.getItem(key)]).filter((entry) => entry[1] !== null) : [];
 	for (let index = storage.length - 1; index >= 0; index--) {
 		const key = storage.key(index);
 		if (key?.startsWith("skiff.")) storage.removeItem(key);
 	}
+	for (const [key, value] of preservedPreferences) storage.setItem(key, value);
 	const now = Date.parse("2026-10-09T04:00:00Z");
 	if (params.get("static") === "1") {
 		Date.now = () => now;
@@ -36,6 +38,27 @@ export function preparePreview(target) {
 		storage.setItem("skiff.test.sessions", JSON.stringify(Object.fromEntries(chats.map((chat) => [chat.sessionFile, [{ role: "user", content: chat.title }, { role: "assistant", content: "预览任务已完成。" }]]))));
 		storage.setItem("skiff.sidebar.collapsed", JSON.stringify(projects.map((project) => project.id)));
 		storage.setItem("skiff.workspace.v1", JSON.stringify({ version: 1, projects, chats, activeId: chats[0].id }));
+	} else if (fixture === "archive") {
+		const project = { id: "archive-project", name: "Skiff Archive", path: "D:\\workspace\\Skiff" };
+		const otherProject = { id: "archive-other", name: "Other Project", path: "D:\\workspace\\aiagent" };
+		const chats = [
+			{ id: "archive-active", projectId: project.id, title: "当前会话", sessionFile: "archive-active.jsonl", hasMessages: true, updatedAt: now - 5000 },
+			{ id: "archive-candidate", projectId: project.id, title: "同项目候选", sessionFile: "archive-candidate.jsonl", hasMessages: true, updatedAt: now - 2000 },
+			{ id: "archive-other-chat", projectId: otherProject.id, title: "其他项目会话", sessionFile: "archive-other.jsonl", hasMessages: true, updatedAt: now - 3000 },
+			{ id: "archive-record", projectId: project.id, title: "已归档会话", sessionFile: "archive-record.jsonl", hasMessages: true, updatedAt: now - 4000, archivedAt: now - 300 },
+			{ id: "archive-empty", projectId: project.id, title: "空白归档", hasMessages: false, updatedAt: now - 5000, archivedAt: now - 200 },
+			{ id: "archive-missing", projectId: otherProject.id, title: "缺失文件归档", sessionFile: "missing-archive.jsonl", hasMessages: true, updatedAt: now - 6000, archivedAt: now - 100 },
+		];
+		const user = (text) => ({ role: "user", content: [{ type: "text", text }] });
+		const assistant = (text) => ({ role: "assistant", provider: "skiff-relay-r1-deepseek", model: "deepseek-chat", content: [{ type: "thinking", thinking: "检查历史上下文" }, { type: "toolCall", id: "archive-tool", name: "read", arguments: { path: "README.md" } }, { type: "toolResult", toolCallId: "archive-tool", name: "read", content: "工具输出" }, { type: "text", text }] });
+		storage.setItem("skiff.test.sessions", JSON.stringify({
+			"archive-active.jsonl": [user("当前会话"), assistant("当前回答")],
+			"archive-candidate.jsonl": [user("同项目候选"), assistant("候选回答")],
+			"archive-other.jsonl": [user("另一个项目的提问"), assistant("另一个项目的回答")],
+			"archive-record.jsonl": [user("已归档会话"), { ...assistant("归档回答"), content: [{ type: "thinking", thinking: "先梳理归档会话中的项目上下文，再对照保存的工具输出检查相关文件内容。\n最后结合历史消息解释当时的处理步骤与结论。" }, { type: "image", data: "aGVsbG8=", mimeType: "image/png" }, { type: "toolCall", id: "archive-tool", name: "read", arguments: { path: "README.md" } }, { type: "toolResult", toolCallId: "archive-tool", name: "read", content: "归档工具输出" }, { type: "text", text: "归档回答" }] }],
+		}));
+		for (const chat of chats) if (chat.hasMessages) chat.selectedModel = { provider: "skiff-relay-r1-deepseek", id: "deepseek-chat", modelId: "deepseek-chat", routeId: "route-deepseek-r1", offerId: "route-deepseek-r1/deepseek-chat" };
+		storage.setItem("skiff.workspace.v1", JSON.stringify({ version: 1, projects: [project, otherProject], chats, activeId: "archive-active" }));
 	} else if (["chat", "long", "picker", "voyage", "authorization"].includes(fixture) || fixture.startsWith("voyage-")) {
 		seedPolishPreview(storage, fixture === "long");
 		const sessions = JSON.parse(storage.getItem("skiff.test.sessions"));

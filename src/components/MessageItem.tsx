@@ -30,8 +30,8 @@ const formatMessageTime = (ts?: number): string | undefined => {
 type Tool = Extract<ContentBlock, { kind: "tool" }>;
 type Result = Extract<ContentBlock, { kind: "toolResult" }>;
 
-export const MessageItem = memo(function MessageItem({ message, turnMessages, showRole, roleDisplay, compact, running, turnRunning = false, turnId, turnHead, turnSteps, turnDuration, turnOpen, onToggleTurn, disabled, isLast, onContinue, onEdit, onRegenerate, onDelete }: {
-	turnMessages?: ChatMessage[];
+export const MessageItem = memo(function MessageItem({ message, turnMessages, showRole, roleDisplay, compact, running, turnRunning = false, turnId, turnHead, turnSteps, turnDuration, turnOpen, onToggleTurn, disabled, isLast, onContinue, onEdit, onRegenerate, onDelete, readOnly = false }: {
+	turnMessages?: ChatMessage[]; readOnly?: boolean;
 	turnRunning?: boolean;
 	message: ChatMessage; showRole: boolean; roleDisplay: ModelDisplay; compact: boolean; running: boolean; turnId: string; turnHead: boolean; turnSteps: number; turnDuration?: number; turnOpen: boolean; onToggleTurn: (turnId: string) => void; disabled: boolean; isLast: boolean; onContinue: () => void; onEdit: MessageAction; onRegenerate: MessageAction; onDelete: MessageAction;
 }) {
@@ -74,7 +74,7 @@ export const MessageItem = memo(function MessageItem({ message, turnMessages, sh
 		else nodes.push(<details key={entry.key} className={`tool-result ${block.isError ? "err" : ""}`}><summary>{block.name} · 执行结果</summary><pre>{block.text}</pre></details>);
 	}
 	// Copy / regenerate / delete only sit on the newest message; earlier assistant steps stay clean.
-	const showActions = isUser || isLast;
+	const showActions = readOnly || isUser || isLast;
 	const showHeader = !isUser && turnHead && (turnSteps > 0 || turnRunning);
 	// Intermediate process-only messages vanish when the turn is collapsed.
 	if (!nodes.length && !showHeader && !message.streaming) return null;
@@ -92,11 +92,11 @@ export const MessageItem = memo(function MessageItem({ message, turnMessages, sh
 		{(showActions || (!isUser && isLast && !running)) && <div className="message-actions">
 			{!isUser && !message.streaming && message.routeSnapshot && <span className="message-route" title={`实际应答线路：${message.routeSnapshot.familyName} · ${message.routeSnapshot.modelId} · ${message.routeSnapshot.relayName}`}><Icon name="pin" size={13} />实际线路：{message.routeSnapshot.relayName} · {message.routeSnapshot.alias || message.routeSnapshot.modelId} · {message.routeSnapshot.billingAccountId || "未知账户"}</span>}
 			{!isUser && isLast && !running && message.usage && <TurnUsage message={message} messages={turnMessages} />}
-			{!isUser && isLast && !running && <Button className={`continue-btn ${message.stopReason === "length" ? "truncated" : ""}`} disabled={disabled} onClick={onContinue} aria-label="继续生成" title="发送「继续」，让模型接着写下去">{message.stopReason === "length" ? "输出被截断 · 继续" : "继续"}</Button>}
+			{!readOnly && !isUser && isLast && !running && <Button className={`continue-btn ${message.stopReason === "length" ? "truncated" : ""}`} disabled={disabled} onClick={onContinue} aria-label="继续生成" title="发送「继续」，让模型接着写下去">{message.stopReason === "length" ? "输出被截断 · 继续" : "继续"}</Button>}
 			{showActions && <div className="message-buttons">
 				<CopyButton text={text} label="复制消息" />
-				{isUser ? <button disabled={disabled} onClick={() => onEdit(message)} aria-label="编辑并重发" title="编辑并重发"><Icon name="edit" size={14} /></button> : <button disabled={disabled} onClick={() => onRegenerate(message)} aria-label="重新生成" title="从上一条提问重新生成"><Icon name="refresh" size={14} /></button>}
-				<button disabled={disabled} onClick={() => onDelete(message)} aria-label="删除本轮及后续消息" title="删除本轮及后续消息（保留原会话文件）"><Icon name="trash" size={14} /></button>
+				{!readOnly && <>{isUser ? <button disabled={disabled} onClick={() => onEdit(message)} aria-label="编辑并重发" title="编辑并重发"><Icon name="edit" size={14} /></button> : <button disabled={disabled} onClick={() => onRegenerate(message)} aria-label="重新生成" title="从上一条提问重新生成"><Icon name="refresh" size={14} /></button>}
+				<button disabled={disabled} onClick={() => onDelete(message)} aria-label="删除本轮及后续消息" title="删除本轮及后续消息（保留原会话文件）"><Icon name="trash" size={14} /></button></>}
 			</div>}
 		</div>}
 	</article>;

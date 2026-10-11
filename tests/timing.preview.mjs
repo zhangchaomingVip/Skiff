@@ -34,7 +34,7 @@ window.__TAURI_INTERNALS__.invoke = async (command, args) => {
 	}
 	return result;
 };
-const search = { available: false, configured: false, extensionInstalled: false, enabled: false, busy: false, toggle: async () => {}, clearKey: async () => {}, install: async () => {}, refresh: () => {} };
+const search = { available: false, configured: false, extensionInstalled: false, enabled: false, statusLoaded: true, validating: false, busy: false, toggle: async () => {}, clearKey: async () => {}, install: async () => {}, refresh: async () => {} };
 const noop = () => {};
 const send = (text, images) => latest.actions.prompt(text, images);
 const intervals = new Set();

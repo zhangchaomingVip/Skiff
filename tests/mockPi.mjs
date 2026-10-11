@@ -31,6 +31,7 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 	];
 	if (fixture) {
 		families[0].routes[1].models.push({ ...families[0].routes[0].models[1], inputCost: .14, outputCost: .28 });
+		if (fixture === "archive") families[0].routes[0].models.find((model) => model.modelId === "deepseek-chat").alias = "Skiff Long Model Alias For Layout Testing";
 		delete relays[2].billingAccountId;
 		if (fixture === "authorization") families[0].routes[1].reasoning = true;
 		if (fixture === "empty") families.forEach((family) => { family.routes = []; });

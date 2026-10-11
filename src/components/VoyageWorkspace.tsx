@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useState, type CSSProperties } from "react";
 import type { ImageAttachment, SessionState } from "../chat/types";
 import type { PiSessionActions } from "../chat/usePiSession";
 import { useVoyageMetrics } from "../chat/useVoyageMetrics";
@@ -10,10 +10,11 @@ import { VoyageRail } from "./VoyageRail";
 import { useModelFamily } from "../chat/familyContext";
 import type { RouteAuthorizationChoice, RouteAuthorizationRequest } from "../chat/routeAuthorization";
 import { Dialog } from "./ui";
+import { ResizeSeparator } from "./ResizeSeparator";
 
 const StableChatView = memo(ChatView);
 
-export function VoyageWorkspace({ state, loading = false, connected, pending, actions, onSend, onReconnect, projectName, search, onConfigureSearch, failover, modelNotice, routeAuthorization }: {
+export function VoyageWorkspace({ state, loading = false, connected, pending, actions, onSend, onReconnect, projectName, search, onConfigureSearch, failover, modelNotice, routeAuthorization, railWidth = 260, availableWidth = window.innerWidth, onRailWidth, onRailWidthCommit }: {
 	modelNotice?: string;
 	state: SessionState;
 	loading?: boolean;
@@ -27,6 +28,10 @@ export function VoyageWorkspace({ state, loading = false, connected, pending, ac
 	onConfigureSearch: () => void;
 	failover?: { label: string; switch: (automatic?: boolean) => void };
 	routeAuthorization?: { request: RouteAuthorizationRequest; onChoice: (choice: RouteAuthorizationChoice) => void };
+	railWidth?: number;
+	availableWidth?: number;
+	onRailWidth?: (width: number) => void;
+	onRailWidthCommit?: (width: number) => void;
 }) {
 	const { pricingModels } = useModelFamily();
 	const [abortedRunKey, setAbortedRunKey] = useState<string>();
@@ -50,14 +55,19 @@ export function VoyageWorkspace({ state, loading = false, connected, pending, ac
 		return () => { query.removeEventListener("change", resize); compact.removeEventListener("change", updateCompact); };
 	}, []);
 	const toggle = () => setExpanded((value) => !value);
+	const hasRoom = narrow || availableWidth >= 608;
+	const visibleExpanded = expanded && hasRoom;
+	const railBounds = { min: 240, max: Math.max(240, Math.min(480, availableWidth - 368)) };
+	const shownRailWidth = Math.max(240, Math.min(railWidth, railBounds.max));
 
-	return <div className={`chat-and-rail ${expanded ? "rail-expanded" : "rail-collapsed"}`}>
+	return <div className={`chat-and-rail ${visibleExpanded ? "rail-expanded" : "rail-collapsed"}`} style={{ "--voyage-width": `${shownRailWidth}px` } as CSSProperties}>
 		<div className="chat-column">
 			<LiveTurnContext.Provider value={metrics.liveTurn}>
 				<StableChatView state={state} loading={loading} connected={connected} pending={pending} actions={voyageActions} onSend={onSend} onReconnect={onReconnect} projectName={projectName} search={search} onConfigureSearch={onConfigureSearch} failover={failover} routeAuthorization={routeAuthorization} />
 			</LiveTurnContext.Provider>
-			<ContextUsage notice={modelNotice} metrics={metrics} expanded={expanded} onToggle={toggle} />
+			<ContextUsage notice={modelNotice} metrics={metrics} expanded={visibleExpanded} onToggle={toggle} />
 		</div>
-		{narrow && expanded ? <Dialog className="voyage-dialog" aria-label="航行台详情" returnFocusSelector=".voyage-summary" onClose={() => setExpanded(false)}><VoyageRail metrics={metrics} expanded onToggle={toggle} /></Dialog> : <VoyageRail metrics={metrics} expanded={expanded} onToggle={toggle} />}
+		{visibleExpanded && !narrow && onRailWidth && onRailWidthCommit && <ResizeSeparator label="调整右侧航行台宽度" value={shownRailWidth} bounds={railBounds} direction={-1} onResize={onRailWidth} onCommit={onRailWidthCommit} />}
+		{narrow && expanded ? <Dialog className="voyage-dialog" aria-label="航行台详情" returnFocusSelector=".voyage-summary" onClose={() => setExpanded(false)}><VoyageRail metrics={metrics} expanded onToggle={toggle} /></Dialog> : <VoyageRail metrics={metrics} expanded={visibleExpanded} onToggle={toggle} />}
 	</div>;
 }

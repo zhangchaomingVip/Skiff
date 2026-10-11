@@ -6,6 +6,7 @@ import { useModelFamily } from "../chat/familyContext";
 import { ModelPicker } from "./ModelPicker";
 import { BrandIcon, type BrandName } from "./BrandIcon";
 import { Icon } from "./Icon";
+import { modelBrand } from "../chat/modelDisplay";
 
 const BRANDABLE = ["deepseek", "kimi", "glm"] as const;
 const brand = (familyId?: string): BrandName | undefined => BRANDABLE.find((name) => name === familyId);
@@ -25,12 +26,14 @@ export function ModelMenu({ models, model, disabled, onModel }: {
 	const root = useRef<HTMLDivElement>(null);
 	const trigger = useRef<HTMLButtonElement>(null);
 	const family = model ? familyOf(model) : undefined;
-	const mark = brand(family?.id);
+	const mark = brand(family?.id) ?? modelBrand(model?.provider, model?.id, model?.name);
+	const displayName = model?.name ?? model?.id ?? "选择模型";
+	const fullTitle = model ? [family ? FAMILY_LABELS[family.id] ?? family.name : undefined, displayName, model.providerName, model.routeId, `${model.provider}/${model.id}`].filter(Boolean).join(" · ") : "选择模型";
 
 	return <div className="model-chip-wrap" ref={root}>
-		<Button className="model-trigger" ref={trigger} disabled={disabled} onClick={() => setOpen((value) => !value)} aria-expanded={open} aria-haspopup="dialog" aria-label="选择模型" title={model ? `${family ? `${FAMILY_LABELS[family.id] ?? family.name} · ` : ""}${model.providerName ?? model.provider} · ${model.id}` : "选择模型"}>
-			{mark && <BrandIcon name={mark} size={14} />}
-			<span className="model-trigger-label">{family ? `${FAMILY_LABELS[family.id] ?? family.name} · ${model?.name ?? model?.id}` : model?.name ?? model?.id ?? "选择模型"}</span>
+		<Button className="model-trigger" ref={trigger} disabled={disabled} onClick={() => setOpen((value) => !value)} aria-expanded={open} aria-haspopup="dialog" aria-label="选择模型" title={fullTitle}>
+			{mark ? <BrandIcon name={mark} size={14} /> : <Icon name="tokens" size={14} />}
+			<span className="model-trigger-label">{displayName}</span>
 			<span className="chev-caret"><Icon name="chevron" size={12} /></span>
 		</Button>
 		{open && <Popover anchor={trigger} onClose={() => setOpen(false)} className="model-popover" aria-label="选择模型">

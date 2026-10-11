@@ -1,7 +1,7 @@
 @layer pages {
 /* Chat and instrument are adjacent Grid columns. The rail never overlays messages. */
-.chat-and-rail { flex: 1; min-width: 0; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 240px; }
-.chat-and-rail.rail-collapsed { grid-template-columns: minmax(0, 1fr) 40px; }
+.chat-and-rail { flex: 1; min-width: 0; min-height: 0; display: grid; grid-template-columns: minmax(360px, 1fr) 8px minmax(0, var(--voyage-width, 260px)); }
+.chat-and-rail.rail-collapsed { grid-template-columns: minmax(360px, 1fr) 40px; }
 .chat-column { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .chat-column > .chat { min-height: 0; }
 
@@ -161,10 +161,10 @@
 
 /* The integrated dashboard is the single expanded rail surface. */
 @layer pages {
-	.chat-and-rail { grid-template-columns: minmax(0, 1fr) 260px; }
-	.chat-and-rail.rail-collapsed { grid-template-columns: minmax(0, 1fr) 40px; }
+	.chat-and-rail { grid-template-columns: minmax(360px, 1fr) 8px minmax(0, var(--voyage-width, 260px)); }
+	.chat-and-rail.rail-collapsed { grid-template-columns: minmax(360px, 1fr) 40px; }
 	.voyage-rail.expanded { padding: 0; overflow-y: auto; overflow-x: hidden; background: var(--bg); }
-	.voyage-dashboard { position: relative; width: 260px; min-height: 100%; padding: 16px; color: var(--text); font-size: var(--font-size-sm); }
+	.voyage-dashboard { position: relative; width: 100%; min-width: 0; min-height: 100%; padding: 16px; color: var(--text); font-size: var(--font-size-sm); }
 	.voyage-dashboard-header { margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border); text-align: center; }
 	.voyage-dashboard-header h1 { margin: 0 0 8px; font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold); letter-spacing: .5px; }
 	.voyage-status-pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border: 1px solid var(--border); border-radius: var(--radius-full); color: var(--secondary); font-size: var(--font-size-sm); }
@@ -260,6 +260,6 @@
 	.voyage-collapsed-content { display: flex; flex-direction: column; align-items: center; gap: 9px; }
 	.voyage-collapsed-content strong { max-width: 38px; overflow: hidden; font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); line-height: 1; white-space: nowrap; }
 	.voyage-collapsed-content small { color: var(--muted); font-size: var(--font-size-xs); line-height: 1; }
-	@media (max-width: 760px) { .chat-and-rail { grid-template-columns: minmax(0, 1fr) 40px; } .voyage-dashboard { width: min(260px, calc(100vw - 24px)); } }
+	@media (max-width: 760px) { .chat-and-rail { grid-template-columns: minmax(0, 1fr) 40px; } .voyage-dashboard { width: min(480px, calc(100vw - 24px)); } }
 	@media (prefers-reduced-motion: reduce) { .voyage-dashboard *, .voyage-rail * { animation: none !important; transition: none !important; } }
 }

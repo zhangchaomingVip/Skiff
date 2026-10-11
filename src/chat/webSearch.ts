@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { PiSessionActions, SessionOwner } from "./usePiSession";
 import { useSessionValue } from "./useSessionValue";
@@ -10,6 +10,8 @@ interface Status {
 	keyHint?: string;
 	extensionInstalled: boolean;
 	enabled: boolean;
+	validated: boolean | null;
+	validationMessage?: string;
 }
 
 export interface WebSearchControls {
@@ -17,36 +19,60 @@ export interface WebSearchControls {
 	available: boolean;
 	configured: boolean;
 	keyHint?: string;
+	agentDir?: string;
 	extensionInstalled: boolean;
 	enabled: boolean;
+	validated?: boolean;
+	validationMessage?: string;
+	statusLoaded: boolean;
+	validating: boolean;
 	busy: boolean;
 	error?: string;
 	toggle: (next: boolean) => Promise<void>;
 	clearKey: () => Promise<void>;
 	install: () => Promise<void>;
-	refresh: () => void;
+	refresh: () => Promise<void>;
 }
 
 /**
- * Wires the composer's web-search pill to three places: pi's extension command
- * (`/web on|off`), the key stored beside pi's config, and the shipped extension
- * file itself.
+ * Keeps local configuration, Tavily health, and the live pi command list in
+ * one place so the composer and settings dialog always show the same state.
  */
 export function useWebSearch(actions: PiSessionActions, connected: boolean, reconnect: () => void, owner: SessionOwner, isCurrent: () => boolean): WebSearchControls {
 	const [available, setAvailable] = useSessionValue(owner, isCurrent, () => false);
-	const [status, setStatus] = useSessionValue<Status | undefined>(owner, isCurrent, () => undefined);
-	const [enabled, setEnabled] = useSessionValue(owner, isCurrent, () => false);
-	const [busy, setBusy] = useSessionValue(owner, isCurrent, () => false);
-	const [error, setError] = useSessionValue<string | undefined>(owner, isCurrent, () => undefined);
+	const [status, setStatus] = useState<Status>();
+	const [enabled, setEnabled] = useState(false);
+	const [validating, setValidating] = useState(false);
+	const [busy, setBusy] = useState(false);
+	const [error, setError] = useState<string>();
+	const statusRequest = useRef(0);
 
-	const refresh = useCallback(() => {
-		void invoke<Status>("get_web_search_status")
-			.then((next) => {
-				setStatus(next);
-				setEnabled(next.enabled);
-			})
-			.catch((e) => setError(String(e)));
-	}, [setStatus, setEnabled, setError]);
+	const refresh = useCallback(async () => {
+		const requestId = ++statusRequest.current;
+		setValidating(true);
+		setError(undefined);
+		try {
+			const next = await invoke<Status>("get_web_search_status");
+			if (requestId !== statusRequest.current) return;
+			setStatus(next);
+			setEnabled(next.enabled);
+			if (!next.configured) return;
+
+			try {
+				const validation = await invoke<Status>("validate_web_search");
+				if (requestId === statusRequest.current) {
+					setStatus(validation);
+					setEnabled(validation.enabled);
+				}
+			} catch (e) {
+				if (requestId === statusRequest.current) setStatus({ ...next, validated: false, validationMessage: String(e) });
+			}
+		} catch (e) {
+			if (requestId === statusRequest.current) setError(String(e));
+		} finally {
+			if (requestId === statusRequest.current) setValidating(false);
+		}
+	}, []);
 
 	useEffect(() => {
 		if (!connected) {
@@ -54,20 +80,27 @@ export function useWebSearch(actions: PiSessionActions, connected: boolean, reco
 			return;
 		}
 		let cancelled = false;
-		// A pi session without the extension simply has no `web` command.
 		void actions
 			.getCommands()
 			.then((commands) => {
 				if (!cancelled) setAvailable(commands.some((command) => command.source === "extension" && command.name === "web"));
 			})
-			.catch(() => undefined);
+			.catch(() => { if (!cancelled) setAvailable(false); });
 		return () => { cancelled = true; };
 	}, [actions, connected, setAvailable]);
 
-	useEffect(() => { refresh(); }, [refresh, connected]);
+	useEffect(() => { void refresh(); }, [refresh]);
 
 	const toggle = useCallback(async (next: boolean) => {
 		if (!isCurrent() || !connected) return;
+		if (!available) {
+			setError("当前 pi 会话尚未加载联网搜索扩展，请在设置中安装或重新加载。");
+			return;
+		}
+		if (next && status?.validated === false) {
+			setError(status.validationMessage ?? "Tavily API Key 验证失败，请检查设置。");
+			return;
+		}
 		setBusy(true);
 		setError(undefined);
 		try {
@@ -78,7 +111,7 @@ export function useWebSearch(actions: PiSessionActions, connected: boolean, reco
 		} finally {
 			setBusy(false);
 		}
-	}, [actions, connected, isCurrent, setBusy, setError, setEnabled]);
+	}, [actions, available, connected, isCurrent, status, setBusy, setError]);
 
 	const clearKey = useCallback(async () => {
 		if (!isCurrent()) return;
@@ -87,13 +120,13 @@ export function useWebSearch(actions: PiSessionActions, connected: boolean, reco
 		try {
 			await invoke("clear_web_search_key");
 			setEnabled(false);
-			refresh();
+			await refresh();
 		} catch (e) {
 			setError(String(e));
 		} finally {
 			setBusy(false);
 		}
-	}, [refresh, isCurrent, setBusy, setError, setEnabled]);
+	}, [refresh, isCurrent, setBusy, setError]);
 
 	const install = useCallback(async () => {
 		if (!isCurrent()) return;
@@ -102,21 +135,26 @@ export function useWebSearch(actions: PiSessionActions, connected: boolean, reco
 		try {
 			const changed = await invoke<boolean>("install_web_search_extension");
 			if (!isCurrent()) return;
-			if (changed) reconnect();
-			refresh();
+			if (changed || !available) reconnect();
+			await refresh();
 		} catch (e) {
 			setError(String(e));
 		} finally {
 			setBusy(false);
 		}
-	}, [reconnect, refresh, isCurrent, setBusy, setError]);
+	}, [available, reconnect, refresh, isCurrent, setBusy, setError]);
 
 	return {
 		available,
 		configured: status?.configured ?? false,
 		keyHint: status?.keyHint,
+		agentDir: status?.agentDir,
 		extensionInstalled: status?.extensionInstalled ?? false,
 		enabled,
+		validated: status?.validated ?? undefined,
+		validationMessage: status?.validationMessage,
+		statusLoaded: status !== undefined,
+		validating,
 		busy,
 		error,
 		toggle,

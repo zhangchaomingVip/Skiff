@@ -25,9 +25,10 @@ export interface Conversation {
 	routeSnapshots?: Array<RouteSnapshot | null>;
 	routeEvents?: RouteEvent[];
 	pinned?: boolean;
+	archivedAt?: number;
 }
 
-interface Workspace {
+export interface Workspace {
 	version: 1;
 	projects: Project[];
 	chats: Conversation[];
@@ -70,14 +71,15 @@ export function normalizeRouteSnapshots(value: unknown): Conversation["routeSnap
 	return value.map((item) => item === null ? null : normalizeRouteSnapshot(item) ?? null);
 }
 
-function readWorkspace(): Workspace | null {
+export function normalizeWorkspace(value: unknown): Workspace | null {
 	try {
-		const value = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null") as Workspace | null;
-		if (!value || value.version !== 1 || !Array.isArray(value.projects) || !Array.isArray(value.chats)) return null;
-		if (!value.projects.length || !value.projects.every((p) => p && typeof p.id === "string" && typeof p.name === "string" && typeof p.path === "string")) return null;
-		if (!value.chats.every((c) => c && typeof c.id === "string" && typeof c.title === "string" && typeof c.updatedAt === "number" && typeof c.hasMessages === "boolean" && (c.sessionFile === undefined || typeof c.sessionFile === "string") && value.projects.some((p) => p.id === c.projectId))) return null;
-		if (!value.chats.some((c) => c.id === value.activeId)) return null;
-		for (const chat of value.chats) {
+		if (!value || typeof value !== "object") return null;
+		const workspace = value as Workspace;
+		if (workspace.version !== 1 || !Array.isArray(workspace.projects) || !Array.isArray(workspace.chats)) return null;
+		if (!workspace.projects.length || !workspace.projects.every((p) => p && typeof p.id === "string" && typeof p.name === "string" && typeof p.path === "string")) return null;
+		if (!workspace.chats.every((c) => c && typeof c.id === "string" && typeof c.title === "string" && typeof c.updatedAt === "number" && typeof c.hasMessages === "boolean" && (c.sessionFile === undefined || typeof c.sessionFile === "string") && workspace.projects.some((p) => p.id === c.projectId))) return null;
+		if (!workspace.chats.some((c) => c.id === workspace.activeId)) return null;
+		for (const chat of workspace.chats) {
 			const selected = normalizeSelectedModel(chat.selectedModel);
 			if (selected) chat.selectedModel = selected; else delete chat.selectedModel;
 			const snapshots = normalizeRouteSnapshots(chat.routeSnapshots);
@@ -85,8 +87,60 @@ function readWorkspace(): Workspace | null {
 			const events = normalizeRouteEvents(chat.routeEvents);
 			if (events) chat.routeEvents = events; else delete chat.routeEvents;
 			if (chat.pinned !== undefined && typeof chat.pinned !== "boolean") delete chat.pinned;
+			if (chat.archivedAt !== undefined && (typeof chat.archivedAt !== "number" || !Number.isFinite(chat.archivedAt))) delete chat.archivedAt;
 		}
-		return value;
+		return workspace;
+	} catch {
+		return null;
+	}
+}
+
+export function isArchived(chat: Conversation): boolean {
+	return typeof chat.archivedAt === "number" && Number.isFinite(chat.archivedAt);
+}
+
+export function visibleConversations(chats: Conversation[]): Conversation[] {
+	return chats.filter((chat) => !isArchived(chat));
+}
+
+export function persistableConversations(chats: Conversation[], activeId: string): Conversation[] {
+	return chats.filter((chat) => chat.hasMessages || chat.id === activeId || isArchived(chat));
+}
+
+export function archiveConversation(workspace: Workspace, id: string, archivedAt = Date.now(), makeDraft = newChat): Workspace {
+	const target = workspace.chats.find((chat) => chat.id === id);
+	if (!target || isArchived(target)) return workspace;
+	const chats = workspace.chats.map((chat) => chat.id === id ? { ...chat, archivedAt } : chat);
+	if (workspace.activeId !== id) return { ...workspace, chats };
+	const next = chats.filter((chat) => chat.id !== id && chat.projectId === target.projectId && !isArchived(chat)).sort((a, b) => b.updatedAt - a.updatedAt)[0];
+	if (next) return { ...workspace, chats, activeId: next.id };
+	const draft = makeDraft(target.projectId);
+	return { ...workspace, chats: [...chats, draft], activeId: draft.id };
+}
+
+export function restoreConversation(workspace: Workspace, id: string): Workspace {
+	const target = workspace.chats.find((chat) => chat.id === id);
+	if (!target || !isArchived(target)) return workspace;
+	return { ...workspace, chats: workspace.chats.map((chat) => {
+		if (chat.id !== id) return chat;
+		const restored = { ...chat };
+		delete restored.archivedAt;
+		return restored;
+	}), activeId: id };
+}
+
+export function deleteConversation(workspace: Workspace, id: string, makeDraft = newChat): Workspace {
+	const removed = workspace.chats.find((chat) => chat.id === id);
+	if (!removed) return workspace;
+	const chats = workspace.chats.filter((chat) => chat.id !== id);
+	if (workspace.activeId !== id) return { ...workspace, chats };
+	const next = chats.filter((chat) => chat.projectId === removed.projectId && !isArchived(chat)).sort((a, b) => b.updatedAt - a.updatedAt)[0] ?? makeDraft(removed.projectId);
+	return { ...workspace, chats: chats.includes(next) ? chats : [...chats, next], activeId: next.id };
+}
+
+function readWorkspace(): Workspace | null {
+	try {
+		return normalizeWorkspace(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null"));
 	} catch {
 		return null;
 	}
@@ -116,8 +170,8 @@ export function useWorkspace() {
 	useEffect(() => {
 		if (!workspace) return;
 		try {
-			// Empty drafts are transient; keep only the active one alongside history.
-			localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...workspace, chats: workspace.chats.filter((c) => c.hasMessages || c.id === workspace.activeId) }));
+			// Archived drafts are intentional records, even when they have no messages.
+			localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...workspace, chats: persistableConversations(workspace.chats, workspace.activeId) }));
 		} catch {
 			setError("无法保存聊天索引。关闭应用后可能无法从侧栏找回本次聊天。");
 		}
@@ -129,13 +183,13 @@ export function useWorkspace() {
 		if (!projectId) return;
 		setWorkspace((w) => {
 			if (!w) return w;
-			const draft = w.chats.find((c) => c.projectId === projectId && !c.hasMessages);
+			const draft = w.chats.find((c) => c.projectId === projectId && !c.hasMessages && !isArchived(c));
 			const chat = draft ? { ...draft, ...(selectedModel ? { selectedModel } : {}) } : { ...newChat(projectId), ...(selectedModel ? { selectedModel } : {}) };
 			return { ...w, chats: draft ? w.chats.map((item) => item.id === draft.id ? chat : item) : [...w.chats, chat], activeId: chat.id };
 		});
 	};
 	const selectProject = (id: string) => {
-		const latest = workspace?.chats.filter((c) => c.projectId === id).sort((a, b) => b.updatedAt - a.updatedAt)[0];
+		const latest = workspace?.chats.filter((c) => c.projectId === id && !isArchived(c)).sort((a, b) => b.updatedAt - a.updatedAt)[0];
 		if (latest) setWorkspace((w) => w && w.activeId !== latest.id ? { ...w, activeId: latest.id } : w);
 		else createChat(id);
 	};
@@ -159,25 +213,19 @@ export function useWorkspace() {
 
 	return {
 		workspace, activeChat, activeProject, error, loading, initialize, addProject, createChat, selectProject, updateChat,
-		selectChat: (id: string) => setWorkspace((w) => w && w.activeId !== id && w.chats.some((chat) => chat.id === id) ? { ...w, activeId: id } : w),
+		selectChat: (id: string) => setWorkspace((w) => w && w.activeId !== id && w.chats.some((chat) => chat.id === id && !isArchived(chat)) ? { ...w, activeId: id } : w),
+		archiveChat: (id: string, archivedAt = Date.now()) => setWorkspace((w) => w ? archiveConversation(w, id, archivedAt) : w),
+		restoreChat: (id: string) => setWorkspace((w) => w ? restoreConversation(w, id) : w),
 		clearError: () => setError(undefined),
 		renameChat: (id: string, title: string) => { if (title.trim()) updateChat(id, { title: title.trim().slice(0, 100), customTitle: true }); },
 		renameProject: (id: string, name: string) => setWorkspace((w) => w && name.trim() ? { ...w, projects: w.projects.map((p) => p.id === id ? { ...p, name: name.trim().slice(0, 100) } : p) } : w),
-		deleteChat: (id: string) => setWorkspace((w) => {
-			if (!w) return w;
-			const removed = w.chats.find((chat) => chat.id === id);
-			if (!removed) return w;
-			const chats = w.chats.filter((chat) => chat.id !== id);
-			if (w.activeId !== id) return { ...w, chats };
-			const next = chats.filter((chat) => chat.projectId === removed.projectId).sort((a, b) => b.updatedAt - a.updatedAt)[0] ?? newChat(removed.projectId);
-			return { ...w, chats: chats.includes(next) ? chats : [...chats, next], activeId: next.id };
-		}),
+		deleteChat: (id: string) => setWorkspace((w) => w ? deleteConversation(w, id) : w),
 		deleteProject: (id: string) => setWorkspace((w) => {
 			if (!w || w.projects.length <= 1) return w;
 			const projects = w.projects.filter((project) => project.id !== id);
 			const chats = w.chats.filter((chat) => chat.projectId !== id);
 			if (chats.some((chat) => chat.id === w.activeId)) return { ...w, projects, chats };
-			const next = [...chats].sort((a, b) => b.updatedAt - a.updatedAt)[0] ?? newChat(projects[0].id);
+			const next = visibleConversations(chats).sort((a, b) => b.updatedAt - a.updatedAt)[0] ?? newChat(projects[0].id);
 			return { ...w, projects, chats: chats.includes(next) ? chats : [...chats, next], activeId: next.id };
 		}),
 	};

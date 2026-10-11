@@ -11,7 +11,7 @@ const images: ImageAttachment[] = [];
 const files: TextAttachment[] = [];
 const commands = async () => [{ name: "review", description: "审查" }, { name: "plan", description: "计划" }];
 const noop = () => {};
-const search: WebSearchControls = { available: false, configured: false, extensionInstalled: false, enabled: false, busy: false, toggle: async () => {}, clearKey: async () => {}, install: async () => {}, refresh: noop };
+const search: WebSearchControls = { available: false, configured: false, extensionInstalled: false, enabled: false, statusLoaded: true, validating: false, busy: false, toggle: async () => {}, clearKey: async () => {}, install: async () => {}, refresh: async () => {} };
 
 export function ComposerHarness() {
 	const root = useRef<HTMLDivElement>(null);

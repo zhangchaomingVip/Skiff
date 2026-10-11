@@ -51,7 +51,7 @@ export function SidebarCollapse({ open, id, children }: { open: boolean; id?: st
 	</div>;
 }
 
-export function Sidebar({ projects, chats, activeId, activeProjectId, homeActive, disabled, navigationDisabled = disabled, connected, onHome, onNewChat, onSelectChat, onSelectProject, onAddProject, onClose, onRenameChat, onRenameProject, onDeleteChat, onDeleteProject, onTogglePinChat }: {
+export function Sidebar({ projects, chats, activeId, activeProjectId, homeActive, disabled, navigationDisabled = disabled, connected, onHome, onNewChat, onSelectChat, onSelectProject, onAddProject, onClose, onRenameChat, onRenameProject, onDeleteChat, onDeleteProject, onArchiveChat, onTogglePinChat }: {
 	projects: Project[];
 	chats: Conversation[];
 	activeId?: string;
@@ -70,11 +70,15 @@ export function Sidebar({ projects, chats, activeId, activeProjectId, homeActive
 	onRenameProject: (id: string, name: string) => void;
 	onDeleteChat: (id: string) => void;
 	onDeleteProject: (id: string) => void;
+	onArchiveChat: (id: string) => void;
 	onTogglePinChat: (id: string, pinned: boolean) => void;
 }) {
 	const projectsListId = useId();
+	const recentListId = useId();
 	const [projectsExpanded, setProjectsExpanded] = useState(() => { try { return localStorage.getItem("skiff.sidebar.projects-expanded") !== "false"; } catch { return true; } });
 	useEffect(() => { try { localStorage.setItem("skiff.sidebar.projects-expanded", String(projectsExpanded)); } catch { /* Optional layout preference. */ } }, [projectsExpanded]);
+	const [recentExpanded, setRecentExpanded] = useState(() => { try { return localStorage.getItem("skiff.sidebar.recent-expanded") !== "false"; } catch { return true; } });
+	useEffect(() => { try { localStorage.setItem("skiff.sidebar.recent-expanded", String(recentExpanded)); } catch { /* Optional layout preference. */ } }, [recentExpanded]);
 	const [collapsed, setCollapsed] = useState<Set<string>>(() => { try { const ids = JSON.parse(localStorage.getItem("skiff.sidebar.collapsed") ?? "[]"); return new Set(Array.isArray(ids) ? ids.filter((id) => typeof id === "string") : []); } catch { return new Set(); } });
 	useEffect(() => { try { localStorage.setItem("skiff.sidebar.collapsed", JSON.stringify([...collapsed])); } catch { /* Optional layout preference. */ } }, [collapsed]);
 	const [searchOpen, setSearchOpen] = useState(false);
@@ -176,6 +180,7 @@ export function Sidebar({ projects, chats, activeId, activeProjectId, homeActive
 			<div className="sidebar-row-actions">
 				<IconButton size="compact"  disabled={disabled} aria-label={`${chat.pinned ? "取消固定" : "固定"}聊天 ${chat.title}`} title={chat.pinned ? "取消固定" : "固定到顶部"} onClick={() => onTogglePinChat(chat.id, !chat.pinned)}><Icon name="pin" size={13} /></IconButton>
 				<IconButton size="compact"  disabled={disabled} aria-label={`重命名聊天 ${chat.title}`} title="重命名聊天（Enter 或失焦保存）" onClick={() => startEdit({ id: chat.id, kind: "chat", text: chat.title, scope })}><Icon name="edit" size={13} /></IconButton>
+				<IconButton size="compact" disabled={disabled} aria-label={`归档聊天 ${chat.title}`} title="归档聊天" onClick={() => onArchiveChat(chat.id)}><Icon name="archive" size={13} /></IconButton>
 				<IconButton size="compact"  disabled={disabled} aria-label={`删除聊天 ${chat.title}`} title="从侧栏删除聊天" onClick={() => setDeleting({ id: chat.id, kind: "chat", name: chat.title })}><Icon name="trash" size={13} /></IconButton>
 			</div>
 		</div>;
@@ -236,11 +241,13 @@ export function Sidebar({ projects, chats, activeId, activeProjectId, homeActive
 					</nav>}
 				</SidebarCollapse>
 				<section className="sidebar-recent" aria-label="最近任务">
-					<h2 className="section-label">最近</h2>
-					<nav aria-label="最近任务列表">
-						{recentChats.map((chat) => renderChatRow(chat, recentChats, "recent"))}
-						{!recentChats.length && <span className="no-chats">{search ? "没有匹配的最近任务" : "还没有最近任务"}</span>}
-					</nav>
+					<h2 className="section-label"><button type="button" className="section-name" onClick={() => setRecentExpanded((expanded) => !expanded)} aria-expanded={recentExpanded} aria-controls={recentListId} title={recentExpanded ? "收起最近任务" : "展开最近任务"}>最近<span className={`section-toggle ${recentExpanded ? "expanded" : ""}`}><Icon name="chevron" size={13} /></span></button></h2>
+					<SidebarCollapse open={recentExpanded} id={recentListId}>
+						{() => <nav aria-label="最近任务列表">
+							{recentChats.map((chat) => renderChatRow(chat, recentChats, "recent"))}
+							{!recentChats.length && <span className="no-chats">{search ? "没有匹配的最近任务" : "还没有最近任务"}</span>}
+						</nav>}
+					</SidebarCollapse>
 				</section>
 			</div>
 			<div className="sidebar-footer"><span className={`dot ${connected ? "on" : "off"}`} /><span>{connected ? "pi 已连接" : "pi 未连接"} · 本地工作区</span></div>
@@ -248,6 +255,7 @@ export function Sidebar({ projects, chats, activeId, activeProjectId, homeActive
 				<button disabled={navigationDisabled} onClick={() => { onSelectChat(menu.chatId); closeMenu(); }}><Icon name="message" size={14} />打开</button>
 				<button disabled={disabled} onClick={() => { startEdit({ id: menu.chatId, kind: "chat", text: menuChat.title, scope: menu.scope }); closeMenu(); }}><Icon name="edit" size={14} />重命名</button>
 				<button disabled={disabled} onClick={() => { onTogglePinChat(menu.chatId, !menuChat.pinned); closeMenu(); }}><Icon name="pin" size={14} />{menuChat.pinned ? "取消固定" : "固定到顶部"}</button>
+				<button disabled={disabled} onClick={() => { onArchiveChat(menu.chatId); closeMenu(); }}><Icon name="archive" size={14} />归档</button>
 				<button className="danger" disabled={disabled} onClick={() => { setDeleting({ id: menu.chatId, kind: "chat", name: menuChat.title }); closeMenu(); }}><Icon name="trash" size={14} />删除</button>
 			</div>}
 		</aside>

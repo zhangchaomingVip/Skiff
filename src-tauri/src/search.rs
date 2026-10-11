@@ -31,6 +31,10 @@ pub struct WebSearchStatus {
 	extension_installed: bool,
 	/// Last value persisted by the extension through `/web on|off`.
 	enabled: bool,
+	/// Whether the stored key was validated against Tavily API.
+	validated: Option<bool>,
+	/// Human-readable validation message (error or success).
+	validation_message: Option<String>,
 }
 
 fn read_json(path: &Path) -> Value {
@@ -59,8 +63,44 @@ fn read_stored_key(dir: &Path) -> Option<String> {
 		.map(str::to_string)
 }
 
-#[tauri::command]
-pub fn get_web_search_status() -> Result<WebSearchStatus, String> {
+/// Lightweight Tavily validation: call their API with a dummy query.
+async fn validate_tavily_key(api_key: &str) -> Result<(), String> {
+	let client = reqwest::Client::builder()
+		.timeout(std::time::Duration::from_secs(12))
+		.build()
+		.map_err(|e| format!("无法初始化 Tavily 请求：{e}"))?;
+	let response = client
+		.post("https://api.tavily.com/search")
+		.json(&json!({
+			"api_key": api_key,
+			"query": "Skiff API key validation",
+			"max_results": 1,
+			"search_depth": "basic"
+		}))
+		.send()
+		.await
+		.map_err(|e| {
+			if e.is_timeout() {
+				"连接 Tavily 超时，请检查网络后重试".to_string()
+			} else {
+				"无法连接到 Tavily，请检查网络后重试".to_string()
+			}
+		})?;
+
+	let status = response.status();
+	if status.is_success() {
+		return Ok(());
+	}
+	if status.as_u16() == 401 || status.as_u16() == 403 {
+		return Err("API Key 无效或无权访问 Tavily，请检查密钥和账户权限".into());
+	}
+	if status.as_u16() == 429 {
+		return Err("Tavily 请求过于频繁，请稍后重试".into());
+	}
+	Err(format!("Tavily 验证请求失败（HTTP {status}）"))
+}
+
+fn read_web_search_status() -> (WebSearchStatus, Option<String>) {
 	let agent_dir = super::get_pi_agent_dir();
 	let key = agent_dir.as_deref().and_then(read_stored_key);
 	let key_hint = key.as_ref().map(|value| {
@@ -75,7 +115,45 @@ pub fn get_web_search_status() -> Result<WebSearchStatus, String> {
 		.as_deref()
 		.map(|dir| read_json(&dir.join(STATE_FILE)).get("enabled").and_then(Value::as_bool).unwrap_or(false))
 		.unwrap_or(false);
-	Ok(WebSearchStatus { agent_dir: agent_dir.map(|p| p.to_string_lossy().to_string()), configured: key.is_some(), key_hint, extension_installed, enabled })
+
+	let status = WebSearchStatus {
+		agent_dir: agent_dir.map(|p| p.to_string_lossy().to_string()),
+		configured: key.is_some(),
+		key_hint,
+		extension_installed,
+		enabled,
+		validated: None,
+		validation_message: None,
+	};
+	(status, key)
+}
+
+#[tauri::command]
+pub fn get_web_search_status() -> Result<WebSearchStatus, String> {
+	Ok(read_web_search_status().0)
+}
+
+/// Validate the saved key without returning it to the frontend.
+#[tauri::command]
+pub async fn validate_web_search() -> Result<WebSearchStatus, String> {
+	let (mut status, key) = read_web_search_status();
+	let Some(key) = key else {
+		status.validated = Some(false);
+		status.validation_message = Some("尚未配置 Tavily API Key".into());
+		return Ok(status);
+	};
+
+	match validate_tavily_key(&key).await {
+		Ok(()) => {
+			status.validated = Some(true);
+			status.validation_message = Some("Tavily API Key 验证通过".into());
+		}
+		Err(message) => {
+			status.validated = Some(false);
+			status.validation_message = Some(message);
+		}
+	}
+	Ok(status)
 }
 
 #[tauri::command]

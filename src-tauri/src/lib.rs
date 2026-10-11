@@ -441,7 +441,7 @@ pub fn run() {
 			families::test_provider_connection, families::cancel_provider_test, families::discover_relay_models,
 			families::fetch_pricing_page, families::extract_pricing_table,
 			families::fetch_public_catalog, families::set_usd_cny_rate,
-			search::get_web_search_status, search::save_web_search_key, search::clear_web_search_key, search::install_web_search_extension
+			search::get_web_search_status, search::validate_web_search, search::save_web_search_key, search::clear_web_search_key, search::install_web_search_extension
 		])
 		.on_window_event(|window, event| {
 			if matches!(event, tauri::WindowEvent::Destroyed) {
