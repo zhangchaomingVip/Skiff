@@ -175,7 +175,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .suggestions svg { color: var(--secondary); margin-bottom: var(--space-2); }
 .suggestions strong { font-weight: var(--font-weight-medium); font-size: var(--font-size-sm); }
 .suggestions span { font-size: var(--font-size-sm); color: var(--muted); }
-.msg { position: relative; max-width: var(--content-width); margin: 0 auto var(--space-6); }
+.msg { position: relative; width: 100%; max-width: var(--content-width); margin: 0 auto var(--space-6); }
 .msg-role { font-size: var(--font-size-sm); color: var(--muted); margin-bottom: var(--space-2); font-weight: var(--font-weight-medium); letter-spacing: .02em; display: flex; align-items: center; gap: 5px; }
 .msg-body { overflow-wrap: anywhere; line-height: 1.85; font-size: var(--font-size-md); }
 .msg.user { display: flex; flex-direction: column; align-items: flex-end; }
@@ -339,14 +339,11 @@ details[open] > summary .disclosure { transform: rotate(90deg); }
 
 /* Token accounting */
 .usage-details { position: relative; }
-.usage-details > summary, .usage-time { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--panel-2); padding: 3px 10px; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.usage-cost { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--panel-2); padding: 3px 10px; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.continue-btn { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--panel-2); padding: 3px 12px; font-size: var(--font-size-sm); color: var(--secondary); white-space: nowrap; }
-.continue-btn:hover:not(:disabled) { background: var(--hover); color: var(--text); }
-.continue-btn.truncated { border-color: var(--danger); color: var(--danger); }
-.usage-details > summary { cursor: pointer; list-style: none; }
+.usage-details > summary, .usage-time, .usage-cost { display: inline-flex; align-items: center; gap: 5px; border: 0; background: transparent; padding: 3px 0; font-size: var(--font-size-sm); color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.usage-details > summary { cursor: pointer; list-style: none; border-radius: 0; border-bottom: 1px dotted var(--color-border-light); }
+.usage-details > summary:hover { color: var(--secondary); }
 .usage-details > summary::-webkit-details-marker { display: none; }
-.usage-popover { position: absolute; z-index: 7; bottom: 35px; left: 50%; transform: translateX(-50%); width: min(360px, calc(100vw - 40px)); padding: 19px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--panel-2); box-shadow: 0 8px 35px var(--shadow-color); font-size: var(--font-size-sm); }
+.usage-popover { position: absolute; z-index: 7; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%); width: min(360px, calc(100vw - 40px)); padding: 19px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--panel-2); box-shadow: 0 8px 35px var(--shadow-color); font-size: var(--font-size-sm); }
 .usage-heading { display: flex; justify-content: space-between; gap: 10px; }
 .usage-heading strong { color: var(--text); }
 .usage-heading b { margin-left: 6px; }
@@ -446,19 +443,22 @@ details[open] > summary .disclosure { transform: rotate(90deg); }
 
 /* Transcript reading and message actions */
 .transcript { flex: 1; min-height: 0; position: relative; display: flex; flex-direction: column; }
-.transcript .messages { height: 100%; overflow-anchor: none; }
+.transcript .messages { height: 100%; overflow-anchor: none; display: flex; flex-direction: column; }
+/* Few messages: centre the thread instead of crowding the top. Auto margins
+   collapse to 0 once content overflows, so long chats still scroll normally. */
+.transcript .messages > :first-child { margin-top: auto; }
+.transcript .messages > :last-child { margin-bottom: auto; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
 /* Consecutive assistant steps of one turn read as a single block. */
 .msg.compact { margin-bottom: 6px; }
 
 .msg-role svg { flex: none; }
-.message-actions { position: relative; display: flex; align-items: center; gap: 10px; margin-top: var(--space-2); color: var(--muted); }
+.message-actions { position: relative; display: flex; align-items: center; gap: 12px; margin-top: var(--space-2); color: var(--muted); }
 .msg.user .message-actions { justify-content: flex-end; }
 .message-route { display: inline-flex; align-items: center; gap: 4px; min-width: 0; max-width: min(420px, 100%); color: var(--muted); font-size: var(--font-size-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.message-route svg { flex: none; color: var(--accent); }
-.message-buttons { display: flex; align-items: center; gap: 8px; opacity: 0; pointer-events: none; transition: opacity .12s; }
-.msg:hover .message-buttons, .msg:focus-within .message-buttons, .message-actions:focus-within .message-buttons { opacity: 1; pointer-events: auto; }
+.message-route svg { flex: none; }
+.message-buttons { display: flex; align-items: center; gap: 2px; margin-left: 0; }
 .message-actions button, .copy-btn, .code-header button, .editing-banner button, .text-attachments button { display: inline-flex; align-items: center; gap: 5px; padding: 4px 6px; border: 0; border-radius: var(--radius-xs); background: transparent; font-size: var(--font-size-sm); color: var(--secondary); }
 .message-actions button:hover, .copy-btn:hover, .code-header button:hover { color: var(--text); background: var(--hover); }
 /* Context-window pressure under the composer */

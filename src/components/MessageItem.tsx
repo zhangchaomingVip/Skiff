@@ -1,4 +1,3 @@
-import { Button } from "./ui";
 import { memo } from "react";
 import type { ChatMessage, ContentBlock } from "../chat/types";
 import { splitAttachments } from "../chat/textAttachments";
@@ -16,8 +15,6 @@ import { Icon } from "./Icon";
 import { ImagePreview } from "./ImagePreview";
 import { BrandIcon } from "./BrandIcon";
 
-export type MessageAction = (message: ChatMessage) => void;
-
 /** Compact, locale-aware timestamp shown beside a message role. */
 const formatMessageTime = (ts?: number): string | undefined => {
 	if (!ts) return undefined;
@@ -30,10 +27,10 @@ const formatMessageTime = (ts?: number): string | undefined => {
 type Tool = Extract<ContentBlock, { kind: "tool" }>;
 type Result = Extract<ContentBlock, { kind: "toolResult" }>;
 
-export const MessageItem = memo(function MessageItem({ message, turnMessages, showRole, roleDisplay, compact, running, turnRunning = false, turnId, turnHead, turnSteps, turnDuration, turnOpen, onToggleTurn, disabled, isLast, onContinue, onEdit, onRegenerate, onDelete, readOnly = false }: {
+export const MessageItem = memo(function MessageItem({ message, turnMessages, showRole, roleDisplay, compact, running, turnRunning = false, turnId, turnHead, turnSteps, turnDuration, turnOpen, onToggleTurn, isLast, readOnly = false }: {
 	turnMessages?: ChatMessage[]; readOnly?: boolean;
 	turnRunning?: boolean;
-	message: ChatMessage; showRole: boolean; roleDisplay: ModelDisplay; compact: boolean; running: boolean; turnId: string; turnHead: boolean; turnSteps: number; turnDuration?: number; turnOpen: boolean; onToggleTurn: (turnId: string) => void; disabled: boolean; isLast: boolean; onContinue: () => void; onEdit: MessageAction; onRegenerate: MessageAction; onDelete: MessageAction;
+	message: ChatMessage; showRole: boolean; roleDisplay: ModelDisplay; compact: boolean; running: boolean; turnId: string; turnHead: boolean; turnSteps: number; turnDuration?: number; turnOpen: boolean; onToggleTurn: (turnId: string) => void; isLast: boolean;
 }) {
 	const isUser = message.role === "user";
 	const text = message.blocks.filter((b) => b.kind === "text").map((b) => b.text).join("\n\n");
@@ -91,14 +88,11 @@ export const MessageItem = memo(function MessageItem({ message, turnMessages, sh
 			{!nodes.length && message.streaming ? <span className="typing">正在思考…</span> : nodes}
 		</div>
 		{(showActions || showUsage) && <div className="message-actions">
-			{!isUser && !message.streaming && message.routeSnapshot && <span className="message-route" title={`实际应答线路：${message.routeSnapshot.familyName} · ${message.routeSnapshot.modelId} · ${message.routeSnapshot.relayName}`}><Icon name="pin" size={13} />实际线路：{message.routeSnapshot.relayName} · {message.routeSnapshot.alias || message.routeSnapshot.modelId} · {message.routeSnapshot.billingAccountId || "未知账户"}</span>}
-			{showUsage && <TurnUsage message={message} messages={turnMessages} />}
-			{!readOnly && !isUser && isLast && !running && <Button className={`continue-btn ${message.stopReason === "length" ? "truncated" : ""}`} disabled={disabled} onClick={onContinue} aria-label="继续生成" title="发送「继续」，让模型接着写下去">{message.stopReason === "length" ? "输出被截断 · 继续" : "继续"}</Button>}
 			{showActions && <div className="message-buttons">
 				<CopyButton text={text} label="复制消息" />
-				{!readOnly && <>{isUser ? <button disabled={disabled} onClick={() => onEdit(message)} aria-label="编辑并重发" title="编辑并重发"><Icon name="edit" size={14} /></button> : <button disabled={disabled} onClick={() => onRegenerate(message)} aria-label="重新生成" title="从上一条提问重新生成"><Icon name="refresh" size={14} /></button>}
-				<button disabled={disabled} onClick={() => onDelete(message)} aria-label="删除本轮及后续消息" title="删除本轮及后续消息（保留原会话文件）"><Icon name="trash" size={14} /></button></>}
 			</div>}
+			{!isUser && !message.streaming && message.routeSnapshot && <span className="message-route" title={`实际应答线路：${message.routeSnapshot.familyName} · ${message.routeSnapshot.modelId} · ${message.routeSnapshot.relayName}`}><Icon name="pin" size={13} />实际线路：{message.routeSnapshot.relayName} · {message.routeSnapshot.alias || message.routeSnapshot.modelId} · {message.routeSnapshot.billingAccountId || "未知账户"}</span>}
+			{showUsage && <TurnUsage message={message} messages={turnMessages} />}
 		</div>}
 	</article>;
 });

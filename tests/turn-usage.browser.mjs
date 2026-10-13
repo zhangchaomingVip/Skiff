@@ -28,7 +28,8 @@ try {
 	await page.waitForFunction(() => window.turnUsageHarness);
 	await render({ messages }, 2);
 	assert.deepEqual((await totals()).map((text) => text.trim()), ["Tokens: 260", "Tokens: 300"]);
-	assert.equal(await page.locator(".continue-btn").count(), 1);
+	// The footer no longer ships continue / regenerate / delete buttons; only copy remains.
+	assert.equal(await page.locator(".continue-btn").count(), 0);
 	const first = page.locator(".usage-details").first();
 	await first.locator("summary").click();
 	assert.equal(await first.locator(".usage-heading strong").textContent(), "本轮 Token 消耗");

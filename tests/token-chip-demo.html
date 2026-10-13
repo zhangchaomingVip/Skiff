@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Skiff Token Chip 显示方案对比</title>
+<style>
+	/* 贴近 Skiff 暗色主题 */
+	:root {
+		--bg: #16181d; --panel: #1c1f26; --panel-2: #23272f;
+		--border: #2e333d; --border-light: #3a404c;
+		--text: #e6e9ef; --secondary: #a8b0bd; --muted: #6b7280;
+		--accent: #5b8def; --success: #4caf7d; --purple: #a78bfa; --amber: #e5b567;
+	}
+	* { box-sizing: border-box; margin: 0; }
+	body { background: var(--bg); color: var(--text); font: 14px/1.6 -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; padding: 40px 24px; }
+	h1 { font-size: 20px; margin-bottom: 6px; }
+	.page-sub { color: var(--muted); font-size: 13px; margin-bottom: 32px; }
+	.variant { max-width: 720px; margin: 0 auto 36px; }
+	.variant-label { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; }
+	.variant-label h2 { font-size: 15px; }
+	.variant-label span { color: var(--muted); font-size: 12px; }
+	/* 模拟消息 footer 工具条 */
+	.msg-footer { display: flex; align-items: center; gap: 18px; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 14px 18px; }
+	.msg-footer .tail { color: var(--muted); font-size: 12px; display: inline-flex; align-items: center; gap: 5px; }
+	.note { color: var(--muted); font-size: 12px; margin-top: 8px; line-height: 1.7; }
+	.note b { color: var(--secondary); font-weight: 600; }
+
+	svg { display: block; }
+	.num { font-variant-numeric: tabular-nums; }
+
+	/* ===== 方案 A：箭头拆分（cc-switch 风格） ===== */
+	.chip-a { display: inline-flex; align-items: center; gap: 12px; font-size: 12.5px; cursor: default; }
+	.chip-a .dir { display: inline-flex; align-items: center; gap: 4px; }
+	.chip-a .in { color: var(--success); }
+	.chip-a .out { color: var(--purple); }
+	.chip-a .ctx { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); padding-left: 12px; border-left: 1px solid var(--border-light); }
+	.chip-a .ctx .num { color: var(--secondary); }
+
+	/* ===== 方案 B：总量 + 新增徽标 ===== */
+	.chip-b { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); cursor: default; }
+	.chip-b .total { display: inline-flex; align-items: center; gap: 5px; }
+	.chip-b .delta { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; font-weight: 600; color: var(--success); background: color-mix(in srgb, var(--success) 14%, transparent); border-radius: 99px; padding: 1px 7px; }
+
+	/* ===== 方案 C：迷你堆叠条 ===== */
+	.chip-c { display: inline-flex; align-items: center; gap: 9px; font-size: 12.5px; color: var(--muted); cursor: default; }
+	.chip-c .bar { display: inline-flex; width: 64px; height: 6px; border-radius: 3px; overflow: hidden; background: var(--panel-2); }
+	.chip-c .bar i { display: block; height: 100%; }
+	.chip-c .bar .hit { background: var(--accent); opacity: .55; }
+	.chip-c .bar .miss { background: var(--accent); }
+	.chip-c .bar .out { background: var(--purple); }
+	.chip-c .lbl { color: var(--secondary); }
+
+	/* ===== 方案 D：本论新增为主 + 悬浮明细卡 ===== */
+	.chip-d { position: relative; display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); cursor: pointer; border-bottom: 1px dotted var(--border-light); padding-bottom: 1px; }
+	.chip-d:hover { color: var(--secondary); }
+	.chip-d .new { display: inline-flex; align-items: center; gap: 3px; color: var(--success); font-weight: 600; }
+	.chip-d .total { color: var(--muted); }
+	.chip-d:hover .total { color: var(--secondary); }
+	.chip-d:hover .pop { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+	.pop { position: absolute; z-index: 5; bottom: calc(100% + 10px); left: 50%; transform: translate(-50%, 4px); opacity: 0; pointer-events: none; transition: .15s ease; width: 300px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 8px 35px rgba(0,0,0,.45); padding: 14px 16px; font-size: 12px; color: var(--secondary); cursor: default; }
+	.pop h3 { font-size: 12.5px; color: var(--text); display: flex; justify-content: space-between; margin-bottom: 10px; }
+	.pop h3 b { font-weight: 600; }
+	.pop .row { display: flex; justify-content: space-between; align-items: center; padding: 3px 0; }
+	.pop .row .k { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); }
+	.pop .row.sub { padding-left: 17px; color: var(--muted); }
+	.pop .row.sep { border-top: 1px solid var(--border); margin-top: 8px; padding-top: 9px; color: var(--secondary); }
+	.pop .v { font-weight: 600; color: var(--text); }
+	.sw { display: inline-block; width: 9px; height: 9px; border-radius: 2.5px; }
+	.sw.in { background: var(--accent); } .sw.hit { background: var(--accent); opacity: .55; }
+	.sw.write { background: var(--amber); } .sw.out { background: var(--purple); }
+	.pop .rate { display: flex; justify-content: space-between; border-top: 1px solid var(--border); margin-top: 10px; padding-top: 10px; }
+	.pop .rate b { color: var(--success); }
+	.pop .cbar { display: flex; height: 6px; border-radius: 3px; overflow: hidden; background: var(--panel); margin: 8px 0 6px; }
+	.pop .cbar i { display: block; height: 100%; }
+	.pop .cbar .hit { background: var(--accent); opacity: .55; } .pop .cbar .miss { background: var(--accent); }
+	.pop .hint { color: var(--muted); font-size: 11px; margin-top: 8px; line-height: 1.6; }
+</style>
+</head>
+<body>
+<h1>Token Chip 显示方案对比</h1>
+<p class="page-sub">样例数据：本轮输入合计 1,528（缓存命中 1,400 · 未命中 128）+ 输出 462 = 总 1.99k；其中<b style="color:var(--success)">新增 590</b>（未命中 128 + 输出 462）。悬浮可查看各方案交互。</p>
+
+<!-- ============ 方案 A ============ -->
+<div class="variant">
+	<div class="variant-label"><h2>方案 A · 箭头拆分</h2><span>cc-switch 风格：↓输入 ↑输出 ｜ 累计上下文</span></div>
+	<div class="msg-footer">
+		<span class="chip-a" title="输入 = 本轮发给模型的全部 token（含缓存命中）；输出 = 模型新生成；上下文 = 会话累计">
+			<span class="dir in">
+				<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v14"/><path d="m6 12 6 6 6-6"/></svg>
+				<b class="num">1,528</b>
+			</span>
+			<span class="dir out">
+				<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V6"/><path d="m6 12 6-6 6 6"/></svg>
+				<b class="num">462</b>
+			</span>
+			<span class="ctx">
+				<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
+				<span class="num">126.1k</span>
+			</span>
+		</span>
+		<span class="tail">¥0.002105</span>
+		<span class="tail">星期二12:26</span>
+	</div>
+	<p class="note">信息密度最高，一眼区分进出。缺点：没有直接给出「新增」概念，用户需自行理解为 ↓ 含缓存。<b>126.1k</b> 为会话累计上下文（多轮求和）。</p>
+</div>
+
+<!-- ============ 方案 B ============ -->
+<div class="variant">
+	<div class="variant-label"><h2>方案 B · 总量 + 新增徽标</h2><span>改动最小：保留现有 chip，追加绿色「+新增」</span></div>
+	<div class="msg-footer">
+		<span class="chip-b" title="总量 = 本轮输入合计 + 输出；新增 = 缓存未命中 + 缓存写入 + 输出（实际新产生的 token）">
+			<span class="total">
+				<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
+				Tokens: <b class="num" style="color:var(--secondary)">1.99k</b>
+			</span>
+			<span class="delta num">+590 新增</span>
+		</span>
+		<span class="tail">¥0.002105</span>
+		<span class="tail">星期二12:26</span>
+	</div>
+	<p class="note">对现有 UI 侵入最小，「新增」语义最直白。缓存命中率高的轮次，新增会明显小于总量，反差感强。缺点：看不出输入/输出占比。</p>
+</div>
+
+<!-- ============ 方案 C ============ -->
+<div class="variant">
+	<div class="variant-label"><h2>方案 C · 迷你堆叠条</h2><span>图形化：条内三段 = 命中 / 未命中 / 输出</span></div>
+	<div class="msg-footer">
+		<span class="chip-c" title="蓝浅色 = 缓存命中 1,400 · 蓝 = 未命中 128 · 紫 = 输出 462">
+			<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
+			<span class="bar"><i class="hit" style="width:70.4%"></i><i class="miss" style="width:6.4%"></i><i class="out" style="width:23.2%"></i></span>
+			<span class="lbl num">1.99k</span>
+		</span>
+		<span class="tail">¥0.002105</span>
+		<span class="tail">星期二12:26</span>
+	</div>
+	<p class="note">最省空间且带比例感知：命中占多少一目了然。缺点：精确数值仍需悬浮提示，色块含义有学习成本（适合搭配首次引导）。</p>
+</div>
+
+<!-- ============ 方案 D ============ -->
+<div class="variant">
+	<div class="variant-label"><h2>方案 D · 新增为主 + 悬浮明细（推荐）</h2><span>绿色 ↑ 显示新增，悬浮展示完整账本</span></div>
+	<div class="msg-footer" style="padding-bottom: 14px;">
+		<span class="chip-d">
+			<span class="new num">
+				<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V6"/><path d="m6 12 6-6 6 6"/></svg>
+				590
+			</span>
+			<span class="total num">/ 1.99k</span>
+			<span class="pop">
+				<h3>本轮 Token 消耗 <span>新增 <b>590</b></span></h3>
+				<div class="row"><span class="k"><i class="sw in"></i>输入（发给模型）</span><span class="v num">1,528</span></div>
+				<div class="row sub"><span class="k">缓存命中</span><span class="num">1,400</span></div>
+				<div class="row sub"><span class="k">缓存未命中（新增）</span><span class="num">128</span></div>
+				<div class="row sub"><span class="k">缓存写入</span><span class="num">0</span></div>
+				<div class="row sep"><span class="k"><i class="sw out"></i>输出（新生成）</span><span class="v num">462</span></div>
+				<div class="rate"><span>缓存命中率</span><b class="num">91.6%</b></div>
+				<div class="cbar"><i class="hit" style="width:91.6%"></i><i class="miss" style="width:8.4%"></i></div>
+				<p class="hint">新增 = 缓存未命中 + 缓存写入 + 输出，即本轮实际新产生的 token。缓存命中部分以低价/免费计费。</p>
+			</span>
+		</span>
+		<span class="tail">¥0.002105</span>
+		<span class="tail">星期二12:26</span>
+	</div>
+	<p class="note">绿色 <b>↑ 590</b> 即本轮新增（未命中 128 + 输出 462），灰色 <b>/ 1.99k</b> 为总量参照；去掉了 Tokens 文案和图标，chip 更短。悬浮卡保留现有完整明细 + 命中率条，↑ 语义在卡内明细行中可自解释。（悬浮 chip 查看效果）</p>
+</div>
+
+</body>
+</html>

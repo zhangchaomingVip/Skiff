@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>消息操作栏 · 设计参考</title>
+<style>
+	* { margin: 0; padding: 0; box-sizing: border-box; }
+	body {
+		font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+		background: #f5f6f8;
+		color: #1f2329;
+		padding: 40px 24px;
+	}
+	.wrap { max-width: 860px; margin: 0 auto; }
+	h1 { font-size: 20px; margin-bottom: 6px; }
+	.sub { font-size: 13px; color: #8a8f99; margin-bottom: 32px; }
+	h2 { font-size: 14px; color: #8a8f99; font-weight: 500; margin: 36px 0 10px; }
+	h2 .tag {
+		display: inline-block; font-size: 11px; font-weight: 500;
+		padding: 1px 8px; border-radius: 99px; margin-left: 8px; vertical-align: 2px;
+	}
+	.tag.bad  { background: #fde8e8; color: #d64545; }
+	.tag.good { background: #e3f3e7; color: #2c9a52; }
+
+	/* ===== 模拟消息卡片 ===== */
+	.msg {
+		background: #fff;
+		border: 1px solid #e8eaee;
+		border-radius: 12px;
+		padding: 20px 22px 14px;
+	}
+	.msg-body { font-size: 14px; line-height: 1.8; color: #353a42; }
+	.msg-body code {
+		background: #f2f3f5; border-radius: 4px; padding: 1px 5px;
+		font-family: "Cascadia Code", Consolas, monospace; font-size: 12.5px;
+	}
+	.footer { margin-top: 16px; }
+
+	/* ============ 方案 0：现状还原 ============ */
+	.v0 {
+		display: flex; align-items: center; gap: 8px;
+		border: 1px solid #e3e5e9; border-radius: 10px; padding: 6px 10px;
+	}
+	.v0 .chip {
+		display: flex; align-items: center; gap: 5px;
+		border: 1px solid #e3e5e9; border-radius: 8px;
+		font-size: 12px; color: #4e5561; padding: 4px 10px; white-space: nowrap;
+	}
+	.v0 .chip.plain { border-color: transparent; }
+	.v0 .btn {
+		display: flex; align-items: center; gap: 4px;
+		border: 1px solid #e3e5e9; border-radius: 8px; background: #fff;
+		font-size: 12px; color: #4e5561; padding: 4px 10px; cursor: pointer;
+	}
+	.v0 .btn.icon { padding: 4px 7px; border-color: transparent; }
+	.v0 .spacer { flex: 1; }
+
+	/* ============ 方案 A：极简常显（推荐） ============ */
+	.vA { display: flex; align-items: center; gap: 6px; min-height: 28px; }
+	.vA .meta {
+		display: flex; align-items: center; gap: 14px;
+		font-size: 12px; color: #9aa0aa; white-space: nowrap;
+	}
+	.vA .meta .dot::before { content: "·"; margin-right: 14px; color: #d4d7dc; }
+	.vA .meta b { font-weight: 500; color: #6b7280; }
+	.vA .meta .tok { cursor: default; border-bottom: 1px dotted #cfd3d9; }
+	.vA .spacer { flex: 1; }
+	.vA .acts { display: flex; align-items: center; gap: 2px; }
+	.vA .act {
+		display: flex; align-items: center; gap: 5px;
+		border: none; background: transparent; border-radius: 6px;
+		font-size: 12px; color: #7a8089; padding: 5px 8px; cursor: pointer;
+		transition: background .12s, color .12s;
+	}
+	.vA .act:hover { background: #f2f3f5; color: #353a42; }
+	.vA .act.danger:hover { background: #fdeeee; color: #d64545; }
+	.vA .primary {
+		border: none; background: #eef1ff; color: #3b5bdb; border-radius: 6px;
+		font-size: 12px; font-weight: 500; padding: 5px 12px; cursor: pointer;
+		transition: background .12s;
+	}
+	.vA .primary:hover { background: #e0e6ff; }
+	.vA .divider { width: 1px; height: 14px; background: #e8eaee; margin: 0 6px; }
+
+	/* ============ 方案 B：hover 浮现 ============ */
+	.msg.hoverable { position: relative; }
+	.vB {
+		display: flex; align-items: center; gap: 6px; min-height: 28px;
+		opacity: 0; transition: opacity .15s;
+	}
+	.msg.hoverable:hover .vB { opacity: 1; }
+	.vB .meta { font-size: 12px; color: #9aa0aa; display: flex; gap: 14px; white-space: nowrap; }
+	.vB .spacer { flex: 1; }
+	.vB .acts {
+		display: flex; align-items: center; gap: 2px;
+		background: #fff; border: 1px solid #eceef1; border-radius: 8px;
+		padding: 2px; box-shadow: 0 2px 8px rgba(30,34,40,.06);
+	}
+	.vB .act {
+		display: flex; align-items: center; justify-content: center;
+		width: 26px; height: 26px; border: none; background: transparent;
+		border-radius: 6px; color: #7a8089; cursor: pointer;
+		transition: background .12s, color .12s; position: relative;
+	}
+	.vB .act:hover { background: #f2f3f5; color: #353a42; }
+	.vB .act.danger:hover { background: #fdeeee; color: #d64545; }
+	.vB .act:hover::after {
+		content: attr(data-tip); position: absolute; bottom: calc(100% + 6px); left: 50%;
+		transform: translateX(-50%); background: #2b2f36; color: #fff;
+		font-size: 11px; padding: 3px 8px; border-radius: 5px; white-space: nowrap;
+		pointer-events: none;
+	}
+
+	.notes { font-size: 13px; color: #6b7280; line-height: 1.9; margin-top: 10px; padding-left: 18px; }
+	.notes li { margin-bottom: 2px; }
+	svg { display: block; }
+</style>
+</head>
+<body>
+<div class="wrap">
+	<h1>消息操作栏 · 设计参考</h1>
+	<p class="sub">对应截图中红框区域：线路 / Tokens / 时间 / 继续 / 复制 / 重试 / 删除。hover 各方案可交互体验。</p>
+
+	<!-- ================= 现状 ================= -->
+	<h2>现状还原 <span class="tag bad">问题：边框套边框、主次不分、按钮形态三种并存</span></h2>
+	<div class="msg">
+		<div class="msg-body">这样普通智能体（Assistant）流程下，模型仅凭 name+description 就能知道这是执行 Python 脚本的工具；linsight 任务模式的提示词注入不受影响。</div>
+		<div class="footer v0">
+			<span class="chip plain">⌘ 实际线路：kimiCode · kimi-f</span>
+			<span class="chip">◇ Tokens: 220.68k ⓘ</span>
+			<span class="btn icon">—</span>
+			<span class="chip">🕐 星期一18:00</span>
+			<span class="btn">继续</span>
+			<span class="btn">⧉ 复制</span>
+			<span class="btn icon">↻</span>
+			<span class="btn icon">🗑</span>
+		</div>
+	</div>
+
+	<!-- ================= 方案 A ================= -->
+	<h2>方案 A · 极简常显（推荐） <span class="tag good">去边框 / 元信息降级 / 操作统一</span></h2>
+	<div class="msg">
+		<div class="msg-body">这样普通智能体（Assistant）流程下，模型仅凭 name+description 就能知道这是执行 Python 脚本的工具；linsight 任务模式的提示词注入不受影响。</div>
+		<div class="footer vA">
+			<div class="meta">
+				<span><b>kimiCode</b> · kimi-f</span>
+				<span class="tok" title="输入 186.2k · 输出 34.4k · 缓存命中 78%">220.68k tokens</span>
+				<span>星期一 18:00</span>
+			</div>
+			<div class="spacer"></div>
+			<div class="acts">
+				<button class="primary">↳ 继续</button>
+				<button class="act">
+					<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+					复制
+				</button>
+				<button class="act" title="重新生成">
+					<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></svg>
+				</button>
+				<span class="divider"></span>
+				<button class="act danger" title="删除">
+					<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+				</button>
+			</div>
+		</div>
+	</div>
+	<ul class="notes">
+		<li>整行无边框，元信息用 12px 灰字平铺，Tokens 带虚线下划线提示 hover 看明细；</li>
+		<li>「继续」是唯一主操作，用浅色品牌底突出；其余操作统一 ghost 按钮；</li>
+		<li>删除前加分隔线，hover 变红，防止误触。</li>
+	</ul>
+
+	<!-- ================= 方案 B ================= -->
+	<h2>方案 B · hover 浮现（对话密度更高） <span class="tag good">最干净，适合长会话</span></h2>
+	<div class="msg hoverable">
+		<div class="msg-body">这样普通智能体（Assistant）流程下，模型仅凭 name+description 就能知道这是执行 Python 脚本的工具；linsight 任务模式的提示词注入不受影响。<b style="color:#8a8f99;font-weight:400">（hover 此卡片查看效果）</b></div>
+		<div class="footer vB">
+			<div class="meta">
+				<span>kimiCode · kimi-f</span>
+				<span>220.68k tokens</span>
+				<span>星期一 18:00</span>
+			</div>
+			<div class="spacer"></div>
+			<div class="acts">
+				<button class="act" data-tip="继续"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></button>
+				<button class="act" data-tip="复制"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+				<button class="act" data-tip="重新生成"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></svg></button>
+				<button class="act danger" data-tip="删除"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+			</div>
+		</div>
+	</div>
+	<ul class="notes">
+		<li>默认只留一行浅灰元信息，操作组收进一个带阴影的浮动 pill，hover 消息时浮现；</li>
+		<li>图标按钮配 tooltip，代替文字标签，密度最低；</li>
+		<li>适合消息多、滚动频繁的 coding 场景；代价是发现性略低，可与方案 A 折中（常显半透明，hover 提亮）。</li>
+	</ul>
+</div>
+</body>
+</html>

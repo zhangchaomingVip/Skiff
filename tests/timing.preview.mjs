@@ -129,33 +129,8 @@ try {
 	assert(await sent.task, "Successful prompt rejected");
 	assert(latest.state.messages.at(-1).durationMs === 4300 && latest.elapsedMs === 4300, "Send latency missing from final duration");
 	record("发送立即显示用户行、模型占位和计时；延迟确认、空回复及纯文本接续不重复、不归零");
-	for (const edit of [true, false]) {
-		document.querySelector(edit ? '[aria-label="编辑并重发"]' : '[aria-label="重新生成"]').click();
-		if (edit) {
-			await until(() => document.querySelector(".editing-banner"), "Edit mode did not open");
-			setDraft("编辑后的问题");
-			await delay(30);
-			document.querySelector('[aria-label="发送消息"]').click();
-		}
-		await until(() => heldPrompts.length > 0 && waiting(), "Resend placeholder missing");
-		const held = heldPrompts.shift();
-		assert(held.request.message === "编辑后的问题" && latest.state.messages.length === 0, "Fork/resend did not reconcile history");
-		confirmUser(held);
-		emit({ type: "message_start", message: { role: "assistant" } });
-		await advance(1000);
-		await finishReply(held);
-		record(edit ? "编辑重发在回退完成后立即显示占位" : "重新生成沿用原提问并立即显示占位");
-	}
-	document.querySelector('[aria-label="继续生成"]').click();
-	await until(() => heldPrompts.length > 0 && waiting(), "Continue placeholder missing");
-	const continuation = heldPrompts.shift();
-	assert(continuation.request.message === "继续", "Continue sent wrong text");
-	assert(document.querySelectorAll(".voyage-turn dd")[1].textContent === "—", "New prompt displayed the preceding turn's usage");
-	confirmUser(continuation);
-	emit({ type: "message_start", message: { role: "assistant" } });
-	await advance(1000);
-	await finishReply(continuation);
-	record("继续生成立即展示新轮占位");
+	// The footer no longer exposes continue / regenerate / delete buttons; copy is the only action.
+	// Re-send and follow-up continuation are now driven from the composer by the user.
 	setDraft("失败后保留草稿"); await delay(30);
 	document.querySelector('[aria-label="发送消息"]').click();
 	await until(() => heldPrompts.length > 0 && waiting(), "Failed send placeholder missing");

@@ -61,6 +61,6 @@ export function ArchivePreviewDialog({ chat, project, busy, onRestore, onDelete,
 		</div>
 		{preview.status === "loading" && <div className="archive-preview-status" role="status"><span className="dot busy" />正在读取归档会话…</div>}
 		{preview.status === "error" && <div className="archive-preview-error" role="alert"><span>{preview.message}</span><Button type="button" variant="ghost" size="compact" onClick={() => setRetry((value) => value + 1)}><Icon name="refresh" size={14} />重试</Button></div>}
-		{preview.status === "ready" && <MessageList messages={preview.messages} projectName={project?.name} running={false} models={[]} onSuggestion={() => {}} followSignal={0} disabled readOnly onContinue={() => {}} onEdit={() => {}} onRegenerate={() => {}} onDelete={() => {}} />}
+		{preview.status === "ready" && <MessageList messages={preview.messages} projectName={project?.name} running={false} models={[]} onSuggestion={() => {}} followSignal={0} readOnly />}
 	</Dialog>;
 }

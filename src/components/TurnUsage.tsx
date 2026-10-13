@@ -10,6 +10,8 @@ export function TurnUsage({ message, messages }: { message: ChatMessage; message
 	const { pricingModels, models, current } = useModelFamily();
 	const usage = useMemo(() => summarizeUsage(messages ?? [message]), [messages, message]);
 	const cost = useMemo(() => summarizeCosts(messages ?? [message], pricingModels ?? models ?? [], current), [messages, message, pricingModels, models, current]);
+	// Hovering the token chip reveals the condensed breakdown; clicking still opens the full panel.
+	const usageSummaryText = `输入 ${formatTokens(usage.inputTotal)} · 输出 ${formatTokens(usage.output)} · 缓存命中 ${(usage.hitRate * 100).toFixed(1)}%`;
 	const root = useRef<HTMLDetailsElement>(null);
 	useEffect(() => {
 		const dismiss = (event: PointerEvent) => { if (root.current?.open && !root.current.contains(event.target as Node)) root.current.open = false; };
@@ -19,7 +21,7 @@ export function TurnUsage({ message, messages }: { message: ChatMessage; message
 	}, []);
 	return <>
 		<details className="usage-details" ref={root}>
-			<summary aria-label="本轮 Token 消耗明细"><Icon name="tokens" size={13} /> Tokens: {formatTokens(usage.total)} <Icon name="info" size={13} /></summary>
+			<summary aria-label="本轮 Token 消耗明细" title={usageSummaryText}><Icon name="tokens" size={13} /> Tokens: {formatTokens(usage.total)}</summary>
 			<div className="usage-popover">
 				<div className="usage-heading"><strong>本轮 Token 消耗</strong><span>总计 <b>{formatTokens(usage.total)}</b></span></div>
 				<dl><div className="usage-row"><dt><i className="swatch input" />输入</dt><dd>{formatTokens(usage.inputTotal)}</dd></div>
