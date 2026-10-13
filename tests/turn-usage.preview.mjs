@@ -18,6 +18,6 @@ window.turnUsageHarness = {
 					messages: parseMessages(messages), running: false, models: [model], model,
 					onSuggestion: noop, followSignal: 0, ...props,
 				})),
-		);
+		));
 	},
 };
