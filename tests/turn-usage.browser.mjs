@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 const require = createRequire(import.meta.url);
 const { chromium } = process.env.SKIFF_PLAYWRIGHT_DIR ? require(process.env.SKIFF_PLAYWRIGHT_DIR) : await import("playwright");
 const browser = await chromium.launch({ headless: true, channel: process.env.SKIFF_BROWSER_CHANNEL ?? "msedge" });
-const page = await browser.newPage({ viewport: { width: 1200, height: 900 } });
+const page = await browser.newPage({ viewport: { width: 1200, height: 900 }, timezoneId: "Asia/Shanghai" });
 const errors = [];
 page.on("pageerror", (error) => errors.push(error.message));
 const usage = (input, cacheRead, cacheWrite, output, reasoning) => ({ input, cacheRead, cacheWrite, output, reasoning, totalTokens: input + cacheRead + cacheWrite + output });
@@ -21,15 +21,15 @@ const render = async (props, count) => {
 	await page.evaluate((props) => window.turnUsageHarness.render(props), props);
 	await page.waitForFunction((count) => document.querySelectorAll(".usage-details").length === count, count);
 };
-const totals = () => page.locator(".usage-trigger .usage-total").allTextContents();
+const totals = () => page.locator(".usage-trigger .usage-input").allTextContents();
 const added = () => page.locator(".usage-trigger .usage-new").allTextContents();
 
 try {
 	await page.goto(`${process.argv[2] ?? "http://127.0.0.1:1424"}/tests/turn-usage.html`);
 	await page.waitForFunction(() => window.turnUsageHarness);
 	await render({ messages }, 2);
-	assert.deepEqual(await totals(), ["/ 260", "/ 300"]);
-	assert.deepEqual(await added(), ["225", "260"]);
+	assert.deepEqual(await totals(), ["205(+170)", "250(+210)"]);
+	assert.deepEqual(await added(), ["(+170)", "(+210)"]);
 	// The footer no longer ships continue / regenerate / delete buttons; only copy remains.
 	assert.equal(await page.locator(".continue-btn").count(), 0);
 	const first = page.locator(".usage-details").first();
@@ -49,28 +49,28 @@ try {
 	assert.equal(await page.locator(".continue-btn").count(), 0);
 	const active = [...messages, { role: "user", content: "第三轮" }, { role: "assistant", content: "工具执行中", usage: usage(500, 0, 0, 10, 0) }];
 	await render({ messages: active, running: true, activeTurnId: "turn:history_6" }, 2);
-	assert.deepEqual(await totals(), ["/ 260", "/ 300"]);
+	assert.deepEqual(await totals(), ["205(+170)", "250(+210)"]);
 	await render({ messages: active, running: false }, 3);
+	assert.deepEqual(await added(), ["(+170)", "(+210)"]);
+	assert.equal(await page.locator(".usage-trigger").last().getAttribute("title"), "输入 Token 500，新增 500");
 
 	// A final entry without usage still displays usage from the turn's earlier requests.
 	await render({ messages: [...messages.slice(0, 3), { role: "assistant", content: "没有 usage 的最终消息" }, ...messages.slice(4)], readOnly: true }, 2);
-	assert.deepEqual(await totals(), ["/ 155", "/ 300"]);
+	assert.deepEqual(await totals(), ["125(+105)", "250(+210)"]);
 	assert.equal(await page.locator(".continue-btn").count(), 0);
 	await render({ messages: [{ role: "user", content: "未上报用量" }, { role: "assistant", content: "回复" }] }, 0);
 
 	// A centred first turn used to clip the upward-opening panel inside .messages.
 	await render({ messages: [{ role: "user", content: "你好" }, { role: "assistant", content: "你好，有什么可以帮你？", usage: usage(128, 1400, 0, 462) }] }, 1);
-	assert.deepEqual(await added(), ["590"]);
-	assert.deepEqual(await totals(), ["/ 1.99k"]);
+	assert.deepEqual(await added(), ["(+128)"]);
+	assert.deepEqual(await totals(), ["1.53k(+128)"]);
 	const chip = page.locator(".usage-trigger");
 	const panel = page.locator(".usage-popover");
 	await chip.hover();
-	await panel.waitFor({ state: "visible" });
-	await panel.hover();
-	assert.equal(await panel.isVisible(), true);
+	assert.equal(await chip.getAttribute("title"), "输入 Token 1,528，新增 128");
+	assert.equal(await panel.count(), 0);
 	await page.mouse.move(0, 0);
-	await panel.waitFor({ state: "detached" });
-	// Keyboard activation pins the panel; pointer exit must not dismiss it.
+	// Keyboard activation opens the panel; pointer exit must not dismiss it.
 	await chip.focus();
 	await chip.press("Enter");
 	await panel.waitFor({ state: "visible" });
@@ -104,8 +104,55 @@ try {
 	await panel.waitFor({ state: "visible" });
 	await page.mouse.click(0, 0);
 	await panel.waitFor({ state: "detached" });
+	// Match the requested row and preserve the completed reply's actual route/prices.
+	const snapshot = { providerKey: "old-provider", familyId: "deepseek", familyName: "DeepSeek", modelId: "deepseek-flash", alias: "旧别名", relayId: "custom", relayName: "基元律动", billingAccountId: "xxx", currency: "CNY", inputCost: 1, outputCost: 147 / 190 };
+	const completed = { role: "assistant", provider: "old-provider", model: "deepseek-flash", content: "完成", usage: usage(73, 1917, 0, 190), routeSnapshot: snapshot, timestamp: new Date("2026-10-13T12:31:00+08:00").getTime() };
+	await render({ messages: [{ role: "user", content: "验证 chip" }, completed], current: { provider: "other", id: "other", providerName: "新渠道" } }, 1);
+	assert.equal(await page.locator(".usage-model-label").textContent(), "基元律动 · deepseek-flash");
+	assert.equal(await page.locator(".usage-model").getAttribute("title"), "完整线路：基元律动 · deepseek-flash · 账户xxx");
+	assert.equal(await page.locator(".message-route").count(), 0);
+	assert.deepEqual(await totals(), ["1.99k(+73)"]);
+	assert.equal(await chip.getAttribute("title"), "输入 Token 1,990，新增 73");
+	assert.equal(await page.locator(".usage-cache").textContent(), "⚡96%");
+	assert.equal(await page.locator(".usage-cache").getAttribute("title"), "缓存读取 Token 1,917 · 命中率 96%");
+	assert.equal(await page.locator(".usage-output").textContent(), "⇡ 190");
+	assert.equal(await page.locator(".usage-output").getAttribute("title"), "输出 Token 190");
+	assert.equal(await page.locator(".usage-cost").textContent(), "¥0.00214");
+	assert.equal(await page.locator(".usage-cost").getAttribute("title"), "精确费用 ¥0.002137（按 6 位原始值）");
+	assert.equal(await page.locator(".usage-time").textContent(), "🕒 12:31");
+	assert.equal(await page.locator(".usage-time").getAttribute("title"), "2026-10-13 周二 12:31");
+	await page.evaluate(() => {
+		window.copiedValues = [];
+		Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async (value) => window.copiedValues.push(value) } });
+	});
+	await page.locator(".usage-model").click();
+	await page.locator(".usage-cost").click();
+	assert.deepEqual(await page.evaluate(() => window.copiedValues), ["deepseek-flash", "¥0.002137"]);
+	await page.locator(".usage-cache").click();
+	await page.locator(".usage-output").click();
+	await page.locator(".usage-time").click();
+	assert.equal(await panel.count(), 0);
+	assert.deepEqual(await page.evaluate(() => window.copiedValues), ["deepseek-flash", "¥0.002137"]);
+	for (const theme of ["dark", "light"]) {
+		await page.evaluate((theme) => document.documentElement.dataset.theme = theme, theme);
+		for (const width of [1200, 600, 360]) {
+			await page.setViewportSize({ width, height: 900 });
+			assert.equal(await page.locator(".turn-usage").evaluate((el) => el.getBoundingClientRect().right <= innerWidth), true);
+			if (process.env.SKIFF_SCREENSHOT_DIR) await page.screenshot({ path: `${process.env.SKIFF_SCREENSHOT_DIR}/turn-usage-${theme}-${width}.png` });
+		}
+	}
+	// Suppress parentheses for zero new input and for an uncached first turn.
+	for (const input of [usage(0, 1990, 0, 190), usage(1990, 0, 0, 190)]) {
+		await render({ messages: [{ role: "user", content: "边界" }, { ...completed, usage: input }] }, 1);
+		await page.waitForFunction(() => document.querySelector(".usage-new") === null);
+		assert.deepEqual(await totals(), ["1.99k"]);
+	}
+	// Cache writes count as new input, while output never enters the parentheses.
+	await render({ messages: [{ role: "user", content: "缓存写入" }, { ...completed, usage: usage(50, 1900, 40, 500) }] }, 1);
+	await page.waitForFunction(() => document.querySelector(".usage-new")?.textContent === "(+90)");
+	assert.deepEqual(await totals(), ["1.99k(+90)"]);
 	assert.deepEqual(errors, []);
-	console.log("PASS: per-turn usage, new/total tokens, tool aggregation, cache/reasoning breakdown, folding, pending/streaming turns, history/archive, hover/keyboard/click dismissal, centred first-turn popup and small-window scrolling");
+	console.log("PASS: per-turn input/cache/output chips, route snapshots, exact cost/model copying, full date titles, new input boundaries, tool aggregation, folding, pending/history turns, click/keyboard dismissal, small-window popovers and 6 theme/width screenshots");
 } finally {
 	await browser.close();
 }

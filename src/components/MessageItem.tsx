@@ -91,7 +91,6 @@ export const MessageItem = memo(function MessageItem({ message, turnMessages, sh
 			{showActions && <div className="message-buttons">
 				<CopyButton text={text} label="复制消息" />
 			</div>}
-			{!isUser && !message.streaming && message.routeSnapshot && <span className="message-route" title={`实际应答线路：${message.routeSnapshot.familyName} · ${message.routeSnapshot.modelId} · ${message.routeSnapshot.relayName}`}><Icon name="pin" size={13} />实际线路：{message.routeSnapshot.relayName} · {message.routeSnapshot.alias || message.routeSnapshot.modelId} · {message.routeSnapshot.billingAccountId || "未知账户"}</span>}
 			{showUsage && <TurnUsage message={message} messages={turnMessages} />}
 		</div>}
 	</article>;

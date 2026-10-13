@@ -11,11 +11,12 @@ const root = createRoot(document.getElementById("root"));
 const noop = () => {};
 const model = { provider: "mock", id: "mock", currency: "CNY", cost: { input: 1, output: 2 } };
 window.turnUsageHarness = {
-	render({ messages, ...props }) {
+	render({ messages, models = [model], current = model, ...props }) {
+		const parsed = parseMessages(messages).map((message) => ({ ...message, routeSnapshot: messages[Number(message.id.replace("history_", ""))]?.routeSnapshot }));
 		root.render(React.createElement(StrictMode, null,
-			React.createElement(ModelFamilyContext.Provider, { value: { models: [model], familyOf: noop, manage: noop } },
+			React.createElement(ModelFamilyContext.Provider, { value: { models, current, familyOf: noop, manage: noop } },
 				React.createElement(MessageList, {
-					messages: parseMessages(messages), running: false, models: [model], model,
+					messages: parsed, running: false, models, model: current,
 					onSuggestion: noop, followSignal: 0, ...props,
 				})),
 		));

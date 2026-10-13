@@ -51,9 +51,12 @@ export function formatCost(amount: number, currency: Currency): string {
 	return symbol + rounded.toFixed(Math.min(100, decimals)).replace(/0+$/, "");
 }
 
-export function formatCosts(summary?: CostSummary): string {
+export function formatCosts(summary?: CostSummary, fractionDigits?: number): string {
 	if (!summary || summary.unconfigured) return "—";
-	const parts = (["CNY", "USD"] as const).flatMap((currency) => summary.totals[currency] === undefined ? [] : [formatCost(summary.totals[currency], currency)]);
+	const parts = (["CNY", "USD"] as const).flatMap((currency) => {
+		const amount = summary.totals[currency];
+		return amount === undefined ? [] : [fractionDigits === undefined ? formatCost(amount, currency) : `${currency === "USD" ? "$" : "¥"}${amount.toFixed(fractionDigits)}`];
+	});
 	return parts.join(" + ") || "—";
 }
 

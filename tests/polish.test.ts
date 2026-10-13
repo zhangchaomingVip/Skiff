@@ -6,7 +6,7 @@ import { initialSessionState } from "../src/chat/types.ts";
 import { forkEntry, forkTurn, groupTurns, turnDraft, userForTurn } from "../src/chat/turns.ts";
 import { readTextFiles, appendTextFiles, splitAttachments } from "../src/chat/textAttachments.ts";
 import { highlightCode } from "../src/chat/highlight.ts";
-import { formatCompletedAt, formatDuration } from "../src/chat/usage.ts";
+import { completedAtTooltip, formatCompletedAt, formatDuration } from "../src/chat/usage.ts";
 import { DEFAULT_APPEND_PROMPT, loadAppendPrompt, saveAppendPrompt } from "../src/chat/prompt.ts";
 import { isNotableThinking, shouldShowThinking } from "../src/chat/thinking.ts";
 import { toolKind, toolKindLabel, toolRunSummary, toolTarget, type ToolRunItem } from "../src/chat/toolRuns.ts";
@@ -136,7 +136,8 @@ test("turn header shows duration + steps and the footer shows the completion clo
 	assert.equal(infos[1].stepCount, 1);
 	assert.equal(infos[1].durationMs, 46000);
 	assert.equal(formatDuration(infos[1].durationMs!), "46s");
-	assert.equal(formatCompletedAt(new Date(2026, 9, 2, 23, 15).getTime()), "星期五23:15");
+	assert.equal(formatCompletedAt(new Date(2026, 9, 2, 23, 15).getTime()), "23:15");
+	assert.equal(completedAtTooltip(new Date(2026, 9, 13, 12, 31).getTime()), "2026-10-13 周二 12:31");
 });
 
 test("short reasoning is hidden once a turn settles but stays visible while streaming", () => {

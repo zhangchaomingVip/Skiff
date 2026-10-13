@@ -33,12 +33,19 @@ export function formatDuration(ms: number): string {
 	return `${Math.floor(seconds / 3600)}h ${Math.floor(seconds % 3600 / 60)}m`;
 }
 
-const WEEKDAYS = ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"];
+const WEEKDAYS = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
 
-/** Turn completion time, e.g. `星期五23:15` — only the weekday and clock, no date. */
+/** Compact turn completion clock; the full local date lives in the tooltip. */
 export function formatCompletedAt(value: number): string {
 	const date = new Date(value);
 	const hours = String(date.getHours()).padStart(2, "0");
 	const minutes = String(date.getMinutes()).padStart(2, "0");
-	return `${WEEKDAYS[date.getDay()]}${hours}:${minutes}`;
+	return `${hours}:${minutes}`;
+}
+
+export function completedAtTooltip(value: number): string {
+	const date = new Date(value);
+	const month = String(date.getMonth() + 1).padStart(2, "0");
+	const day = String(date.getDate()).padStart(2, "0");
+	return `${date.getFullYear()}-${month}-${day} ${WEEKDAYS[date.getDay()]} ${formatCompletedAt(value)}`;
 }

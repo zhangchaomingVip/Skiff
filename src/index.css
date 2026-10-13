@@ -338,12 +338,15 @@ details[open] > summary .disclosure { transform: rotate(90deg); }
 .menu-hint { font-size: var(--font-size-sm); color: var(--muted); margin: 8px 12px 3px; line-height: 1.6; }
 
 /* Token accounting */
+.turn-usage { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 16px; min-width: 0; }
+.usage-tokens { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
 .usage-details { position: relative; }
-.usage-trigger, .usage-time, .usage-cost { display: inline-flex; align-items: center; gap: 6px; border: 0; background: transparent; padding: 3px 0; font-size: var(--font-size-sm); color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.usage-trigger, .usage-model, .usage-cache, .usage-output, .usage-time, .usage-cost { display: inline-flex; align-items: center; gap: 6px; border: 0; background: transparent; padding: 3px 0; font-size: var(--font-size-md); color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.usage-model { min-width: 0; max-width: 100%; }
+.usage-model-label { overflow: hidden; text-overflow: ellipsis; }
 .usage-trigger { cursor: pointer; border-radius: 0; border-bottom: 1px dotted var(--color-border-light); }
 .usage-trigger:hover, .usage-trigger[aria-expanded=true] { color: var(--secondary); }
-.usage-new { display: inline-flex; align-items: center; gap: 3px; color: var(--color-success); font-weight: var(--font-weight-title); }
-.usage-new > svg { width: 12px; height: 12px; stroke-width: 2.6; }
+.usage-new { color: var(--color-success); font-weight: var(--font-weight-title); }
 .usage-heading { display: flex; justify-content: space-between; gap: 10px; }
 .usage-heading strong { color: var(--text); }
 .usage-heading b { margin-left: 6px; }
@@ -455,11 +458,11 @@ details[open] > summary .disclosure { transform: rotate(90deg); }
 .msg-role svg { flex: none; }
 .message-actions { position: relative; display: flex; align-items: center; gap: 12px; margin-top: var(--space-2); color: var(--muted); }
 .msg.user .message-actions { justify-content: flex-end; }
-.message-route { display: inline-flex; align-items: center; gap: 4px; min-width: 0; max-width: min(420px, 100%); color: var(--muted); font-size: var(--font-size-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.message-route svg { flex: none; }
 .message-buttons { display: flex; align-items: center; gap: 2px; margin-left: 0; }
 .message-actions button, .copy-btn, .code-header button, .editing-banner button, .text-attachments button { display: inline-flex; align-items: center; gap: 5px; padding: 4px 6px; border: 0; border-radius: var(--radius-xs); background: transparent; font-size: var(--font-size-sm); color: var(--secondary); }
 .message-actions button:hover, .copy-btn:hover, .code-header button:hover { color: var(--text); background: var(--hover); }
+.message-actions .turn-usage button { gap: 6px; padding: 3px 0; font-size: var(--font-size-md); color: var(--muted); }
+.message-actions .turn-usage button:hover:not(:disabled), .message-actions .usage-trigger[aria-expanded=true] { color: var(--text); }
 /* Context-window pressure under the composer */
 .swatch.overhead { background: var(--muted); }
 .swatch.conversation { background: var(--accent); }
