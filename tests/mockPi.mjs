@@ -215,6 +215,12 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 				}
 				case "never_reply": break;
 				case "get_state": respond({ model: session.model, thinkingLevel: session.thinkingLevel, sessionFile: session.file, isStreaming: session.isStreaming }); break;
+				case "get_session_stats": {
+					const latest = [...session.messages].reverse().find((message) => message.role === "assistant" && message.usage);
+					const usage = latest?.usage;
+					respond({ contextUsage: { tokens: usage ? usage.input + usage.cacheRead + usage.cacheWrite + usage.output : null, contextWindow: session.model.contextWindow ?? 128000, percent: usage ? (usage.input + usage.cacheRead + usage.cacheWrite + usage.output) / (session.model.contextWindow ?? 128000) * 100 : null } });
+					break;
+				}
 				case "get_available_thinking_levels": respond({ levels: session.model.reasoning ? ["off", "minimal", "low", "medium", "high", ...(session.model.maxThinking === "max" ? ["xhigh", "max"] : session.model.maxThinking === "xhigh" ? ["xhigh"] : [])] : ["off"] }); break;
 				case "set_thinking_level": session.thinkingLevel = session.model.reasoning ? request.level : "off"; respond({}); break;
 				case "get_available_models": respond({ models: familyModels() }); break;

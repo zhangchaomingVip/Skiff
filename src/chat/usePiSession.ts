@@ -5,7 +5,7 @@ import { parseMessages, parseModels } from "./parse";
 import { reduce } from "./reducer";
 import { forkTurn } from "./turns";
 import { loadAppendPrompt } from "./prompt";
-import { initialSessionState, type ImageAttachment, type ModelInfo, type SessionState } from "./types";
+import { initialSessionState, type ContextUsage, type ImageAttachment, type ModelInfo, type SessionState } from "./types";
 import type { RuntimeOffer } from "./modelFamilies";
 import { attachHistoricalSnapshots } from "./routeSnapshot";
 import type { FamiliesConfig } from "./useModelFamilies";
@@ -53,6 +53,19 @@ function parseCommands(raw: unknown): PiCommand[] {
 		.filter((command) => command.name.length > 0);
 }
 
+export function parseContextUsage(raw: unknown, version: number): ContextUsage | undefined {
+	if (!raw || typeof raw !== "object") return undefined;
+	const record = raw as Record<string, unknown>;
+	const value = record.contextUsage;
+	if (!value || typeof value !== "object") return undefined;
+	const context = value as Record<string, unknown>;
+	const window = typeof context.contextWindow === "number" && Number.isFinite(context.contextWindow) && context.contextWindow > 0 ? context.contextWindow : undefined;
+	const tokens = context.tokens === null ? null : typeof context.tokens === "number" && Number.isFinite(context.tokens) && context.tokens >= 0 ? context.tokens : null;
+	return { tokens, ...(window === undefined ? {} : { contextWindow: window }), source: "pi", estimated: tokens !== null, version };
+}
+
+const isContextRefreshEvent = (type: string | undefined) => Boolean(type && /message_end|agent_end|agent_settled|compaction|compact|context_reset/i.test(type));
+
 // Serialize teardown/start across fast navigation and React effect cleanup.
 let previousTeardown: Promise<void> = Promise.resolve();
 let nextGeneration = 0;
@@ -83,6 +96,7 @@ export function usePiSession(target?: SessionTarget, runtimeOffers: readonly Run
 	const streamingRef = useRef(false);
 	const [revision, setRevision] = useState(0);
 	const runStarted = useRef<number>();
+	const contextVersionRef = useRef(0);
 	const promptRef = useRef<{ id: string; cancelled: boolean }>();
 	const preferredModel = useRef<{ chatId?: string; cwd?: string; model?: ModelInfo }>();
 	const runtimeOffersRef = useRef(runtimeOffers);
@@ -139,6 +153,34 @@ export function usePiSession(target?: SessionTarget, runtimeOffers: readonly Run
 		rpcRef.current = rpc;
 		let cancelled = false;
 		const current = () => !cancelled && isCurrent();
+		contextVersionRef.current = 0;
+		let contextInFlight = false;
+		let contextPending = false;
+		const invalidateContext = () => {
+			contextVersionRef.current++;
+			setState((s) => ({ ...s, contextUsage: undefined }));
+		};
+		const refreshContext = async () => {
+			if (!current()) return;
+			if (contextInFlight) { contextPending = true; return; }
+			contextInFlight = true;
+			const version = contextVersionRef.current;
+			try {
+				const result = await rpc.request<Record<string, unknown>>({ type: "get_session_stats" });
+				if (current() && version === contextVersionRef.current) {
+					const reading = parseContextUsage(result, version);
+					// Missing contextUsage means an older pi. Leave the field absent so
+					// the metrics hook uses its local compatibility path.
+					if (reading) setState((s) => ({ ...s, contextUsage: reading }));
+				}
+			} catch {
+				// A transient stats failure must never interrupt a chat run. An
+				// invalidated snapshot is intentionally not restored here.
+			} finally {
+				contextInFlight = false;
+				if (contextPending) { contextPending = false; void refreshContext(); }
+			}
+		};
 		// pi's provider errors go to stderr; without this they are silently dropped.
 		const offStderr = listen<string>(`rpc-stderr://${rpc.instanceId}`, (e) => {
 			if (current() && e.payload) setRawLines((prev) => [...prev.slice(-499), `[stderr] ${e.payload}`]);
@@ -158,6 +200,10 @@ export function usePiSession(target?: SessionTarget, runtimeOffers: readonly Run
 		streamingRef.current = false;
 		const offEvent = rpc.onEvent((event: RpcEvent) => {
 			if (!current()) return;
+			if (isContextRefreshEvent(event.type)) {
+				if (/compaction|compact|context_reset/i.test(event.type ?? "")) invalidateContext();
+				void refreshContext();
+			}
 			const now = Date.now();
 			if (event.type === "agent_start" && runStarted.current === undefined) runStarted.current = now;
 			let duration: number | undefined;
@@ -208,11 +254,12 @@ export function usePiSession(target?: SessionTarget, runtimeOffers: readonly Run
 					catch (error) { unavailableModel = preferred; selectionError = error; } // The app resolves removed/disabled models after loading configuration.
 				}
 				if (!current()) return;
-				const [data, models, transcript, levels] = await Promise.all([
+				const [data, models, transcript, levels, stats] = await Promise.all([
 					rpc.request<Record<string, unknown>>({ type: "get_state" }),
 					rpc.request<{ models?: unknown }>({ type: "get_available_models" }),
 					rpc.request<{ messages?: unknown }>({ type: "get_messages" }),
 					rpc.request<{ levels?: string[] }>({ type: "get_available_thinking_levels" }).catch(() => ({ levels: [] })),
+					rpc.request<Record<string, unknown>>({ type: "get_session_stats" }).catch(() => ({})),
 				]);
 				if (!current()) return;
 				const availableModels = parseModels(models.models);
@@ -230,6 +277,7 @@ export function usePiSession(target?: SessionTarget, runtimeOffers: readonly Run
 						availableModels, messages,
 					isStreaming: Boolean(data.isStreaming),
 					activeRun: startedAt === undefined ? undefined : { startedAt, turnId: user ? `turn:${user.id}` : undefined },
+					contextUsage: parseContextUsage(stats, contextVersionRef.current),
 				});
 				streamingRef.current = Boolean(data.isStreaming);
 				setSessionFile(typeof data.sessionFile === "string" ? data.sessionFile : undefined);
@@ -277,7 +325,15 @@ export function usePiSession(target?: SessionTarget, runtimeOffers: readonly Run
 				const [transcript, data] = await Promise.all([rpc.request<{ messages: unknown }>({ type: "get_messages" }), rpc.request<Record<string, unknown>>({ type: "get_state" })]);
 				if (!ownsRpc(rpc)) return false;
 				setState((s) => ({ ...s, messages: parseMessages(transcript.messages), lastError: undefined }));
+				// A fork creates a new branch projection; never reuse the old branch's
+				// context while the fresh stats request is in flight.
+				contextVersionRef.current++;
+				setState((s) => ({ ...s, contextUsage: undefined }));
 				setSessionFile(typeof data.sessionFile === "string" ? data.sessionFile : undefined);
+				try {
+					const stats = await rpc.request<Record<string, unknown>>({ type: "get_session_stats" });
+					if (ownsRpc(rpc)) setState((s) => ({ ...s, contextUsage: parseContextUsage(stats, contextVersionRef.current) }));
+				} catch { /* old pi or a short-lived fork refresh failure */ }
 				return true;
 			} catch (error) {
 				if (ownsRpc(rpc)) {
@@ -355,10 +411,17 @@ export function usePiSession(target?: SessionTarget, runtimeOffers: readonly Run
 				const result = await rpc.request<ModelInfo>({ type: "set_model", provider: model.provider, modelId: model.id });
 				if (!ownsRpc(rpc)) return false;
 				const parsed = parseModels([result])[0];
+				contextVersionRef.current++;
+				setState((s) => ({ ...s, contextUsage: undefined }));
 				setState((s) => ({ ...s, model: parsed ? { ...parsed, offerId: model.offerId, routeId: model.routeId, modelId: model.modelId ?? model.id, familyId: model.familyId, familyName: model.familyName, relayId: model.relayId } : parsed, thinkingLevels: [], thinkingLevel: undefined, lastError: undefined }));
 				const [data, levels] = await Promise.all([rpc.request<Record<string, unknown>>({ type: "get_state" }), rpc.request<{ levels: string[] }>({ type: "get_available_thinking_levels" }).catch(() => ({ levels: [] }))]);
 				if (!ownsRpc(rpc)) return false;
 				setState((s) => ({ ...s, thinkingLevel: String(data.thinkingLevel ?? "off"), thinkingLevels: levels.levels }));
+				// get_session_stats is intentionally best effort for old pi builds.
+				try {
+					const stats = await rpc.request<Record<string, unknown>>({ type: "get_session_stats" });
+					if (ownsRpc(rpc)) setState((s) => ({ ...s, contextUsage: parseContextUsage(stats, contextVersionRef.current) }));
+				} catch { /* compatibility path remains active */ }
 				return true;
 			} catch (error) { if (ownsRpc(rpc)) fail(error); return false; } finally { if (ownsRpc(rpc)) { setPending(false); busyRef.current = false; } }
 		},

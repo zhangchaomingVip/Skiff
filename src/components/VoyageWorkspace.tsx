@@ -35,7 +35,7 @@ export function VoyageWorkspace({ state, loading = false, connected, pending, ac
 }) {
 	const { pricingModels } = useModelFamily();
 	const [abortedRunKey, setAbortedRunKey] = useState<string>();
-	const metrics = useVoyageMetrics(state.messages, state.model, state.isStreaming, pricingModels ?? state.availableModels, state.activeRun, state.lastError, abortedRunKey, state.voyageTimeline);
+	const metrics = useVoyageMetrics(state.messages, state.model, state.isStreaming, pricingModels ?? state.availableModels, state.activeRun, state.lastError, abortedRunKey, state.voyageTimeline, state.contextUsage);
 	const timelineKey = metrics.timeline?.key;
 	const voyageActions = useMemo(() => ({ ...actions, abort: async () => {
 		// Some bridges end without an assistant stopReason. Retain the user's

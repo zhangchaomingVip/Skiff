@@ -29,17 +29,17 @@ try {
 		{ id: "context-step-1", role: "assistant", streaming: false, blocks: [], usage: usage(100, 40, 10, 20, 8) },
 	], isStreaming: false, model: { id: "preview", provider: "mock", contextWindow: 1000 } };
 	await render();
-	assert.equal((await read()).context, 150);
+	assert.equal((await read()).context, 170);
 	state.messages.push({ id: "context-step-2", role: "assistant", streaming: false, blocks: [], usage: usage(60, 15, 5, 10, 4) });
 	await render();
-	assert.equal((await read()).context, 230);
+	assert.equal((await read()).context, 90);
 	assert.equal((await read()).turn.input, 230);
 	assert.equal((await read()).turn.reasoning, 12);
 	state.messages[1].usage = usage(1, 0, 0, 1, 1);
 	state.messages[2].usage = usage(1, 0, 0, 1, 1);
 	await render();
-	assert.equal((await read()).context, 230);
-	assert((await page.locator(".voyage-turn").textContent()).includes("输入 tokens"));
+	assert.equal((await read()).context, 2);
+	assert((await page.locator(".voyage-turn").textContent()).includes("累计输入 tokens（含缓存）"));
 	assert((await page.locator(".voyage-turn").textContent()).includes("思考 tokens"));
 	state = { sessionId: "context-reset", messages: [], isStreaming: false, model: { id: "preview", provider: "mock", contextWindow: 1000 } };
 	await render();

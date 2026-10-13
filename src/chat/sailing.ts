@@ -1,4 +1,4 @@
-import type { ChatMessage, ModelInfo, SessionState } from "./types";
+import type { ChatMessage, ContextUsage, ModelInfo, SessionState } from "./types";
 import { summarizeUsage } from "./usage";
 import { summarizeCosts, type CostSummary } from "./cost";
 
@@ -126,13 +126,13 @@ export function sampleVoyage(previous: VoyageSample, tokens: number, now: number
 		durationMs: previous.startedAt !== undefined && Number.isFinite(previous.startedAt) ? Math.max(0, now - previous.startedAt) : undefined };
 }
 
-export function contextReminder(context?: number, limit?: number): string | undefined {
+export function contextReminder(context?: number, limit?: number, estimated = false): string | undefined {
 	if (context === undefined || limit === undefined || !Number.isFinite(context) || context < 0 || !Number.isFinite(limit) || limit <= 0) return undefined;
 	const ratio = context / limit;
 	if (ratio < .9) return undefined;
-	if (ratio === 1) return "上下文已达到上限，建议新开会话。";
-	if (ratio > 1) return `上下文已超出上限（${(ratio * 100).toFixed(1)}%），建议新开会话。`;
-	return `上下文已使用 ${(ratio * 100).toFixed(1)}%，建议新开会话。`;
+	if (ratio === 1) return `${estimated ? "估算上下文已达到" : "上下文已达到"}上限，建议新开会话。`;
+	if (ratio > 1) return `${estimated ? "估算上下文已超出" : "上下文已超出"}上限（${(ratio * 100).toFixed(1)}%），建议新开会话。`;
+	return `${estimated ? "估算上下文已使用" : "上下文已使用"} ${(ratio * 100).toFixed(1)}%，建议新开会话。`;
 }
 
 export function contextPressure(ratio: number): "normal" | "warning" | "critical" {
@@ -142,9 +142,14 @@ export function contextPressure(ratio: number): "normal" | "warning" | "critical
 export interface VoyageContext {
 	key: string;
 	inputs: ReadonlyMap<string, number>;
+	/** Cumulative complete input for the turn, including cache channels. */
 	input?: number;
+	/** Complete input of the most recent reliable request. */
+	lastRequestInput?: number;
 	context?: number;
 	estimated: boolean;
+	source: ContextUsage["source"];
+	version?: number;
 }
 
 export function estimateContextTokens(messages: ChatMessage[]): number {
@@ -159,23 +164,82 @@ export function estimateContextTokens(messages: ChatMessage[]): number {
 	}, 0), 0);
 }
 
-/** Keep each request's largest input so repeated usage cannot erase a tool round trip. */
-export function advanceVoyageContext(previous: VoyageContext | undefined, key: string, messages: ChatMessage[]): VoyageContext {
+const reliableUsage = (message: ChatMessage): message is ChatMessage & { usage: NonNullable<ChatMessage["usage"]> } => {
+	const usage = message.usage;
+	if (!usage || message.stopReason === "error" || message.stopReason === "aborted") return false;
+	const channels = [usage.input, usage.cacheRead, usage.cacheWrite, usage.output];
+	if (!channels.every((value) => Number.isFinite(value) && value >= 0)) return false;
+	// pi emits an all-zero usage placeholder while a request is still pending;
+	// it carries no reliable context even if it arrives as a terminal event.
+	if (channels.every((value) => value === 0)) return false;
+	return true;
+};
+
+const completeInput = (message: ChatMessage & { usage: NonNullable<ChatMessage["usage"]> }) => message.usage.input + message.usage.cacheRead + message.usage.cacheWrite;
+
+/**
+ * Keep cumulative input for accounting, while context is one current snapshot.
+ * `observed` is the optional pi get_session_stats reading; it may intentionally
+ * contain `tokens: null` after compaction.
+ */
+export function advanceVoyageContext(previous: VoyageContext | undefined, key: string, messages: ChatMessage[], observed?: ContextUsage): VoyageContext {
 	const retained = previous?.key === key ? previous : undefined;
-	const inputs = new Map(retained?.inputs);
-	for (const message of currentTurnMessages(messages)) {
-		const usage = message.usage;
-		if (!usage || ![usage.input, usage.cacheRead, usage.cacheWrite].every((value) => Number.isFinite(value) && value >= 0)) continue;
-		const input = usage.input + usage.cacheRead + usage.cacheWrite;
-		if (Number.isFinite(input)) inputs.set(message.id, Math.max(inputs.get(message.id) ?? 0, input));
+	const inputs = new Map<string, number>();
+	const turn = currentTurnMessages(messages);
+	let last: (ChatMessage & { usage: NonNullable<ChatMessage["usage"]> }) | undefined;
+	let lastIndex = -1;
+	for (const [index, message] of turn.entries()) {
+		if (!reliableUsage(message)) continue;
+		const value = completeInput(message);
+		// A terminal usage replaces an earlier streaming value. Repeated events
+		// with the same message ID are therefore idempotent.
+		inputs.set(message.id, value);
+		last = message;
+		lastIndex = index;
 	}
+	// Preserve already observed requests when a reducer update temporarily omits
+	// their usage, but never carry them across a voyage/session key.
+	if (!last && retained) for (const [id, value] of retained.inputs) inputs.set(id, value);
 	const input = inputs.size ? [...inputs.values()].reduce((sum, value) => sum + value, 0) : undefined;
-	const userIndex = messages.map((message) => message.role).lastIndexOf("user");
-	const estimate = input === undefined ? estimateContextTokens(messages.slice(Math.max(0, userIndex))) : 0;
-	const observed = input ?? (estimate > 0 ? estimate : undefined);
-	const context = observed === undefined ? retained?.context : Math.max(retained?.context ?? 0, observed);
-	const estimated = input === undefined || (context !== undefined && context > input);
-	return { key, inputs, input, context, estimated };
+	const lastRequestInput = last ? completeInput(last) : retained?.lastRequestInput;
+
+	if (observed) {
+		return {
+			key, inputs, input, lastRequestInput,
+			context: observed.tokens === null ? undefined : observed.tokens,
+			estimated: observed.estimated ?? true,
+			source: observed.source ?? "pi",
+			version: observed.version,
+		};
+	}
+
+	let context: number | undefined;
+	let source: VoyageContext["source"] = "unknown";
+	let estimated = false;
+	if (last) {
+		// The latest request's output is part of pi's context estimate. Only
+		// content after that request is added as a local trailing estimate.
+		const baseline = completeInput(last) + Math.max(0, last.usage.output);
+		const trailing = turn.slice(lastIndex + 1);
+		// parseMessages attaches a later toolResult to the assistant message that
+		// created the call, so account for those blocks even when no new message
+		// follows the usage-bearing assistant entry.
+		const appendedResults = last.blocks.filter((block) => block.kind === "toolResult");
+		const appendedEstimate = appendedResults.length ? estimateContextTokens([{ ...last, blocks: appendedResults }]) : 0;
+		context = baseline + appendedEstimate + (trailing.length ? estimateContextTokens(trailing) : 0);
+		source = "last-request";
+		estimated = true;
+	} else if (input === undefined) {
+		const estimate = estimateContextTokens(messages);
+		context = estimate > 0 ? estimate : retained?.context;
+		source = context === undefined ? "unknown" : "local-estimate";
+		estimated = context !== undefined;
+	} else {
+		context = retained?.context;
+		source = retained?.source ?? "unknown";
+		estimated = retained?.estimated ?? false;
+	}
+	return { key, inputs, input, lastRequestInput, context, estimated, source, version: retained?.version };
 }
 
 /** Usage belongs to the most recent user prompt, including any intermediate assistant steps. */

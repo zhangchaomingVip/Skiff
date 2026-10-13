@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { advanceVoyageContext, averageOutputSpeed, contextPressure, contextReminder, currentTurnMessages, currentTurnStats, sampleVoyage, startVoyage, turnOutput, visibleReplyUnits, voyageStatus, type VoyageActivity, type VoyageContext, type VoyagePhase, type VoyageSample } from "./sailing";
 import { advanceTimeline, refreshTimeline, startTimeline, toolFailureStatus, type VoyageTimeline, type VoyageTool } from "./voyageTimeline";
-import type { ChatMessage, ModelInfo, SessionState } from "./types";
+import type { ChatMessage, ContextUsage, ModelInfo, SessionState } from "./types";
 import { summarizeCosts, type CostSummary } from "./cost";
 
 export interface VoyageMetrics {
@@ -23,16 +23,18 @@ export interface VoyageMetrics {
 	arrived: boolean;
 	pressure: "normal" | "warning" | "critical";
 	turn: { durationMs?: number; input?: number; output?: number; reasoning?: number; cost?: CostSummary };
+	recentRequestInput?: number;
 	liveTurn?: { turnId?: string; durationMs: number };
 	sessionCost: CostSummary;
 	timeline?: VoyageTimeline;
 	activeTools: VoyageTool[];
 	toolLog: VoyageTool[];
 	contextEstimated: boolean;
+	contextSource: ContextUsage["source"];
 	speedEstimated: boolean;
 }
 
-export function useVoyageMetrics(messages: ChatMessage[], model: ModelInfo | undefined, streaming: boolean, pricingModels: ModelInfo[] = [], activeRun?: SessionState["activeRun"], error?: string, abortedRunKey?: string, eventTimeline?: VoyageTimeline): VoyageMetrics {
+export function useVoyageMetrics(messages: ChatMessage[], model: ModelInfo | undefined, streaming: boolean, pricingModels: ModelInfo[] = [], activeRun?: SessionState["activeRun"], error?: string, abortedRunKey?: string, eventTimeline?: VoyageTimeline, contextUsage?: ContextUsage): VoyageMetrics {
 	const user = [...messages].reverse().find((message) => message.role === "user");
 	const transcriptId = `turn:${user?.id ?? messages[0]?.id ?? "empty"}`;
 	const run = useRef<{ key: string; identity: string; turnId?: string; baseline: string }>();
@@ -86,11 +88,13 @@ export function useVoyageMetrics(messages: ChatMessage[], model: ModelInfo | und
 	const phase = timeline?.phase ?? "response";
 	const activity = streaming ? phase === "response" ? currentSample?.activity ?? "fishing" : "fishing" : "moored";
 	const data = useMemo(() => {
-		const limit = eventTimeline?.contextLimit ?? model?.contextWindow;
-		const next = advanceVoyageContext(contextLedger.current, key, belongs ? messages : []);
+		// A timeline belongs to an earlier run and must not supply a window after
+		// a model/branch change. Use the pi snapshot or current model only.
+		const limit = contextUsage?.contextWindow ?? model?.contextWindow;
+		const next = advanceVoyageContext(contextLedger.current, key, belongs ? messages : [], contextUsage);
 		contextLedger.current = next;
 		return { ...next, limit: limit && Number.isFinite(limit) && limit > 0 ? limit : undefined };
-	}, [key, messages, model, belongs, eventTimeline]);
+	}, [key, messages, model, belongs, eventTimeline, contextUsage]);
 
 	const ratio = data.limit && data.context !== undefined ? data.context / data.limit : 0;
 	const arrived = ratio >= 1;
@@ -108,7 +112,7 @@ export function useVoyageMetrics(messages: ChatMessage[], model: ModelInfo | und
 		peakSpeed: currentSample?.peak,
 		averageEstimated: output.estimated,
 		activity,
-		reminder: contextReminder(data?.context, data?.limit),
+		reminder: contextReminder(data?.context, data?.limit, data?.estimated),
 		streaming,
 		context: data?.context,
 		limit: data?.limit,
@@ -119,12 +123,14 @@ export function useVoyageMetrics(messages: ChatMessage[], model: ModelInfo | und
 		arrived,
 		pressure: contextPressure(ratio),
 		turn: { ...turn, input: data.input, durationMs },
+		recentRequestInput: data.lastRequestInput,
 		liveTurn,
 		sessionCost,
 		timeline,
 		activeTools: timeline?.tools.filter((tool) => tool.status === "running") ?? [],
 		toolLog: timeline?.tools.filter((tool) => tool.status !== "running").sort((a, b) => a.completionOrder! - b.completionOrder!) ?? [],
 		contextEstimated: data?.estimated ?? true,
+		contextSource: data?.source ?? "unknown",
 		speedEstimated,
 	};
 }

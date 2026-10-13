@@ -4,6 +4,8 @@
 
 ## 实现口径
 
+> 历史记录：本节保留 feature 014 当时的验证口径；“上下文按航行累计输入”和“估算最大值永久保留”已由 feature 016-context-usage-correction 替代。后续验证应以 pi 当前上下文快照为准，累计输入只用于消耗统计。
+
 - 当前航行每个 assistant 请求累计 `input + cacheRead + cacheWrite`，包含工具往返后的请求和流式 usage；上下文不使用 `totalTokens`、输出 Token 或事件时间线的旧上下文读数。
 - 以航行 key 隔离输入账本，每个消息 ID 保存最大的已观察完整输入。重复、较小或暂时消失的 usage 不会重计或清除输入；后续请求仍继续累加。航行记录中的输入使用同一账本。
 - 没有有效输入 usage 时，估算本次用户文本、回复、思考、工具参数和工具结果。收到有效输入后使用累计 API 输入；若此前估算更大，则保留该最大值及估算标记，直到 API 输入追上。展开面板及收起状态栏都标记估算。
@@ -77,3 +79,4 @@ $env:NODE_PATH = "C:\Users\49772\.cache\codex-runtimes\codex-primary-runtime\dep
 - `git diff --check`：通过。
 
 此验证使用浏览器模拟事件，未连接真实 pi/provider 或 Tauri/WebView2。
+- 历史说明：本文件记录 feature 014 的原始实施结果；其中“上下文等于本轮累计输入”和“同次航行保留最大值”的规则已由 feature 016-context-usage-correction 替代。当前累计输入仅用于消耗统计，上下文读数使用 pi 快照或兼容降级。

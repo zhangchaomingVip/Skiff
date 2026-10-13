@@ -29,23 +29,23 @@ try {
 	state = { messages: [user, { id: "first", role: "assistant", streaming: true, usage: usage(100, 40, 10), blocks: [call("first", "inspect_repository")] }], isStreaming: true,
 		activeRun: { startedAt: 1000, promptId: "prompt", turnId: "turn:user" }, model: { id: "mock", provider: "mock", contextWindow: 1000 } };
 	await render();
-	assert.equal((await read()).context, 150);
-	assert.equal((await read()).contextEstimated, false);
+	assert.equal((await read()).context, 170);
+	assert.equal((await read()).contextEstimated, true);
 	assert.equal(await page.locator(".voyage-tool-active li").textContent(), "inspect_repository");
 	assert.equal(await page.locator(".voyage-tool-active .voyage-tool-desc").count(), 0);
 	state.messages[1].blocks.push(result("first", "完成"));
 	state.messages[1].streaming = false;
 	state.messages.push({ id: "second", role: "assistant", streaming: true, usage: usage(60, 15, 5, 10, 4), blocks: [{ kind: "thinking", text: "继续思考" }, { kind: "text", text: "完成" }] });
 	await render();
-	assert.deepEqual([(await read()).context, (await read()).turn.input, (await read()).turn.reasoning, (await read()).turn.output], [230, 230, 9, 30]);
-	await render(); assert.equal((await read()).context, 230);
-	state.messages[1].usage = usage(0); state.messages[2].usage = usage(0);
-	await render(); assert.equal((await read()).context, 230); assert.equal((await read()).turn.input, 230);
+	assert.deepEqual([(await read()).context, (await read()).turn.input, (await read()).turn.reasoning, (await read()).turn.output], [90, 230, 9, 30]);
+	await render(); assert.equal((await read()).context, 90);
+	state.messages[1].usage = usage(0, 0, 0, 0, 0); state.messages[2].usage = usage(0, 0, 0, 0, 0);
+	await render(); assert.equal((await read()).context, 90); assert.equal((await read()).turn.input, 230);
 	state.messages.push({ id: "third", role: "assistant", streaming: true, usage: usage(20, 5, 5), blocks: [] });
-	await render(); assert.equal((await read()).context, 260);
+	await render(); assert.equal((await read()).context, 50);
 	state.voyageTimeline = { ...(await read()).timeline, contextUsed: 999999, contextLimit: 1000, contextEstimated: false };
-	await render(); assert.equal((await read()).context, 260);
-	assert((await page.locator(".voyage-progress-caption").textContent()).includes("260"));
+	await render(); assert.equal((await read()).context, 50);
+	assert((await page.locator(".voyage-progress-caption").textContent()).includes("50"));
 
 	state = { sessionId: "estimate", messages: [{ ...user, blocks: [{ kind: "text", text: "问题" }] }, { id: "first", role: "assistant", blocks: [
 		{ kind: "thinking", text: "思考" }, { kind: "text", text: "abcd" }, call("estimate", "read", "abcdefgh"), result("estimate", "工具结果"),
@@ -59,7 +59,7 @@ try {
 	assert((await page.locator(".voyage-distance").textContent()).includes("估算"));
 	await page.locator(".voyage-summary").click();
 	state.messages[1].usage = usage(20); await render();
-	assert.equal((await read()).context, 20); assert.equal((await read()).contextEstimated, false);
+	assert.equal((await read()).context, 40); assert.equal((await read()).contextEstimated, true);
 
 	state = { sessionId: "statuses", messages: [user, { id: "tools", role: "assistant", streaming: true, usage: usage(100, 40, 10, 20, 8), blocks: [
 		call("failed", "inspect_repository_and_permissions", "D:/workspace/Skiff/".repeat(10)),
@@ -76,7 +76,7 @@ try {
 	state.voyageTimeline = { ...timeline, tools: [...timeline.tools, { ...timeline.tools[2], id: "interrupted", name: "cancelled_tool", summary: "", status: "interrupted", completionOrder: 5 }], completedCount: 5 };
 	await render();
 	assert.equal(await page.locator(".voyage-tool-log summary").textContent(), "航海日志 · 5 项已入日志（4 次失败）");
-	assert.deepEqual(await record(), { "本轮耗时": "6s", "输入 tokens": "230", "思考 tokens": "12", "输出 tokens": "30" });
+	assert.deepEqual(await record(), { "本轮耗时": "6s", "累计输入 tokens（含缓存）": "230", "思考 tokens": "12", "输出 tokens": "30" });
 	await page.locator(".voyage-tool-log summary").click();
 	for (const [status, label] of [["failed", "失败"], ["timeout", "超时"], ["missing", "缺少结果"], ["interrupted", "已中止"]]) {
 		await page.locator(`.tool-${status} .voyage-tool-state`).waitFor({ state: "visible" });

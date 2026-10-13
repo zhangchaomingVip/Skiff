@@ -86,6 +86,20 @@ export interface Notice {
 	text: string;
 }
 
+export type ContextUsageSource = "pi" | "last-request" | "local-estimate" | "unknown";
+
+/** A snapshot of the current context, deliberately separate from cumulative usage. */
+export interface ContextUsage {
+	/** null means pi knows the context but has no usable reading yet. */
+	tokens: number | null;
+	contextWindow?: number;
+	source: ContextUsageSource;
+	/** pi may estimate its projection; this flag is independent of source. */
+	estimated: boolean;
+	/** Monotonically increasing within one session owner. */
+	version: number;
+}
+
 export interface SessionState {
 	messages: ChatMessage[];
 	isStreaming: boolean;
@@ -101,6 +115,8 @@ export interface SessionState {
 	thinkingLevels?: string[];
 	notices: Notice[];
 	lastError?: string;
+	/** Current context snapshot. This is never the cumulative usage total. */
+	contextUsage?: ContextUsage;
 }
 
 export const initialSessionState: SessionState = {
