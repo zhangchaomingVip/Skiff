@@ -76,8 +76,9 @@ export const MessageItem = memo(function MessageItem({ message, turnMessages, sh
 	// Copy / regenerate / delete only sit on the newest message; earlier assistant steps stay clean.
 	const showActions = readOnly || isUser || isLast;
 	const showHeader = !isUser && turnHead && (turnSteps > 0 || turnRunning);
+	const showUsage = !isUser && !turnRunning && !message.streaming && !(isLast && running) && turnMessages?.some((entry) => entry.usage);
 	// Intermediate process-only messages vanish when the turn is collapsed.
-	if (!nodes.length && !showHeader && !message.streaming) return null;
+	if (!nodes.length && !showHeader && !showUsage && !message.streaming) return null;
 	return <article className={`msg ${isUser ? "user" : "assistant"}${compact ? " compact" : ""}`} aria-label={isUser ? "你的消息" : "Skiff 的消息"}>
 		{showRole && <div className="msg-role">{roleDisplay.brand && <BrandIcon name={roleDisplay.brand} size={14} />}{roleDisplay.label}{message.timestamp !== undefined && <span className="msg-time">{formatMessageTime(message.timestamp)}</span>}</div>}
 		<div className="msg-body">
@@ -89,9 +90,9 @@ export const MessageItem = memo(function MessageItem({ message, turnMessages, sh
 			</div>}
 			{!nodes.length && message.streaming ? <span className="typing">正在思考…</span> : nodes}
 		</div>
-		{(showActions || (!isUser && isLast && !running)) && <div className="message-actions">
+		{(showActions || showUsage) && <div className="message-actions">
 			{!isUser && !message.streaming && message.routeSnapshot && <span className="message-route" title={`实际应答线路：${message.routeSnapshot.familyName} · ${message.routeSnapshot.modelId} · ${message.routeSnapshot.relayName}`}><Icon name="pin" size={13} />实际线路：{message.routeSnapshot.relayName} · {message.routeSnapshot.alias || message.routeSnapshot.modelId} · {message.routeSnapshot.billingAccountId || "未知账户"}</span>}
-			{!isUser && isLast && !running && message.usage && <TurnUsage message={message} messages={turnMessages} />}
+			{showUsage && <TurnUsage message={message} messages={turnMessages} />}
 			{!readOnly && !isUser && isLast && !running && <Button className={`continue-btn ${message.stopReason === "length" ? "truncated" : ""}`} disabled={disabled} onClick={onContinue} aria-label="继续生成" title="发送「继续」，让模型接着写下去">{message.stopReason === "length" ? "输出被截断 · 继续" : "继续"}</Button>}
 			{showActions && <div className="message-buttons">
 				<CopyButton text={text} label="复制消息" />

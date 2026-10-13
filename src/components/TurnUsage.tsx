@@ -5,7 +5,7 @@ import { Icon } from "./Icon";
 import { costTooltip, formatCosts, summarizeCosts } from "../chat/cost";
 import { useModelFamily } from "../chat/familyContext";
 
-/** Fixed usage shown once at the end of the conversation: tokens, cost and duration. */
+/** Usage shown once at the end of each completed turn: tokens, cost and completion time. */
 export function TurnUsage({ message, messages }: { message: ChatMessage; messages?: ChatMessage[] }) {
 	const { pricingModels, models, current } = useModelFamily();
 	const usage = useMemo(() => summarizeUsage(messages ?? [message]), [messages, message]);
@@ -21,7 +21,7 @@ export function TurnUsage({ message, messages }: { message: ChatMessage; message
 		<details className="usage-details" ref={root}>
 			<summary aria-label="本轮 Token 消耗明细"><Icon name="tokens" size={13} /> Tokens: {formatTokens(usage.total)} <Icon name="info" size={13} /></summary>
 			<div className="usage-popover">
-				<div className="usage-heading"><strong>最后一轮 Token 消耗</strong><span>总计 <b>{formatTokens(usage.total)}</b></span></div>
+				<div className="usage-heading"><strong>本轮 Token 消耗</strong><span>总计 <b>{formatTokens(usage.total)}</b></span></div>
 				<dl><div className="usage-row"><dt><i className="swatch input" />输入</dt><dd>{formatTokens(usage.inputTotal)}</dd></div>
 					<div className="usage-row sub"><dt><i className="swatch hit" />缓存命中</dt><dd>{formatTokens(usage.cacheRead)}</dd></div>
 					<div className="usage-row sub"><dt><i className="swatch miss" />缓存未命中</dt><dd>{formatTokens(usage.input)}</dd></div>
