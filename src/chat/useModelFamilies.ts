@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { RuntimeOffer } from "./modelFamilies";
 import type { Currency } from "./types";
+import type { DiscoveredModel } from "../rpc/modelDiscovery";
 
 const FAMILY_IDS = ["deepseek", "kimi", "glm"] as const;
 export type FamilyId = (typeof FAMILY_IDS)[number];
@@ -190,7 +191,7 @@ export function useModelFamilies() {
 		test: (baseUrl: string, apiKey: string, modelId: string, timeoutSeconds: number, requestId?: string) =>
 			invoke<TestResult>("test_provider_connection", { baseUrl, apiKey, modelId, timeoutSeconds, requestId }),
 		cancelTest: (requestId: string) => invoke("cancel_provider_test", { requestId }),
-		discover: (baseUrl: string, apiKey: string) => invoke<string[]>("discover_relay_models", { baseUrl, apiKey }),
+		discover: (baseUrl: string, apiKey: string) => invoke<DiscoveredModel[]>("discover_relay_models", { baseUrl, apiKey }),
 	};
 }
 

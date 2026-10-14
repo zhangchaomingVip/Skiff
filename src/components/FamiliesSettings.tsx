@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { TestResult } from "../chat/useModelFamilies";
 import { slowOrFailedModels, testModelsConcurrently } from "../chat/providerConnection";
 import { buildDiscoveredRoutes, discoveredFamily } from "../chat/providerRoutes";
+import type { DiscoveredModel } from "../rpc/modelDiscovery";
 import type { RelayRouteSpec } from "../chat/useModelFamilies";
 import { FAMILY_LABELS, blankRelay, blankRoute, blankModel, validateModels, maskBaseUrl, maskKey, type ModelFamily, type ModelSpec, type RelaySpec, type RouteSpec } from "../chat/useModelFamilies";
 import { filterPresets, hostOf, matchPreset, PRESET_KINDS, type ProviderPreset } from "../chat/providerPresets";
@@ -59,7 +60,7 @@ export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, o
 	onAutoFailover: (autoFailover: boolean) => Promise<boolean>;
 	onTest: (baseUrl: string, apiKey: string, modelId: string, timeoutSeconds: number, requestId?: string) => Promise<TestResult>;
 	onCancelTest: (requestId: string) => Promise<unknown>;
-	onDiscover: (baseUrl: string, apiKey: string) => Promise<string[]>;
+	onDiscover: (baseUrl: string, apiKey: string) => Promise<DiscoveredModel[]>;
 }) {
 	const [tab, setTab] = useState<"relays" | "families" | "archives">(relays.length ? "families" : "relays");
 	// 模型选择 tab 内的家族筛选：undefined 表示「全部线路」。
@@ -74,7 +75,8 @@ export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, o
 	const [reveal, setReveal] = useState(false);
 	const [testing, setTesting] = useState(false);
 	const [testResults, setTestResults] = useState<(TestResult & { modelId: string })[]>([]);
-	const [testModels, setTestModels] = useState<string[]>([]);
+	const [discoveredModels, setDiscoveredModels] = useState<DiscoveredModel[]>([]);
+	const testModels = useMemo(() => discoveredModels.map((model) => model.id), [discoveredModels]);
 	const [testModel, setTestModel] = useState<string>();
 	const [showTestModels, setShowTestModels] = useState(false);
 	const [selectedTestModels, setSelectedTestModels] = useState<string[]>([]);
@@ -121,7 +123,7 @@ export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, o
 	const resetConnectionTest = () => {
 		testRequest.current += 1;
 		cancelActiveTest();
-		setTesting(false); setTestResults([]); setTestModels([]); setTestModel(undefined);
+		setTesting(false); setTestResults([]); setDiscoveredModels([]); setTestModel(undefined);
 		setShowTestModels(false); setSelectedTestModels([]); setTestModelQuery(""); setTestBatch([]);
 		setCompletedTestModels([]); setTestStopped(false);
 		setRunningTestModels([]); setStoppedTestModels([]);
@@ -259,13 +261,13 @@ export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, o
 		setRunningTestModels([]); setStoppedTestModels([]);
 		if (all) setShowTestModels(true);
 		try {
-			const models = testModels.length && !all ? testModels : await onDiscover(relay.baseUrl, relay.apiKey);
+			const models = discoveredModels.length && !all ? discoveredModels : await onDiscover(relay.baseUrl, relay.apiKey);
 			if (request !== testRequest.current) return;
 			if (!models.length) { setError("接口未返回模型，无法测试连接"); return; }
-			setTestModels(models);
-			const available = models.filter((model) => !excludedTestModels.includes(model));
-			const preferred = testModel && available.includes(testModel) ? testModel : available.find((model) => discoveredFamily(model)) ?? available[0];
-			const batch = all ? available : selected ? available.filter((model) => selected.includes(model)) : [preferred].filter((model): model is string => !!model);
+			setDiscoveredModels(models);
+			const available = models.filter((model) => !excludedTestModels.includes(model.id));
+			const preferred = testModel && available.some((m) => m.id === testModel) ? testModel : (available.find((m) => discoveredFamily(m.id))?.id ?? available[0]?.id);
+			const batch = all ? available.map((m) => m.id) : selected ? available.filter((m) => selected.includes(m.id)).map((m) => m.id) : [preferred].filter((id): id is string => !!id);
 			if (!batch.length) { setError("请至少选择一个模型"); return; }
 			setTestBatch(batch);
 			await testModelsConcurrently(batch, {
@@ -308,7 +310,7 @@ export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, o
 		setPending(true); setError(undefined);
 		try {
 			const failedModels = testResults.filter((item) => !item.ok).map((item) => item.modelId);
-			const routes = buildDiscoveredRoutes(connectionPassed ? testModels.filter((id) => !failedModels.includes(id)) : [], relay, families, fillFromCatalog);
+			const routes = buildDiscoveredRoutes(connectionPassed ? discoveredModels.filter((m) => !failedModels.includes(m.id)) : [], relay, families, fillFromCatalog);
 			const saved = await onSaveRelay(relay, routes);
 			if (saved) {
 				if (routes.length) {

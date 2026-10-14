@@ -175,7 +175,8 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 				await new Promise((resolve) => target.setTimeout(resolve, 350));
 				if (args.apiKey === "invalid") throw new Error("密钥无效或未授权");
 				if (String(args.baseUrl).includes("missing")) throw new Error("该地址不支持 /models 接口，请手动填写");
-				return ["deepseek-chat", "deepseek-flash", "deepseek-reasoner", "Kimi-K2", "moonshot-v1", "glm-4.6", "chatglm-6b", ...Array.from({ length: 22 }, (_, i) => `a-model-${String(i).padStart(2, "0")}`)];
+				const ids = ["deepseek-chat", "deepseek-flash", "deepseek-reasoner", "Kimi-K2", "moonshot-v1", "glm-4.6", "chatglm-6b", ...Array.from({ length: 22 }, (_, i) => `a-model-${String(i).padStart(2, "0")}`)];
+				return ids.map((id) => ({ id, reasoning: false, vision: false, tools: false }));
 			}
 			if (command === "validate_project_directory") {
 				if (!/^D:\\workspace\\[\w-]+$/.test(args.path)) throw new Error("请输入存在的文件夹的绝对路径");

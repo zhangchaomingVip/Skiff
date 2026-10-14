@@ -1207,9 +1207,9 @@ pub async fn fetch_public_catalog() -> Result<providers::CatalogResponse, String
 	providers::public_catalog(&agent_dir()?).await
 }
 
-///模型发现沿用 OpenAI 兼容 `/models`，供线路添加时拉取模型 ID。
+///模型发现沿用 OpenAI 兼容 `/models`，供线路添加时拉取模型 ID 与能力。
 #[tauri::command]
-pub async fn discover_relay_models(base_url: String, api_key: String) -> Result<Vec<String>, String> {
+pub async fn discover_relay_models(base_url: String, api_key: String) -> Result<Vec<providers::DiscoveredModel>, String> {
 	providers::discover(&base_url, &api_key).await
 }
 

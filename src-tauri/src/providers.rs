@@ -7,6 +7,7 @@
 use std::path::Path;
 use std::sync::Mutex;
 use std::time::Duration;
+use serde::Serialize;
 use serde_json::{json, Value};
 
 pub(crate) static CONFIG_LOCK: Mutex<()> = Mutex::new(());
@@ -100,7 +101,18 @@ fn discovery_http_error(status: u16, bytes: &[u8], key: &str) -> String {
 	format!("HTTP {status} · {summary}")
 }
 
-pub(crate) async fn discover(base: &str, key: &str) -> Result<Vec<String>, String> {
+/// A model reported by an OpenAI-compatible `/models` endpoint. Only the
+/// capability flags Skiff can act on are kept; everything else is ignored.
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DiscoveredModel {
+	pub id: String,
+	pub reasoning: bool,
+	pub vision: bool,
+	pub tools: bool,
+}
+
+pub(crate) async fn discover(base: &str, key: &str) -> Result<Vec<DiscoveredModel>, String> {
 	let base = base_url(base)?;
 	validate_key(key)?;
 	if key.trim().is_empty() { return Err("请先填写 API Key".into()); }
@@ -120,10 +132,22 @@ pub(crate) async fn discover(base: &str, key: &str) -> Result<Vec<String>, Strin
 	}
 	if !status.is_success() { return Err(discovery_http_error(status.as_u16(), &bytes, key.trim())); }
 	let value: Value = serde_json::from_slice(&bytes).map_err(|_| "模型列表不是有效 JSON")?;
-	let mut ids: Vec<String> = value["data"].as_array().ok_or("模型列表应包含 data 数组")?.iter().filter_map(|m| m["id"].as_str()).filter(|id| !id.trim().is_empty()).map(str::to_string).collect();
-	ids.sort(); ids.dedup();
-	if ids.is_empty() { return Err("接口未返回模型，请手动填写模型 ID".into()); }
-	Ok(ids)
+	let mut models: Vec<DiscoveredModel> = value["data"].as_array().ok_or("模型列表应包含 data 数组")?.iter().filter_map(|m| {
+		let id = m["id"].as_str()?;
+		if id.trim().is_empty() { return None; }
+		Some(DiscoveredModel {
+			id: id.to_string(),
+			// Most providers omit these; only adopt them when the endpoint
+			// actually reports the capability, otherwise default to false.
+			reasoning: m["reasoning"].as_bool().unwrap_or(false),
+			vision: m["vision"].as_bool().unwrap_or(false),
+			tools: m["tools"].as_bool().unwrap_or(false),
+		})
+	}).collect();
+	models.sort_by(|a, b| a.id.cmp(&b.id));
+	models.dedup_by(|a, b| a.id == b.id);
+	if models.is_empty() { return Err("接口未返回模型，请手动填写模型 ID".into()); }
+	Ok(models)
 }
 
 /// A pricing source page fetched for the import flow: the final URL after
