@@ -29,7 +29,11 @@ export default function modelFamilies(pi) {
 		const timeout = AbortSignal.timeout(route.timeoutSeconds * 1000);
 		const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
 		const doFetch = options.fetch ?? globalThis.fetch;
-		const upstream = streamSimpleOpenAICompletions({ ...model, api: "openai-completions" }, context, {
+		// Family routes serve DeepSeek, Kimi and GLM through arbitrary relays.
+		// pi cannot infer their role support from our provider key or relay URL.
+		const upstream = streamSimpleOpenAICompletions({
+			...model, api: "openai-completions", compat: { ...model.compat, supportsDeveloperRole: false },
+		}, context, {
 			...options, maxTokens: options.maxTokens ?? model.maxTokens, signal, timeoutMs: route.timeoutSeconds * 1000,
 			apiKey: process.env[route.keyEnv],
 			onPayload: async (payload, current) => {

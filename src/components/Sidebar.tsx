@@ -51,7 +51,7 @@ export function SidebarCollapse({ open, id, children }: { open: boolean; id?: st
 	</div>;
 }
 
-export function Sidebar({ projects, chats, activeId, activeProjectId, homeActive, disabled, navigationDisabled = disabled, connected, onHome, onNewChat, onSelectChat, onSelectProject, onAddProject, onClose, onRenameChat, onRenameProject, onDeleteChat, onDeleteProject, onArchiveChat, onTogglePinChat }: {
+export function Sidebar({ projects, chats, activeId, activeProjectId, homeActive, disabled, navigationDisabled = disabled, runningIds, canCloseChat, connected, onHome, onNewChat, onSelectChat, onSelectProject, onAddProject, onClose, onRenameChat, onRenameProject, onDeleteChat, onDeleteProject, onArchiveChat, onTogglePinChat }: {
 	projects: Project[];
 	chats: Conversation[];
 	activeId?: string;
@@ -59,6 +59,8 @@ export function Sidebar({ projects, chats, activeId, activeProjectId, homeActive
 	homeActive: boolean;
 	disabled: boolean;
 	navigationDisabled?: boolean;
+	runningIds?: ReadonlySet<string>;
+	canCloseChat?: (id: string) => boolean;
 	connected: boolean;
 	onHome: () => void;
 	onNewChat: () => void;
@@ -174,14 +176,15 @@ export function Sidebar({ projects, chats, activeId, activeProjectId, homeActive
 		return <div key={chat.id} className={`chat-row ${chat.id === activeId ? "selected" : ""} ${showDrop ? (dropTarget.before ? "drop-above" : "drop-below") : ""}`} draggable={!disabled && !search && editing?.id !== chat.id} onDragStart={(event) => { setDragId(chat.id); event.dataTransfer.effectAllowed = "move"; }} onDragEnd={() => { setDragId(undefined); setDropTarget(undefined); }} onDragOver={(event) => { if (!dragId || dragId === chat.id) return; const source = list.find((item) => item.id === dragId); if (!source || !!source.pinned !== !!chat.pinned) return; event.preventDefault(); event.dataTransfer.dropEffect = "move"; const rect = event.currentTarget.getBoundingClientRect(); setDropTarget({ id: chat.id, before: event.clientY < rect.top + rect.height / 2, scope }); }} onDrop={(event) => { event.preventDefault(); handleDrop(list, chat.id, event.clientY < event.currentTarget.getBoundingClientRect().top + event.currentTarget.getBoundingClientRect().height / 2); }} onContextMenu={(event) => openChatMenu(event, chat, scope)}>
 			{editing?.id === chat.id && editing.scope === scope ? renameInput() : <button className="chat-link" disabled={navigationDisabled} onClick={() => onSelectChat(chat.id)} title={chat.title} aria-current={chat.id === activeId ? "page" : undefined}>
 				<span className="chat-title">{highlight(chat.title, search)}</span>
+				{runningIds?.has(chat.id) && <span className="dot busy" role="status" aria-label="正在生成" title="正在生成" />}
 				{chat.selectedModel && <span className="chat-model">{chat.selectedModel.id}</span>}
 				{!!search && <time dateTime={new Date(chat.updatedAt).toISOString()}>{dayLabel(chat.updatedAt)}</time>}
 			</button>}
 			<div className="sidebar-row-actions">
 				<IconButton size="compact"  disabled={disabled} aria-label={`${chat.pinned ? "取消固定" : "固定"}聊天 ${chat.title}`} title={chat.pinned ? "取消固定" : "固定到顶部"} onClick={() => onTogglePinChat(chat.id, !chat.pinned)}><Icon name="pin" size={13} /></IconButton>
 				<IconButton size="compact"  disabled={disabled} aria-label={`重命名聊天 ${chat.title}`} title="重命名聊天（Enter 或失焦保存）" onClick={() => startEdit({ id: chat.id, kind: "chat", text: chat.title, scope })}><Icon name="edit" size={13} /></IconButton>
-				<IconButton size="compact" disabled={disabled} aria-label={`归档聊天 ${chat.title}`} title="归档聊天" onClick={() => onArchiveChat(chat.id)}><Icon name="archive" size={13} /></IconButton>
-				<IconButton size="compact"  disabled={disabled} aria-label={`删除聊天 ${chat.title}`} title="从侧栏删除聊天" onClick={() => setDeleting({ id: chat.id, kind: "chat", name: chat.title })}><Icon name="trash" size={13} /></IconButton>
+				<IconButton size="compact" disabled={disabled || canCloseChat?.(chat.id) === false} aria-label={`归档聊天 ${chat.title}`} title="归档聊天" onClick={() => onArchiveChat(chat.id)}><Icon name="archive" size={13} /></IconButton>
+				<IconButton size="compact"  disabled={disabled || canCloseChat?.(chat.id) === false} aria-label={`删除聊天 ${chat.title}`} title="从侧栏删除聊天" onClick={() => setDeleting({ id: chat.id, kind: "chat", name: chat.title })}><Icon name="trash" size={13} /></IconButton>
 			</div>
 		</div>;
 	};
@@ -228,7 +231,7 @@ export function Sidebar({ projects, chats, activeId, activeProjectId, homeActive
 								<div className={`project-row ${project.id === activeProjectId ? "current" : ""}`}>
 									<IconButton size="compact" className={`project-chevron ${!isCollapsed || search ? "expanded" : ""}`} onClick={() => setCollapsed((previous) => { const next = new Set(previous); if (next.has(project.id)) next.delete(project.id); else next.add(project.id); return next; })} aria-label={`${!isCollapsed || search ? "收起" : "展开"}${project.name}`} aria-expanded={!isCollapsed || !!search} aria-controls={`${projectsListId}-${project.id}`}><Icon name="chevron" size={13} /></IconButton>
 									{editing?.id === project.id ? renameInput() : <button className="project-select" disabled={navigationDisabled} onClick={() => onSelectProject(project.id)} title={project.path}><Icon name="folder" size={15} /><span>{project.name}</span><span className="project-count">{history.length}</span></button>}
-									<div className="sidebar-row-actions"><IconButton size="compact"  disabled={disabled} aria-label={`重命名项目 ${project.name}`} title="重命名项目（Enter 或失焦保存）" onClick={() => startEdit({ id: project.id, kind: "project", text: project.name })}><Icon name="edit" size={13} /></IconButton><IconButton size="compact"  disabled={disabled || projects.length <= 1} aria-label={`移除项目 ${project.name}`} title={projects.length <= 1 ? "至少保留一个项目" : "移除项目"} onClick={() => setDeleting({ id: project.id, kind: "project", name: project.name })}><Icon name="trash" size={13} /></IconButton></div>
+									<div className="sidebar-row-actions"><IconButton size="compact"  disabled={disabled} aria-label={`重命名项目 ${project.name}`} title="重命名项目（Enter 或失焦保存）" onClick={() => startEdit({ id: project.id, kind: "project", text: project.name })}><Icon name="edit" size={13} /></IconButton><IconButton size="compact"  disabled={disabled || projects.length <= 1 || chats.some((chat) => chat.projectId === project.id && canCloseChat?.(chat.id) === false)} aria-label={`移除项目 ${project.name}`} title={projects.length <= 1 ? "至少保留一个项目" : "移除项目"} onClick={() => setDeleting({ id: project.id, kind: "project", name: project.name })}><Icon name="trash" size={13} /></IconButton></div>
 								</div>
 								<SidebarCollapse open={!isCollapsed || !!search} id={`${projectsListId}-${project.id}`}>
 									{() => <div className="project-chats">
@@ -255,8 +258,8 @@ export function Sidebar({ projects, chats, activeId, activeProjectId, homeActive
 				<button disabled={navigationDisabled} onClick={() => { onSelectChat(menu.chatId); closeMenu(); }}><Icon name="message" size={14} />打开</button>
 				<button disabled={disabled} onClick={() => { startEdit({ id: menu.chatId, kind: "chat", text: menuChat.title, scope: menu.scope }); closeMenu(); }}><Icon name="edit" size={14} />重命名</button>
 				<button disabled={disabled} onClick={() => { onTogglePinChat(menu.chatId, !menuChat.pinned); closeMenu(); }}><Icon name="pin" size={14} />{menuChat.pinned ? "取消固定" : "固定到顶部"}</button>
-				<button disabled={disabled} onClick={() => { onArchiveChat(menu.chatId); closeMenu(); }}><Icon name="archive" size={14} />归档</button>
-				<button className="danger" disabled={disabled} onClick={() => { setDeleting({ id: menu.chatId, kind: "chat", name: menuChat.title }); closeMenu(); }}><Icon name="trash" size={14} />删除</button>
+				<button disabled={disabled || canCloseChat?.(menu.chatId) === false} onClick={() => { onArchiveChat(menu.chatId); closeMenu(); }}><Icon name="archive" size={14} />归档</button>
+				<button className="danger" disabled={disabled || canCloseChat?.(menu.chatId) === false} onClick={() => { setDeleting({ id: menu.chatId, kind: "chat", name: menuChat.title }); closeMenu(); }}><Icon name="trash" size={14} />删除</button>
 			</div>}
 		</aside>
 	);

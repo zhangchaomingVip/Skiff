@@ -21,6 +21,7 @@ npm run tauri -- dev
 - 顶部齿轮可添加 OpenAI 兼容提供商：填写名称、Base URL（如 `https://api.example.com/v1`）、API Key，点击「获取模型」或手动填写模型 ID，然后「保存并使用」。接口使用 Chat Completions；按服务商声明勾选推理和图片能力、填写限制，勾选本身不改变模型能力。
 - 凭据保存在本机 pi `auth.json`，模型配置合并到 `models.json`；尊重 `PI_CODING_AGENT_DIR`。编辑已有提供商时，留空 Key 保留原凭据。Key 不存入浏览器索引，也不回传已保存值。
 - 图片支持文件选择、拖放和粘贴；最多 4 张，每张 5 MiB，格式为 PNG/JPEG/WebP/GIF。先选择支持图片的模型，可仅发送图片；发送前可删除附件，发送失败保留草稿。pi 可能按自身配置缩放图片。
+- 文本和 Word（.docx）支持文件选择、拖放和粘贴，合计最多 4 个附件。UTF-8 文本每个最大 512 KiB；Word 每个最大 10 MiB，提取后的正文最大 512 KiB。Word 在本地提取正文（包含表格文字，不含嵌入图片与排版），以带文件名的文本发送并计入模型输入；可单独发送，支持附件预览和历史恢复。旧版 .doc 请先另存为 .docx；损坏、加密或没有正文的文档会提示错误。
 
 ## 检查与预览
 
@@ -37,6 +38,8 @@ npm run dev -- --port 1421
 ```
 
 打开 `http://localhost:1421/tests/preview.html?theme=light` 或 `?theme=dark`。此页面使用测试专用模拟桥，不调用真实模型；桌面入口始终连接真实 pi。测试预览应使用与桌面开发不同的端口，隔离本地存储。
+
+Word 附件回归包含在 `npm test` 中。启动上述预览后，可运行 `node tests/wordAttachments.browser.mjs` 验证文件选择、拖放、粘贴、实际发送和错误后的草稿保留；需要 Playwright 和 Edge，可通过 `SKIFF_PLAYWRIGHT_DIR` 指定已有 Playwright 安装目录。截图与浏览器验收结果输出到 `dist/word-attachments*`。
 
 设计与验收记录见 [features/002/DESIGN.md](features/002/DESIGN.md)。
 

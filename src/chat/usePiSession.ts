@@ -66,8 +66,6 @@ export function parseContextUsage(raw: unknown, version: number): ContextUsage |
 
 const isContextRefreshEvent = (type: string | undefined) => Boolean(type && /message_end|agent_end|agent_settled|compaction|compact|context_reset/i.test(type));
 
-// Serialize teardown/start across fast navigation and React effect cleanup.
-let previousTeardown: Promise<void> = Promise.resolve();
 let nextGeneration = 0;
 
 export interface SessionOwner {
@@ -91,6 +89,8 @@ interface SessionSnapshot {
 
 /** A real pi session per conversation; transcripts stay in pi's files. */
 export function usePiSession(target?: SessionTarget, runtimeOffers: readonly RuntimeOffer[] = [], configuration?: { config?: FamiliesConfig; ready: boolean }) {
+	// Reconnects serialize only this conversation's teardown and startup.
+	const previousTeardown = useRef<Promise<void>>(Promise.resolve());
 	const rpcRef = useRef<PiRpc | null>(null);
 	const busyRef = useRef(false);
 	const streamingRef = useRef(false);
@@ -229,7 +229,7 @@ export function usePiSession(target?: SessionTarget, runtimeOffers: readonly Run
 		const offLine = rpc.onLine((line) => {
 			if (current()) setRawLines((prev) => [...prev.slice(-499), line]);
 		});
-		const preceding = previousTeardown;
+		const preceding = previousTeardown.current;
 		let startupConfig: FamiliesConfig | undefined;
 		const spawned = preceding.then(async () => {
 			if (!current()) return;
@@ -300,7 +300,7 @@ export function usePiSession(target?: SessionTarget, runtimeOffers: readonly Run
 			// A late spawn must not become an orphan after switching conversations.
 			// Wait only for the spawn, then stop immediately to reject outstanding
 			// initialization requests instead of waiting for their RPC timeout.
-			previousTeardown = spawned.catch(() => {}).then(() => rpc.stop()).catch(() => {});
+			previousTeardown.current = spawned.catch(() => {}).then(() => rpc.stop()).catch(() => {});
 			if (rpcRef.current === rpc) rpcRef.current = null;
 		};
 	}, [owner, configurationReady, fail, isCurrent, setters]);
@@ -461,5 +461,5 @@ export function usePiSession(target?: SessionTarget, runtimeOffers: readonly Run
 	}, []);
 	const canNavigate = useCallback(() => !busyRef.current && !streamingRef.current && runStarted.current === undefined, []);
 
-	return { owner, phase, loading: !!target && phase === "loading", isCurrent, canNavigate, state, connected, rawLines, actions, sessionFile, loadedId, loadedConfig, pending, elapsedMs, reconnect };
+	return useMemo(() => ({ owner, phase, loading: !!target && phase === "loading", isCurrent, canNavigate, state, connected, rawLines, actions, sessionFile, loadedId, loadedConfig, pending, elapsedMs, reconnect }), [owner, phase, !!target, isCurrent, canNavigate, state, connected, rawLines, actions, sessionFile, loadedId, loadedConfig, pending, elapsedMs, reconnect]);
 }

@@ -17,6 +17,10 @@ const server = createServer(async (request, response) => {
 	let body = ""; for await (const chunk of request) body += chunk;
 	const payload = JSON.parse(body);
 	requests.push({ path: request.url, key: request.headers.authorization, payload });
+	if (payload.messages.some((message) => message.role === "developer")) {
+		response.writeHead(400, { "Content-Type": "application/json" });
+		response.end(JSON.stringify({ error: { message: "developer is not one of ['system', 'assistant', 'user', 'tool', 'function']" } })); return;
+	}
 	if (request.url.startsWith("/timeout")) return;
 	if (request.url.startsWith("/failure")) {
 		response.writeHead(401, { "Content-Type": "application/json" });
@@ -48,7 +52,7 @@ try {
 	].map((item) => ({ providerKey: `skiff-deepseek-${item.id}`, keyEnv: `SKIFF_TEST_KEY_${item.id}`,
 		baseUrl: `http://127.0.0.1:${server.address().port}/${item.path}/v1`,
 		streaming: item.streaming, tools: item.tools, timeoutSeconds: item.timeout,
-		models: [{ id: item.model, name: item.id, api: "openai-completions", input: item.vision ? ["text", "image"] : ["text"], reasoning: false,
+		models: [{ id: item.model, name: item.id, api: "openai-completions", input: item.vision ? ["text", "image"] : ["text"], reasoning: item.id === "a",
 			contextWindow: 64000, maxTokens: item.id === "a" ? 100 : 200, cost: { input: item.input, output: 3, cacheRead: 0, cacheWrite: 0 } }] }));
 	routes[0].models.push(
 		{ ...routes[0].models[0], id: "deepseek-flash", maxTokens: 300, contextWindow: 32000, cost: { input: 4, output: 6, cacheRead: 0, cacheWrite: 0 } },
@@ -113,6 +117,7 @@ try {
 			assert.equal(request.key, `Bearer dummy-${route.providerKey}`);
 			assert.equal(request.payload.model, model.id);
 			assert.equal(request.payload.stream, route.streaming);
+			assert.equal(request.payload.messages[0].role, "system", "Family routes must retain system instructions when reasoning is enabled");
 			if (images.length) assert.ok(request.payload.messages.some((message) => Array.isArray(message.content)
 				&& message.content.some((part) => part.type === "image_url" && part.image_url.url === `data:image/png;base64,${images[0].data}`)), "Route image did not reach upstream");
 			assert.equal(request.payload.max_tokens ?? request.payload.max_completion_tokens, model.maxTokens);

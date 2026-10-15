@@ -583,6 +583,7 @@ fn project_model(route: &RouteSpec, item: &ModelSpec, key: &str) -> Value {
 		"cost": { "input": item.input_cost, "output": item.output_cost, "cacheRead": item.cache_read_cost, "cacheWrite": item.cache_write_cost },
 		"currency": item.currency, "contextWindow": item.context_window, "maxTokens": item.max_tokens,
 		"input": vision, "reasoning": route.reasoning,
+		"compat": { "supportsDeveloperRole": false },
 	})
 }
 
@@ -1023,6 +1024,7 @@ mod tests {
 		assert_eq!(runtime_offers(&saved).len(), 2);
 		let projected = providers::read_config(&dir.join("models.json")).unwrap();
 		assert_eq!(projected["providers"][provider_key("glm", &relay.id)]["models"][0]["id"], "vendor/glm-chat");
+		assert_eq!(projected["providers"][provider_key("glm", &relay.id)]["models"][0]["compat"]["supportsDeveloperRole"], false);
 		assert!(!std::fs::read_to_string(config_path(&dir)).unwrap().contains("sk-test-discovery"));
 
 		// Retesting must preserve manual edits and explicit defaults.

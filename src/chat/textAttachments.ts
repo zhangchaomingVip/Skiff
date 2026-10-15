@@ -1,9 +1,18 @@
+import { isWordFile, readWordText, validateWordFile } from "./wordAttachments";
+
 export interface TextAttachment { id: string; name: string; text: string }
 
 export async function readTextFiles(files: File[], currentCount: number): Promise<TextAttachment[]> {
-	if (currentCount + files.length > 4) throw new Error("每条消息最多添加 4 个文本文件。");
+	if (currentCount + files.length > 4) throw new Error("每条消息最多添加 4 个文本或 Word 文件。");
+	for (const file of files) {
+		if (isWordFile(file)) validateWordFile(file);
+		else {
+			if (/\.doc$/i.test(file.name) || file.type === "application/msword") throw new Error(`暂不支持旧版 .doc 文件「${file.name}」，请在 Word 中另存为 .docx 后上传。`);
+			if (!file.size || file.size > 512 * 1024) throw new Error("文本文件不能为空，且每个不能超过 512 KiB。");
+		}
+	}
 	return Promise.all(files.map(async (file) => {
-		if (!file.size || file.size > 512 * 1024) throw new Error("文本文件不能为空，且每个不能超过 512 KiB。");
+		if (isWordFile(file)) return { id: crypto.randomUUID(), name: file.name, text: await readWordText(file) };
 		const text = new TextDecoder("utf-8", { fatal: true }).decode(await file.arrayBuffer());
 		if (text.includes("\0")) throw new Error(`不支持二进制文件：${file.name}`);
 		return { id: crypto.randomUUID(), name: file.name, text };

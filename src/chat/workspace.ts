@@ -179,11 +179,11 @@ export function useWorkspace() {
 
 	const activeChat = workspace?.chats.find((c) => c.id === workspace.activeId);
 	const activeProject = workspace?.projects.find((p) => p.id === activeChat?.projectId);
-	const createChat = (projectId = activeProject?.id, selectedModel?: Conversation["selectedModel"]) => {
+	const createChat = (projectId = activeProject?.id, selectedModel?: Conversation["selectedModel"], unavailableDraftIds?: ReadonlySet<string>) => {
 		if (!projectId) return;
 		setWorkspace((w) => {
 			if (!w) return w;
-			const draft = w.chats.find((c) => c.projectId === projectId && !c.hasMessages && !isArchived(c));
+			const draft = w.chats.find((c) => c.id === w.activeId && c.projectId === projectId && !c.hasMessages && !isArchived(c) && !unavailableDraftIds?.has(c.id));
 			const chat = draft ? { ...draft, ...(selectedModel ? { selectedModel } : {}) } : { ...newChat(projectId), ...(selectedModel ? { selectedModel } : {}) };
 			return { ...w, chats: draft ? w.chats.map((item) => item.id === draft.id ? chat : item) : [...w.chats, chat], activeId: chat.id };
 		});

@@ -1,8 +1,8 @@
 import { SidebarPresentation } from "./components/SidebarPresentation";
 import { IconButton, Button, Tooltip } from "./components/ui";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { usePiSession } from "./chat/usePiSession";
-import { useSessionValue } from "./chat/useSessionValue";
+import { usePiSessions } from "./chat/usePiSessions";
+import { useSessionRef, useSessionValue } from "./chat/useSessionValue";
 import { showVoyageIcon } from "./taskbarIcon";
 import { isArchived, useWorkspace, visibleConversations } from "./chat/workspace";
 import { useModelFamilies } from "./chat/useModelFamilies";
@@ -11,7 +11,6 @@ import { familyFromProvider, modelBrand } from "./chat/modelDisplay";
 import { classifyProviderFailure, nextRoute, reconcile, resolveSelection, type RouteRequirements, type RuntimeOffer } from "./chat/modelFamilies";
 import type { ModelInfo } from "./chat/types";
 import { billingAccountLabel, createRouteAuthorizationState, requestRouteSwitch, resolveRouteAuthorization, type AuthorizationRoute, type RouteAuthorizationChoice } from "./chat/routeAuthorization";
-import { snapshotsForMessages } from "./chat/routeSnapshot";
 import { createRouteEvent, type AuditRouteRef, type RouteEvent } from "./chat/routeAudit";
 import { VoyageWorkspace } from "./components/VoyageWorkspace";
 import { RawDrawer } from "./components/RawDrawer";
@@ -51,13 +50,13 @@ export default function App() {
 	}, [activeChat?.hasMessages, library.workspace, view]);
 	const currentView = view ?? (library.workspace ? "launcher" : "chat");
 	const modelFamilies = useModelFamilies();
-	const session = usePiSession(activeChat && activeProject ? { id: activeChat.id, cwd: activeProject.path, sessionFile: activeChat.hasMessages ? activeChat.sessionFile : undefined, elapsedMs: activeChat.elapsedMs, model: activeChat.selectedModel, routeSnapshots: activeChat.routeSnapshots } : undefined, modelFamilies.offers, { config: modelFamilies.config, ready: !modelFamilies.loading });
+	const pool = usePiSessions(activeChat?.id, allChats, library.workspace?.projects ?? [], modelFamilies.offers, { config: modelFamilies.config, ready: !modelFamilies.loading }, library.updateChat);
+	const { session } = pool;
 	const { state, connected, rawLines, actions } = session;
 	const [modelNotice, setModelNotice] = useSessionValue<string | undefined>(session.owner, session.isCurrent, () => undefined);
 	const [routeAuthorization, setRouteAuthorization] = useSessionValue(session.owner, session.isCurrent, () => createRouteAuthorizationState(activeChat?.id ?? "none"));
 	const [routeEvents, setRouteEvents] = useSessionValue<RouteEvent[]>(session.owner, session.isCurrent, () => activeChat?.routeEvents ?? []);
-	const routeAuthorizationContext = useRef<{ requestId: string; automatic: boolean; failureKind: ReturnType<typeof classifyProviderFailure> }>();
-	useEffect(() => { routeAuthorizationContext.current = undefined; }, [session.owner]);
+	const routeAuthorizationContext = useSessionRef<{ requestId: string; automatic: boolean; failureKind: ReturnType<typeof classifyProviderFailure> }>(session.owner, () => undefined);
 	const fallbackNoticeRef = useRef("");
 	useEffect(() => {
 		if (!modelNotice) return;
@@ -93,9 +92,8 @@ export default function App() {
 		const rank = new Map(recentOfferIds.map((id, index) => [id, index]));
 		return modelFamilies.offers.map((offer, index) => ({ offer, index })).sort((a, b) => (rank.get(a.offer.offerId ?? "") ?? Number.MAX_SAFE_INTEGER) - (rank.get(b.offer.offerId ?? "") ?? Number.MAX_SAFE_INTEGER) || a.index - b.index).map(({ offer }) => offer);
 	}, [modelFamilies.offers, recentOfferIds]);
-	const pendingRecentOffer = useRef<{ id: string; assistantCount: number }>();
-	const requestRequirements = useRef<RouteRequirements>({});
-	useEffect(() => { pendingRecentOffer.current = undefined; requestRequirements.current = {}; }, [session.owner]);
+	const pendingRecentOffer = useSessionRef<{ id: string; assistantCount: number }>(session.owner, () => undefined);
+	const requestRequirements = useSessionRef<RouteRequirements>(session.owner, () => ({}));
 	useEffect(() => {
 		const assistantCount = state.messages.filter((message) => message.role === "assistant").length;
 		if (pendingRecentOffer.current && assistantCount > pendingRecentOffer.current.assistantCount && !state.isStreaming && !state.lastError) {
@@ -106,8 +104,8 @@ export default function App() {
 	}, [state.isStreaming, state.lastError, state.messages.length, busy, validOfferIds]);
 	// Mirror the voyage state on the taskbar: the sailing mark while pi answers,
 	// the docked speedboat once the turn ends.
-	useEffect(() => { void showVoyageIcon(busy).catch(() => undefined); }, [busy]);
-	const navigationDisabled = busy || search.busy || !library.workspace;
+	useEffect(() => { void showVoyageIcon(pool.runningIds.size > 0).catch(() => undefined); }, [pool.runningIds.size > 0]);
+	const navigationDisabled = search.busy || !library.workspace;
 	const locked = navigationDisabled || session.loading;
 	const narrowViewport = viewportWidth <= 760;
 	const desktopSidebarOpen = sidebarOpen && !narrowViewport;
@@ -122,52 +120,25 @@ export default function App() {
 	const setVoyageWidthFromDrag = useCallback((value: number) => setVoyageWidth(value), []);
 	const commitVoyageWidth = useCallback((value: number) => { setVoyageWidth(value); try { localStorage.setItem("skiff.voyage.width", String(value)); } catch { /* Width still applies for this session. */ } }, []);
 	const archiveChat = useCallback((id: string) => {
-		if (locked || !session.canNavigate()) return;
+		if (navigationDisabled || !pool.canClose(id)) return;
 		const wasActive = activeChat?.id === id;
 		library.archiveChat(id);
 		if (wasActive) {
 			setView("launcher");
 			if (narrowViewport) setSidebarOpen(false);
 		}
-	}, [activeChat?.id, library, locked, narrowViewport, session.canNavigate]);
+	}, [activeChat?.id, library, navigationDisabled, narrowViewport, pool.canClose]);
 	const restoreArchivedChat = useCallback((id: string) => {
-		if (locked || !session.canNavigate()) return;
+		if (navigationDisabled) return;
 		library.restoreChat(id);
 		setProviderDialogOpen(false);
 		setView("chat");
 		if (narrowViewport) setSidebarOpen(false);
-	}, [library, locked, narrowViewport, session.canNavigate]);
+	}, [library, navigationDisabled, narrowViewport]);
 	const deleteArchivedChat = useCallback((id: string) => {
-		if (locked || !session.canNavigate()) return;
+		if (navigationDisabled || !pool.canClose(id)) return;
 		library.deleteChat(id);
-	}, [library, locked, session.canNavigate]);
-
-	useEffect(() => {
-		if (!session.isCurrent() || !activeChat || session.loadedId !== activeChat.id) return;
-		const firstUser = state.messages.find((m) => m.role === "user");
-		const title = firstUser?.blocks.filter((b) => b.kind === "text").map((b) => b.kind === "text" ? b.text : "").join(" ").replace(/\s+/g, " ").trim() || (firstUser ? "图片聊天" : "");
-		library.updateChat(activeChat.id, {
-			...(session.sessionFile ? { sessionFile: session.sessionFile } : {}),
-			hasMessages: !!firstUser,
-			...(!activeChat.customTitle ? { title: title ? title.slice(0, 48) : "新聊天" } : {}),
-			elapsedMs: session.elapsedMs,
-			...(state.model ? (() => {
-				const offer = modelFamilies.offers.find((item) => (state.model?.routeId && item.routeId === state.model.routeId && item.modelId === state.model.id) || (item.providerKey === state.model?.provider && item.modelId === state.model.id));
-				const selectedModel = { provider: state.model.provider, id: state.model.id, modelId: state.model.modelId ?? state.model.id, ...(offer?.routeId ? { routeId: offer.routeId } : state.model.routeId ? { routeId: state.model.routeId } : {}), ...(offer?.offerId ? { offerId: offer.offerId } : state.model.offerId ? { offerId: state.model.offerId } : {}) };
-				const current = activeChat.selectedModel;
-				return current?.provider !== selectedModel.provider || current.id !== selectedModel.id || current.routeId !== selectedModel.routeId || current.offerId !== selectedModel.offerId ? { selectedModel } : {};
-			})() : {}),
-		});
-	}, [activeChat?.id, activeChat?.selectedModel, session.loadedId, session.sessionFile, state.messages, state.model, session.elapsedMs, modelFamilies.offers, session.isCurrent]);
-	const routeSnapshots = useMemo(() => snapshotsForMessages(state.messages), [state.messages]);
-	const routeSnapshotsJson = useMemo(() => JSON.stringify(routeSnapshots), [routeSnapshots]);
-	const savedRouteSnapshots = useRef("");
-	useEffect(() => { savedRouteSnapshots.current = ""; }, [session.owner]);
-	useEffect(() => {
-		if (!session.isCurrent() || !activeChat || session.loadedId !== activeChat.id || savedRouteSnapshots.current === routeSnapshotsJson) return;
-		savedRouteSnapshots.current = routeSnapshotsJson;
-		library.updateChat(activeChat.id, { routeSnapshots });
-	}, [activeChat?.id, session.loadedId, routeSnapshots, routeSnapshotsJson, library, session.isCurrent]);
+	}, [library, navigationDisabled, pool.canClose]);
 	const routeEventsJson = useMemo(() => JSON.stringify(routeEvents), [routeEvents]);
 	const savedRouteEvents = useRef("");
 	useEffect(() => { savedRouteEvents.current = ""; }, [session.owner]);
@@ -230,26 +201,26 @@ export default function App() {
 	const openLauncher = useCallback(() => { if (library.workspace) { setView("launcher"); if (window.innerWidth <= 760) setSidebarOpen(false); } }, [library.workspace]);
 	const resumeChat = useCallback(() => { if (activeChat) setView("chat"); }, [activeChat]);
 	const selectChat = useCallback((id: string) => {
-		if (navigationDisabled || !session.canNavigate()) return;
+		if (navigationDisabled) return;
 		library.selectChat(id); setView("chat"); if (window.innerWidth <= 760) setSidebarOpen(false);
-	}, [library, navigationDisabled, session.canNavigate]);
+	}, [library, navigationDisabled]);
 	const selectProject = useCallback((id: string) => {
-		if (navigationDisabled || !session.canNavigate()) return;
+		if (navigationDisabled) return;
 		library.selectProject(id);
-	}, [library, navigationDisabled, session.canNavigate]);
+	}, [library, navigationDisabled]);
 	const startLauncherChat = useCallback(async (offer: RuntimeOffer) => {
-		if (locked || !session.canNavigate()) return;
+		if (navigationDisabled || modelFamilies.loading) return;
 		if (!activeProject) { setModelNotice("请先选择一个项目后再开始聊天"); return; }
 		// Reusing the active empty draft keeps its pi process alive. Apply the
 		// explicitly chosen offer there before entering chat, just as the picker does.
-		if (activeChat && !activeChat.hasMessages && activeChat.projectId === activeProject.id) {
+		if (activeChat && !activeChat.hasMessages && activeChat.projectId === activeProject.id && !busy && !session.loading) {
 			const model = displayModels.find((item) => item.provider === offer.providerKey && item.id === offer.modelId);
 			if (!model || !await actions.setModel(model)) return;
 		}
 		if (!session.isCurrent()) return;
-		library.createChat(activeProject.id, { provider: offer.providerKey, id: offer.modelId, modelId: offer.modelId, ...(offer.routeId ? { routeId: offer.routeId } : {}), ...(offer.offerId ? { offerId: offer.offerId } : {}) });
+		library.createChat(activeProject.id, { provider: offer.providerKey, id: offer.modelId, modelId: offer.modelId, ...(offer.routeId ? { routeId: offer.routeId } : {}), ...(offer.offerId ? { offerId: offer.offerId } : {}) }, new Set(allChats.filter((chat) => !pool.canClose(chat.id)).map((chat) => chat.id)));
 		setView("chat");
-	}, [activeChat, activeProject, actions, displayModels, library, locked, session.canNavigate, session.isCurrent]);
+	}, [activeChat, activeProject, actions, displayModels, library, navigationDisabled, modelFamilies.loading, busy, session.loading, session.isCurrent, allChats, pool.canClose]);
 	useEffect(() => {
 		const onKeyDown = (event: KeyboardEvent) => {
 			if (document.querySelector("dialog[open]")) return;
@@ -356,7 +327,7 @@ export default function App() {
 		if (!next) return undefined;
 		return { label: `${next.relayName} · ${next.modelId}`, switch: (automatic = false) => authorizeFailover(next, automatic) };
 	}, [state.lastError, state.model, modelFamilies.offers, authorizeFailover]);
-	const autoSwitchRef = useRef<{ chatId: string; requestId: string; attempted: boolean }>();
+	const autoSwitchRef = useSessionRef<{ chatId: string; requestId: string; attempted: boolean }>(session.owner, () => undefined);
 	useEffect(() => {
 		const users = state.messages.filter((message) => message.role === "user");
 		const requestId = users[users.length - 1]?.id ?? `messages-${state.messages.length}`;
@@ -375,10 +346,11 @@ export default function App() {
 
 	return (
 		<ModelFamilyContext.Provider value={familyContext}>
+		{pool.runtimes}
 		<div className={`app ${sidebarOpen ? "with-sidebar" : ""}`}>
 			<TitleBar />
 			<div className="app-body" style={{ "--sidebar-width": `${shownSidebarWidth}px` } as CSSProperties}>
-			{sidebarOpen && <SidebarPresentation onClose={() => setSidebarOpen(false)}><Sidebar projects={library.workspace?.projects ?? []} chats={visibleChats} activeId={activeChat?.id} activeProjectId={activeProject?.id} homeActive={currentView === "launcher"} disabled={locked} navigationDisabled={navigationDisabled} connected={connected} onHome={openLauncher} onNewChat={openLauncher} onSelectChat={selectChat} onSelectProject={selectProject} onAddProject={() => setProjectDialogOpen(true)} onClose={() => setSidebarOpen(false)} onRenameChat={library.renameChat} onRenameProject={library.renameProject} onDeleteChat={library.deleteChat} onDeleteProject={library.deleteProject} onArchiveChat={archiveChat} onTogglePinChat={(id, pinned) => library.updateChat(id, { pinned })} /></SidebarPresentation>}
+			{sidebarOpen && <SidebarPresentation onClose={() => setSidebarOpen(false)}><Sidebar projects={library.workspace?.projects ?? []} chats={visibleChats} activeId={activeChat?.id} activeProjectId={activeProject?.id} homeActive={currentView === "launcher"} disabled={navigationDisabled} runningIds={pool.runningIds} canCloseChat={pool.canClose} navigationDisabled={navigationDisabled} connected={connected} onHome={openLauncher} onNewChat={openLauncher} onSelectChat={selectChat} onSelectProject={selectProject} onAddProject={() => setProjectDialogOpen(true)} onClose={() => setSidebarOpen(false)} onRenameChat={library.renameChat} onRenameProject={library.renameProject} onDeleteChat={deleteArchivedChat} onDeleteProject={(id) => { if (allChats.filter((chat) => chat.projectId === id).every((chat) => pool.canClose(chat.id))) library.deleteProject(id); }} onArchiveChat={archiveChat} onTogglePinChat={(id, pinned) => library.updateChat(id, { pinned })} /></SidebarPresentation>}
 			{desktopSidebarOpen && <ResizeSeparator label="调整左侧导航宽度" value={shownSidebarWidth} bounds={sidebarBounds} onResize={setSidebarWidthFromDrag} onCommit={commitSidebarWidth} />}
 			<main className="workspace">
 				<header className="chat-header">
@@ -392,7 +364,7 @@ export default function App() {
 				{library.error && <div className="workspace-alert" role="alert"><span>{library.error}</span><Button variant="ghost" onClick={library.workspace ? library.clearError : () => void library.initialize()} disabled={library.loading}>{library.workspace ? "关闭" : "重试"}</Button></div>}
 				{currentView === "launcher" && (session.loading || (!connected && state.lastError)) && <div className="workspace-alert" role={session.loading ? "status" : "alert"} aria-label={session.loading ? "正在加载会话" : undefined}><span>{session.loading ? "正在加载会话…" : state.lastError}</span>{!session.loading && <Button variant="ghost" onClick={() => session.reconnect()}>重新连接</Button>}</div>}
 				<div className="body">
-					{currentView === "launcher" ? <LauncherView activeChat={activeChat} activeProject={activeProject} projects={library.workspace?.projects ?? []} chats={visibleChats} offers={modelFamilies.offers} recentOfferIds={recentOfferIds} familyDefaults={modelFamilies.families} disabled={locked} navigationDisabled={navigationDisabled} loading={modelFamilies.loading} error={modelFamilies.error} onResume={resumeChat} onSelectProject={selectProject} onAddProject={() => setProjectDialogOpen(true)} onManageProviders={() => setProviderDialogOpen(true)} onRetryModels={modelFamilies.refresh} onStartChat={startLauncherChat} onOpenChat={selectChat} /> : <VoyageWorkspace modelNotice={modelNotice} key={`${session.owner.id ?? "loading"}:${session.owner.cwd ?? ""}`} state={displayState} loading={session.loading} connected={connected} pending={session.pending} actions={actions} onSend={send} onReconnect={session.reconnect} projectName={activeProject?.name} search={search} onConfigureSearch={() => setSearchDialogOpen(true)} failover={failover} routeAuthorization={routeAuthorizationPrompt} railWidth={shownVoyageWidth} availableWidth={workspaceWidth} onRailWidth={setVoyageWidthFromDrag} onRailWidthCommit={commitVoyageWidth} />}
+					{currentView === "launcher" ? <LauncherView activeChat={activeChat} activeProject={activeProject} projects={library.workspace?.projects ?? []} chats={visibleChats} offers={modelFamilies.offers} recentOfferIds={recentOfferIds} familyDefaults={modelFamilies.families} disabled={navigationDisabled || modelFamilies.loading} navigationDisabled={navigationDisabled} loading={modelFamilies.loading} error={modelFamilies.error} onResume={resumeChat} onSelectProject={selectProject} onAddProject={() => setProjectDialogOpen(true)} onManageProviders={() => setProviderDialogOpen(true)} onRetryModels={modelFamilies.refresh} onStartChat={startLauncherChat} onOpenChat={selectChat} /> : <VoyageWorkspace modelNotice={modelNotice} key={`${session.owner.id ?? "loading"}:${session.owner.cwd ?? ""}`} state={displayState} loading={session.loading} connected={connected} pending={session.pending} actions={actions} onSend={send} onReconnect={session.reconnect} projectName={activeProject?.name} search={search} onConfigureSearch={() => setSearchDialogOpen(true)} failover={failover} routeAuthorization={routeAuthorizationPrompt} railWidth={shownVoyageWidth} availableWidth={workspaceWidth} onRailWidth={setVoyageWidthFromDrag} onRailWidthCommit={commitVoyageWidth} />}
 					{rawOpen && currentView === "chat" && <div className="raw-panel"><IconButton className="raw-close" onClick={() => setRawOpen(false)} aria-label="关闭诊断日志"><Icon name="close" /></IconButton><RawDrawer lines={rawLines} /></div>}
 				</div>
 				{shareDialogOpen && currentView === "chat" && <ShareDialog title={activeChat?.title} messages={state.messages} onClose={() => setShareDialogOpen(false)} />}

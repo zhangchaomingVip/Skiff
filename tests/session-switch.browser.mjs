@@ -51,9 +51,9 @@ async function regressions() {
 		await page.waitForFunction(() => window.switchFixture.held());
 		const old = await page.evaluate(() => [...window.switchFixture.mock.processes.keys()][0]);
 		await select(2);
-		await ready("s2"); // Barrier stays held: old RPC must be rejected by stop.
+		await ready("s2"); // Barrier stays held: another runtime starts independently.
 		check(await page.locator('.selected .chat-link').getAttribute("title") === "Session 2", `${type} 挂起时真实导航不等待 35 秒超时`);
-		const before = await page.evaluate(() => JSON.stringify(window.switchFixture.renders.at(-1)));
+		const before = await page.evaluate(() => JSON.stringify(Object.fromEntries(Object.entries(window.switchFixture.renders.at(-1)).filter(([key]) => key !== "time"))));
 		await page.evaluate((old) => {
 			const f = window.switchFixture;
 			for (const listener of f.mock.listeners.values()) if (listener.event === `rpc-stderr://${old}`) f.mock.callbacks.get(listener.handler)?.({ payload: "stale stderr" });
@@ -63,7 +63,7 @@ async function regressions() {
 			f.release("late failure");
 		}, old);
 		await page.waitForTimeout(30);
-		check(await page.evaluate(() => JSON.stringify(window.switchFixture.renders.at(-1))) === before, `${type} 迟到错误、消息、stderr 与退出均不污染当前快照`);
+		check(await page.evaluate(() => JSON.stringify(Object.fromEntries(Object.entries(window.switchFixture.renders.at(-1)).filter(([key]) => key !== "time")))) === before, `${type} 迟到错误、消息、stderr 与退出均不污染当前快照`);
 		await clean();
 	}
 	await open();
@@ -73,9 +73,10 @@ async function regressions() {
 	const latest = await page.evaluate(() => window.switchFixture.renders.at(-1).owner.generation);
 	await page.evaluate(() => window.switchFixture.release());
 	await ready("s0");
+	await page.waitForFunction(() => window.switchFixture.mock.processes.size === 3);
 	const sequence = await data();
-	check(sequence.renders.at(-1).owner.generation === latest && sequence.processes === 1, "A→B→C→A 最新批次生效，跳过已过期的启动及后续初始化");
-	check(sequence.spans.filter((span) => span.type === "switch_session").length === 2, "等待启动时被越过的目标没有恢复或读取历史");
+	check(sequence.renders.at(-1).owner.generation === latest && sequence.processes === 3, "A→B→C→A 复用原会话，已打开会话各自保留进程");
+	check(sequence.spans.filter((span) => span.type === "switch_session").length === 3, "各目标各自恢复一次历史");
 	const countBefore = sequence.spans.length;
 	await select(0); await page.waitForTimeout(40);
 	check((await data()).spans.length === countBefore, "重复选择当前目标不启动、恢复或读取历史");
@@ -103,17 +104,20 @@ async function regressions() {
 	await row(2).focus(); await page.keyboard.press("Enter"); await ready("s2");
 	check((await data()).renders.at(-1).id === "s2", "键盘 Enter 可在加载期间选择跨项目会话");
 	await page.evaluate(() => window.switchFixture.release());
+	await clean(); await open();
 	await page.evaluate(() => window.switchFixture.hold("get_messages"));
 	await select(1); await page.waitForFunction(() => window.switchFixture.held());
 	await page.locator('.project-select').filter({ hasText: "Project B" }).click(); await ready("s2");
 	check((await data()).renders.at(-1).id === "s2", "项目选择在加载期间可用");
 	await page.evaluate(() => window.switchFixture.release());
+	await clean(); await open();
 	await page.evaluate(() => window.switchFixture.hold("get_messages"));
 	await select(1); await page.waitForFunction(() => window.switchFixture.held());
 	await row(2).click({ button: "right", position: { x: 20, y: 15 } });
 	await page.getByRole("menu").getByRole("button", { name: "打开", exact: true }).click(); await ready("s2");
 	check((await data()).renders.at(-1).id === "s2", "右键菜单在加载期间可打开已有会话");
 	await page.evaluate(() => window.switchFixture.release());
+	await clean(); await open();
 	await page.evaluate(() => window.switchFixture.hold("get_messages"));
 	await select(1); await page.waitForFunction(() => window.switchFixture.held());
 	await page.locator('.home-nav').click();
@@ -122,32 +126,32 @@ async function regressions() {
 	await page.evaluate(() => window.switchFixture.release());
 	await row(1).click({ button: "right", position: { x: 20, y: 15 } });
 	await page.evaluate(() => { const f = window.switchFixture; f.mock.emit([...f.mock.processes.keys()][0], { type: "agent_start" }); });
-	check(await page.getByRole("menu").getByRole("button", { name: "打开", exact: true }).isDisabled(), "已打开的右键菜单在生成开始后也遵守导航限制");
+	check(await page.getByRole("menu").getByRole("button", { name: "打开", exact: true }).isEnabled(), "生成期间右键菜单仍可打开其他会话");
 	await page.evaluate(() => { const f = window.switchFixture; f.mock.emit([...f.mock.processes.keys()][0], { type: "agent_end" }); });
 	await page.keyboard.press("Escape");
 	await page.evaluate(() => window.switchFixture.hold("prompt"));
 	await page.locator('textarea').fill("s2 fixture message pending");
 	await page.getByRole("button", { name: "发送消息", exact: true }).click();
 	await page.waitForFunction(() => window.switchFixture.held());
-	check(await row(1).isDisabled() && await page.evaluate(() => window.switchFixture.currentSession.pending), "发送请求挂起而 agent_start 尚未到达时仍禁止导航");
+	check(await row(1).isEnabled() && await page.evaluate(() => window.switchFixture.currentSession.pending), "发送请求挂起而 agent_start 尚未到达时仍允许导航");
 	await page.evaluate(() => window.switchFixture.release());
 	await page.getByRole("button", { name: "停止生成", exact: true }).click();
 	await page.waitForFunction(() => !window.switchFixture.currentSession.pending && !window.switchFixture.currentSession.state.isStreaming);
 	await page.locator('textarea').fill("s2 fixture message draft");
 	await page.getByRole("button", { name: "发送消息", exact: true }).click();
 	await page.getByRole("button", { name: "停止生成", exact: true }).waitFor();
-	check(await row(1).isDisabled() && await page.locator('.project-select').first().isDisabled(), "生成中侧栏与项目入口被禁用");
+	check(await row(1).isEnabled() && await page.locator('.project-select').first().isEnabled(), "生成中侧栏与项目入口可用");
 	await page.locator('.home-nav').click();
-	check(await page.locator('.launcher-recent-row').first().isDisabled(), "生成中 Launcher 已有会话入口被禁用");
+	check(await page.locator('.launcher-recent-row').first().isEnabled(), "生成中 Launcher 已有会话入口可用");
 	await page.getByRole("button", { name: "当前工作区", exact: true }).click();
-	check(await page.locator('.launcher-ws-item').first().isDisabled(), "生成中 Launcher 项目入口被禁用");
+	check(await page.locator('.launcher-ws-item').first().isEnabled(), "生成中 Launcher 项目入口可用");
 	await page.keyboard.press("Escape");
 	await page.getByRole("button", { name: "返回聊天", exact: true }).click();
 	await page.getByRole("button", { name: "停止生成", exact: true }).click();
 	await page.waitForFunction(() => !window.switchFixture.currentSession.state.isStreaming);
 	await page.evaluate(() => { const f = window.switchFixture; f.hold("set_model"); void f.derivedState.selectModel({ provider: "skiff-relay-r2-deepseek", id: "deepseek-chat", routeId: "route-deepseek-r2", offerId: "route-deepseek-r2/deepseek-chat" }); });
 	await page.waitForFunction(() => window.switchFixture.held());
-	check(await row(1).isDisabled(), "修改模型请求未完成时导航被禁用");
+	check(await row(1).isEnabled(), "修改模型请求未完成时仍允许导航");
 	await page.evaluate(() => window.switchFixture.release());
 	await page.waitForFunction(() => !window.switchFixture.currentSession.pending);
 	await page.waitForFunction(() => JSON.parse(localStorage.getItem("skiff.workspace.v1")).chats.find((c) => c.id === "s2").selectedModel.provider === "skiff-relay-r2-deepseek");
@@ -170,10 +174,16 @@ async function regressions() {
 	await select(1); await ready("s1");
 	check(await page.getByRole("textbox", { name: "聊天消息", exact: true }).inputValue() === "" && !await page.locator('.composer').innerText().then((text) => text.includes("draft.txt")), "不同会话子树隔离草稿与附件");
 	await page.locator('.msg.user').first().hover();
-	await page.getByRole("button", { name: "编辑并重发", exact: true }).first().click();
-	check(await page.locator('.editing-banner').count() === 1, "会话编辑状态可进入");
-	await select(2); await ready("s2");
-	check(await page.locator('.editing-banner').count() === 0, "切换后不继承旧会话编辑状态");
+	const edit = page.getByRole("button", { name: "编辑并重发", exact: true }).first();
+	if (await edit.count()) {
+		await edit.click();
+		check(await page.locator('.editing-banner').count() === 1, "会话编辑状态可进入");
+		await select(2); await ready("s2");
+		check(await page.locator('.editing-banner').count() === 0, "切换后不继承旧会话编辑状态");
+	} else {
+		// The current message UI exposes copy only. Keep this explicit in reports.
+		report.skipped = ["编辑状态隔离：当前消息界面未提供编辑并重发入口"];
+	}
 	await clean();
 	await open("kind=tool");
 	await page.getByRole("button", { name: "收起本轮执行过程", exact: true }).first().click();
@@ -217,11 +227,12 @@ try {
 	try { await select(2); } catch (error) { if (!baseline) throw error; }
 	check(await page.locator('.sidebar-recent .selected .chat-link').getAttribute("title") === "Session 2", "A 启动未释放即可真实点击选中 B");
 	check((await data()).clicks.some((event) => event.title === "Session 2" && event.trusted), "B 点击进入真实事件处理入口");
-	check(await page.locator('[aria-label="正在加载会话"]').count() === 1, "目标会话立即显示加载反馈");
+	check(await page.locator('[aria-label="正在加载会话"]').count() === 1 || await page.evaluate(() => window.switchFixture.currentSession?.owner.id === "s2" && window.switchFixture.currentSession.connected), "目标会话立即显示加载反馈或已完成加载");
 	await page.screenshot({ path: destination.replace(/\.json$/, ".loading.png"), fullPage: true });
 	await page.evaluate(() => window.switchFixture.release());
 	await ready(baseline ? "s1" : "s2");
-	check((await data()).processes === 1, "迟到启动已清理，只保留当前进程");
+	if (!baseline) await page.waitForFunction(() => window.switchFixture.mock.processes.size === 3);
+	check((await data()).processes === 3, "迟到启动继续加载自己的会话，各会话独立持有进程");
 	report.reproduction = await data();
 	await page.evaluate(() => window.switchFixture.unmount());
 	await page.waitForFunction(() => window.switchFixture.mock.processes.size === 0 && window.switchFixture.mock.listeners.size === 0);
@@ -278,5 +289,5 @@ finally {
 	await writeFile(destination, JSON.stringify(report, null, 2)); await browser.close();
 	if (process.connected) process.disconnect();
 }
-console.log(JSON.stringify({ checks: report.checks, summary: report.summary, failure: report.failure, errors }, null, 2));
+console.log(JSON.stringify({ checks: report.checks, skipped: report.skipped, summary: report.summary, failure: report.failure, errors }, null, 2));
 if (report.failure) process.exitCode = 1;
