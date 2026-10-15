@@ -33,15 +33,21 @@ try {
 	// The footer no longer ships continue / regenerate / delete buttons; only copy remains.
 	assert.equal(await page.locator(".continue-btn").count(), 0);
 	const first = page.locator(".usage-details").first();
-	await first.locator("button").click();
+	await first.locator(".usage-trigger").click();
 	assert.equal(await first.locator(".usage-heading strong").textContent(), "本轮 Token 消耗");
 	assert.deepEqual(await first.locator(".usage-row dd").allTextContents(), ["205", "35", "160", "10", "55", "15", "40", "260"]);
 	assert.equal(await first.locator(".usage-rate b").textContent(), "17.1%");
-	await first.locator("button").press("Escape");
-	assert.equal(await first.locator("button").getAttribute("aria-expanded"), "false");
-	assert.equal(await first.locator("button").evaluate((el) => el === document.activeElement), true);
+	await first.locator(".usage-trigger").press("Escape");
+	assert.equal(await first.locator(".usage-trigger").getAttribute("aria-expanded"), "false");
+	assert.equal(await first.locator(".usage-trigger").evaluate((el) => el === document.activeElement), true);
 	await page.getByRole("button", { name: "收起本轮执行过程" }).click();
 	assert.equal(await page.locator(".usage-details").count(), 2);
+	assert.equal(await page.getByRole("button", { name: "展开本轮执行过程" }).count(), 1);
+	await render({ messages, revealTurn: { turnId: "turn:history_0", requestKey: "search-1" } }, 2);
+	await page.getByRole("button", { name: "收起本轮执行过程" }).waitFor();
+	await page.getByRole("button", { name: "收起本轮执行过程" }).click();
+	await render({ messages, revealTurn: { turnId: "turn:history_0", requestKey: "search-2" } }, 2);
+	await page.getByRole("button", { name: "收起本轮执行过程" }).waitFor();
 
 	// Pending and active next turns must preserve all completed turns' details.
 	const nextUser = { id: "next", role: "user", blocks: [{ kind: "text", text: "第三轮" }] };
@@ -108,13 +114,15 @@ try {
 	const snapshot = { providerKey: "old-provider", familyId: "deepseek", familyName: "DeepSeek", modelId: "deepseek-flash", alias: "旧别名", relayId: "custom", relayName: "基元律动", billingAccountId: "xxx", currency: "CNY", inputCost: 1, outputCost: 147 / 190 };
 	const completed = { role: "assistant", provider: "old-provider", model: "deepseek-flash", content: "完成", usage: usage(73, 1917, 0, 190), routeSnapshot: snapshot, timestamp: new Date("2026-10-13T12:31:00+08:00").getTime() };
 	await render({ messages: [{ role: "user", content: "验证 chip" }, completed], current: { provider: "other", id: "other", providerName: "新渠道" } }, 1);
+	assert.equal(await page.locator(".usage-model").count(), 0);
+	assert.equal(await page.locator(".usage-time").count(), 0);
+	await chip.click();
 	assert.equal(await page.locator(".usage-model-label").textContent(), "基元律动 · deepseek-flash");
 	assert.equal(await page.locator(".usage-model").getAttribute("title"), "完整线路：基元律动 · deepseek-flash · 账户xxx");
 	assert.equal(await page.locator(".message-route").count(), 0);
 	assert.deepEqual(await totals(), ["1.99k(+73)"]);
 	assert.equal(await chip.getAttribute("title"), "输入 Token 1,990，新增 73");
-	assert.equal(await page.locator(".usage-cache").textContent(), "⚡96%");
-	assert.equal(await page.locator(".usage-cache").getAttribute("title"), "缓存读取 Token 1,917 · 命中率 96%");
+	assert.equal(await page.locator(".usage-rate b").textContent(), "96.3%");
 	assert.equal(await page.locator(".usage-output").textContent(), "⇡ 190");
 	assert.equal(await page.locator(".usage-output").getAttribute("title"), "输出 Token 190");
 	assert.equal(await page.locator(".usage-cost").textContent(), "¥0.00214");
@@ -126,11 +134,11 @@ try {
 		Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async (value) => window.copiedValues.push(value) } });
 	});
 	await page.locator(".usage-model").click();
+	await page.keyboard.press("Escape");
 	await page.locator(".usage-cost").click();
 	assert.deepEqual(await page.evaluate(() => window.copiedValues), ["deepseek-flash", "¥0.002137"]);
-	await page.locator(".usage-cache").click();
-	await page.locator(".usage-output").click();
-	await page.locator(".usage-time").click();
+	assert.equal(await page.locator(".usage-model").count(), 0);
+	assert.equal(await page.locator(".usage-time").count(), 0);
 	assert.equal(await panel.count(), 0);
 	assert.deepEqual(await page.evaluate(() => window.copiedValues), ["deepseek-flash", "¥0.002137"]);
 	for (const theme of ["dark", "light"]) {
@@ -152,7 +160,7 @@ try {
 	await page.waitForFunction(() => document.querySelector(".usage-new")?.textContent === "(+90)");
 	assert.deepEqual(await totals(), ["1.99k(+90)"]);
 	assert.deepEqual(errors, []);
-	console.log("PASS: per-turn input/cache/output chips, route snapshots, exact cost/model copying, full date titles, new input boundaries, tool aggregation, folding, pending/history turns, click/keyboard dismissal, small-window popovers and 6 theme/width screenshots");
+	console.log("PASS: compact token/cost entries and cache/route/time details, route snapshots, exact cost/model copying, full date titles, new input boundaries, tool aggregation, folding, pending/history turns, click/keyboard dismissal, small-window popovers and 6 theme/width screenshots");
 } finally {
 	await browser.close();
 }

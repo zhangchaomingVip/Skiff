@@ -53,6 +53,12 @@
 		--font-size-xl: 18px;
 		--font-size-2xl: 20px;
 		--font-size-3xl: 24px;
+		--font-size-gauge-min: 14px;
+		--chat-gutter: var(--space-10);
+		--gauge-track: var(--boundary);
+		--bubble-bg: var(--panel);
+		--bubble-border: var(--boundary);
+		--disabled-text: var(--muted);
 		--font-weight-regular: 400;
 		--font-weight-medium: 500;
 		--font-weight-title: 550;
@@ -157,6 +163,11 @@
 		--syn-attr: #916100;
 		--syn-meta: #2b58c4;
 		--shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+		--shadow-color: rgb(0 0 0 / .1);
+		--shadow-xs: 0 1px 2px rgba(0, 0, 0, .08);
+		--shadow-elevation-1: 0 1px 3px rgba(0, 0, 0, .06);
+		--shadow-elevation-2: 0 4px 12px rgba(0, 0, 0, .08);
+		--shadow-elevation-3: 0 8px 20px rgba(0, 0, 0, .1);
 	}
 
 }

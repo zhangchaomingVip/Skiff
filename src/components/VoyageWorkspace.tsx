@@ -1,9 +1,12 @@
-import { memo, useEffect, useMemo, useState, type CSSProperties } from "react";
+import type { Delivery } from "../chat/interactions";
+import { memo, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import type { ImageAttachment, SessionState } from "../chat/types";
 import type { PiSessionActions } from "../chat/usePiSession";
 import { useVoyageMetrics } from "../chat/useVoyageMetrics";
 import { LiveTurnContext } from "../chat/liveTurnContext";
 import type { WebSearchControls } from "../chat/webSearch";
+import type { DraftTarget } from "../chat/useDraft";
+import type { MessageReveal } from "../chat/useConversationSearch";
 import { ChatView } from "./ChatView";
 import { ContextUsage } from "./ContextUsage";
 import { VoyageRail } from "./VoyageRail";
@@ -14,14 +17,16 @@ import { ResizeSeparator } from "./ResizeSeparator";
 
 const StableChatView = memo(ChatView);
 
-export function VoyageWorkspace({ state, loading = false, connected, pending, actions, onSend, onReconnect, projectName, search, onConfigureSearch, failover, modelNotice, routeAuthorization, railWidth = 260, availableWidth = window.innerWidth, onRailWidth, onRailWidthCommit }: {
+export function VoyageWorkspace({ draftTarget, revealMessage, state, loading = false, connected, pending, actions, onSend, onReconnect, projectName, search, onConfigureSearch, failover, modelNotice, routeAuthorization, railWidth = 260, availableWidth = window.innerWidth, onRailWidth, onRailWidthCommit }: {
+	draftTarget?: DraftTarget;
+	revealMessage?: MessageReveal;
 	modelNotice?: string;
 	state: SessionState;
 	loading?: boolean;
 	connected: boolean;
 	pending: boolean;
 	actions: PiSessionActions;
-	onSend: (text: string, images?: ImageAttachment[]) => Promise<boolean>;
+	onSend: (text: string, images?: ImageAttachment[], delivery?: Delivery) => Promise<boolean>;
 	onReconnect: () => void;
 	projectName?: string;
 	search: WebSearchControls;
@@ -34,15 +39,8 @@ export function VoyageWorkspace({ state, loading = false, connected, pending, ac
 	onRailWidthCommit?: (width: number) => void;
 }) {
 	const { pricingModels } = useModelFamily();
-	const [abortedRunKey, setAbortedRunKey] = useState<string>();
-	const metrics = useVoyageMetrics(state.messages, state.model, state.isStreaming, pricingModels ?? state.availableModels, state.activeRun, state.lastError, abortedRunKey, state.voyageTimeline, state.contextUsage);
-	const timelineKey = metrics.timeline?.key;
-	const voyageActions = useMemo(() => ({ ...actions, abort: async () => {
-		// Some bridges end without an assistant stopReason. Retain the user's
-		// explicit abort intent for this timeline only, without persisting it.
-		setAbortedRunKey(timelineKey);
-		await actions.abort();
-	} }), [actions, timelineKey]);
+	const measured = useVoyageMetrics(state.messages, state.model, state.isStreaming, pricingModels ?? state.availableModels, state.activeRun, state.lastError, state.lastOutcome?.reason === "manual" ? state.voyageTimeline?.key : undefined, state.voyageTimeline, state.contextUsage);
+	const metrics = { ...measured, status: state.lastOutcome?.reason === "manual" && !state.isStreaming ? "已停止" : measured.status };
 	const [expanded, setExpanded] = useState(() => window.innerWidth >= 1200);
 	const [narrow, setNarrow] = useState(() => window.innerWidth <= 760);
 	useEffect(() => {
@@ -60,10 +58,27 @@ export function VoyageWorkspace({ state, loading = false, connected, pending, ac
 	const railBounds = { min: 240, max: Math.max(240, Math.min(480, availableWidth - 368)) };
 	const shownRailWidth = Math.max(240, Math.min(railWidth, railBounds.max));
 
-	return <div className={`chat-and-rail ${visibleExpanded ? "rail-expanded" : "rail-collapsed"}`} style={{ "--voyage-width": `${shownRailWidth}px` } as CSSProperties}>
+	const layout = useRef<HTMLDivElement>(null);
+	useLayoutEffect(() => {
+		const root = layout.current;
+		const workspace = root?.closest<HTMLElement>(".workspace");
+		const composer = root?.querySelector<HTMLElement>(".composer");
+		if (!root || !workspace || !composer) return;
+		// Follow the actual centered content, including rail/sidebar resizing.
+		const align = () => workspace.style.setProperty("--chat-content-inset", `${composer.getBoundingClientRect().left - workspace.getBoundingClientRect().left}px`);
+		const observer = new ResizeObserver(align);
+		observer.observe(root);
+		const column = root.querySelector(".chat-column");
+		if (column) observer.observe(column);
+		observer.observe(composer);
+		align();
+		return () => { observer.disconnect(); workspace.style.removeProperty("--chat-content-inset"); };
+	}, []);
+
+	return <div ref={layout} className={`chat-and-rail ${visibleExpanded ? "rail-expanded" : "rail-collapsed"}`} style={{ "--voyage-width": `${shownRailWidth}px` } as CSSProperties}>
 		<div className="chat-column">
 			<LiveTurnContext.Provider value={metrics.liveTurn}>
-				<StableChatView state={state} loading={loading} connected={connected} pending={pending} actions={voyageActions} onSend={onSend} onReconnect={onReconnect} projectName={projectName} search={search} onConfigureSearch={onConfigureSearch} failover={failover} routeAuthorization={routeAuthorization} />
+				<StableChatView draftTarget={draftTarget} revealMessage={revealMessage} state={state} loading={loading} connected={connected} pending={pending} actions={actions} onSend={onSend} onReconnect={onReconnect} projectName={projectName} search={search} onConfigureSearch={onConfigureSearch} failover={failover} routeAuthorization={routeAuthorization} />
 			</LiveTurnContext.Provider>
 			<ContextUsage notice={modelNotice} metrics={metrics} expanded={visibleExpanded} onToggle={toggle} />
 		</div>

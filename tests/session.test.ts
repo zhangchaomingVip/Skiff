@@ -26,7 +26,7 @@ test("streamed assistant text finalizes once and retains subsequent tool results
 	assert.equal(state.messages[0].blocks[0].text, "Hello world");
 	state = reduce(state, { type: "message_end", message: { role: "assistant", content: [{ type: "text", text: "Hello world" }] } });
 	state = reduce(state, { type: "message_end", message: { role: "toolResult", toolName: "bash", content: [{ type: "text", text: "ok" }] } });
-	state = reduce(state, { type: "agent_end" });
+	state = reduce(state, { type: "agent_settled" });
 	assert.equal(state.messages.length, 1);
 	assert.equal(state.messages[0].blocks.length, 2);
 	assert.equal(state.isStreaming, false);

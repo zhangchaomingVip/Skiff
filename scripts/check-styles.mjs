@@ -2,18 +2,26 @@ import fs from "node:fs";
 import path from "node:path";
 import postcss from "postcss";
 import { fileURLToPath } from "node:url";
+import { auditVisualGuards, themeVariables } from "./visual-guards.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
-export function auditStyles() {
+export function auditStyles(overrides = {}) {
+	const read = (file) => overrides[file] ?? fs.readFileSync(path.join(root, file), "utf8");
+	const sources = [];
 	const files = ["src/tokens.css", "src/index.css", "src/voyage.css", "src/components/ui.css"];
-	const sheets = files.map((file) => ({ file, sheet: postcss.parse(fs.readFileSync(path.join(root, file), "utf8"), { from: file }) }));
+	const sheets = files.map((file) => ({ file, sheet: postcss.parse(read(file), { from: file }) }));
 	const definitions = new Set();
 	for (const { sheet } of sheets) sheet.walkDecls((decl) => { if (decl.prop.startsWith("--")) definitions.add(decl.prop); });
 	// Only declared CSSProperties in our source count as runtime tokens.
 	const visit = (folder) => { for (const entry of fs.readdirSync(folder, { withFileTypes: true })) {
 		const name = path.join(folder, entry.name);
 		if (entry.isDirectory()) visit(name);
-		else if (/\.tsx?$/.test(name)) for (const match of fs.readFileSync(name, "utf8").matchAll(/["'](--[\w-]+)["']\s*:/g)) definitions.add(match[1]);
+		else if (/\.tsx?$/.test(name)) {
+			const file = path.relative(root, name).replaceAll("\\", "/");
+			const source = read(file);
+			sources.push({ file, source });
+			for (const match of source.matchAll(/["'](--[\w-]+)["']\s*:/g)) definitions.add(match[1]);
+		}
 	} };
 	visit(path.join(root, "src"));
 	const errors = [];
@@ -28,7 +36,7 @@ export function auditStyles() {
 			}
 			const location = `${file}:${decl.source.start.line} ${decl.parent.selector ?? decl.parent.name} ${decl.prop}: ${decl.value}`;
 			if (/#(?:[\da-f]{3,8})\b|rgba?\(/i.test(decl.value)) { inventory.colors.push(location); if (file !== "src/tokens.css") errors.push(`Color outside tokens: ${location}`); }
-			if (decl.prop === "font-size" && /\dpx/.test(decl.value)) { inventory.fontSizes.push(location); if (file !== "src/tokens.css" && !decl.parent.selector?.includes("voyage-gauge")) errors.push(`Font outside scale: ${location}`); }
+			if (decl.prop === "font-size" && /\dpx/.test(decl.value)) { inventory.fontSizes.push(location); if (file !== "src/tokens.css") errors.push(`Font outside scale: ${location}`); }
 			if (decl.prop.includes("border-radius") && /\d(?:px|%)/.test(decl.value)) { inventory.radii.push(location); if (file !== "src/tokens.css") errors.push(`Radius outside scale: ${location}`); }
 			if (decl.prop.includes("shadow") && !decl.value.startsWith("var(") && decl.value !== "none") inventory.shadows.push(location);
 			if (["height", "min-height"].includes(decl.prop) && /button|input|trigger|btn|select|control/.test(decl.parent.selector ?? "")) inventory.controlHeights.push(location);
@@ -45,6 +53,7 @@ export function auditStyles() {
 		};
 		check(sheet);
 	}
+	errors.push(...auditVisualGuards(sheets, sources));
 	return { errors, inventory };
 }
 
@@ -55,16 +64,15 @@ const luminance = (hex) => {
 export function contrast(a, b) { const x = luminance(a); const y = luminance(b); return (Math.max(x, y) + .05) / (Math.min(x, y) + .05); }
 export function auditContrast() {
 	const sheet = postcss.parse(fs.readFileSync(path.join(root, "src/tokens.css"), "utf8"));
-	const palette = (theme) => {
-		const vars = new Map();
-		sheet.walkRules((rule) => { if (rule.selector === ":root" || theme === "light" && rule.selector === '[data-theme="light"]') for (const decl of rule.nodes) if (decl.type === "decl") vars.set(decl.prop, decl.value); });
-		const resolve = (name) => { const value = vars.get(name); const match = /^var\((--[\w-]+)\)$/.exec(value ?? ""); return match ? resolve(match[1]) : value; };
-		return resolve;
-	};
 	const rows = [];
 	for (const theme of ["light", "dark"]) {
-		const get = palette(theme);
+		const { get } = themeVariables(sheet, theme);
 		for (const fg of ["--color-text-primary", "--color-text-secondary", "--color-text-tertiary", "--color-accent", "--color-success", "--color-warning", "--color-error"]) for (const bg of ["--color-bg-primary", "--color-bg-secondary", "--color-bg-tertiary", "--color-bg-hover", "--color-sidebar-bg", "--selected"]) rows.push({ theme, fg, bg, ratio: contrast(get(fg), get(bg)), minimum: 4.5 });
+		for (const [fg, bg, minimum] of [
+			["--text", "--bubble-bg", 4.5], ["--bubble-border", "--bg", 3], ["--bubble-border", "--bubble-bg", 3],
+			["--secondary", "--bg", 4.5], ["--gauge-track", "--bg", 3], ["--disabled-text", "--surface", 3],
+			["--bubble-bg", "--bg", 0],
+		]) rows.push({ theme, fg, bg, ratio: contrast(get(fg), get(bg)), minimum, ...(minimum === 0 ? { diagnostic: true } : {}) });
 		rows.push({ theme, fg: "--boundary", bg: "--surface", ratio: contrast(get("--boundary"), get("--surface")), minimum: 3 });
 		rows.push({ theme, fg: "--boundary", bg: "--hover", ratio: contrast(get("--boundary"), get("--hover")), minimum: 3 });
 		rows.push({ theme, fg: "--danger", bg: "--error-bg", ratio: contrast(get("--danger"), get("--error-bg")), minimum: 4.5 });

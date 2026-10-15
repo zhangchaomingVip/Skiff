@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 const require = createRequire(import.meta.url);
 const { chromium } = process.env.SKIFF_PLAYWRIGHT_DIR ? require(process.env.SKIFF_PLAYWRIGHT_DIR) : await import("playwright");
 const origin = process.argv[2] ?? "http://127.0.0.1:1421";
-const browser = await chromium.launch({ headless: true, ...(process.env.SKIFF_BROWSER_EXECUTABLE ? { executablePath: process.env.SKIFF_BROWSER_EXECUTABLE } : {}) });
+const browser = await chromium.launch({ headless: true, channel: "msedge", ...(process.env.SKIFF_BROWSER_EXECUTABLE ? { executablePath: process.env.SKIFF_BROWSER_EXECUTABLE } : {}) });
 const page = await browser.newPage({ viewport: { width: 1440, height: 960 } });
 await page.addInitScript(() => {
 	if (sessionStorage.getItem("skiff.test.invalid-widths") === "true") return;
@@ -31,10 +31,10 @@ try {
 	await page.goto(`${origin}/tests/preview.html?fixture=archive&theme=light&persist=1`);
 	await waitUntil(() => document.querySelector(".sidebar-footer")?.textContent.includes("pi 已连接"), "Active pi fixture did not connect");
 	await waitUntil(() => document.querySelector(".voyage-rail.expanded"), "Desktop rail did not expand on initial load");
-	assert.equal((await title())?.trim(), "当前会话");
+	assert.match((await title())?.trim(), /^当前会话/);
 	assert.equal(await page.getByRole("separator", { name: "调整左侧导航宽度" }).getAttribute("aria-valuenow"), "240", "Invalid left width should use its default");
 	assert.equal(await page.getByRole("separator", { name: "调整右侧航行台宽度" }).getAttribute("aria-valuenow"), "260", "Invalid right width should use its default");
-	assert.equal(await page.locator(".sidebar-recent .chat-row").count(), 3, "Archived chats must be absent from recent navigation");
+	assert.equal(await page.locator(".project-chats .chat-row").count(), 3, "Unarchived chats appear exactly once");
 	const projectCount = await page.locator(".project-row").filter({ hasText: "Skiff Archive" }).locator(".project-count").textContent();
 	assert.equal(projectCount, "2", "Archived chats must not affect project counts");
 	const beforeArchiveSearch = await page.locator(".sidebar-scroll .chat-row").count();
@@ -43,27 +43,12 @@ try {
 	assert.equal(await page.locator(".sidebar-scroll .chat-row").count(), 0, "Archived chats must not appear in sidebar search");
 	await page.getByRole("textbox", { name: "搜索项目与聊天" }).press("Escape");
 	assert.ok(beforeArchiveSearch > 0);
-	await page.locator(".sidebar-recent .chat-row").filter({ hasText: "当前会话" }).click({ button: "right" });
+	await page.locator(".project-chats .chat-row").filter({ hasText: "当前会话" }).click({ button: "right" });
 	const chatMenu = page.getByRole("menu");
 	await chatMenu.getByRole("button", { name: "归档", exact: true }).waitFor();
 	await page.keyboard.press("Escape");
 	await chatMenu.waitFor({ state: "detached" });
 
-	const recentToggle = page.locator(".sidebar-recent > .section-label .section-name");
-	await recentToggle.focus();
-	await page.keyboard.press("Enter");
-	await waitUntil(() => document.querySelectorAll(".sidebar-recent .chat-row").length === 0, "Recent list did not collapse");
-	assert.equal(await recentToggle.getAttribute("aria-expanded"), "false");
-	await page.emulateMedia({ reducedMotion: "reduce" });
-	await recentToggle.click();
-	await waitUntil(() => document.querySelectorAll(".sidebar-recent .chat-row").length === 3, "Recent list did not reopen under reduced motion");
-	await recentToggle.click();
-	await waitUntil(() => document.querySelectorAll(".sidebar-recent .chat-row").length === 0, "Recent list did not collapse under reduced motion");
-	await page.emulateMedia({ reducedMotion: "no-preference" });
-	assert.equal(await page.evaluate(() => localStorage.getItem("skiff.sidebar.recent-expanded")), "false");
-	await page.reload();
-	await waitUntil(() => document.querySelector(".sidebar-footer")?.textContent.includes("pi 已连接"), "Reloaded preview did not reconnect after collapsing recent chats");
-	assert.equal(await page.locator(".sidebar-recent > .section-label .section-name").getAttribute("aria-expanded"), "false", "Recent collapse preference did not restore after reload");
 
 	const baselineProcesses = await countPreviewProcesses();
 	const baselineListeners = await countPreviewListeners();
@@ -114,19 +99,15 @@ try {
 	await emptyPreview.getByRole("button", { name: "关闭归档预览" }).click();
 
 	await page.locator(".archive-session-row").filter({ hasText: "已归档会话" }).getByRole("button", { name: "恢复" }).click();
-	await waitUntil(() => document.querySelector(".header-title-row > span:first-child")?.textContent?.trim() === "已归档会话", "Restore did not enter the conversation");
+	await waitUntil(() => document.querySelector(".header-title-row > span:first-child")?.textContent?.trim().startsWith("已归档会话"), "Restore did not enter the conversation");
 	assert.equal(await page.locator("dialog[open]").count(), 0, "Restore should close settings");
 	assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem("skiff.workspace.v1")).chats.find((chat) => chat.id === "archive-record").archivedAt), undefined);
-	const recentToggleAfterRestore = page.locator(".sidebar-recent > .section-label .section-name");
-	await recentToggleAfterRestore.click();
-	await waitUntil(() => document.querySelector(".sidebar-recent > .section-label .section-name")?.getAttribute("aria-expanded") === "true", "Recent list did not reopen before archiving the active chat");
-	await waitUntil(() => !!document.querySelector(".sidebar-recent .sidebar-collapse.expanded .chat-row"), "Recent rows did not finish opening");
-	const activeArchiveButton = page.locator(".sidebar-recent").getByRole("button", { name: "归档聊天 已归档会话" });
-	const activeChatRow = page.locator(".sidebar-recent .chat-row").filter({ hasText: "已归档会话" });
-	await waitUntil(() => !document.querySelector(".sidebar-recent .chat-row.selected .sidebar-row-actions button[aria-label='归档聊天 已归档会话']")?.disabled, "Active archive action remained disabled after session restore");
+	const activeArchiveButton = page.locator(".project-chats").getByRole("button", { name: "归档聊天 已归档会话" });
+	const activeChatRow = page.locator(".project-chats .chat-row").filter({ hasText: "已归档会话" });
+	await waitUntil(() => !document.querySelector(".project-chats .chat-row.selected .sidebar-row-actions button[aria-label='归档聊天 已归档会话']")?.disabled, "Active archive action remained disabled after session restore");
 	await activeArchiveButton.scrollIntoViewIfNeeded();
 	await activeChatRow.hover();
-	await waitUntil(() => getComputedStyle(document.querySelector(".sidebar-recent .chat-row.selected .sidebar-row-actions")).pointerEvents === "auto", "Recent row actions did not become interactive");
+	await waitUntil(() => getComputedStyle(document.querySelector(".project-chats .chat-row.selected .sidebar-row-actions")).pointerEvents === "auto", "Recent row actions did not become interactive");
 	const actionPoint = await activeArchiveButton.evaluate((button) => { const rect = button.getBoundingClientRect(); return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }; });
 	await page.mouse.click(actionPoint.x, actionPoint.y);
 	await waitUntil(() => document.querySelector(".header-title-row > span:first-child")?.textContent?.trim() === "主页", "Archiving the active chat did not return home");
@@ -140,7 +121,7 @@ try {
 	assert.ok(await page.evaluate(() => JSON.parse(localStorage.getItem("skiff.test.sessions"))["archive-record.jsonl"]), "Deleting the archive must retain its pi session file");
 	await page.getByRole("button", { name: "完成", exact: true }).click();
 
-	await page.locator(".project-chats .chat-link[title='同项目候选'] .chat-title").click();
+	await page.locator(".project-chats .chat-link[title^='同项目候选']").click({ position: { x: 20, y: 16 } });
 	await waitUntil(() => document.querySelector(".voyage-rail.expanded"), "Desktop rail did not expand");
 	const modelTrigger = page.getByRole("button", { name: "选择模型" });
 	assert.match((await modelTrigger.textContent()) ?? "", /Skiff Long Model Alias/);
@@ -166,9 +147,9 @@ try {
 	await page.getByRole("textbox", { name: "聊天消息" }).fill("检查生成期间归档限制");
 	await page.getByRole("button", { name: "发送消息" }).click();
 	await page.getByRole("button", { name: "停止生成" }).waitFor();
-	await waitUntil(() => document.querySelector(".sidebar-recent .chat-row.selected .sidebar-row-actions button[aria-label^='归档聊天']")?.disabled === true, "Archive action should be disabled while generating");
+	await waitUntil(() => document.querySelector(".project-chats .chat-row.selected .sidebar-row-actions button[aria-label^='归档聊天']")?.disabled === true, "Archive action should be disabled while generating");
 	await page.getByRole("button", { name: "停止生成" }).click();
-	await waitUntil(() => document.querySelector(".sidebar-recent .chat-row.selected .sidebar-row-actions button[aria-label^='归档聊天']")?.disabled === false, "Archive action did not re-enable after generation stopped");
+	await waitUntil(() => document.querySelector(".project-chats .chat-row.selected .sidebar-row-actions button[aria-label^='归档聊天']")?.disabled === false, "Archive action did not re-enable after generation stopped");
 
 	const leftSeparator = page.getByRole("separator", { name: "调整左侧导航宽度" });
 	const drag = async (separator, deltaX) => {
@@ -206,7 +187,6 @@ try {
 	await waitUntil(() => document.querySelector(".sidebar-footer")?.textContent.includes("pi 已连接"), "Reloaded preview did not reconnect");
 	assert.equal(await page.getByRole("separator", { name: "调整左侧导航宽度" }).getAttribute("aria-valuenow"), String(keyboardWidth));
 	assert.equal(await page.getByRole("separator", { name: "调整右侧航行台宽度" }).getAttribute("aria-valuenow"), String(rightWidth));
-	assert.equal(await page.locator(".sidebar-recent > .section-label .section-name").getAttribute("aria-expanded"), "true", "Recent expansion preference did not persist");
 
 	await page.setViewportSize({ width: 800, height: 900 });
 	await waitUntil(() => document.querySelector(".chat-and-rail.rail-collapsed"), "Right rail did not temporarily collapse in a narrow workspace");
@@ -219,7 +199,7 @@ try {
 	await waitUntil(() => document.querySelector(".ui-dialog[data-variant='drawer'][open]"), "Narrow viewport did not retain the sidebar drawer");
 	assert.equal(await page.locator(".resize-separator").count(), 0, "Resize handles must be absent in drawer mode");
 	assert.deepEqual(errors, [], `Browser reported errors: ${errors.join("; ")}`);
-	console.log("PASS archive search, read-only preview/cleanup, restore/delete semantics, recent collapse, desktop resizing, persistence, responsive collapse and drawer mode");
+	console.log("PASS archive search, read-only preview/cleanup, restore/delete semantics, single sidebar list, desktop resizing, persistence, responsive collapse and drawer mode");
 } finally {
 	await browser.close();
 }

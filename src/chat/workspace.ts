@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { drafts, hasDraft } from "./drafts";
 import { invoke } from "@tauri-apps/api/core";
 import type { RouteSnapshot } from "./types";
 import type { RouteEvent } from "./routeAudit";
@@ -15,6 +16,9 @@ export interface Conversation {
 	projectId: string;
 	title: string;
 	customTitle?: boolean;
+	createdAt?: number;
+	modelAlias?: string;
+	hasDraft?: boolean;
 	sessionFile?: string;
 	updatedAt: number;
 	hasMessages: boolean;
@@ -37,7 +41,7 @@ export interface Workspace {
 
 const STORAGE_KEY = "skiff.workspace.v1";
 const newChat = (projectId: string): Conversation => ({
-	id: crypto.randomUUID(), projectId, title: "新聊天", updatedAt: Date.now(), hasMessages: false,
+	id: crypto.randomUUID(), projectId, title: "新聊天", createdAt: Date.now(), updatedAt: Date.now(), hasMessages: false,
 });
 
 export function normalizeSelectedModel(value: unknown): Conversation["selectedModel"] {
@@ -86,6 +90,9 @@ export function normalizeWorkspace(value: unknown): Workspace | null {
 			if (snapshots) chat.routeSnapshots = snapshots; else delete chat.routeSnapshots;
 			const events = normalizeRouteEvents(chat.routeEvents);
 			if (events) chat.routeEvents = events; else delete chat.routeEvents;
+			if (chat.createdAt !== undefined && (typeof chat.createdAt !== "number" || !Number.isFinite(chat.createdAt))) delete chat.createdAt;
+			if (typeof chat.hasDraft !== "boolean") delete chat.hasDraft;
+			if (typeof chat.modelAlias !== "string") delete chat.modelAlias;
 			if (chat.pinned !== undefined && typeof chat.pinned !== "boolean") delete chat.pinned;
 			if (chat.archivedAt !== undefined && (typeof chat.archivedAt !== "number" || !Number.isFinite(chat.archivedAt))) delete chat.archivedAt;
 		}
@@ -104,7 +111,7 @@ export function visibleConversations(chats: Conversation[]): Conversation[] {
 }
 
 export function persistableConversations(chats: Conversation[], activeId: string): Conversation[] {
-	return chats.filter((chat) => chat.hasMessages || chat.id === activeId || isArchived(chat));
+	return chats.filter((chat) => chat.hasMessages || chat.hasDraft || chat.id === activeId || isArchived(chat));
 }
 
 export function archiveConversation(workspace: Workspace, id: string, archivedAt = Date.now(), makeDraft = newChat): Workspace {
@@ -150,6 +157,7 @@ export function useWorkspace() {
 	const [workspace, setWorkspace] = useState<Workspace | null>(readWorkspace);
 	const [error, setError] = useState<string>();
 	const [loading, setLoading] = useState(false);
+	const [draftsReady, setDraftsReady] = useState(drafts.ready);
 
 	const initialize = async () => {
 		setLoading(true);
@@ -177,23 +185,53 @@ export function useWorkspace() {
 		}
 	}, [workspace]);
 
+	const draftIds = workspace?.chats.filter((chat) => !isArchived(chat)).map((chat) => chat.id).join(";");
+	useEffect(() => {
+		if (!workspace) return;
+		const ids = workspace.chats.filter((chat) => !isArchived(chat)).map((chat) => chat.id);
+		drafts.setAllowed(ids);
+		void drafts.hydrate(ids);
+	}, [draftIds]);
+	useEffect(() => {
+		const sync = () => { setDraftsReady(drafts.ready); setWorkspace((current) => {
+			if (!current) return current;
+			let changed = false;
+			const chats = current.chats.map((chat) => {
+				const value = !isArchived(chat) && (hasDraft(drafts.get(chat.id)) || (drafts.loadFailed && !!chat.hasDraft));
+				if (!!chat.hasDraft === value) return chat;
+				changed = true; return { ...chat, hasDraft: value };
+			});
+			return changed ? { ...current, chats } : current;
+		}); };
+		const unsubscribe = drafts.subscribe(sync);
+		const flush = () => { void drafts.flush(); };
+		const exit = () => drafts.flushOnExit();
+		window.addEventListener("beforeunload", exit);
+		window.addEventListener("pagehide", exit);
+		document.addEventListener("visibilitychange", flush);
+		return () => { unsubscribe(); flush(); window.removeEventListener("beforeunload", exit); window.removeEventListener("pagehide", exit); document.removeEventListener("visibilitychange", flush); };
+	}, []);
+
 	const activeChat = workspace?.chats.find((c) => c.id === workspace.activeId);
 	const activeProject = workspace?.projects.find((p) => p.id === activeChat?.projectId);
 	const createChat = (projectId = activeProject?.id, selectedModel?: Conversation["selectedModel"], unavailableDraftIds?: ReadonlySet<string>) => {
 		if (!projectId) return;
+		void drafts.flush();
 		setWorkspace((w) => {
 			if (!w) return w;
-			const draft = w.chats.find((c) => c.id === w.activeId && c.projectId === projectId && !c.hasMessages && !isArchived(c) && !unavailableDraftIds?.has(c.id));
+			const draft = w.chats.find((c) => c.id === w.activeId && c.projectId === projectId && !c.hasMessages && !c.hasDraft && !hasDraft(drafts.get(c.id)) && !isArchived(c) && !unavailableDraftIds?.has(c.id));
 			const chat = draft ? { ...draft, ...(selectedModel ? { selectedModel } : {}) } : { ...newChat(projectId), ...(selectedModel ? { selectedModel } : {}) };
 			return { ...w, chats: draft ? w.chats.map((item) => item.id === draft.id ? chat : item) : [...w.chats, chat], activeId: chat.id };
 		});
 	};
 	const selectProject = (id: string) => {
+		void drafts.flush();
 		const latest = workspace?.chats.filter((c) => c.projectId === id && !isArchived(c)).sort((a, b) => b.updatedAt - a.updatedAt)[0];
 		if (latest) setWorkspace((w) => w && w.activeId !== latest.id ? { ...w, activeId: latest.id } : w);
 		else createChat(id);
 	};
 	const addProject = async (path: string) => {
+		void drafts.flush();
 		const directory = await invoke<{ name: string; path: string }>("validate_project_directory", { path: path.trim() });
 		const pathKey = (value: string) => /^[a-z]:\\|^\\\\/i.test(value) ? value.toLowerCase() : value;
 		const existing = workspace?.projects.find((p) => pathKey(p.path) === pathKey(directory.path));
@@ -212,21 +250,24 @@ export function useWorkspace() {
 	};
 
 	return {
-		workspace, activeChat, activeProject, error, loading, initialize, addProject, createChat, selectProject, updateChat,
-		selectChat: (id: string) => setWorkspace((w) => w && w.activeId !== id && w.chats.some((chat) => chat.id === id && !isArchived(chat)) ? { ...w, activeId: id } : w),
-		archiveChat: (id: string, archivedAt = Date.now()) => setWorkspace((w) => w ? archiveConversation(w, id, archivedAt) : w),
+		workspace, activeChat, activeProject, error, loading, draftsReady, initialize, addProject, createChat, selectProject, updateChat,
+		selectChat: (id: string) => { void drafts.flush(); setWorkspace((w) => w && w.activeId !== id && w.chats.some((chat) => chat.id === id && !isArchived(chat)) ? { ...w, activeId: id } : w); },
+		archiveChat: (id: string, archivedAt = Date.now()) => { drafts.remove(id); setWorkspace((w) => w ? archiveConversation(w, id, archivedAt) : w); },
 		restoreChat: (id: string) => setWorkspace((w) => w ? restoreConversation(w, id) : w),
 		clearError: () => setError(undefined),
 		renameChat: (id: string, title: string) => { if (title.trim()) updateChat(id, { title: title.trim().slice(0, 100), customTitle: true }); },
 		renameProject: (id: string, name: string) => setWorkspace((w) => w && name.trim() ? { ...w, projects: w.projects.map((p) => p.id === id ? { ...p, name: name.trim().slice(0, 100) } : p) } : w),
-		deleteChat: (id: string) => setWorkspace((w) => w ? deleteConversation(w, id) : w),
-		deleteProject: (id: string) => setWorkspace((w) => {
+		deleteChat: (id: string) => { drafts.remove(id); setWorkspace((w) => w ? deleteConversation(w, id) : w); },
+		deleteProject: (id: string) => {
+			if (!workspace || workspace.projects.length <= 1) return;
+			for (const chat of workspace.chats.filter((chat) => chat.projectId === id)) drafts.remove(chat.id);
+			setWorkspace((w) => {
 			if (!w || w.projects.length <= 1) return w;
 			const projects = w.projects.filter((project) => project.id !== id);
 			const chats = w.chats.filter((chat) => chat.projectId !== id);
 			if (chats.some((chat) => chat.id === w.activeId)) return { ...w, projects, chats };
 			const next = visibleConversations(chats).sort((a, b) => b.updatedAt - a.updatedAt)[0] ?? newChat(projects[0].id);
 			return { ...w, projects, chats: chats.includes(next) ? chats : [...chats, next], activeId: next.id };
-		}),
+		}); },
 	};
 }

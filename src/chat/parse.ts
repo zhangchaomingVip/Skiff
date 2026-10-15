@@ -109,6 +109,7 @@ export function parseMessages(raw: unknown): ChatMessage[] {
 			assistant?.blocks.push(...parseBlocks([{ ...message, type: "toolResult" }]));
 		} else if (message.role === "user" || message.role === "assistant") {
 			messages.push({
+				entryId: typeof message.entryId === "string" ? message.entryId : undefined,
 				id: `history_${index}`, role: message.role, blocks: parseBlocks(message.content),
 				provider: typeof message.provider === "string" ? message.provider : undefined,
 				model: typeof message.model === "string" ? message.model : undefined,

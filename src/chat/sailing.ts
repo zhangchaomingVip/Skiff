@@ -45,10 +45,9 @@ export type VoyageActivity = "sailing" | "fishing" | "moored";
 export type VoyagePhase = "thinking" | "tool" | "response";
 
 export function voyageStatus(activity: VoyageActivity, phase: VoyagePhase): string {
-	if (activity === "moored") return "已停泊";
-	if (phase === "thinking") return "思考中";
-	if (phase === "tool") return "工具执行中";
-	return activity === "sailing" ? "航行中" : "等待响应";
+	if (activity === "moored") return "空闲";
+	if (phase === "response" && activity !== "sailing") return "等待响应";
+	return "运行中";
 }
 
 export function currentTurnMessages(messages: ChatMessage[], run?: SessionState["activeRun"]): ChatMessage[] {

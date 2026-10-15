@@ -1,17 +1,21 @@
+import type { Delivery } from "./chat/interactions";
+import { drafts, hasDraft } from "./chat/drafts";
+import { useConversationSearch } from "./chat/useConversationSearch";
+import { conversationLabel } from "./chat/conversationDisplay";
+import { BackgroundSessions } from "./components/BackgroundSessions";
+import { HistorySearchDialog } from "./components/HistorySearchDialog";
 import { SidebarPresentation } from "./components/SidebarPresentation";
 import { IconButton, Button, Tooltip } from "./components/ui";
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { usePiSessions } from "./chat/usePiSessions";
-import { useSessionRef, useSessionValue } from "./chat/useSessionValue";
+import { useSessionRef } from "./chat/useSessionValue";
 import { showVoyageIcon } from "./taskbarIcon";
 import { isArchived, useWorkspace, visibleConversations } from "./chat/workspace";
 import { useModelFamilies } from "./chat/useModelFamilies";
 import { ModelFamilyContext } from "./chat/familyContext";
-import { familyFromProvider, modelBrand } from "./chat/modelDisplay";
-import { classifyProviderFailure, nextRoute, reconcile, resolveSelection, type RouteRequirements, type RuntimeOffer } from "./chat/modelFamilies";
+import { familyFromProvider } from "./chat/modelDisplay";
+import { reconcile, type RuntimeOffer } from "./chat/modelFamilies";
 import type { ModelInfo } from "./chat/types";
-import { billingAccountLabel, createRouteAuthorizationState, requestRouteSwitch, resolveRouteAuthorization, type AuthorizationRoute, type RouteAuthorizationChoice } from "./chat/routeAuthorization";
-import { createRouteEvent, type AuditRouteRef, type RouteEvent } from "./chat/routeAudit";
 import { VoyageWorkspace } from "./components/VoyageWorkspace";
 import { RawDrawer } from "./components/RawDrawer";
 import { Sidebar } from "./components/Sidebar";
@@ -46,23 +50,14 @@ export default function App() {
 	const archivedChats = useMemo(() => allChats.filter(isArchived), [allChats]);
 	const [view, setView] = useState<AppView>();
 	useEffect(() => {
-		if (view === undefined && library.workspace) setView(activeChat?.hasMessages ? "chat" : "launcher");
-	}, [activeChat?.hasMessages, library.workspace, view]);
+		if (view === undefined && library.workspace && library.draftsReady) setView((activeChat?.hasMessages || activeChat?.hasDraft) ? "chat" : "launcher");
+	}, [activeChat?.hasMessages, activeChat?.hasDraft, library.workspace, library.draftsReady, view]);
 	const currentView = view ?? (library.workspace ? "launcher" : "chat");
 	const modelFamilies = useModelFamilies();
 	const pool = usePiSessions(activeChat?.id, allChats, library.workspace?.projects ?? [], modelFamilies.offers, { config: modelFamilies.config, ready: !modelFamilies.loading }, library.updateChat);
 	const { session } = pool;
 	const { state, connected, rawLines, actions } = session;
-	const [modelNotice, setModelNotice] = useSessionValue<string | undefined>(session.owner, session.isCurrent, () => undefined);
-	const [routeAuthorization, setRouteAuthorization] = useSessionValue(session.owner, session.isCurrent, () => createRouteAuthorizationState(activeChat?.id ?? "none"));
-	const [routeEvents, setRouteEvents] = useSessionValue<RouteEvent[]>(session.owner, session.isCurrent, () => activeChat?.routeEvents ?? []);
-	const routeAuthorizationContext = useSessionRef<{ requestId: string; automatic: boolean; failureKind: ReturnType<typeof classifyProviderFailure> }>(session.owner, () => undefined);
-	const fallbackNoticeRef = useRef("");
-	useEffect(() => {
-		if (!modelNotice) return;
-		const timer = window.setTimeout(() => setModelNotice(undefined), 8000);
-		return () => window.clearTimeout(timer);
-	}, [modelNotice]);
+	const { modelNotice, setModelNotice, failover, routeAuthorization: routeAuthorizationPrompt } = session;
 	const [rawOpen, setRawOpen] = useState(false);
 	const [sidebarOpen, setSidebarOpen] = useState(() => { if (window.innerWidth <= 760) return false; try { return localStorage.getItem("skiff.sidebar.open") !== "false"; } catch { return true; } });
 	useEffect(() => { try { localStorage.setItem("skiff.sidebar.open", String(sidebarOpen)); } catch { /* Layout can still be used without storage. */ } }, [sidebarOpen]);
@@ -93,7 +88,6 @@ export default function App() {
 		return modelFamilies.offers.map((offer, index) => ({ offer, index })).sort((a, b) => (rank.get(a.offer.offerId ?? "") ?? Number.MAX_SAFE_INTEGER) - (rank.get(b.offer.offerId ?? "") ?? Number.MAX_SAFE_INTEGER) || a.index - b.index).map(({ offer }) => offer);
 	}, [modelFamilies.offers, recentOfferIds]);
 	const pendingRecentOffer = useSessionRef<{ id: string; assistantCount: number }>(session.owner, () => undefined);
-	const requestRequirements = useSessionRef<RouteRequirements>(session.owner, () => ({}));
 	useEffect(() => {
 		const assistantCount = state.messages.filter((message) => message.role === "assistant").length;
 		if (pendingRecentOffer.current && assistantCount > pendingRecentOffer.current.assistantCount && !state.isStreaming && !state.lastError) {
@@ -139,39 +133,6 @@ export default function App() {
 		if (navigationDisabled || !pool.canClose(id)) return;
 		library.deleteChat(id);
 	}, [library, navigationDisabled, pool.canClose]);
-	const routeEventsJson = useMemo(() => JSON.stringify(routeEvents), [routeEvents]);
-	const savedRouteEvents = useRef("");
-	useEffect(() => { savedRouteEvents.current = ""; }, [session.owner]);
-	useEffect(() => {
-		if (!session.isCurrent() || !activeChat || session.loadedId !== activeChat.id || savedRouteEvents.current === routeEventsJson) return;
-		savedRouteEvents.current = routeEventsJson;
-		library.updateChat(activeChat.id, { routeEvents });
-	}, [activeChat?.id, session.loadedId, routeEvents, routeEventsJson, library, session.isCurrent]);
-
-	// pi reads channel configuration at startup. Refresh idle sessions after
-	// migration or edits, preserving the current transcript and selected channel.
-	const appliedConfig = useRef<{ config: typeof modelFamilies.config; chatId?: string }>();
-	useEffect(() => {
-		if (!connected || busy || modelFamilies.loading || !modelFamilies.config || (appliedConfig.current?.config === modelFamilies.config && appliedConfig.current?.chatId === activeChat?.id)) return;
-		appliedConfig.current = { config: modelFamilies.config, chatId: activeChat?.id };
-		const offers = modelFamilies.offers;
-		const currentFamily = familyFromProvider(state.model?.provider)?.id ?? modelBrand(state.model?.id, state.model?.provider);
-		const resolved = resolveSelection(state.model, offers, currentFamily, modelFamilies.families);
-		const selected = resolved.offer;
-		if (resolved.invalidated) {
-			const noticeKey = `${activeChat?.id ?? ""}:${state.model?.routeId ?? state.model?.provider ?? ""}:${selected?.routeId ?? "none"}`;
-			if (fallbackNoticeRef.current !== noticeKey) {
-				fallbackNoticeRef.current = noticeKey;
-				setModelNotice(selected ? `当前模型已失效，已切换到 ${selected.familyName} · ${selected.relayName} · ${selected.modelId}` : "当前模型已失效，请先在中转上配置线路");
-			}
-		} else fallbackNoticeRef.current = "";
-		const model = selected ? { provider: selected.providerKey, id: selected.modelId, modelId: selected.modelId, routeId: selected.routeId, offerId: selected.offerId, familyId: selected.familyId, familyName: selected.familyName, relayId: selected.relayId } : state.model && !familyFromProvider(state.model.provider) ? state.model : undefined;
-		// A newly selected chat already read this configuration at startup.
-		// Only edits made since that startup require another process.
-		if (session.loadedConfig !== modelFamilies.config) session.reconnect(model);
-		else if (selected && model && (state.model?.provider !== selected.providerKey || state.model.id !== selected.modelId)) void actions.setModel(model);
-	}, [activeChat?.id, connected, busy, modelFamilies.loading, modelFamilies.config, modelFamilies.offers, modelFamilies.families, state.model, session.loadedConfig, session.reconnect, actions]);
-
 	const displayModels = useMemo(() => modelFamilies.fallback ? state.availableModels : orderedOffers.length ? reconcile(state.model, orderedOffers, state.availableModels, modelFamilies.families) : [], [state.model, state.availableModels, orderedOffers, modelFamilies.families, modelFamilies.fallback]);
 	const displayModel = displayModels.find((model) => model.provider === state.model?.provider && model.id === state.model?.id) ?? (modelFamilies.fallback ? state.model : undefined);
 	const pricingModels = useMemo(() => {
@@ -182,23 +143,12 @@ export default function App() {
 		}));
 	}, [orderedOffers, modelFamilies.fallback, state.availableModels]);
 	const selectModel = useCallback(async (model: ModelInfo) => {
-		if (!session.isCurrent()) return;
-		setRouteAuthorization((current) => ({ ...current, pending: undefined }));
-			const currentModel = state.model;
-			const sourceOffer = currentModel && modelFamilies.offers.find((item) => (currentModel.routeId && item.routeId === currentModel.routeId && item.modelId === currentModel.id) || (item.providerKey === currentModel.provider && item.modelId === currentModel.id));
-			const targetOffer = model.offerId ? modelFamilies.offers.find((item) => item.offerId === model.offerId) : modelFamilies.offers.find((item) => item.providerKey === model.provider && item.modelId === model.id);
 		const selected = await actions.setModel(model);
-			if (!session.isCurrent()) return;
-			if (selected && model.offerId) setRecentOfferIds((ids) => rememberOffer(ids, model.offerId ?? "", validOfferIds));
-			if (selected && sourceOffer && targetOffer && sourceOffer.offerId !== targetOffer.offerId) {
-				const source = routeFromOffer(sourceOffer);
-				const target = routeFromOffer(targetOffer);
-				setRouteEvents((events) => [...events, createRouteEvent({ sessionId: activeChat?.id ?? "", requestId: `manual:${Date.now()}`, source: { offerId: source.offerId, routeId: source.routeId, familyId: source.familyId, modelId: source.modelId, relayName: source.relayName, billingAccountId: source.billingAccountId ?? undefined }, target: { offerId: target.offerId, routeId: target.routeId, familyId: target.familyId, modelId: target.modelId, relayName: target.relayName, billingAccountId: target.billingAccountId ?? undefined }, authorization: "none", automatic: false, retried: false, result: "switched" })].slice(-100));
-			}
-		}, [actions, activeChat?.id, modelFamilies.offers, state.model, validOfferIds, session.isCurrent, setRouteEvents, setRouteAuthorization]);
+		if (selected && session.isCurrent() && model.offerId) setRecentOfferIds((ids) => rememberOffer(ids, model.offerId!, validOfferIds));
+	}, [actions, session.isCurrent, validOfferIds]);
 	const displayState = { ...state, model: displayModel, availableModels: displayModels };
 
-	const openLauncher = useCallback(() => { if (library.workspace) { setView("launcher"); if (window.innerWidth <= 760) setSidebarOpen(false); } }, [library.workspace]);
+	const openLauncher = useCallback(() => { void drafts.flush(); if (library.workspace) { setView("launcher"); if (window.innerWidth <= 760) setSidebarOpen(false); } }, [library.workspace]);
 	const resumeChat = useCallback(() => { if (activeChat) setView("chat"); }, [activeChat]);
 	const selectChat = useCallback((id: string) => {
 		if (navigationDisabled) return;
@@ -208,12 +158,19 @@ export default function App() {
 		if (navigationDisabled) return;
 		library.selectProject(id);
 	}, [library, navigationDisabled]);
+	const retrieval = useConversationSearch(visibleChats, library.workspace?.projects ?? [], pool.messages, activeChat?.id, session.loading ? undefined : session.owner.id, selectChat);
+	const newDraft = useCallback(() => {
+		if (navigationDisabled || !activeProject) return;
+		void drafts.flush();
+		library.createChat(activeProject.id, activeChat?.selectedModel, new Set(allChats.filter((chat) => !pool.canClose(chat.id) || hasDraft(drafts.get(chat.id))).map((chat) => chat.id)));
+		setView("chat"); if (window.innerWidth <= 760) setSidebarOpen(false);
+	}, [library, navigationDisabled, activeProject, activeChat?.selectedModel, allChats, pool.canClose]);
 	const startLauncherChat = useCallback(async (offer: RuntimeOffer) => {
 		if (navigationDisabled || modelFamilies.loading) return;
 		if (!activeProject) { setModelNotice("请先选择一个项目后再开始聊天"); return; }
 		// Reusing the active empty draft keeps its pi process alive. Apply the
 		// explicitly chosen offer there before entering chat, just as the picker does.
-		if (activeChat && !activeChat.hasMessages && activeChat.projectId === activeProject.id && !busy && !session.loading) {
+		if (activeChat && !activeChat.hasMessages && !activeChat.hasDraft && !hasDraft(drafts.get(activeChat.id)) && activeChat.projectId === activeProject.id && !busy && !session.loading) {
 			const model = displayModels.find((item) => item.provider === offer.providerKey && item.id === offer.modelId);
 			if (!model || !await actions.setModel(model)) return;
 		}
@@ -226,20 +183,17 @@ export default function App() {
 			if (document.querySelector("dialog[open]")) return;
 			if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "n") {
 				event.preventDefault();
-				openLauncher();
+				newDraft();
 			}
 		};
 		window.addEventListener("keydown", onKeyDown);
 		return () => window.removeEventListener("keydown", onKeyDown);
-	}, [openLauncher]);
+	}, [newDraft]);
 
-	const send = async (text: string, images?: ImageAttachment[]) => {
+	const send = async (text: string, images?: ImageAttachment[], delivery?: Delivery) => {
 		if (!activeChat) return false;
 		if (!modelFamilies.fallback && !displayModel) { setModelNotice("请先在中转上配置线路并启用后再发送消息"); return false; }
-		requestRequirements.current = { streaming: true, tools: state.model?.tools === true, reasoning: state.model?.reasoning === true, vision: !!images?.length || state.model?.vision === true };
-		const accepted = await actions.prompt(text, images);
-		if (!session.isCurrent()) return false;
-		if (!accepted) requestRequirements.current = {};
+		const accepted = await actions.prompt(text, images, delivery);
 		if (accepted && displayModel?.offerId) pendingRecentOffer.current = { id: displayModel.offerId, assistantCount: state.messages.filter((message) => message.role === "assistant").length };
 		if (accepted) library.updateChat(activeChat.id, { updatedAt: Date.now() });
 		return accepted;
@@ -266,81 +220,6 @@ export default function App() {
 		manage: () => setProviderDialogOpen(true),
 	}), [modelFamilies.offers, modelFamilies.families, displayModels, displayModel, selectModel, pricingModels]);
 
-	// A provider error offers the next route of the same family that serves the
-	// same model; the setting decides whether that switch happens on its own.
-	const routeFromOffer = (offer: RuntimeOffer): AuthorizationRoute => ({ familyId: offer.familyId, familyName: offer.familyName, modelId: offer.modelId, offerId: offer.offerId, routeId: offer.routeId, relayName: offer.relayName, billingAccountId: offer.billingAccountId });
-	const sourceRoute = useMemo<AuthorizationRoute | undefined>(() => {
-		if (!state.model) return undefined;
-		const offer = modelFamilies.offers.find((item) => (state.model?.routeId && item.routeId === state.model.routeId && item.modelId === state.model.id) || (item.providerKey === state.model?.provider && item.modelId === state.model.id));
-		return offer ? routeFromOffer(offer) : { familyId: state.model.familyId, familyName: state.model.familyName, modelId: state.model.modelId ?? state.model.id, offerId: state.model.offerId, routeId: state.model.routeId, relayName: state.model.providerName ?? state.model.provider, billingAccountId: undefined };
-	}, [modelFamilies.offers, state.model]);
-	const modelForOffer = (offer: RuntimeOffer): ModelInfo => ({ provider: offer.providerKey, id: offer.modelId, modelId: offer.modelId, routeId: offer.routeId, offerId: offer.offerId, familyId: offer.familyId, familyName: offer.familyName, relayId: offer.relayId });
-	const auditRoute = (route: AuthorizationRoute): AuditRouteRef => ({ offerId: route.offerId, routeId: route.routeId, familyId: route.familyId, modelId: route.modelId, relayName: route.relayName, billingAccountId: route.billingAccountId ?? undefined });
-	const recordRouteEvent = useCallback((source: AuthorizationRoute | undefined, target: AuthorizationRoute | undefined, requestId: string, failureKind: ReturnType<typeof classifyProviderFailure> | undefined, authorization: RouteEvent["authorization"], automatic: boolean, result: RouteEvent["result"]) => {
-		setRouteEvents((events) => [...events, createRouteEvent({ sessionId: activeChat?.id ?? "", requestId, source: source ? auditRoute(source) : undefined, target: target ? auditRoute(target) : undefined, failureKind, authorization, automatic, retried: false, result })].slice(-100));
-	}, [activeChat?.id, setRouteEvents]);
-	const applyAuthorizedSwitch = useCallback(async (target: AuthorizationRoute, model: ModelInfo, authorization: "same_route" | "same_account" | "session" | "once") => {
-		if (!await actions.setModel(model)) return false;
-		if (!session.isCurrent()) return false;
-		setModelNotice(authorization === "same_account" ? `已静默切换到 ${target.relayName}（同一扣费账户：${billingAccountLabel(target)}）` : `已切换到 ${target.relayName} · ${target.modelId}（已获得线路授权）`);
-		return true;
-	}, [actions, session.isCurrent, setModelNotice]);
-	const authorizeFailover = useCallback((offer: RuntimeOffer, automatic = false) => {
-		if (!sourceRoute) return;
-		const model = modelForOffer(offer);
-		const targetRoute = routeFromOffer(offer);
-		const failureKind = classifyProviderFailure(state.lastError ?? "");
-		const transition = requestRouteSwitch(routeAuthorization, sourceRoute, targetRoute);
-		setRouteAuthorization(transition.state);
-		if (transition.effect.kind === "allow") {
-			const effect = transition.effect;
-			const authorization = effect.authorization === "same_route" ? "none" : effect.authorization;
-			void applyAuthorizedSwitch(effect.target, model, effect.authorization).then((switched) => recordRouteEvent(sourceRoute, targetRoute, `${activeChat?.id ?? ""}:${Date.now()}`, failureKind, authorization, automatic, switched ? "switched" : "failed"));
-		}
-		else if (transition.effect.kind === "prompt") routeAuthorizationContext.current = { requestId: transition.effect.prompt.request.requestId, automatic, failureKind };
-		else if (transition.effect.kind === "deny" || transition.effect.kind === "stale") setModelNotice(transition.effect.systemMessage);
-	}, [activeChat?.id, applyAuthorizedSwitch, recordRouteEvent, routeAuthorization, sourceRoute, state.lastError]);
-	const resolveAuthorization = useCallback((requestId: string, choice: RouteAuthorizationChoice) => {
-		const transition = resolveRouteAuthorization(routeAuthorization, requestId, choice);
-		setRouteAuthorization(transition.state);
-		const effect = transition.effect;
-		if (effect.kind === "allow") {
-			const offer = modelFamilies.offers.find((item) => item.offerId === effect.target.offerId);
-			const context = routeAuthorizationContext.current?.requestId === requestId ? routeAuthorizationContext.current : undefined;
-			if (offer) {
-				const authorization = effect.authorization === "same_route" ? "none" : effect.authorization;
-				void applyAuthorizedSwitch(effect.target, modelForOffer(offer), effect.authorization).then((switched) => recordRouteEvent(effect.source, effect.target, requestId, context?.failureKind, authorization, context?.automatic ?? false, switched ? "switched" : "failed"));
-			}
-			else setModelNotice("目标线路已失效，请重新选择可用线路。");
-		}
-		else if (effect.kind === "deny") {
-			const context = routeAuthorizationContext.current?.requestId === requestId ? routeAuthorizationContext.current : undefined;
-			recordRouteEvent(effect.source, effect.target, requestId, context?.failureKind, "keep_failed", context?.automatic ?? false, "denied");
-			setModelNotice(effect.systemMessage);
-		}
-		else if (effect.kind === "stale") setModelNotice(effect.systemMessage);
-		if (routeAuthorizationContext.current?.requestId === requestId) routeAuthorizationContext.current = undefined;
-	}, [applyAuthorizedSwitch, modelFamilies.offers, recordRouteEvent, routeAuthorization]);
-	const failover = useMemo(() => {
-		if (!state.lastError || !state.model || classifyProviderFailure(state.lastError) === "non_retryable") return undefined;
-		const next = nextRoute(state.model, modelFamilies.offers, requestRequirements.current);
-		if (!next) return undefined;
-		return { label: `${next.relayName} · ${next.modelId}`, switch: (automatic = false) => authorizeFailover(next, automatic) };
-	}, [state.lastError, state.model, modelFamilies.offers, authorizeFailover]);
-	const autoSwitchRef = useSessionRef<{ chatId: string; requestId: string; attempted: boolean }>(session.owner, () => undefined);
-	useEffect(() => {
-		const users = state.messages.filter((message) => message.role === "user");
-		const requestId = users[users.length - 1]?.id ?? `messages-${state.messages.length}`;
-		if (!activeChat) return;
-		if (autoSwitchRef.current?.chatId !== activeChat.id || autoSwitchRef.current.requestId !== requestId) autoSwitchRef.current = { chatId: activeChat.id, requestId, attempted: false };
-		if (!state.lastError || classifyProviderFailure(state.lastError) === "non_retryable" || !modelFamilies.config?.autoFailover || !failover || busy || !connected || autoSwitchRef.current.attempted) return;
-		autoSwitchRef.current.attempted = true;
-		failover.switch(true);
-	}, [activeChat?.id, failover, modelFamilies.config?.autoFailover, state.lastError, state.messages, busy, connected]);
-	const routeAuthorizationPrompt = routeAuthorization.sessionId === (activeChat?.id ?? "none") && routeAuthorization.pending ? {
-		request: routeAuthorization.pending,
-		onChoice: (choice: RouteAuthorizationChoice) => resolveAuthorization(routeAuthorization.pending?.requestId ?? "", choice),
-	} : undefined;
 	const headerModel: ModelInfo | undefined = displayModel ?? state.model ?? (activeChat?.selectedModel ? { ...activeChat.selectedModel, modelId: activeChat.selectedModel.modelId ?? activeChat.selectedModel.id, name: activeChat.selectedModel.modelId ?? activeChat.selectedModel.id, providerName: activeChat.selectedModel.routeId ?? activeChat.selectedModel.provider } : undefined);
 	const headerFamily = headerModel ? familyContext.familyOf(headerModel) : undefined;
 
@@ -350,26 +229,28 @@ export default function App() {
 		<div className={`app ${sidebarOpen ? "with-sidebar" : ""}`}>
 			<TitleBar />
 			<div className="app-body" style={{ "--sidebar-width": `${shownSidebarWidth}px` } as CSSProperties}>
-			{sidebarOpen && <SidebarPresentation onClose={() => setSidebarOpen(false)}><Sidebar projects={library.workspace?.projects ?? []} chats={visibleChats} activeId={activeChat?.id} activeProjectId={activeProject?.id} homeActive={currentView === "launcher"} disabled={navigationDisabled} runningIds={pool.runningIds} canCloseChat={pool.canClose} navigationDisabled={navigationDisabled} connected={connected} onHome={openLauncher} onNewChat={openLauncher} onSelectChat={selectChat} onSelectProject={selectProject} onAddProject={() => setProjectDialogOpen(true)} onClose={() => setSidebarOpen(false)} onRenameChat={library.renameChat} onRenameProject={library.renameProject} onDeleteChat={deleteArchivedChat} onDeleteProject={(id) => { if (allChats.filter((chat) => chat.projectId === id).every((chat) => pool.canClose(chat.id))) library.deleteProject(id); }} onArchiveChat={archiveChat} onTogglePinChat={(id, pinned) => library.updateChat(id, { pinned })} /></SidebarPresentation>}
+			{sidebarOpen && <SidebarPresentation onClose={() => setSidebarOpen(false)}><Sidebar projects={library.workspace?.projects ?? []} chats={visibleChats} activeId={activeChat?.id} activeProjectId={activeProject?.id} homeActive={currentView === "launcher"} disabled={navigationDisabled} runningIds={pool.runningIds} canCloseChat={pool.canClose} navigationDisabled={navigationDisabled} connected={connected} onHome={openLauncher} onNewChat={newDraft} statuses={pool.statuses} searchProgress={retrieval.progress} searchQuery={retrieval.query} onSearch={retrieval.setQuery} onSearchMatch={retrieval.openMatch} onSelectChat={selectChat} onSelectProject={selectProject} onAddProject={() => setProjectDialogOpen(true)} onClose={() => setSidebarOpen(false)} onRenameChat={library.renameChat} onRenameProject={library.renameProject} onDeleteChat={deleteArchivedChat} onDeleteProject={(id) => { if (allChats.filter((chat) => chat.projectId === id).every((chat) => pool.canClose(chat.id))) library.deleteProject(id); }} onArchiveChat={archiveChat} onTogglePinChat={(id, pinned) => library.updateChat(id, { pinned })} /></SidebarPresentation>}
 			{desktopSidebarOpen && <ResizeSeparator label="调整左侧导航宽度" value={shownSidebarWidth} bounds={sidebarBounds} onResize={setSidebarWidthFromDrag} onCommit={commitSidebarWidth} />}
 			<main className="workspace">
 				<header className="chat-header">
 					{!sidebarOpen && <Tooltip text="展开侧栏" align="start"><IconButton onClick={() => setSidebarOpen(true)} aria-label="展开侧栏"><Icon name="panel" /></IconButton></Tooltip>}
 					<div className="header-title">
-						<div className="header-title-row"><span>{currentView === "launcher" ? "主页" : activeChat?.title ?? "新聊天"}</span>{currentView === "chat" && activeProject && <span className="header-project" title={activeProject.path}><Icon name="folder" size={14} />{activeProject.name}</span>}</div>
+						<div className="header-title-row"><span>{currentView === "launcher" ? "主页" : activeChat ? conversationLabel(activeChat, visibleChats) : "新聊天"}</span>{currentView === "chat" && activeProject && <span className="header-project" title={activeProject.path}><Icon name="folder" size={14} />{activeProject.name}</span>}</div>
 						{currentView === "launcher" ? <span className="header-subtitle">模型优先的任务入口</span> : headerModel && <span className="header-model" title={`${headerFamily?.name ?? headerModel.familyName ?? headerModel.provider} · ${headerModel.providerName ?? headerModel.provider} · ${headerModel.id}`}><span>{headerFamily?.name ?? headerModel.familyName ?? headerModel.provider}</span><span className="header-model-sep">·</span><span>{headerModel.modelId ?? headerModel.id}</span><span className="header-model-sep">·</span><span>{headerModel.providerName ?? headerModel.provider}</span></span>}
 					</div>
-					<div className="header-actions">{busy && <span className="working"><span className="dot busy" />正在处理</span>}<ThemeToggle />{currentView === "chat" && state.messages.length > 0 && <Tooltip text="分享对话"><IconButton onClick={() => setShareDialogOpen(true)} disabled={busy} aria-label="分享对话"><Icon name="share" /></IconButton></Tooltip>}<Tooltip text="系统提示词"><IconButton onClick={() => setPromptDialogOpen(true)} disabled={busy} aria-label="系统提示词"><Icon name="message" /></IconButton></Tooltip><Tooltip text="设置"><IconButton onClick={() => setProviderDialogOpen(true)} disabled={busy} aria-label="设置"><Icon name="settings" /></IconButton></Tooltip><Tooltip text="诊断日志"><IconButton className={`${rawOpen ? "active" : ""}`} onClick={() => setRawOpen((open) => !open)} aria-label="诊断日志" aria-pressed={rawOpen}><Icon name="code" /></IconButton></Tooltip></div>
+					<div className="header-actions"><BackgroundSessions statuses={pool.statuses} activeId={activeChat?.id} chats={visibleChats} onSelect={selectChat} disabled={navigationDisabled} />{busy && <span className="working"><span className="dot busy" />{state.isStreaming ? "运行中" : "等待响应"}</span>}<ThemeToggle />{currentView === "chat" && state.messages.length > 0 && <Tooltip text="分享对话"><IconButton onClick={() => setShareDialogOpen(true)} disabled={busy} aria-label="分享对话"><Icon name="share" /></IconButton></Tooltip>}<Tooltip text="系统提示词"><IconButton onClick={() => setPromptDialogOpen(true)} disabled={busy} aria-label="系统提示词"><Icon name="message" /></IconButton></Tooltip><Tooltip text="设置"><IconButton onClick={() => setProviderDialogOpen(true)} disabled={busy} aria-label="设置"><Icon name="settings" /></IconButton></Tooltip><Tooltip text="诊断日志"><IconButton className={`${rawOpen ? "active" : ""}`} onClick={() => setRawOpen((open) => !open)} aria-label="诊断日志" aria-pressed={rawOpen}><Icon name="code" /></IconButton></Tooltip></div>
 				</header>
+				{retrieval.notice && <div className="workspace-alert" role="status">{retrieval.notice}<Button variant="ghost" onClick={retrieval.closeNotice}>关闭</Button></div>}
 				{library.error && <div className="workspace-alert" role="alert"><span>{library.error}</span><Button variant="ghost" onClick={library.workspace ? library.clearError : () => void library.initialize()} disabled={library.loading}>{library.workspace ? "关闭" : "重试"}</Button></div>}
 				{currentView === "launcher" && (session.loading || (!connected && state.lastError)) && <div className="workspace-alert" role={session.loading ? "status" : "alert"} aria-label={session.loading ? "正在加载会话" : undefined}><span>{session.loading ? "正在加载会话…" : state.lastError}</span>{!session.loading && <Button variant="ghost" onClick={() => session.reconnect()}>重新连接</Button>}</div>}
 				<div className="body">
-					{currentView === "launcher" ? <LauncherView activeChat={activeChat} activeProject={activeProject} projects={library.workspace?.projects ?? []} chats={visibleChats} offers={modelFamilies.offers} recentOfferIds={recentOfferIds} familyDefaults={modelFamilies.families} disabled={navigationDisabled || modelFamilies.loading} navigationDisabled={navigationDisabled} loading={modelFamilies.loading} error={modelFamilies.error} onResume={resumeChat} onSelectProject={selectProject} onAddProject={() => setProjectDialogOpen(true)} onManageProviders={() => setProviderDialogOpen(true)} onRetryModels={modelFamilies.refresh} onStartChat={startLauncherChat} onOpenChat={selectChat} /> : <VoyageWorkspace modelNotice={modelNotice} key={`${session.owner.id ?? "loading"}:${session.owner.cwd ?? ""}`} state={displayState} loading={session.loading} connected={connected} pending={session.pending} actions={actions} onSend={send} onReconnect={session.reconnect} projectName={activeProject?.name} search={search} onConfigureSearch={() => setSearchDialogOpen(true)} failover={failover} routeAuthorization={routeAuthorizationPrompt} railWidth={shownVoyageWidth} availableWidth={workspaceWidth} onRailWidth={setVoyageWidthFromDrag} onRailWidthCommit={commitVoyageWidth} />}
+					{currentView === "launcher" ? <LauncherView activeChat={activeChat} activeProject={activeProject} projects={library.workspace?.projects ?? []} chats={visibleChats} offers={modelFamilies.offers} recentOfferIds={recentOfferIds} familyDefaults={modelFamilies.families} disabled={navigationDisabled || modelFamilies.loading} navigationDisabled={navigationDisabled} loading={modelFamilies.loading} error={modelFamilies.error} onResume={resumeChat} onSelectProject={selectProject} onAddProject={() => setProjectDialogOpen(true)} onManageProviders={() => setProviderDialogOpen(true)} onRetryModels={modelFamilies.refresh} onStartChat={startLauncherChat} onOpenChat={selectChat} /> : <VoyageWorkspace draftTarget={activeChat && activeProject ? { chatId: activeChat.id, cwd: activeProject.path, sessionFile: activeChat.hasMessages ? activeChat.sessionFile : undefined } : undefined} revealMessage={retrieval.reveal} modelNotice={modelNotice} key={`${session.owner.id ?? "loading"}:${session.owner.cwd ?? ""}`} state={displayState} loading={session.loading} connected={connected} pending={session.pending} actions={actions} onSend={send} onReconnect={session.reconnect} projectName={activeProject?.name} search={search} onConfigureSearch={() => setSearchDialogOpen(true)} failover={failover} routeAuthorization={routeAuthorizationPrompt} railWidth={shownVoyageWidth} availableWidth={workspaceWidth} onRailWidth={setVoyageWidthFromDrag} onRailWidthCommit={commitVoyageWidth} />}
 					{rawOpen && currentView === "chat" && <div className="raw-panel"><IconButton className="raw-close" onClick={() => setRawOpen(false)} aria-label="关闭诊断日志"><Icon name="close" /></IconButton><RawDrawer lines={rawLines} /></div>}
 				</div>
 				{shareDialogOpen && currentView === "chat" && <ShareDialog title={activeChat?.title} messages={state.messages} onClose={() => setShareDialogOpen(false)} />}
 			</main>
 			</div>
+			{retrieval.historyView && <HistorySearchDialog {...retrieval.historyView} onClose={retrieval.closeHistory} />}
 			{projectDialogOpen && <ProjectDialog onAdd={library.addProject} onClose={() => setProjectDialogOpen(false)} />}
 			{providerDialogOpen && <FamiliesSettings configError={modelFamilies.error} families={modelFamilies.families} relays={modelFamilies.relays} autoFailover={modelFamilies.config?.autoFailover ?? false} usdCnyRate={modelFamilies.usdCnyRate} onSaveRate={modelFamilies.setUsdCnyRate} onSaveRelay={modelFamilies.saveRelay} onDeleteRelay={modelFamilies.deleteRelay} onSetRelayEnabled={modelFamilies.setRelayEnabled} onSaveRoute={modelFamilies.saveRoute} onDeleteRoute={modelFamilies.deleteRoute} onReorderRoutes={modelFamilies.reorderRoutes} onSetDefaultRoute={modelFamilies.setDefaultRoute} onAutoFailover={modelFamilies.setAutoFailover} onTest={modelFamilies.test} onCancelTest={modelFamilies.cancelTest} onDiscover={modelFamilies.discover} chats={archivedChats} projects={library.workspace?.projects ?? []} navigationBusy={locked} onRestoreArchive={restoreArchivedChat} onDeleteArchive={deleteArchivedChat} onClose={() => setProviderDialogOpen(false)} />}
 			{promptDialogOpen && <PromptDialog sessionPath={session.sessionFile} onSaved={() => { setPromptDialogOpen(false); session.reconnect(); }} onClose={() => setPromptDialogOpen(false)} />}

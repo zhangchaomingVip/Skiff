@@ -1,0 +1,4636 @@
+{
+  "browser": "151.0.4129.101",
+  "mode": "production",
+  "profile": false,
+  "fixtureQuery": "",
+  "viewport": [
+    1440,
+    1000
+  ],
+  "cpuThrottle": 1,
+  "baseline": false,
+  "checks": [
+    {
+      "name": "启动挂起时跨项目会话按钮可用",
+      "passed": true
+    },
+    {
+      "name": "A 启动未释放即可真实点击选中 B",
+      "passed": true
+    },
+    {
+      "name": "B 点击进入真实事件处理入口",
+      "passed": true
+    },
+    {
+      "name": "目标会话立即显示加载反馈或已完成加载",
+      "passed": true
+    },
+    {
+      "name": "迟到启动继续加载自己的会话，各会话独立持有进程",
+      "passed": true
+    },
+    {
+      "name": "每次正式 App 渲染均未把旧历史交给新会话子树",
+      "passed": true
+    },
+    {
+      "name": "switch_session 挂起时真实导航不等待 35 秒超时",
+      "passed": true
+    },
+    {
+      "name": "switch_session 迟到错误、消息、stderr 与退出均不污染当前快照",
+      "passed": true
+    },
+    {
+      "name": "get_messages 挂起时真实导航不等待 35 秒超时",
+      "passed": true
+    },
+    {
+      "name": "get_messages 迟到错误、消息、stderr 与退出均不污染当前快照",
+      "passed": true
+    },
+    {
+      "name": "A→B→C→A 复用原会话，已打开会话各自保留进程",
+      "passed": true
+    },
+    {
+      "name": "各目标各自恢复一次历史",
+      "passed": true
+    },
+    {
+      "name": "重复选择当前目标不启动、恢复或读取历史",
+      "passed": true
+    },
+    {
+      "name": "rpc_start 初始化失败展示当前错误与重试入口",
+      "passed": true
+    },
+    {
+      "name": "Launcher 同样显示当前初始化错误与重试入口",
+      "passed": true
+    },
+    {
+      "name": "rpc_start 失败不永久 loading",
+      "passed": true
+    },
+    {
+      "name": "rpc_start 同 ID 重试建立独立批次",
+      "passed": true
+    },
+    {
+      "name": "switch_session 初始化失败展示当前错误与重试入口",
+      "passed": true
+    },
+    {
+      "name": "switch_session 失败不永久 loading",
+      "passed": true
+    },
+    {
+      "name": "switch_session 同 ID 重试建立独立批次",
+      "passed": true
+    },
+    {
+      "name": "get_messages 初始化失败展示当前错误与重试入口",
+      "passed": true
+    },
+    {
+      "name": "get_messages 失败不永久 loading",
+      "passed": true
+    },
+    {
+      "name": "get_messages 同 ID 重试建立独立批次",
+      "passed": true
+    },
+    {
+      "name": "键盘 Enter 可在加载期间选择跨项目会话",
+      "passed": true
+    },
+    {
+      "name": "项目选择在加载期间可用",
+      "passed": true
+    },
+    {
+      "name": "右键菜单在加载期间可打开已有会话",
+      "passed": true
+    },
+    {
+      "name": "Launcher 最近会话在加载期间可打开",
+      "passed": true
+    },
+    {
+      "name": "生成期间右键菜单仍可打开其他会话",
+      "passed": true
+    },
+    {
+      "name": "发送请求挂起而 agent_start 尚未到达时仍允许导航",
+      "passed": true
+    },
+    {
+      "name": "生成中侧栏与项目入口可用",
+      "passed": true
+    },
+    {
+      "name": "生成中 Launcher 已有会话入口可用",
+      "passed": true
+    },
+    {
+      "name": "生成中 Launcher 项目入口可用",
+      "passed": true
+    },
+    {
+      "name": "修改模型请求未完成时仍允许导航",
+      "passed": true
+    },
+    {
+      "name": "文件、模型选择、RouteSnapshot、RouteEvent 和计时按会话持久化",
+      "passed": true
+    },
+    {
+      "name": "重载后模型与会话归属元数据仍正确",
+      "passed": true
+    },
+    {
+      "name": "同会话重连保留草稿",
+      "passed": true
+    },
+    {
+      "name": "不同会话子树隔离草稿与附件",
+      "passed": true
+    },
+    {
+      "name": "跨会话执行折叠与滚动跟随状态隔离",
+      "passed": true
+    },
+    {
+      "name": "空历史成功后展示空会话，结束加载",
+      "passed": true
+    },
+    {
+      "name": "同 ID 重连期间模型和历史立即隔离",
+      "passed": true
+    },
+    {
+      "name": "同 ID cwd 变化及旧批次成功/退出均不覆盖最新模型和文件",
+      "passed": true
+    },
+    {
+      "name": "启动未完成的重连模型偏好不跨 cwd 批次继承",
+      "passed": true
+    },
+    {
+      "name": "连续切换与卸载后进程和监听器清理完成",
+      "passed": true
+    }
+  ],
+  "samples": [
+    {
+      "id": 1,
+      "start": 1217.1000000238419,
+      "highlight": 23.5,
+      "paintOpportunity": 37.80000001192093,
+      "history": 23.69999998807907,
+      "ready": 23.69999998807907,
+      "mountedAtHighlight": 2,
+      "mountedReady": 2
+    },
+    {
+      "id": 0,
+      "start": 1310.800000011921,
+      "highlight": 78.19999998807907,
+      "paintOpportunity": 123,
+      "history": 78.5,
+      "ready": 78.5,
+      "mountedAtHighlight": 100,
+      "mountedReady": 100
+    },
+    {
+      "id": 1,
+      "start": 1480.4000000357628,
+      "highlight": 21.099999964237213,
+      "paintOpportunity": 33.80000001192093,
+      "history": 21.099999964237213,
+      "ready": 21.099999964237213,
+      "mountedAtHighlight": 2,
+      "mountedReady": 2
+    },
+    {
+      "id": 0,
+      "start": 1569.9000000357628,
+      "highlight": 82.30000001192093,
+      "paintOpportunity": 131.5999999642372,
+      "history": 82.69999998807907,
+      "ready": 82.69999998807907,
+      "mountedAtHighlight": 100,
+      "mountedReady": 100
+    },
+    {
+      "id": 1,
+      "start": 1754.5,
+      "highlight": 20.100000023841858,
+      "paintOpportunity": 33.200000047683716,
+      "history": 20.200000047683716,
+      "ready": 20.200000047683716,
+      "mountedAtHighlight": 2,
+      "mountedReady": 2
+    },
+    {
+      "id": 0,
+      "start": 1845.2000000476837,
+      "highlight": 84.09999996423721,
+      "paintOpportunity": 144.29999995231628,
+      "history": 84.5,
+      "ready": 84.5,
+      "mountedAtHighlight": 100,
+      "mountedReady": 100
+    },
+    {
+      "id": 1,
+      "start": 2049.800000011921,
+      "highlight": 21.5,
+      "paintOpportunity": 36.60000002384186,
+      "history": 21.600000023841858,
+      "ready": 21.600000023841858,
+      "mountedAtHighlight": 2,
+      "mountedReady": 2
+    },
+    {
+      "id": 0,
+      "start": 2144.2000000476837,
+      "highlight": 91.79999995231628,
+      "paintOpportunity": 138.5999999642372,
+      "history": 92,
+      "ready": 92,
+      "mountedAtHighlight": 100,
+      "mountedReady": 100
+    },
+    {
+      "id": 1,
+      "start": 2327.100000023842,
+      "highlight": 19,
+      "paintOpportunity": 32.60000002384186,
+      "history": 19.100000023841858,
+      "ready": 19.100000023841858,
+      "mountedAtHighlight": 2,
+      "mountedReady": 2
+    },
+    {
+      "id": 0,
+      "start": 2401,
+      "highlight": 81.70000004768372,
+      "paintOpportunity": 133.30000001192093,
+      "history": 82,
+      "ready": 82,
+      "mountedAtHighlight": 100,
+      "mountedReady": 100
+    },
+    {
+      "id": 1,
+      "start": 2597.600000023842,
+      "highlight": 25.30000001192093,
+      "paintOpportunity": 39.39999997615814,
+      "history": 25.399999976158142,
+      "ready": 25.399999976158142,
+      "mountedAtHighlight": 2,
+      "mountedReady": 2
+    },
+    {
+      "id": 0,
+      "start": 2693.400000035763,
+      "highlight": 69.39999997615814,
+      "paintOpportunity": 93.5,
+      "history": 69.69999998807907,
+      "ready": 69.80000001192093,
+      "mountedAtHighlight": 100,
+      "mountedReady": 100
+    },
+    {
+      "id": 1,
+      "start": 2845.300000011921,
+      "highlight": 18,
+      "paintOpportunity": 29,
+      "history": 18.100000023841858,
+      "ready": 18.100000023841858,
+      "mountedAtHighlight": 2,
+      "mountedReady": 2
+    },
+    {
+      "id": 0,
+      "start": 2924.900000035763,
+      "highlight": 54.19999998807907,
+      "paintOpportunity": 74.69999998807907,
+      "history": 54.39999997615814,
+      "ready": 54.39999997615814,
+      "mountedAtHighlight": 100,
+      "mountedReady": 100
+    },
+    {
+      "id": 1,
+      "start": 3050.800000011921,
+      "highlight": 17.400000035762787,
+      "paintOpportunity": 28.80000001192093,
+      "history": 17.600000023841858,
+      "ready": 17.600000023841858,
+      "mountedAtHighlight": 2,
+      "mountedReady": 2
+    },
+    {
+      "id": 0,
+      "start": 3134,
+      "highlight": 54.5,
+      "paintOpportunity": 74.70000004768372,
+      "history": 54.700000047683716,
+      "ready": 54.700000047683716,
+      "mountedAtHighlight": 100,
+      "mountedReady": 100
+    },
+    {
+      "id": 1,
+      "start": 3260.400000035763,
+      "highlight": 18,
+      "paintOpportunity": 29.30000001192093,
+      "history": 18.099999964237213,
+      "ready": 18.099999964237213,
+      "mountedAtHighlight": 2,
+      "mountedReady": 2
+    },
+    {
+      "id": 0,
+      "start": 3342.5,
+      "highlight": 57.40000003576279,
+      "paintOpportunity": 79.20000004768372,
+      "history": 57.60000002384186,
+      "ready": 57.60000002384186,
+      "mountedAtHighlight": 100,
+      "mountedReady": 100
+    },
+    {
+      "id": 1,
+      "start": 3477,
+      "highlight": 19.100000023841858,
+      "paintOpportunity": 31.900000035762787,
+      "history": 19.100000023841858,
+      "ready": 19.200000047683716,
+      "mountedAtHighlight": 2,
+      "mountedReady": 2
+    },
+    {
+      "id": 0,
+      "start": 3561.400000035763,
+      "highlight": 76.59999996423721,
+      "paintOpportunity": 118.80000001192093,
+      "history": 76.89999997615814,
+      "ready": 76.89999997615814,
+      "mountedAtHighlight": 100,
+      "mountedReady": 100
+    }
+  ],
+  "errors": [],
+  "reproduction": {
+    "spans": [
+      {
+        "type": "list_model_families",
+        "start": 2277.800000011921,
+        "end": 2322.199999988079
+      },
+      {
+        "type": "list_model_runtime",
+        "start": 2278.5,
+        "end": 2322.199999988079
+      },
+      {
+        "type": "get_web_search_status",
+        "start": 2278.800000011921,
+        "end": 2322.199999988079
+      },
+      {
+        "type": "set_history_workspace",
+        "start": 2280.199999988079,
+        "end": 2322.199999988079
+      },
+      {
+        "type": "plugin:event|listen",
+        "start": 2343.400000035763,
+        "end": 2354.5
+      },
+      {
+        "type": "plugin:event|listen",
+        "start": 2354.699999988079,
+        "end": 2354.699999988079
+      },
+      {
+        "type": "rpc_start",
+        "instance": "chat_9fb2a1ac-936a-4f34-b2f2-a6ffee19b652",
+        "start": 2354.699999988079,
+        "end": 2354.800000011921
+      },
+      {
+        "type": "switch_session",
+        "instance": "chat_9fb2a1ac-936a-4f34-b2f2-a6ffee19b652",
+        "start": 2354.800000011921,
+        "end": 2355.199999988079
+      },
+      {
+        "type": "set_model",
+        "instance": "chat_9fb2a1ac-936a-4f34-b2f2-a6ffee19b652",
+        "start": 2355.300000011921,
+        "end": 2355.300000011921
+      },
+      {
+        "type": "get_state",
+        "instance": "chat_9fb2a1ac-936a-4f34-b2f2-a6ffee19b652",
+        "start": 2355.400000035763,
+        "end": 2355.5
+      },
+      {
+        "type": "get_available_models",
+        "instance": "chat_9fb2a1ac-936a-4f34-b2f2-a6ffee19b652",
+        "start": 2355.400000035763,
+        "end": 2355.5
+      },
+      {
+        "type": "get_messages",
+        "instance": "chat_9fb2a1ac-936a-4f34-b2f2-a6ffee19b652",
+        "start": 2355.400000035763,
+        "end": 2508.199999988079
+      },
+      {
+        "type": "get_available_thinking_levels",
+        "instance": "chat_9fb2a1ac-936a-4f34-b2f2-a6ffee19b652",
+        "start": 2355.400000035763,
+        "end": 2355.5
+      },
+      {
+        "type": "get_session_stats",
+        "instance": "chat_9fb2a1ac-936a-4f34-b2f2-a6ffee19b652",
+        "start": 2355.400000035763,
+        "end": 2355.5
+      },
+      {
+        "type": "plugin:image|new",
+        "start": 2409.5,
+        "end": 2409.699999988079
+      },
+      {
+        "type": "get_commands",
+        "instance": "chat_9fb2a1ac-936a-4f34-b2f2-a6ffee19b652",
+        "start": 2571.5,
+        "end": 2586.400000035763
+      },
+      {
+        "type": "get_commands",
+        "instance": "chat_9fb2a1ac-936a-4f34-b2f2-a6ffee19b652",
+        "start": 2571.800000011921,
+        "end": 2586.400000035763
+      },
+      {
+        "type": "plugin:event|listen",
+        "start": 2664.900000035763,
+        "end": 2666.199999988079
+      },
+      {
+        "type": "plugin:event|listen",
+        "start": 2666.199999988079,
+        "end": 2666.199999988079
+      },
+      {
+        "type": "rpc_start",
+        "instance": "chat_b77123e9-1f71-46da-be7c-75decc6792be",
+        "start": 2666.199999988079,
+        "end": 2889.199999988079
+      },
+      {
+        "type": "plugin:event|listen",
+        "start": 2732.600000023842,
+        "end": 2734
+      },
+      {
+        "type": "plugin:event|listen",
+        "start": 2734.100000023842,
+        "end": 2734.100000023842
+      },
+      {
+        "type": "rpc_start",
+        "instance": "chat_2edbf2b5-8f94-4a27-bf6d-7f0b3d986340",
+        "start": 2734.100000023842,
+        "end": 2734.100000023842
+      },
+      {
+        "type": "switch_session",
+        "instance": "chat_2edbf2b5-8f94-4a27-bf6d-7f0b3d986340",
+        "start": 2734.100000023842,
+        "end": 2734.5
+      },
+      {
+        "type": "set_model",
+        "instance": "chat_2edbf2b5-8f94-4a27-bf6d-7f0b3d986340",
+        "start": 2734.5,
+        "end": 2734.600000023842
+      },
+      {
+        "type": "get_state",
+        "instance": "chat_2edbf2b5-8f94-4a27-bf6d-7f0b3d986340",
+        "start": 2734.600000023842,
+        "end": 2734.800000011921
+      },
+      {
+        "type": "get_available_models",
+        "instance": "chat_2edbf2b5-8f94-4a27-bf6d-7f0b3d986340",
+        "start": 2734.699999988079,
+        "end": 2734.800000011921
+      },
+      {
+        "type": "get_messages",
+        "instance": "chat_2edbf2b5-8f94-4a27-bf6d-7f0b3d986340",
+        "start": 2734.699999988079,
+        "end": 2889.800000011921
+      },
+      {
+        "type": "get_available_thinking_levels",
+        "instance": "chat_2edbf2b5-8f94-4a27-bf6d-7f0b3d986340",
+        "start": 2734.699999988079,
+        "end": 2734.800000011921
+      },
+      {
+        "type": "get_session_stats",
+        "instance": "chat_2edbf2b5-8f94-4a27-bf6d-7f0b3d986340",
+        "start": 2734.699999988079,
+        "end": 2734.800000011921
+      },
+      {
+        "type": "switch_session",
+        "instance": "chat_b77123e9-1f71-46da-be7c-75decc6792be",
+        "start": 2889.199999988079,
+        "end": 2889.300000011921
+      },
+      {
+        "type": "set_model",
+        "instance": "chat_b77123e9-1f71-46da-be7c-75decc6792be",
+        "start": 2889.300000011921,
+        "end": 2889.400000035763
+      },
+      {
+        "type": "get_state",
+        "instance": "chat_b77123e9-1f71-46da-be7c-75decc6792be",
+        "start": 2889.400000035763,
+        "end": 2889.699999988079
+      },
+      {
+        "type": "get_available_models",
+        "instance": "chat_b77123e9-1f71-46da-be7c-75decc6792be",
+        "start": 2889.600000023842,
+        "end": 2889.699999988079
+      },
+      {
+        "type": "get_messages",
+        "instance": "chat_b77123e9-1f71-46da-be7c-75decc6792be",
+        "start": 2889.699999988079
+      },
+      {
+        "type": "get_available_thinking_levels",
+        "instance": "chat_b77123e9-1f71-46da-be7c-75decc6792be",
+        "start": 2889.699999988079,
+        "end": 2889.699999988079
+      },
+      {
+        "type": "get_session_stats",
+        "instance": "chat_b77123e9-1f71-46da-be7c-75decc6792be",
+        "start": 2889.699999988079,
+        "end": 2889.699999988079
+      },
+      {
+        "type": "get_commands",
+        "instance": "chat_2edbf2b5-8f94-4a27-bf6d-7f0b3d986340",
+        "start": 2902,
+        "end": 2908.300000011921
+      },
+      {
+        "type": "get_commands",
+        "instance": "chat_2edbf2b5-8f94-4a27-bf6d-7f0b3d986340",
+        "start": 2902.300000011921,
+        "end": 2908.300000011921
+      }
+    ],
+    "renders": [
+      {
+        "id": "s0",
+        "owner": {
+          "id": "s0",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 1
+        },
+        "connected": false,
+        "pending": false,
+        "messageCount": 0,
+        "foreignMessages": 0,
+        "sendable": false,
+        "logs": 0,
+        "elapsedMs": 0,
+        "time": 2189.300000011921
+      },
+      {
+        "id": "s0",
+        "owner": {
+          "id": "s0",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 2
+        },
+        "connected": false,
+        "pending": false,
+        "messageCount": 0,
+        "foreignMessages": 0,
+        "sendable": false,
+        "logs": 0,
+        "elapsedMs": 0,
+        "time": 2281.400000035763
+      },
+      {
+        "id": "s0",
+        "owner": {
+          "id": "s0",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 2
+        },
+        "connected": false,
+        "pending": false,
+        "messageCount": 0,
+        "foreignMessages": 0,
+        "sendable": false,
+        "logs": 0,
+        "elapsedMs": 0,
+        "time": 2330.5
+      },
+      {
+        "id": "s0",
+        "owner": {
+          "id": "s0",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 3
+        },
+        "connected": false,
+        "pending": false,
+        "messageCount": 0,
+        "foreignMessages": 0,
+        "sendable": false,
+        "logs": 0,
+        "elapsedMs": 0,
+        "time": 2344
+      },
+      {
+        "id": "s0",
+        "owner": {
+          "id": "s0",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 3
+        },
+        "connected": false,
+        "pending": false,
+        "messageCount": 0,
+        "foreignMessages": 0,
+        "sendable": false,
+        "logs": 0,
+        "elapsedMs": 0,
+        "time": 2359.600000023842
+      },
+      {
+        "id": "s0",
+        "owner": {
+          "id": "s0",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 3
+        },
+        "connected": false,
+        "pending": false,
+        "messageCount": 0,
+        "foreignMessages": 0,
+        "sendable": false,
+        "logs": 6,
+        "elapsedMs": 0,
+        "time": 2371.199999988079
+      },
+      {
+        "id": "s0",
+        "owner": {
+          "id": "s0",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 3
+        },
+        "connected": false,
+        "pending": false,
+        "messageCount": 0,
+        "foreignMessages": 0,
+        "sendable": false,
+        "logs": 6,
+        "elapsedMs": 0,
+        "time": 2377.900000035763
+      },
+      {
+        "id": "s0",
+        "owner": {
+          "id": "s0",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 3
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 100,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 7,
+        "file": "s0.jsonl",
+        "elapsedMs": 0,
+        "time": 2509.800000011921
+      },
+      {
+        "id": "s0",
+        "owner": {
+          "id": "s0",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 3
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 100,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 7,
+        "file": "s0.jsonl",
+        "elapsedMs": 0,
+        "time": 2572.199999988079
+      },
+      {
+        "id": "s0",
+        "owner": {
+          "id": "s0",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 3
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 100,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 9,
+        "file": "s0.jsonl",
+        "elapsedMs": 0,
+        "time": 2573.400000035763
+      },
+      {
+        "id": "s0",
+        "owner": {
+          "id": "s0",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 3
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 100,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 9,
+        "file": "s0.jsonl",
+        "elapsedMs": 0,
+        "time": 2590.699999988079
+      },
+      {
+        "id": "s1",
+        "owner": {
+          "id": "s1",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 1
+        },
+        "connected": false,
+        "pending": false,
+        "messageCount": 0,
+        "foreignMessages": 0,
+        "sendable": false,
+        "logs": 0,
+        "elapsedMs": 0,
+        "time": 2653.400000035763
+      },
+      {
+        "id": "s1",
+        "owner": {
+          "id": "s1",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 4
+        },
+        "connected": false,
+        "pending": false,
+        "messageCount": 0,
+        "foreignMessages": 0,
+        "sendable": false,
+        "logs": 0,
+        "elapsedMs": 100,
+        "time": 2669
+      },
+      {
+        "id": "s1",
+        "owner": {
+          "id": "s1",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 4
+        },
+        "connected": false,
+        "pending": false,
+        "messageCount": 0,
+        "foreignMessages": 0,
+        "sendable": false,
+        "logs": 0,
+        "elapsedMs": 100,
+        "time": 2676.300000011921
+      },
+      {
+        "id": "s2",
+        "owner": {
+          "id": "s2",
+          "cwd": "D:\\workspace\\demo",
+          "generation": 1
+        },
+        "connected": false,
+        "pending": false,
+        "messageCount": 0,
+        "foreignMessages": 0,
+        "sendable": false,
+        "logs": 0,
+        "elapsedMs": 0,
+        "time": 2723.300000011921
+      },
+      {
+        "id": "s2",
+        "owner": {
+          "id": "s2",
+          "cwd": "D:\\workspace\\demo",
+          "generation": 5
+        },
+        "connected": false,
+        "pending": false,
+        "messageCount": 0,
+        "foreignMessages": 0,
+        "sendable": false,
+        "logs": 6,
+        "elapsedMs": 200,
+        "time": 2739.300000011921
+      },
+      {
+        "id": "s2",
+        "owner": {
+          "id": "s2",
+          "cwd": "D:\\workspace\\demo",
+          "generation": 5
+        },
+        "connected": false,
+        "pending": false,
+        "messageCount": 0,
+        "foreignMessages": 0,
+        "sendable": false,
+        "logs": 6,
+        "elapsedMs": 200,
+        "time": 2751.100000023842
+      },
+      {
+        "id": "s2",
+        "owner": {
+          "id": "s2",
+          "cwd": "D:\\workspace\\demo",
+          "generation": 5
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 2,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 7,
+        "file": "s2.jsonl",
+        "elapsedMs": 200,
+        "time": 2890.400000035763
+      },
+      {
+        "id": "s2",
+        "owner": {
+          "id": "s2",
+          "cwd": "D:\\workspace\\demo",
+          "generation": 5
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 2,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 7,
+        "file": "s2.jsonl",
+        "elapsedMs": 200,
+        "time": 2902.5
+      },
+      {
+        "id": "s2",
+        "owner": {
+          "id": "s2",
+          "cwd": "D:\\workspace\\demo",
+          "generation": 5
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 2,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 9,
+        "file": "s2.jsonl",
+        "elapsedMs": 200,
+        "time": 2903.199999988079
+      },
+      {
+        "id": "s2",
+        "owner": {
+          "id": "s2",
+          "cwd": "D:\\workspace\\demo",
+          "generation": 5
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 2,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 9,
+        "file": "s2.jsonl",
+        "elapsedMs": 200,
+        "time": 2910.300000011921
+      }
+    ],
+    "clicks": [
+      {
+        "title": "Session 1\nDeepSeek · fixture-s1 · deepseek-chat · 账户未标注",
+        "disabled": false,
+        "trusted": true,
+        "time": 2652.900000035763
+      },
+      {
+        "title": "Session 2\nDeepSeek · fixture-s2 · deepseek-chat · 账户未标注",
+        "disabled": false,
+        "trusted": true,
+        "time": 2722.900000035763
+      }
+    ],
+    "tasks": [
+      {
+        "start": 2119.300000011921,
+        "duration": 63
+      },
+      {
+        "start": 2508.800000011921,
+        "duration": 50
+      }
+    ],
+    "commits": [
+      {
+        "phase": "mount",
+        "duration": 33.80000001192093,
+        "time": 2221.100000023842
+      },
+      {
+        "phase": "update",
+        "duration": 15.099999964237213,
+        "time": 2296.300000011921
+      },
+      {
+        "phase": "update",
+        "duration": 7.300000011920929,
+        "time": 2338.100000023842
+      },
+      {
+        "phase": "update",
+        "duration": 9.499999940395355,
+        "time": 2354
+      },
+      {
+        "phase": "update",
+        "duration": 8.099999964237213,
+        "time": 2367.699999988079
+      },
+      {
+        "phase": "update",
+        "duration": 4.799999892711639,
+        "time": 2376.300000011921
+      },
+      {
+        "phase": "update",
+        "duration": 0.30000001192092896,
+        "time": 2378.699999988079
+      },
+      {
+        "phase": "update",
+        "duration": 0.09999996423721313,
+        "time": 2509.100000023842
+      },
+      {
+        "phase": "update",
+        "duration": 48.800000071525574,
+        "time": 2558.699999988079
+      },
+      {
+        "phase": "update",
+        "duration": 0.5999999642372131,
+        "time": 2573.100000023842
+      },
+      {
+        "phase": "update",
+        "duration": 12.20000010728836,
+        "time": 2586.100000023842
+      },
+      {
+        "phase": "update",
+        "duration": 8.899999976158142,
+        "time": 2600.300000011921
+      },
+      {
+        "phase": "update",
+        "duration": 6.500000059604645,
+        "time": 2660
+      },
+      {
+        "phase": "update",
+        "duration": 4.400000035762787,
+        "time": 2673.600000023842
+      },
+      {
+        "phase": "update",
+        "duration": 4.5,
+        "time": 2680.600000023842
+      },
+      {
+        "phase": "update",
+        "duration": 5.700000047683716,
+        "time": 2729.100000023842
+      },
+      {
+        "phase": "update",
+        "duration": 0.10000002384185791,
+        "time": 2734.400000035763
+      },
+      {
+        "phase": "update",
+        "duration": 0,
+        "time": 2734.600000023842
+      },
+      {
+        "phase": "update",
+        "duration": 0,
+        "time": 2734.800000011921
+      },
+      {
+        "phase": "update",
+        "duration": 6.200000047683716,
+        "time": 2745.600000023842
+      },
+      {
+        "phase": "update",
+        "duration": 8.100000023841858,
+        "time": 2759.199999988079
+      },
+      {
+        "phase": "update",
+        "duration": 0.10000002384185791,
+        "time": 2890.100000023842
+      },
+      {
+        "phase": "update",
+        "duration": 6.199999988079071,
+        "time": 2896.900000035763
+      },
+      {
+        "phase": "update",
+        "duration": 0.20000004768371582,
+        "time": 2903.100000023842
+      },
+      {
+        "phase": "update",
+        "duration": 5,
+        "time": 2908.100000023842
+      },
+      {
+        "phase": "update",
+        "duration": 4.699999988079071,
+        "time": 2915
+      }
+    ],
+    "timings": [
+      {
+        "type": "JSON.parse",
+        "start": 2355.199999988079,
+        "duration": 0,
+        "size": 74
+      },
+      {
+        "type": "JSON.parse",
+        "start": 2355.300000011921,
+        "duration": 0,
+        "size": 262
+      },
+      {
+        "type": "JSON.parse",
+        "start": 2355.400000035763,
+        "duration": 0,
+        "size": 340
+      },
+      {
+        "type": "JSON.parse",
+        "start": 2355.400000035763,
+        "duration": 0,
+        "size": 1328
+      },
+      {
+        "type": "JSON.parse",
+        "start": 2355.400000035763,
+        "duration": 0,
+        "size": 105
+      },
+      {
+        "type": "JSON.parse",
+        "start": 2355.5,
+        "duration": 0,
+        "size": 125
+      },
+      {
+        "type": "JSON.parse",
+        "start": 2508.100000023842,
+        "duration": 0.09999996423721313,
+        "size": 15699
+      },
+      {
+        "type": "parseMessages",
+        "start": 2508.400000035763,
+        "duration": 0.2999999523162842,
+        "size": 100
+      },
+      {
+        "type": "JSON.parse",
+        "start": 2571.600000023842,
+        "duration": 0,
+        "size": 152
+      },
+      {
+        "type": "JSON.parse",
+        "start": 2571.800000011921,
+        "duration": 0,
+        "size": 152
+      },
+      {
+        "type": "JSON.parse",
+        "start": 2734.199999988079,
+        "duration": 0,
+        "size": 74
+      },
+      {
+        "type": "JSON.parse",
+        "start": 2734.600000023842,
+        "duration": 0,
+        "size": 262
+      },
+      {
+        "type": "JSON.parse",
+        "start": 2734.600000023842,
+        "duration": 0.09999996423721313,
+        "size": 340
+      },
+      {
+        "type": "JSON.parse",
+        "start": 2734.699999988079,
+        "duration": 0,
+        "size": 1328
+      },
+      {
+        "type": "JSON.parse",
+        "start": 2734.699999988079,
+        "duration": 0,
+        "size": 105
+      },
+      {
+        "type": "JSON.parse",
+        "start": 2734.699999988079,
+        "duration": 0,
+        "size": 125
+      },
+      {
+        "type": "JSON.parse",
+        "start": 2889.300000011921,
+        "duration": 0,
+        "size": 74
+      },
+      {
+        "type": "JSON.parse",
+        "start": 2889.400000035763,
+        "duration": 0,
+        "size": 262
+      },
+      {
+        "type": "JSON.parse",
+        "start": 2889.5,
+        "duration": 0,
+        "size": 340
+      },
+      {
+        "type": "JSON.parse",
+        "start": 2889.699999988079,
+        "duration": 0,
+        "size": 1328
+      },
+      {
+        "type": "JSON.parse",
+        "start": 2889.699999988079,
+        "duration": 0,
+        "size": 105
+      },
+      {
+        "type": "JSON.parse",
+        "start": 2889.699999988079,
+        "duration": 0,
+        "size": 125
+      },
+      {
+        "type": "JSON.parse",
+        "start": 2889.800000011921,
+        "duration": 0,
+        "size": 378
+      },
+      {
+        "type": "parseMessages",
+        "start": 2889.900000035763,
+        "duration": 0,
+        "size": 2
+      },
+      {
+        "type": "JSON.parse",
+        "start": 2902.100000023842,
+        "duration": 0,
+        "size": 152
+      },
+      {
+        "type": "JSON.parse",
+        "start": 2902.300000011921,
+        "duration": 0,
+        "size": 152
+      }
+    ],
+    "scale": {
+      "messageCount": 100,
+      "entryCount": 100,
+      "chatCount": 30,
+      "kind": "text",
+      "bytes": 15631,
+      "codeLines": 0
+    },
+    "sidebarRows": 30,
+    "processes": 3,
+    "listeners": 6
+  },
+  "assets": [
+    "http://127.0.0.1:1425/@vite/client",
+    "http://127.0.0.1:1425/tests/session-switch.preview.tsx"
+  ],
+  "cold": {
+    "spans": [
+      {
+        "type": "list_model_families",
+        "start": 279,
+        "end": 280.4000000357628
+      },
+      {
+        "type": "list_model_runtime",
+        "start": 279.2000000476837,
+        "end": 280.4000000357628
+      },
+      {
+        "type": "get_web_search_status",
+        "start": 279.4000000357628,
+        "end": 280.4000000357628
+      },
+      {
+        "type": "set_history_workspace",
+        "start": 280.10000002384186,
+        "end": 280.4000000357628
+      },
+      {
+        "type": "plugin:event|listen",
+        "start": 322.4000000357628,
+        "end": 337.60000002384186
+      },
+      {
+        "type": "plugin:event|listen",
+        "start": 337.60000002384186,
+        "end": 337.60000002384186
+      },
+      {
+        "type": "rpc_start",
+        "instance": "chat_90520dcf-7894-43b0-93bb-a5fa93235f25",
+        "start": 337.60000002384186,
+        "end": 337.7000000476837
+      },
+      {
+        "type": "switch_session",
+        "instance": "chat_90520dcf-7894-43b0-93bb-a5fa93235f25",
+        "start": 337.80000001192093,
+        "end": 338.2000000476837
+      },
+      {
+        "type": "set_model",
+        "instance": "chat_90520dcf-7894-43b0-93bb-a5fa93235f25",
+        "start": 338.2000000476837,
+        "end": 338.2000000476837
+      },
+      {
+        "type": "get_state",
+        "instance": "chat_90520dcf-7894-43b0-93bb-a5fa93235f25",
+        "start": 338.30000001192093,
+        "end": 338.4000000357628
+      },
+      {
+        "type": "get_available_models",
+        "instance": "chat_90520dcf-7894-43b0-93bb-a5fa93235f25",
+        "start": 338.30000001192093,
+        "end": 338.4000000357628
+      },
+      {
+        "type": "get_messages",
+        "instance": "chat_90520dcf-7894-43b0-93bb-a5fa93235f25",
+        "start": 338.4000000357628,
+        "end": 495.9000000357628
+      },
+      {
+        "type": "get_available_thinking_levels",
+        "instance": "chat_90520dcf-7894-43b0-93bb-a5fa93235f25",
+        "start": 338.4000000357628,
+        "end": 338.4000000357628
+      },
+      {
+        "type": "get_session_stats",
+        "instance": "chat_90520dcf-7894-43b0-93bb-a5fa93235f25",
+        "start": 338.4000000357628,
+        "end": 338.4000000357628
+      },
+      {
+        "type": "plugin:image|new",
+        "start": 375.9000000357628,
+        "end": 376
+      },
+      {
+        "type": "get_commands",
+        "instance": "chat_90520dcf-7894-43b0-93bb-a5fa93235f25",
+        "start": 605.4000000357628,
+        "end": 627.4000000357628
+      },
+      {
+        "type": "get_commands",
+        "instance": "chat_90520dcf-7894-43b0-93bb-a5fa93235f25",
+        "start": 606.1000000238419,
+        "end": 627.4000000357628
+      }
+    ],
+    "renders": [
+      {
+        "id": "s0",
+        "owner": {
+          "id": "s0",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 1
+        },
+        "connected": false,
+        "pending": false,
+        "messageCount": 0,
+        "foreignMessages": 0,
+        "sendable": false,
+        "logs": 0,
+        "elapsedMs": 0,
+        "time": 212
+      },
+      {
+        "id": "s0",
+        "owner": {
+          "id": "s0",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 2
+        },
+        "connected": false,
+        "pending": false,
+        "messageCount": 0,
+        "foreignMessages": 0,
+        "sendable": false,
+        "logs": 0,
+        "elapsedMs": 0,
+        "time": 291.80000001192093
+      },
+      {
+        "id": "s0",
+        "owner": {
+          "id": "s0",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 3
+        },
+        "connected": false,
+        "pending": false,
+        "messageCount": 0,
+        "foreignMessages": 0,
+        "sendable": false,
+        "logs": 0,
+        "elapsedMs": 0,
+        "time": 323.5
+      },
+      {
+        "id": "s0",
+        "owner": {
+          "id": "s0",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 3
+        },
+        "connected": false,
+        "pending": false,
+        "messageCount": 0,
+        "foreignMessages": 0,
+        "sendable": false,
+        "logs": 0,
+        "elapsedMs": 0,
+        "time": 343.5
+      },
+      {
+        "id": "s0",
+        "owner": {
+          "id": "s0",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 3
+        },
+        "connected": false,
+        "pending": false,
+        "messageCount": 0,
+        "foreignMessages": 0,
+        "sendable": false,
+        "logs": 6,
+        "elapsedMs": 0,
+        "time": 357.10000002384186
+      },
+      {
+        "id": "s0",
+        "owner": {
+          "id": "s0",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 3
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 100,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 7,
+        "file": "s0.jsonl",
+        "elapsedMs": 0,
+        "time": 497.10000002384186
+      },
+      {
+        "id": "s0",
+        "owner": {
+          "id": "s0",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 3
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 100,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 7,
+        "file": "s0.jsonl",
+        "elapsedMs": 0,
+        "time": 606.5
+      },
+      {
+        "id": "s0",
+        "owner": {
+          "id": "s0",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 3
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 100,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 9,
+        "file": "s0.jsonl",
+        "elapsedMs": 0,
+        "time": 608.2000000476837
+      },
+      {
+        "id": "s0",
+        "owner": {
+          "id": "s0",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 3
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 100,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 9,
+        "file": "s0.jsonl",
+        "elapsedMs": 0,
+        "time": 637.2000000476837
+      }
+    ],
+    "clicks": [],
+    "tasks": [
+      {
+        "start": 496.30000001192093,
+        "duration": 84
+      }
+    ],
+    "commits": [
+      {
+        "phase": "mount",
+        "duration": 26.899999856948853,
+        "time": 238.60000002384186
+      },
+      {
+        "phase": "update",
+        "duration": 15.599999964237213,
+        "time": 307.30000001192093
+      },
+      {
+        "phase": "update",
+        "duration": 13.399999976158142,
+        "time": 337.2000000476837
+      },
+      {
+        "phase": "update",
+        "duration": 8.100000083446503,
+        "time": 352.30000001192093
+      },
+      {
+        "phase": "update",
+        "duration": 7.199999988079071,
+        "time": 364.60000002384186
+      },
+      {
+        "phase": "update",
+        "duration": 0.09999996423721313,
+        "time": 496.60000002384186
+      },
+      {
+        "phase": "update",
+        "duration": 81.5,
+        "time": 580.1000000238419
+      },
+      {
+        "phase": "update",
+        "duration": 1.0999999642372131,
+        "time": 608
+      },
+      {
+        "phase": "update",
+        "duration": 17.700000047683716,
+        "time": 626.7000000476837
+      },
+      {
+        "phase": "update",
+        "duration": 19.599999845027924,
+        "time": 658.4000000357628
+      }
+    ],
+    "timings": [
+      {
+        "type": "JSON.parse",
+        "start": 338.2000000476837,
+        "duration": 0,
+        "size": 74
+      },
+      {
+        "type": "JSON.parse",
+        "start": 338.2000000476837,
+        "duration": 0,
+        "size": 262
+      },
+      {
+        "type": "JSON.parse",
+        "start": 338.30000001192093,
+        "duration": 0,
+        "size": 340
+      },
+      {
+        "type": "JSON.parse",
+        "start": 338.4000000357628,
+        "duration": 0,
+        "size": 1328
+      },
+      {
+        "type": "JSON.parse",
+        "start": 338.4000000357628,
+        "duration": 0,
+        "size": 105
+      },
+      {
+        "type": "JSON.parse",
+        "start": 338.4000000357628,
+        "duration": 0,
+        "size": 125
+      },
+      {
+        "type": "JSON.parse",
+        "start": 495.80000001192093,
+        "duration": 0.10000002384185791,
+        "size": 15699
+      },
+      {
+        "type": "parseMessages",
+        "start": 496.10000002384186,
+        "duration": 0.10000002384185791,
+        "size": 100
+      },
+      {
+        "type": "JSON.parse",
+        "start": 605.5,
+        "duration": 0.10000002384185791,
+        "size": 152
+      },
+      {
+        "type": "JSON.parse",
+        "start": 606.1000000238419,
+        "duration": 0,
+        "size": 152
+      }
+    ],
+    "scale": {
+      "messageCount": 100,
+      "entryCount": 100,
+      "chatCount": 30,
+      "kind": "text",
+      "bytes": 15631,
+      "codeLines": 0
+    },
+    "sidebarRows": 30,
+    "processes": 1,
+    "listeners": 2
+  },
+  "performance": {
+    "spans": [
+      {
+        "type": "list_model_families",
+        "start": 279,
+        "end": 280.4000000357628
+      },
+      {
+        "type": "list_model_runtime",
+        "start": 279.2000000476837,
+        "end": 280.4000000357628
+      },
+      {
+        "type": "get_web_search_status",
+        "start": 279.4000000357628,
+        "end": 280.4000000357628
+      },
+      {
+        "type": "set_history_workspace",
+        "start": 280.10000002384186,
+        "end": 280.4000000357628
+      },
+      {
+        "type": "plugin:event|listen",
+        "start": 322.4000000357628,
+        "end": 337.60000002384186
+      },
+      {
+        "type": "plugin:event|listen",
+        "start": 337.60000002384186,
+        "end": 337.60000002384186
+      },
+      {
+        "type": "rpc_start",
+        "instance": "chat_90520dcf-7894-43b0-93bb-a5fa93235f25",
+        "start": 337.60000002384186,
+        "end": 337.7000000476837
+      },
+      {
+        "type": "switch_session",
+        "instance": "chat_90520dcf-7894-43b0-93bb-a5fa93235f25",
+        "start": 337.80000001192093,
+        "end": 338.2000000476837
+      },
+      {
+        "type": "set_model",
+        "instance": "chat_90520dcf-7894-43b0-93bb-a5fa93235f25",
+        "start": 338.2000000476837,
+        "end": 338.2000000476837
+      },
+      {
+        "type": "get_state",
+        "instance": "chat_90520dcf-7894-43b0-93bb-a5fa93235f25",
+        "start": 338.30000001192093,
+        "end": 338.4000000357628
+      },
+      {
+        "type": "get_available_models",
+        "instance": "chat_90520dcf-7894-43b0-93bb-a5fa93235f25",
+        "start": 338.30000001192093,
+        "end": 338.4000000357628
+      },
+      {
+        "type": "get_messages",
+        "instance": "chat_90520dcf-7894-43b0-93bb-a5fa93235f25",
+        "start": 338.4000000357628,
+        "end": 495.9000000357628
+      },
+      {
+        "type": "get_available_thinking_levels",
+        "instance": "chat_90520dcf-7894-43b0-93bb-a5fa93235f25",
+        "start": 338.4000000357628,
+        "end": 338.4000000357628
+      },
+      {
+        "type": "get_session_stats",
+        "instance": "chat_90520dcf-7894-43b0-93bb-a5fa93235f25",
+        "start": 338.4000000357628,
+        "end": 338.4000000357628
+      },
+      {
+        "type": "plugin:image|new",
+        "start": 375.9000000357628,
+        "end": 376
+      },
+      {
+        "type": "get_commands",
+        "instance": "chat_90520dcf-7894-43b0-93bb-a5fa93235f25",
+        "start": 605.4000000357628,
+        "end": 627.4000000357628
+      },
+      {
+        "type": "get_commands",
+        "instance": "chat_90520dcf-7894-43b0-93bb-a5fa93235f25",
+        "start": 606.1000000238419,
+        "end": 627.4000000357628
+      },
+      {
+        "type": "plugin:event|listen",
+        "start": 785,
+        "end": 788
+      },
+      {
+        "type": "plugin:event|listen",
+        "start": 788.1000000238419,
+        "end": 788.1000000238419
+      },
+      {
+        "type": "rpc_start",
+        "instance": "chat_65f5ca30-f8b3-4adc-b24a-182b1b7b6152",
+        "start": 788.1000000238419,
+        "end": 788.1000000238419
+      },
+      {
+        "type": "switch_session",
+        "instance": "chat_65f5ca30-f8b3-4adc-b24a-182b1b7b6152",
+        "start": 788.2000000476837,
+        "end": 788.7000000476837
+      },
+      {
+        "type": "set_model",
+        "instance": "chat_65f5ca30-f8b3-4adc-b24a-182b1b7b6152",
+        "start": 788.7000000476837,
+        "end": 789
+      },
+      {
+        "type": "get_state",
+        "instance": "chat_65f5ca30-f8b3-4adc-b24a-182b1b7b6152",
+        "start": 789.1000000238419,
+        "end": 789.4000000357628
+      },
+      {
+        "type": "get_available_models",
+        "instance": "chat_65f5ca30-f8b3-4adc-b24a-182b1b7b6152",
+        "start": 789.1000000238419,
+        "end": 789.4000000357628
+      },
+      {
+        "type": "get_messages",
+        "instance": "chat_65f5ca30-f8b3-4adc-b24a-182b1b7b6152",
+        "start": 789.2000000476837,
+        "end": 945.9000000357628
+      },
+      {
+        "type": "get_available_thinking_levels",
+        "instance": "chat_65f5ca30-f8b3-4adc-b24a-182b1b7b6152",
+        "start": 789.2000000476837,
+        "end": 789.4000000357628
+      },
+      {
+        "type": "get_session_stats",
+        "instance": "chat_65f5ca30-f8b3-4adc-b24a-182b1b7b6152",
+        "start": 789.3000000119209,
+        "end": 789.4000000357628
+      },
+      {
+        "type": "get_commands",
+        "instance": "chat_65f5ca30-f8b3-4adc-b24a-182b1b7b6152",
+        "start": 966.4000000357628,
+        "end": 978.6000000238419
+      },
+      {
+        "type": "get_commands",
+        "instance": "chat_65f5ca30-f8b3-4adc-b24a-182b1b7b6152",
+        "start": 966.7000000476837,
+        "end": 978.6000000238419
+      },
+      {
+        "type": "get_commands",
+        "instance": "chat_90520dcf-7894-43b0-93bb-a5fa93235f25",
+        "start": 1120.300000011921,
+        "end": 1121.2000000476837
+      },
+      {
+        "type": "get_commands",
+        "instance": "chat_90520dcf-7894-43b0-93bb-a5fa93235f25",
+        "start": 1121.1000000238419,
+        "end": 1121.2000000476837
+      },
+      {
+        "type": "get_commands",
+        "instance": "chat_65f5ca30-f8b3-4adc-b24a-182b1b7b6152",
+        "start": 1239.6000000238419,
+        "end": 1240.800000011921
+      },
+      {
+        "type": "get_commands",
+        "instance": "chat_65f5ca30-f8b3-4adc-b24a-182b1b7b6152",
+        "start": 1240.1000000238419,
+        "end": 1240.800000011921
+      },
+      {
+        "type": "get_commands",
+        "instance": "chat_90520dcf-7894-43b0-93bb-a5fa93235f25",
+        "start": 1388.2000000476837,
+        "end": 1389.300000011921
+      },
+      {
+        "type": "get_commands",
+        "instance": "chat_90520dcf-7894-43b0-93bb-a5fa93235f25",
+        "start": 1388.800000011921,
+        "end": 1389.300000011921
+      },
+      {
+        "type": "get_commands",
+        "instance": "chat_65f5ca30-f8b3-4adc-b24a-182b1b7b6152",
+        "start": 1500.7000000476837,
+        "end": 1501.5
+      },
+      {
+        "type": "get_commands",
+        "instance": "chat_65f5ca30-f8b3-4adc-b24a-182b1b7b6152",
+        "start": 1501.300000011921,
+        "end": 1501.5
+      },
+      {
+        "type": "get_commands",
+        "instance": "chat_90520dcf-7894-43b0-93bb-a5fa93235f25",
+        "start": 1651.300000011921,
+        "end": 1652.7000000476837
+      },
+      {
+        "type": "get_commands",
+        "instance": "chat_90520dcf-7894-43b0-93bb-a5fa93235f25",
+        "start": 1652,
+        "end": 1652.7000000476837
+      },
+      {
+        "type": "get_commands",
+        "instance": "chat_65f5ca30-f8b3-4adc-b24a-182b1b7b6152",
+        "start": 1773.9000000357628,
+        "end": 1774.7000000476837
+      },
+      {
+        "type": "get_commands",
+        "instance": "chat_65f5ca30-f8b3-4adc-b24a-182b1b7b6152",
+        "start": 1774.4000000357628,
+        "end": 1774.7000000476837
+      },
+      {
+        "type": "get_commands",
+        "instance": "chat_90520dcf-7894-43b0-93bb-a5fa93235f25",
+        "start": 1928.1000000238419,
+        "end": 1929.800000011921
+      },
+      {
+        "type": "get_commands",
+        "instance": "chat_90520dcf-7894-43b0-93bb-a5fa93235f25",
+        "start": 1929,
+        "end": 1929.800000011921
+      },
+      {
+        "type": "get_commands",
+        "instance": "chat_65f5ca30-f8b3-4adc-b24a-182b1b7b6152",
+        "start": 2070.7000000476837,
+        "end": 2071.400000035763
+      },
+      {
+        "type": "get_commands",
+        "instance": "chat_65f5ca30-f8b3-4adc-b24a-182b1b7b6152",
+        "start": 2071.2000000476837,
+        "end": 2071.400000035763
+      },
+      {
+        "type": "get_commands",
+        "instance": "chat_90520dcf-7894-43b0-93bb-a5fa93235f25",
+        "start": 2235.2000000476837,
+        "end": 2236.2000000476837
+      },
+      {
+        "type": "get_commands",
+        "instance": "chat_90520dcf-7894-43b0-93bb-a5fa93235f25",
+        "start": 2235.900000035763,
+        "end": 2236.2000000476837
+      },
+      {
+        "type": "get_commands",
+        "instance": "chat_65f5ca30-f8b3-4adc-b24a-182b1b7b6152",
+        "start": 2345.600000023842,
+        "end": 2346.2000000476837
+      },
+      {
+        "type": "get_commands",
+        "instance": "chat_65f5ca30-f8b3-4adc-b24a-182b1b7b6152",
+        "start": 2345.900000035763,
+        "end": 2346.2000000476837
+      },
+      {
+        "type": "get_commands",
+        "instance": "chat_90520dcf-7894-43b0-93bb-a5fa93235f25",
+        "start": 2481.800000011921,
+        "end": 2483
+      },
+      {
+        "type": "get_commands",
+        "instance": "chat_90520dcf-7894-43b0-93bb-a5fa93235f25",
+        "start": 2482.5,
+        "end": 2483
+      },
+      {
+        "type": "get_commands",
+        "instance": "chat_65f5ca30-f8b3-4adc-b24a-182b1b7b6152",
+        "start": 2622.2000000476837,
+        "end": 2623
+      },
+      {
+        "type": "get_commands",
+        "instance": "chat_65f5ca30-f8b3-4adc-b24a-182b1b7b6152",
+        "start": 2622.800000011921,
+        "end": 2623
+      },
+      {
+        "type": "get_commands",
+        "instance": "chat_90520dcf-7894-43b0-93bb-a5fa93235f25",
+        "start": 2762.2000000476837,
+        "end": 2763.2000000476837
+      },
+      {
+        "type": "get_commands",
+        "instance": "chat_90520dcf-7894-43b0-93bb-a5fa93235f25",
+        "start": 2762.7000000476837,
+        "end": 2763.2000000476837
+      },
+      {
+        "type": "get_commands",
+        "instance": "chat_65f5ca30-f8b3-4adc-b24a-182b1b7b6152",
+        "start": 2862.600000023842,
+        "end": 2863.400000035763
+      },
+      {
+        "type": "get_commands",
+        "instance": "chat_65f5ca30-f8b3-4adc-b24a-182b1b7b6152",
+        "start": 2863.2000000476837,
+        "end": 2863.400000035763
+      },
+      {
+        "type": "get_commands",
+        "instance": "chat_90520dcf-7894-43b0-93bb-a5fa93235f25",
+        "start": 2978.5,
+        "end": 2979.300000011921
+      },
+      {
+        "type": "get_commands",
+        "instance": "chat_90520dcf-7894-43b0-93bb-a5fa93235f25",
+        "start": 2979,
+        "end": 2979.300000011921
+      },
+      {
+        "type": "get_commands",
+        "instance": "chat_65f5ca30-f8b3-4adc-b24a-182b1b7b6152",
+        "start": 3067.600000023842,
+        "end": 3068.400000035763
+      },
+      {
+        "type": "get_commands",
+        "instance": "chat_65f5ca30-f8b3-4adc-b24a-182b1b7b6152",
+        "start": 3068.100000023842,
+        "end": 3068.400000035763
+      },
+      {
+        "type": "get_commands",
+        "instance": "chat_90520dcf-7894-43b0-93bb-a5fa93235f25",
+        "start": 3188,
+        "end": 3188.7000000476837
+      },
+      {
+        "type": "get_commands",
+        "instance": "chat_90520dcf-7894-43b0-93bb-a5fa93235f25",
+        "start": 3188.400000035763,
+        "end": 3188.7000000476837
+      },
+      {
+        "type": "get_commands",
+        "instance": "chat_65f5ca30-f8b3-4adc-b24a-182b1b7b6152",
+        "start": 3277.800000011921,
+        "end": 3278.5
+      },
+      {
+        "type": "get_commands",
+        "instance": "chat_65f5ca30-f8b3-4adc-b24a-182b1b7b6152",
+        "start": 3278.2000000476837,
+        "end": 3278.5
+      },
+      {
+        "type": "get_commands",
+        "instance": "chat_90520dcf-7894-43b0-93bb-a5fa93235f25",
+        "start": 3399.300000011921,
+        "end": 3400.100000023842
+      },
+      {
+        "type": "get_commands",
+        "instance": "chat_90520dcf-7894-43b0-93bb-a5fa93235f25",
+        "start": 3399.800000011921,
+        "end": 3400.100000023842
+      },
+      {
+        "type": "get_commands",
+        "instance": "chat_65f5ca30-f8b3-4adc-b24a-182b1b7b6152",
+        "start": 3495.5,
+        "end": 3496.2000000476837
+      },
+      {
+        "type": "get_commands",
+        "instance": "chat_65f5ca30-f8b3-4adc-b24a-182b1b7b6152",
+        "start": 3495.900000035763,
+        "end": 3496.2000000476837
+      },
+      {
+        "type": "get_commands",
+        "instance": "chat_90520dcf-7894-43b0-93bb-a5fa93235f25",
+        "start": 3637.400000035763,
+        "end": 3638.300000011921
+      },
+      {
+        "type": "get_commands",
+        "instance": "chat_90520dcf-7894-43b0-93bb-a5fa93235f25",
+        "start": 3637.900000035763,
+        "end": 3638.300000011921
+      }
+    ],
+    "renders": [
+      {
+        "id": "s0",
+        "owner": {
+          "id": "s0",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 1
+        },
+        "connected": false,
+        "pending": false,
+        "messageCount": 0,
+        "foreignMessages": 0,
+        "sendable": false,
+        "logs": 0,
+        "elapsedMs": 0,
+        "time": 212
+      },
+      {
+        "id": "s0",
+        "owner": {
+          "id": "s0",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 2
+        },
+        "connected": false,
+        "pending": false,
+        "messageCount": 0,
+        "foreignMessages": 0,
+        "sendable": false,
+        "logs": 0,
+        "elapsedMs": 0,
+        "time": 291.80000001192093
+      },
+      {
+        "id": "s0",
+        "owner": {
+          "id": "s0",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 3
+        },
+        "connected": false,
+        "pending": false,
+        "messageCount": 0,
+        "foreignMessages": 0,
+        "sendable": false,
+        "logs": 0,
+        "elapsedMs": 0,
+        "time": 323.5
+      },
+      {
+        "id": "s0",
+        "owner": {
+          "id": "s0",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 3
+        },
+        "connected": false,
+        "pending": false,
+        "messageCount": 0,
+        "foreignMessages": 0,
+        "sendable": false,
+        "logs": 0,
+        "elapsedMs": 0,
+        "time": 343.5
+      },
+      {
+        "id": "s0",
+        "owner": {
+          "id": "s0",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 3
+        },
+        "connected": false,
+        "pending": false,
+        "messageCount": 0,
+        "foreignMessages": 0,
+        "sendable": false,
+        "logs": 6,
+        "elapsedMs": 0,
+        "time": 357.10000002384186
+      },
+      {
+        "id": "s0",
+        "owner": {
+          "id": "s0",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 3
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 100,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 7,
+        "file": "s0.jsonl",
+        "elapsedMs": 0,
+        "time": 497.10000002384186
+      },
+      {
+        "id": "s0",
+        "owner": {
+          "id": "s0",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 3
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 100,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 7,
+        "file": "s0.jsonl",
+        "elapsedMs": 0,
+        "time": 606.5
+      },
+      {
+        "id": "s0",
+        "owner": {
+          "id": "s0",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 3
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 100,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 9,
+        "file": "s0.jsonl",
+        "elapsedMs": 0,
+        "time": 608.2000000476837
+      },
+      {
+        "id": "s0",
+        "owner": {
+          "id": "s0",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 3
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 100,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 9,
+        "file": "s0.jsonl",
+        "elapsedMs": 0,
+        "time": 637.2000000476837
+      },
+      {
+        "id": "s1",
+        "owner": {
+          "id": "s1",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 1
+        },
+        "connected": false,
+        "pending": false,
+        "messageCount": 0,
+        "foreignMessages": 0,
+        "sendable": false,
+        "logs": 0,
+        "elapsedMs": 0,
+        "time": 763.7000000476837
+      },
+      {
+        "id": "s1",
+        "owner": {
+          "id": "s1",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 4
+        },
+        "connected": false,
+        "pending": false,
+        "messageCount": 0,
+        "foreignMessages": 0,
+        "sendable": false,
+        "logs": 6,
+        "elapsedMs": 100,
+        "time": 795.9000000357628
+      },
+      {
+        "id": "s1",
+        "owner": {
+          "id": "s1",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 4
+        },
+        "connected": false,
+        "pending": false,
+        "messageCount": 0,
+        "foreignMessages": 0,
+        "sendable": false,
+        "logs": 6,
+        "elapsedMs": 100,
+        "time": 815
+      },
+      {
+        "id": "s1",
+        "owner": {
+          "id": "s1",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 4
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 2,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 7,
+        "file": "s1.jsonl",
+        "elapsedMs": 100,
+        "time": 946.6000000238419
+      },
+      {
+        "id": "s1",
+        "owner": {
+          "id": "s1",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 4
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 2,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 7,
+        "file": "s1.jsonl",
+        "elapsedMs": 100,
+        "time": 967
+      },
+      {
+        "id": "s1",
+        "owner": {
+          "id": "s1",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 4
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 2,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 9,
+        "file": "s1.jsonl",
+        "elapsedMs": 100,
+        "time": 968
+      },
+      {
+        "id": "s1",
+        "owner": {
+          "id": "s1",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 4
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 2,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 9,
+        "file": "s1.jsonl",
+        "elapsedMs": 100,
+        "time": 983.8000000119209
+      },
+      {
+        "id": "s0",
+        "owner": {
+          "id": "s0",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 3
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 100,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 9,
+        "file": "s0.jsonl",
+        "elapsedMs": 0,
+        "time": 1028.2000000476837
+      },
+      {
+        "id": "s0",
+        "owner": {
+          "id": "s0",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 3
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 100,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 9,
+        "file": "s0.jsonl",
+        "elapsedMs": 0,
+        "time": 1121.6000000238419
+      },
+      {
+        "id": "s0",
+        "owner": {
+          "id": "s0",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 3
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 100,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 11,
+        "file": "s0.jsonl",
+        "elapsedMs": 0,
+        "time": 1153.5
+      },
+      {
+        "id": "s1",
+        "owner": {
+          "id": "s1",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 4
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 2,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 9,
+        "file": "s1.jsonl",
+        "elapsedMs": 100,
+        "time": 1217.7000000476837
+      },
+      {
+        "id": "s1",
+        "owner": {
+          "id": "s1",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 4
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 2,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 9,
+        "file": "s1.jsonl",
+        "elapsedMs": 100,
+        "time": 1241.1000000238419
+      },
+      {
+        "id": "s1",
+        "owner": {
+          "id": "s1",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 4
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 2,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 11,
+        "file": "s1.jsonl",
+        "elapsedMs": 100,
+        "time": 1257.5
+      },
+      {
+        "id": "s0",
+        "owner": {
+          "id": "s0",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 3
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 100,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 11,
+        "file": "s0.jsonl",
+        "elapsedMs": 0,
+        "time": 1311.4000000357628
+      },
+      {
+        "id": "s0",
+        "owner": {
+          "id": "s0",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 3
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 100,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 11,
+        "file": "s0.jsonl",
+        "elapsedMs": 0,
+        "time": 1389.7000000476837
+      },
+      {
+        "id": "s0",
+        "owner": {
+          "id": "s0",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 3
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 100,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 13,
+        "file": "s0.jsonl",
+        "elapsedMs": 0,
+        "time": 1414.7000000476837
+      },
+      {
+        "id": "s1",
+        "owner": {
+          "id": "s1",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 4
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 2,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 11,
+        "file": "s1.jsonl",
+        "elapsedMs": 100,
+        "time": 1480.9000000357628
+      },
+      {
+        "id": "s1",
+        "owner": {
+          "id": "s1",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 4
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 2,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 11,
+        "file": "s1.jsonl",
+        "elapsedMs": 100,
+        "time": 1501.800000011921
+      },
+      {
+        "id": "s1",
+        "owner": {
+          "id": "s1",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 4
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 2,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 13,
+        "file": "s1.jsonl",
+        "elapsedMs": 100,
+        "time": 1516.1000000238419
+      },
+      {
+        "id": "s0",
+        "owner": {
+          "id": "s0",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 3
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 100,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 13,
+        "file": "s0.jsonl",
+        "elapsedMs": 0,
+        "time": 1570.5
+      },
+      {
+        "id": "s0",
+        "owner": {
+          "id": "s0",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 3
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 100,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 13,
+        "file": "s0.jsonl",
+        "elapsedMs": 0,
+        "time": 1653.1000000238419
+      },
+      {
+        "id": "s0",
+        "owner": {
+          "id": "s0",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 3
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 100,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 15,
+        "file": "s0.jsonl",
+        "elapsedMs": 0,
+        "time": 1681.2000000476837
+      },
+      {
+        "id": "s1",
+        "owner": {
+          "id": "s1",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 4
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 2,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 13,
+        "file": "s1.jsonl",
+        "elapsedMs": 100,
+        "time": 1754.9000000357628
+      },
+      {
+        "id": "s1",
+        "owner": {
+          "id": "s1",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 4
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 2,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 13,
+        "file": "s1.jsonl",
+        "elapsedMs": 100,
+        "time": 1775
+      },
+      {
+        "id": "s1",
+        "owner": {
+          "id": "s1",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 4
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 2,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 15,
+        "file": "s1.jsonl",
+        "elapsedMs": 100,
+        "time": 1789.6000000238419
+      },
+      {
+        "id": "s0",
+        "owner": {
+          "id": "s0",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 3
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 100,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 15,
+        "file": "s0.jsonl",
+        "elapsedMs": 0,
+        "time": 1845.6000000238419
+      },
+      {
+        "id": "s0",
+        "owner": {
+          "id": "s0",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 3
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 100,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 15,
+        "file": "s0.jsonl",
+        "elapsedMs": 0,
+        "time": 1930.300000011921
+      },
+      {
+        "id": "s0",
+        "owner": {
+          "id": "s0",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 3
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 100,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 17,
+        "file": "s0.jsonl",
+        "elapsedMs": 0,
+        "time": 1966.4000000357628
+      },
+      {
+        "id": "s1",
+        "owner": {
+          "id": "s1",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 4
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 2,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 15,
+        "file": "s1.jsonl",
+        "elapsedMs": 100,
+        "time": 2050.400000035763
+      },
+      {
+        "id": "s1",
+        "owner": {
+          "id": "s1",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 4
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 2,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 15,
+        "file": "s1.jsonl",
+        "elapsedMs": 100,
+        "time": 2071.7000000476837
+      },
+      {
+        "id": "s1",
+        "owner": {
+          "id": "s1",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 4
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 2,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 17,
+        "file": "s1.jsonl",
+        "elapsedMs": 100,
+        "time": 2089
+      },
+      {
+        "id": "s0",
+        "owner": {
+          "id": "s0",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 3
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 100,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 17,
+        "file": "s0.jsonl",
+        "elapsedMs": 0,
+        "time": 2145
+      },
+      {
+        "id": "s0",
+        "owner": {
+          "id": "s0",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 3
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 100,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 17,
+        "file": "s0.jsonl",
+        "elapsedMs": 0,
+        "time": 2236.5
+      },
+      {
+        "id": "s0",
+        "owner": {
+          "id": "s0",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 3
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 100,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 19,
+        "file": "s0.jsonl",
+        "elapsedMs": 0,
+        "time": 2264.900000035763
+      },
+      {
+        "id": "s1",
+        "owner": {
+          "id": "s1",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 4
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 2,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 17,
+        "file": "s1.jsonl",
+        "elapsedMs": 100,
+        "time": 2327.5
+      },
+      {
+        "id": "s1",
+        "owner": {
+          "id": "s1",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 4
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 2,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 17,
+        "file": "s1.jsonl",
+        "elapsedMs": 100,
+        "time": 2346.400000035763
+      },
+      {
+        "id": "s1",
+        "owner": {
+          "id": "s1",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 4
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 2,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 19,
+        "file": "s1.jsonl",
+        "elapsedMs": 100,
+        "time": 2361.300000011921
+      },
+      {
+        "id": "s0",
+        "owner": {
+          "id": "s0",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 3
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 100,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 19,
+        "file": "s0.jsonl",
+        "elapsedMs": 0,
+        "time": 2401.400000035763
+      },
+      {
+        "id": "s0",
+        "owner": {
+          "id": "s0",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 3
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 100,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 19,
+        "file": "s0.jsonl",
+        "elapsedMs": 0,
+        "time": 2483.5
+      },
+      {
+        "id": "s0",
+        "owner": {
+          "id": "s0",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 3
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 100,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 21,
+        "file": "s0.jsonl",
+        "elapsedMs": 0,
+        "time": 2515.800000011921
+      },
+      {
+        "id": "s1",
+        "owner": {
+          "id": "s1",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 4
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 2,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 19,
+        "file": "s1.jsonl",
+        "elapsedMs": 100,
+        "time": 2598.2000000476837
+      },
+      {
+        "id": "s1",
+        "owner": {
+          "id": "s1",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 4
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 2,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 19,
+        "file": "s1.jsonl",
+        "elapsedMs": 100,
+        "time": 2623.400000035763
+      },
+      {
+        "id": "s1",
+        "owner": {
+          "id": "s1",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 4
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 2,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 21,
+        "file": "s1.jsonl",
+        "elapsedMs": 100,
+        "time": 2639.2000000476837
+      },
+      {
+        "id": "s0",
+        "owner": {
+          "id": "s0",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 3
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 100,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 21,
+        "file": "s0.jsonl",
+        "elapsedMs": 0,
+        "time": 2693.900000035763
+      },
+      {
+        "id": "s0",
+        "owner": {
+          "id": "s0",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 3
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 100,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 21,
+        "file": "s0.jsonl",
+        "elapsedMs": 0,
+        "time": 2763.400000035763
+      },
+      {
+        "id": "s0",
+        "owner": {
+          "id": "s0",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 3
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 100,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 23,
+        "file": "s0.jsonl",
+        "elapsedMs": 0,
+        "time": 2789.2000000476837
+      },
+      {
+        "id": "s1",
+        "owner": {
+          "id": "s1",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 4
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 2,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 21,
+        "file": "s1.jsonl",
+        "elapsedMs": 100,
+        "time": 2845.600000023842
+      },
+      {
+        "id": "s1",
+        "owner": {
+          "id": "s1",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 4
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 2,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 21,
+        "file": "s1.jsonl",
+        "elapsedMs": 100,
+        "time": 2863.600000023842
+      },
+      {
+        "id": "s1",
+        "owner": {
+          "id": "s1",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 4
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 2,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 23,
+        "file": "s1.jsonl",
+        "elapsedMs": 100,
+        "time": 2875.800000011921
+      },
+      {
+        "id": "s0",
+        "owner": {
+          "id": "s0",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 3
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 100,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 23,
+        "file": "s0.jsonl",
+        "elapsedMs": 0,
+        "time": 2925.400000035763
+      },
+      {
+        "id": "s0",
+        "owner": {
+          "id": "s0",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 3
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 100,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 23,
+        "file": "s0.jsonl",
+        "elapsedMs": 0,
+        "time": 2979.600000023842
+      },
+      {
+        "id": "s0",
+        "owner": {
+          "id": "s0",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 3
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 100,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 25,
+        "file": "s0.jsonl",
+        "elapsedMs": 0,
+        "time": 3001.5
+      },
+      {
+        "id": "s1",
+        "owner": {
+          "id": "s1",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 4
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 2,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 23,
+        "file": "s1.jsonl",
+        "elapsedMs": 100,
+        "time": 3051.2000000476837
+      },
+      {
+        "id": "s1",
+        "owner": {
+          "id": "s1",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 4
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 2,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 23,
+        "file": "s1.jsonl",
+        "elapsedMs": 100,
+        "time": 3068.7000000476837
+      },
+      {
+        "id": "s1",
+        "owner": {
+          "id": "s1",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 4
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 2,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 25,
+        "file": "s1.jsonl",
+        "elapsedMs": 100,
+        "time": 3081.100000023842
+      },
+      {
+        "id": "s0",
+        "owner": {
+          "id": "s0",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 3
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 100,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 25,
+        "file": "s0.jsonl",
+        "elapsedMs": 0,
+        "time": 3134.600000023842
+      },
+      {
+        "id": "s0",
+        "owner": {
+          "id": "s0",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 3
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 100,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 25,
+        "file": "s0.jsonl",
+        "elapsedMs": 0,
+        "time": 3189
+      },
+      {
+        "id": "s0",
+        "owner": {
+          "id": "s0",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 3
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 100,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 27,
+        "file": "s0.jsonl",
+        "elapsedMs": 0,
+        "time": 3210.800000011921
+      },
+      {
+        "id": "s1",
+        "owner": {
+          "id": "s1",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 4
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 2,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 25,
+        "file": "s1.jsonl",
+        "elapsedMs": 100,
+        "time": 3260.800000011921
+      },
+      {
+        "id": "s1",
+        "owner": {
+          "id": "s1",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 4
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 2,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 25,
+        "file": "s1.jsonl",
+        "elapsedMs": 100,
+        "time": 3278.7000000476837
+      },
+      {
+        "id": "s1",
+        "owner": {
+          "id": "s1",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 4
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 2,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 27,
+        "file": "s1.jsonl",
+        "elapsedMs": 100,
+        "time": 3291.300000011921
+      },
+      {
+        "id": "s0",
+        "owner": {
+          "id": "s0",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 3
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 100,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 27,
+        "file": "s0.jsonl",
+        "elapsedMs": 0,
+        "time": 3343
+      },
+      {
+        "id": "s0",
+        "owner": {
+          "id": "s0",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 3
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 100,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 27,
+        "file": "s0.jsonl",
+        "elapsedMs": 0,
+        "time": 3400.400000035763
+      },
+      {
+        "id": "s0",
+        "owner": {
+          "id": "s0",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 3
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 100,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 29,
+        "file": "s0.jsonl",
+        "elapsedMs": 0,
+        "time": 3423.900000035763
+      },
+      {
+        "id": "s1",
+        "owner": {
+          "id": "s1",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 4
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 2,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 27,
+        "file": "s1.jsonl",
+        "elapsedMs": 100,
+        "time": 3477.5
+      },
+      {
+        "id": "s1",
+        "owner": {
+          "id": "s1",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 4
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 2,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 27,
+        "file": "s1.jsonl",
+        "elapsedMs": 100,
+        "time": 3496.400000035763
+      },
+      {
+        "id": "s1",
+        "owner": {
+          "id": "s1",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 4
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 2,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 29,
+        "file": "s1.jsonl",
+        "elapsedMs": 100,
+        "time": 3511
+      },
+      {
+        "id": "s0",
+        "owner": {
+          "id": "s0",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 3
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 100,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 29,
+        "file": "s0.jsonl",
+        "elapsedMs": 0,
+        "time": 3562
+      },
+      {
+        "id": "s0",
+        "owner": {
+          "id": "s0",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 3
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 100,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 29,
+        "file": "s0.jsonl",
+        "elapsedMs": 0,
+        "time": 3638.600000023842
+      },
+      {
+        "id": "s0",
+        "owner": {
+          "id": "s0",
+          "cwd": "D:\\workspace\\Skiff",
+          "generation": 3
+        },
+        "connected": true,
+        "pending": false,
+        "messageCount": 100,
+        "foreignMessages": 0,
+        "sendable": true,
+        "model": "deepseek-chat",
+        "logs": 31,
+        "file": "s0.jsonl",
+        "elapsedMs": 0,
+        "time": 3664.7000000476837
+      }
+    ],
+    "clicks": [
+      {
+        "title": "Session 1\nDeepSeek · fixture-s1 · deepseek-chat · 账户未标注",
+        "disabled": false,
+        "trusted": true,
+        "time": 763.2000000476837
+      },
+      {
+        "title": "Session 0\nDeepSeek · fixture-s0 · deepseek-chat · 账户未标注",
+        "disabled": false,
+        "trusted": true,
+        "time": 1027.7000000476837
+      },
+      {
+        "title": "Session 1\nDeepSeek · fixture-s1 · deepseek-chat · 账户未标注",
+        "disabled": false,
+        "trusted": true,
+        "time": 1217.1000000238419
+      },
+      {
+        "title": "Session 0\nDeepSeek · fixture-s0 · deepseek-chat · 账户未标注",
+        "disabled": false,
+        "trusted": true,
+        "time": 1310.800000011921
+      },
+      {
+        "title": "Session 1\nDeepSeek · fixture-s1 · deepseek-chat · 账户未标注",
+        "disabled": false,
+        "trusted": true,
+        "time": 1480.4000000357628
+      },
+      {
+        "title": "Session 0\nDeepSeek · fixture-s0 · deepseek-chat · 账户未标注",
+        "disabled": false,
+        "trusted": true,
+        "time": 1569.9000000357628
+      },
+      {
+        "title": "Session 1\nDeepSeek · fixture-s1 · deepseek-chat · 账户未标注",
+        "disabled": false,
+        "trusted": true,
+        "time": 1754.5
+      },
+      {
+        "title": "Session 0\nDeepSeek · fixture-s0 · deepseek-chat · 账户未标注",
+        "disabled": false,
+        "trusted": true,
+        "time": 1845.2000000476837
+      },
+      {
+        "title": "Session 1\nDeepSeek · fixture-s1 · deepseek-chat · 账户未标注",
+        "disabled": false,
+        "trusted": true,
+        "time": 2049.800000011921
+      },
+      {
+        "title": "Session 0\nDeepSeek · fixture-s0 · deepseek-chat · 账户未标注",
+        "disabled": false,
+        "trusted": true,
+        "time": 2144.2000000476837
+      },
+      {
+        "title": "Session 1\nDeepSeek · fixture-s1 · deepseek-chat · 账户未标注",
+        "disabled": false,
+        "trusted": true,
+        "time": 2327.100000023842
+      },
+      {
+        "title": "Session 0\nDeepSeek · fixture-s0 · deepseek-chat · 账户未标注",
+        "disabled": false,
+        "trusted": true,
+        "time": 2401
+      },
+      {
+        "title": "Session 1\nDeepSeek · fixture-s1 · deepseek-chat · 账户未标注",
+        "disabled": false,
+        "trusted": true,
+        "time": 2597.5
+      },
+      {
+        "title": "Session 0\nDeepSeek · fixture-s0 · deepseek-chat · 账户未标注",
+        "disabled": false,
+        "trusted": true,
+        "time": 2693.300000011921
+      },
+      {
+        "title": "Session 1\nDeepSeek · fixture-s1 · deepseek-chat · 账户未标注",
+        "disabled": false,
+        "trusted": true,
+        "time": 2845.300000011921
+      },
+      {
+        "title": "Session 0\nDeepSeek · fixture-s0 · deepseek-chat · 账户未标注",
+        "disabled": false,
+        "trusted": true,
+        "time": 2924.900000035763
+      },
+      {
+        "title": "Session 1\nDeepSeek · fixture-s1 · deepseek-chat · 账户未标注",
+        "disabled": false,
+        "trusted": true,
+        "time": 3050.800000011921
+      },
+      {
+        "title": "Session 0\nDeepSeek · fixture-s0 · deepseek-chat · 账户未标注",
+        "disabled": false,
+        "trusted": true,
+        "time": 3134
+      },
+      {
+        "title": "Session 1\nDeepSeek · fixture-s1 · deepseek-chat · 账户未标注",
+        "disabled": false,
+        "trusted": true,
+        "time": 3260.400000035763
+      },
+      {
+        "title": "Session 0\nDeepSeek · fixture-s0 · deepseek-chat · 账户未标注",
+        "disabled": false,
+        "trusted": true,
+        "time": 3342.5
+      },
+      {
+        "title": "Session 1\nDeepSeek · fixture-s1 · deepseek-chat · 账户未标注",
+        "disabled": false,
+        "trusted": true,
+        "time": 3477
+      },
+      {
+        "title": "Session 0\nDeepSeek · fixture-s0 · deepseek-chat · 账户未标注",
+        "disabled": false,
+        "trusted": true,
+        "time": 3561.400000035763
+      }
+    ],
+    "tasks": [
+      {
+        "start": 496.30000001192093,
+        "duration": 84
+      },
+      {
+        "start": 1025.300000011921,
+        "duration": 118
+      },
+      {
+        "start": 1309.2000000476837,
+        "duration": 97
+      },
+      {
+        "start": 1567.800000011921,
+        "duration": 105
+      },
+      {
+        "start": 1842.4000000357628,
+        "duration": 112
+      },
+      {
+        "start": 2142.2000000476837,
+        "duration": 114
+      },
+      {
+        "start": 2399.7000000476837,
+        "duration": 108
+      },
+      {
+        "start": 2691.7000000476837,
+        "duration": 89
+      },
+      {
+        "start": 2923.600000023842,
+        "duration": 71
+      },
+      {
+        "start": 3132.7000000476837,
+        "duration": 71
+      },
+      {
+        "start": 3341.800000011921,
+        "duration": 75
+      },
+      {
+        "start": 3559.7000000476837,
+        "duration": 97
+      }
+    ],
+    "commits": [
+      {
+        "phase": "mount",
+        "duration": 26.899999856948853,
+        "time": 238.60000002384186
+      },
+      {
+        "phase": "update",
+        "duration": 15.599999964237213,
+        "time": 307.30000001192093
+      },
+      {
+        "phase": "update",
+        "duration": 13.399999976158142,
+        "time": 337.2000000476837
+      },
+      {
+        "phase": "update",
+        "duration": 8.100000083446503,
+        "time": 352.30000001192093
+      },
+      {
+        "phase": "update",
+        "duration": 7.199999988079071,
+        "time": 364.60000002384186
+      },
+      {
+        "phase": "update",
+        "duration": 0.09999996423721313,
+        "time": 496.60000002384186
+      },
+      {
+        "phase": "update",
+        "duration": 81.5,
+        "time": 580.1000000238419
+      },
+      {
+        "phase": "update",
+        "duration": 1.0999999642372131,
+        "time": 608
+      },
+      {
+        "phase": "update",
+        "duration": 17.700000047683716,
+        "time": 626.7000000476837
+      },
+      {
+        "phase": "update",
+        "duration": 19.599999845027924,
+        "time": 658.4000000357628
+      },
+      {
+        "phase": "update",
+        "duration": 12.699999988079071,
+        "time": 776.8000000119209
+      },
+      {
+        "phase": "update",
+        "duration": 0.19999998807907104,
+        "time": 788.7000000476837
+      },
+      {
+        "phase": "update",
+        "duration": 0.09999996423721313,
+        "time": 789
+      },
+      {
+        "phase": "update",
+        "duration": 0.10000002384185791,
+        "time": 789.4000000357628
+      },
+      {
+        "phase": "update",
+        "duration": 11.199999928474426,
+        "time": 807.8000000119209
+      },
+      {
+        "phase": "update",
+        "duration": 9.899999976158142,
+        "time": 825.7000000476837
+      },
+      {
+        "phase": "update",
+        "duration": 0.19999998807907104,
+        "time": 946.3000000119209
+      },
+      {
+        "phase": "update",
+        "duration": 11.699999928474426,
+        "time": 959
+      },
+      {
+        "phase": "update",
+        "duration": 0.5,
+        "time": 967.7000000476837
+      },
+      {
+        "phase": "update",
+        "duration": 10,
+        "time": 978.3000000119209
+      },
+      {
+        "phase": "update",
+        "duration": 8.800000071525574,
+        "time": 993
+      },
+      {
+        "phase": "update",
+        "duration": 69.90000009536743,
+        "time": 1099.2000000476837
+      },
+      {
+        "phase": "update",
+        "duration": 16.199999928474426,
+        "time": 1138.7000000476837
+      },
+      {
+        "phase": "update",
+        "duration": 1.7999999523162842,
+        "time": 1153.2000000476837
+      },
+      {
+        "phase": "update",
+        "duration": 16.699999749660492,
+        "time": 1171.6000000238419
+      },
+      {
+        "phase": "update",
+        "duration": 11.900000035762787,
+        "time": 1229.9000000357628
+      },
+      {
+        "phase": "update",
+        "duration": 8,
+        "time": 1249
+      },
+      {
+        "phase": "update",
+        "duration": 1.699999988079071,
+        "time": 1257.1000000238419
+      },
+      {
+        "phase": "update",
+        "duration": 9.600000083446503,
+        "time": 1267.2000000476837
+      },
+      {
+        "phase": "update",
+        "duration": 58.099999845027924,
+        "time": 1370.2000000476837
+      },
+      {
+        "phase": "update",
+        "duration": 11.699999928474426,
+        "time": 1402.1000000238419
+      },
+      {
+        "phase": "update",
+        "duration": 1.399999976158142,
+        "time": 1414.300000011921
+      },
+      {
+        "phase": "update",
+        "duration": 15.399999976158142,
+        "time": 1431.300000011921
+      },
+      {
+        "phase": "update",
+        "duration": 10.999999940395355,
+        "time": 1492.2000000476837
+      },
+      {
+        "phase": "update",
+        "duration": 6.800000071525574,
+        "time": 1509.1000000238419
+      },
+      {
+        "phase": "update",
+        "duration": 1.199999988079071,
+        "time": 1515.800000011921
+      },
+      {
+        "phase": "update",
+        "duration": 7.300000011920929,
+        "time": 1523.5
+      },
+      {
+        "phase": "update",
+        "duration": 58.299999952316284,
+        "time": 1629.9000000357628
+      },
+      {
+        "phase": "update",
+        "duration": 14.20000010728836,
+        "time": 1668
+      },
+      {
+        "phase": "update",
+        "duration": 1.600000023841858,
+        "time": 1680.800000011921
+      },
+      {
+        "phase": "update",
+        "duration": 16.700000047683716,
+        "time": 1699.1000000238419
+      },
+      {
+        "phase": "update",
+        "duration": 9.199999928474426,
+        "time": 1764.6000000238419
+      },
+      {
+        "phase": "update",
+        "duration": 7.099999964237213,
+        "time": 1782.6000000238419
+      },
+      {
+        "phase": "update",
+        "duration": 1.199999988079071,
+        "time": 1789.4000000357628
+      },
+      {
+        "phase": "update",
+        "duration": 6.800000071525574,
+        "time": 1796.800000011921
+      },
+      {
+        "phase": "update",
+        "duration": 56.39999997615814,
+        "time": 1903
+      },
+      {
+        "phase": "update",
+        "duration": 16.700000047683716,
+        "time": 1948.2000000476837
+      },
+      {
+        "phase": "update",
+        "duration": 1.699999988079071,
+        "time": 1966.1000000238419
+      },
+      {
+        "phase": "update",
+        "duration": 18.5,
+        "time": 1986.7000000476837
+      },
+      {
+        "phase": "update",
+        "duration": 10.900000035762787,
+        "time": 2061.400000035763
+      },
+      {
+        "phase": "update",
+        "duration": 7.8000001311302185,
+        "time": 2079.800000011921
+      },
+      {
+        "phase": "update",
+        "duration": 1.699999988079071,
+        "time": 2088.7000000476837
+      },
+      {
+        "phase": "update",
+        "duration": 11.299999952316284,
+        "time": 2100.800000011921
+      },
+      {
+        "phase": "update",
+        "duration": 65.60000014305115,
+        "time": 2211.5
+      },
+      {
+        "phase": "update",
+        "duration": 13.700000047683716,
+        "time": 2250.900000035763
+      },
+      {
+        "phase": "update",
+        "duration": 1.399999976158142,
+        "time": 2264.5
+      },
+      {
+        "phase": "update",
+        "duration": 15.200000047683716,
+        "time": 2280.600000023842
+      },
+      {
+        "phase": "update",
+        "duration": 9.999999940395355,
+        "time": 2337.600000023842
+      },
+      {
+        "phase": "update",
+        "duration": 6.399999976158142,
+        "time": 2353.2000000476837
+      },
+      {
+        "phase": "update",
+        "duration": 1.0999999642372131,
+        "time": 2361
+      },
+      {
+        "phase": "update",
+        "duration": 5.799999952316284,
+        "time": 2367.7000000476837
+      },
+      {
+        "phase": "update",
+        "duration": 57.30000001192093,
+        "time": 2459.600000023842
+      },
+      {
+        "phase": "update",
+        "duration": 17.20000010728836,
+        "time": 2501.600000023842
+      },
+      {
+        "phase": "update",
+        "duration": 1.899999976158142,
+        "time": 2515.600000023842
+      },
+      {
+        "phase": "update",
+        "duration": 15.70000010728836,
+        "time": 2532.400000035763
+      },
+      {
+        "phase": "update",
+        "duration": 14.400000095367432,
+        "time": 2612.800000011921
+      },
+      {
+        "phase": "update",
+        "duration": 7.700000107288361,
+        "time": 2631.300000011921
+      },
+      {
+        "phase": "update",
+        "duration": 1.399999976158142,
+        "time": 2638.900000035763
+      },
+      {
+        "phase": "update",
+        "duration": 9.100000023841858,
+        "time": 2648.400000035763
+      },
+      {
+        "phase": "update",
+        "duration": 49.50000011920929,
+        "time": 2743.900000035763
+      },
+      {
+        "phase": "update",
+        "duration": 12.100000023841858,
+        "time": 2776.300000011921
+      },
+      {
+        "phase": "update",
+        "duration": 1.399999976158142,
+        "time": 2788.900000035763
+      },
+      {
+        "phase": "update",
+        "duration": 12.699999928474426,
+        "time": 2802.5
+      },
+      {
+        "phase": "update",
+        "duration": 9.100000023841858,
+        "time": 2854.800000011921
+      },
+      {
+        "phase": "update",
+        "duration": 6.200000047683716,
+        "time": 2869.900000035763
+      },
+      {
+        "phase": "update",
+        "duration": 0.8000000715255737,
+        "time": 2875.7000000476837
+      },
+      {
+        "phase": "update",
+        "duration": 6.199999928474426,
+        "time": 2882.300000011921
+      },
+      {
+        "phase": "update",
+        "duration": 37.69999998807907,
+        "time": 2963.600000023842
+      },
+      {
+        "phase": "update",
+        "duration": 9.699999928474426,
+        "time": 2990.300000011921
+      },
+      {
+        "phase": "update",
+        "duration": 1.2999999523162842,
+        "time": 3001.2000000476837
+      },
+      {
+        "phase": "update",
+        "duration": 10.300000071525574,
+        "time": 3012.800000011921
+      },
+      {
+        "phase": "update",
+        "duration": 8.099999964237213,
+        "time": 3059.600000023842
+      },
+      {
+        "phase": "update",
+        "duration": 6.099999964237213,
+        "time": 3075
+      },
+      {
+        "phase": "update",
+        "duration": 0.9000000953674316,
+        "time": 3080.900000035763
+      },
+      {
+        "phase": "update",
+        "duration": 7.800000011920929,
+        "time": 3089.2000000476837
+      },
+      {
+        "phase": "update",
+        "duration": 37.19999998807907,
+        "time": 3173.100000023842
+      },
+      {
+        "phase": "update",
+        "duration": 10.399999976158142,
+        "time": 3200.2000000476837
+      },
+      {
+        "phase": "update",
+        "duration": 1.399999976158142,
+        "time": 3210.5
+      },
+      {
+        "phase": "update",
+        "duration": 10.699999928474426,
+        "time": 3222.300000011921
+      },
+      {
+        "phase": "update",
+        "duration": 8.400000035762787,
+        "time": 3269.600000023842
+      },
+      {
+        "phase": "update",
+        "duration": 6.300000011920929,
+        "time": 3285.100000023842
+      },
+      {
+        "phase": "update",
+        "duration": 1.0000000596046448,
+        "time": 3291
+      },
+      {
+        "phase": "update",
+        "duration": 9.399999976158142,
+        "time": 3300.900000035763
+      },
+      {
+        "phase": "update",
+        "duration": 40.700000047683716,
+        "time": 3384
+      },
+      {
+        "phase": "update",
+        "duration": 11.600000023841858,
+        "time": 3412.7000000476837
+      },
+      {
+        "phase": "update",
+        "duration": 1.300000011920929,
+        "time": 3423.600000023842
+      },
+      {
+        "phase": "update",
+        "duration": 10.999999940395355,
+        "time": 3435.2000000476837
+      },
+      {
+        "phase": "update",
+        "duration": 9.5,
+        "time": 3487.100000023842
+      },
+      {
+        "phase": "update",
+        "duration": 6.5,
+        "time": 3503.400000035763
+      },
+      {
+        "phase": "update",
+        "duration": 1.2000000476837158,
+        "time": 3510.7000000476837
+      },
+      {
+        "phase": "update",
+        "duration": 7.199999988079071,
+        "time": 3518.400000035763
+      },
+      {
+        "phase": "update",
+        "duration": 53.89999997615814,
+        "time": 3616.7000000476837
+      },
+      {
+        "phase": "update",
+        "duration": 12.600000083446503,
+        "time": 3652
+      },
+      {
+        "phase": "update",
+        "duration": 1.399999976158142,
+        "time": 3664.300000011921
+      },
+      {
+        "phase": "update",
+        "duration": 13.399999976158142,
+        "time": 3678.7000000476837
+      }
+    ],
+    "timings": [
+      {
+        "type": "JSON.parse",
+        "start": 338.2000000476837,
+        "duration": 0,
+        "size": 74
+      },
+      {
+        "type": "JSON.parse",
+        "start": 338.2000000476837,
+        "duration": 0,
+        "size": 262
+      },
+      {
+        "type": "JSON.parse",
+        "start": 338.30000001192093,
+        "duration": 0,
+        "size": 340
+      },
+      {
+        "type": "JSON.parse",
+        "start": 338.4000000357628,
+        "duration": 0,
+        "size": 1328
+      },
+      {
+        "type": "JSON.parse",
+        "start": 338.4000000357628,
+        "duration": 0,
+        "size": 105
+      },
+      {
+        "type": "JSON.parse",
+        "start": 338.4000000357628,
+        "duration": 0,
+        "size": 125
+      },
+      {
+        "type": "JSON.parse",
+        "start": 495.80000001192093,
+        "duration": 0.10000002384185791,
+        "size": 15699
+      },
+      {
+        "type": "parseMessages",
+        "start": 496.10000002384186,
+        "duration": 0.10000002384185791,
+        "size": 100
+      },
+      {
+        "type": "JSON.parse",
+        "start": 605.5,
+        "duration": 0.10000002384185791,
+        "size": 152
+      },
+      {
+        "type": "JSON.parse",
+        "start": 606.1000000238419,
+        "duration": 0,
+        "size": 152
+      },
+      {
+        "type": "JSON.parse",
+        "start": 788.4000000357628,
+        "duration": 0,
+        "size": 74
+      },
+      {
+        "type": "JSON.parse",
+        "start": 788.8000000119209,
+        "duration": 0,
+        "size": 262
+      },
+      {
+        "type": "JSON.parse",
+        "start": 789.1000000238419,
+        "duration": 0,
+        "size": 340
+      },
+      {
+        "type": "JSON.parse",
+        "start": 789.2000000476837,
+        "duration": 0,
+        "size": 1328
+      },
+      {
+        "type": "JSON.parse",
+        "start": 789.2000000476837,
+        "duration": 0.09999996423721313,
+        "size": 105
+      },
+      {
+        "type": "JSON.parse",
+        "start": 789.3000000119209,
+        "duration": 0,
+        "size": 125
+      },
+      {
+        "type": "JSON.parse",
+        "start": 945.9000000357628,
+        "duration": 0,
+        "size": 378
+      },
+      {
+        "type": "parseMessages",
+        "start": 945.9000000357628,
+        "duration": 0,
+        "size": 2
+      },
+      {
+        "type": "JSON.parse",
+        "start": 966.5,
+        "duration": 0,
+        "size": 152
+      },
+      {
+        "type": "JSON.parse",
+        "start": 966.7000000476837,
+        "duration": 0,
+        "size": 152
+      },
+      {
+        "type": "JSON.parse",
+        "start": 1120.4000000357628,
+        "duration": 0,
+        "size": 153
+      },
+      {
+        "type": "JSON.parse",
+        "start": 1121.1000000238419,
+        "duration": 0,
+        "size": 153
+      },
+      {
+        "type": "JSON.parse",
+        "start": 1239.7000000476837,
+        "duration": 0,
+        "size": 153
+      },
+      {
+        "type": "JSON.parse",
+        "start": 1240.2000000476837,
+        "duration": 0,
+        "size": 153
+      },
+      {
+        "type": "JSON.parse",
+        "start": 1388.300000011921,
+        "duration": 0,
+        "size": 153
+      },
+      {
+        "type": "JSON.parse",
+        "start": 1388.800000011921,
+        "duration": 0,
+        "size": 153
+      },
+      {
+        "type": "JSON.parse",
+        "start": 1500.7000000476837,
+        "duration": 0,
+        "size": 153
+      },
+      {
+        "type": "JSON.parse",
+        "start": 1501.4000000357628,
+        "duration": 0,
+        "size": 153
+      },
+      {
+        "type": "JSON.parse",
+        "start": 1651.300000011921,
+        "duration": 0,
+        "size": 153
+      },
+      {
+        "type": "JSON.parse",
+        "start": 1652.1000000238419,
+        "duration": 0,
+        "size": 153
+      },
+      {
+        "type": "JSON.parse",
+        "start": 1773.9000000357628,
+        "duration": 0.09999996423721313,
+        "size": 153
+      },
+      {
+        "type": "JSON.parse",
+        "start": 1774.5,
+        "duration": 0,
+        "size": 153
+      },
+      {
+        "type": "JSON.parse",
+        "start": 1928.2000000476837,
+        "duration": 0,
+        "size": 153
+      },
+      {
+        "type": "JSON.parse",
+        "start": 1929,
+        "duration": 0,
+        "size": 153
+      },
+      {
+        "type": "JSON.parse",
+        "start": 2070.7000000476837,
+        "duration": 0,
+        "size": 153
+      },
+      {
+        "type": "JSON.parse",
+        "start": 2071.2000000476837,
+        "duration": 0,
+        "size": 153
+      },
+      {
+        "type": "JSON.parse",
+        "start": 2235.300000011921,
+        "duration": 0,
+        "size": 153
+      },
+      {
+        "type": "JSON.parse",
+        "start": 2235.900000035763,
+        "duration": 0,
+        "size": 153
+      },
+      {
+        "type": "JSON.parse",
+        "start": 2345.600000023842,
+        "duration": 0,
+        "size": 153
+      },
+      {
+        "type": "JSON.parse",
+        "start": 2346,
+        "duration": 0,
+        "size": 153
+      },
+      {
+        "type": "JSON.parse",
+        "start": 2481.900000035763,
+        "duration": 0,
+        "size": 153
+      },
+      {
+        "type": "JSON.parse",
+        "start": 2482.600000023842,
+        "duration": 0,
+        "size": 153
+      },
+      {
+        "type": "JSON.parse",
+        "start": 2622.2000000476837,
+        "duration": 0,
+        "size": 153
+      },
+      {
+        "type": "JSON.parse",
+        "start": 2622.800000011921,
+        "duration": 0,
+        "size": 153
+      },
+      {
+        "type": "JSON.parse",
+        "start": 2762.2000000476837,
+        "duration": 0,
+        "size": 153
+      },
+      {
+        "type": "JSON.parse",
+        "start": 2762.800000011921,
+        "duration": 0,
+        "size": 153
+      },
+      {
+        "type": "JSON.parse",
+        "start": 2862.7000000476837,
+        "duration": 0,
+        "size": 153
+      },
+      {
+        "type": "JSON.parse",
+        "start": 2863.300000011921,
+        "duration": 0,
+        "size": 153
+      },
+      {
+        "type": "JSON.parse",
+        "start": 2978.5,
+        "duration": 0.10000002384185791,
+        "size": 153
+      },
+      {
+        "type": "JSON.parse",
+        "start": 2979,
+        "duration": 0,
+        "size": 153
+      },
+      {
+        "type": "JSON.parse",
+        "start": 3067.600000023842,
+        "duration": 0.10000002384185791,
+        "size": 153
+      },
+      {
+        "type": "JSON.parse",
+        "start": 3068.100000023842,
+        "duration": 0,
+        "size": 153
+      },
+      {
+        "type": "JSON.parse",
+        "start": 3188,
+        "duration": 0,
+        "size": 153
+      },
+      {
+        "type": "JSON.parse",
+        "start": 3188.400000035763,
+        "duration": 0,
+        "size": 153
+      },
+      {
+        "type": "JSON.parse",
+        "start": 3277.900000035763,
+        "duration": 0,
+        "size": 153
+      },
+      {
+        "type": "JSON.parse",
+        "start": 3278.2000000476837,
+        "duration": 0.09999996423721313,
+        "size": 153
+      },
+      {
+        "type": "JSON.parse",
+        "start": 3399.400000035763,
+        "duration": 0,
+        "size": 153
+      },
+      {
+        "type": "JSON.parse",
+        "start": 3399.800000011921,
+        "duration": 0,
+        "size": 153
+      },
+      {
+        "type": "JSON.parse",
+        "start": 3495.5,
+        "duration": 0,
+        "size": 153
+      },
+      {
+        "type": "JSON.parse",
+        "start": 3496,
+        "duration": 0,
+        "size": 153
+      },
+      {
+        "type": "JSON.parse",
+        "start": 3637.5,
+        "duration": 0,
+        "size": 153
+      },
+      {
+        "type": "JSON.parse",
+        "start": 3637.900000035763,
+        "duration": 0,
+        "size": 153
+      }
+    ],
+    "scale": {
+      "messageCount": 100,
+      "entryCount": 100,
+      "chatCount": 30,
+      "kind": "text",
+      "bytes": 15631,
+      "codeLines": 0
+    },
+    "sidebarRows": 30,
+    "processes": 2,
+    "listeners": 4
+  },
+  "summary": {
+    "highlight": {
+      "n": 20,
+      "p50": 25.30000001192093,
+      "p95": 84.09999996423721
+    },
+    "loading": {
+      "n": 0
+    },
+    "paintOpportunity": {
+      "n": 20,
+      "p50": 39.39999997615814,
+      "p95": 138.5999999642372
+    },
+    "history": {
+      "n": 20,
+      "p50": 25.399999976158142,
+      "p95": 84.5
+    },
+    "ready": {
+      "n": 20,
+      "p50": 25.399999976158142,
+      "p95": 84.5
+    }
+  },
+  "skipped": [
+    "编辑状态隔离：当前消息界面未提供编辑并重发入口"
+  ]
+}

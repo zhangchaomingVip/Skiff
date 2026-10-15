@@ -1,13 +1,14 @@
 // Exercise the real reducer path and the rendered needle, not just speed numbers.
 import { createRequire } from "node:module";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 
-const { chromium } = createRequire(import.meta.url)("playwright");
+const require = createRequire(import.meta.url);
+const { chromium } = process.env.SKIFF_PLAYWRIGHT_DIR ? require(process.env.SKIFF_PLAYWRIGHT_DIR) : require("playwright");
 const browser = await chromium.launch({ headless: true, channel: process.env.SKIFF_BROWSER_CHANNEL ?? "msedge" });
 const base = process.argv[2] ?? "http://localhost:1424";
-const screenshots = new URL("../features/014-voyage-panel-polish/screenshots/needle/", import.meta.url);
+const screenshots = process.env.SKIFF_SCREENSHOT_DIR ? pathToFileURL(`${process.env.SKIFF_SCREENSHOT_DIR}/`) : new URL("../features/014-voyage-panel-polish/screenshots/needle/", import.meta.url);
 await fs.mkdir(screenshots, { recursive: true });
 const page = await browser.newPage({ viewport: { width: 1200, height: 800 } });
 const errors = [];

@@ -113,6 +113,17 @@ export class PiRpc {
 		await invoke("rpc_stop", { instanceId: this.instanceId });
 	}
 
+	/** Extension replies retain pi's id and have no response/acknowledgement. */
+	async sendCommand(command: Record<string, unknown> & { type: string }): Promise<void> {
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		try {
+			await Promise.race([
+				invoke("rpc_send", { instanceId: this.instanceId, message: JSON.stringify(command) }),
+				new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error("Extension reply write outcome unknown")), 5000); }),
+			]);
+		} finally { clearTimeout(timer); }
+	}
+
 	private handleLine(line: string): void {
 		const trimmed = line.trim();
 		if (!trimmed) return;

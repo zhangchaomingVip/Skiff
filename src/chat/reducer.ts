@@ -1,3 +1,4 @@
+import { extensionDialog, queueSnapshot } from "./interactions";
 import { parseBlocks } from "./parse";
 import type { ChatMessage, ContentBlock, SessionState } from "./types";
 import type { RpcEvent } from "../rpc/RpcClient";
@@ -41,12 +42,24 @@ export interface ReducerOptions {
 
 function reduceChat(state: SessionState, event: RpcEvent, options: ReducerOptions = {}): SessionState {
 	switch (event.type) {
+		case "queue_update": return { ...state, queue: queueSnapshot(event) };
+		case "queue_withdrawn": return { ...state, withdrawn: queueSnapshot(event) };
+		case "stop_pending": return { ...state, stopping: true };
+		case "stop_finished": {
+			const turnId = typeof event.turnId === "string" ? event.turnId : state.lastOutcome?.turnId;
+			return { ...state, stopping: false, ...(event.success === true ? { lastOutcome: { reason: "manual", turnId }, messages: state.messages.map((message) => `turn:${message.id}` === turnId ? { ...message, turnResult: "manual" } : message) } : {}) };
+		}
+		case "dialog_sending": return { ...state, dialogs: state.dialogs?.map((dialog) => dialog.id === event.id ? { ...dialog, sending: true } : dialog) };
+		case "dialog_uncertain": return { ...state, dialogs: state.dialogs?.map((dialog) => dialog.id === event.id ? { ...dialog, sending: true, error: "回包写入结果不明，为避免重复操作不会重发。请重连以恢复交互。" } : dialog) };
+		case "dialog_expired":
+		case "dialog_replied": return { ...state, dialogs: state.dialogs?.filter((dialog) => dialog.id !== event.id), ...(event.type === "dialog_expired" ? { notices: [...state.notices, { id: nextId("notice"), kind: "warning" as const, text: "等待已超时，pi 将按默认值处理" }] } : {}) };
+		case "agent_end": return state;
 		case "prompt_start": {
 			const startedAt = timestamp(event.startedAt);
 			const message = event.message as ChatMessage | undefined;
 			if (startedAt === undefined || typeof event.promptId !== "string" || message?.role !== "user" || typeof message.id !== "string") return state;
 			return {
-				...state, isStreaming: true, lastError: undefined,
+				...state, isStreaming: true, lastError: undefined, lastOutcome: undefined,
 				activeRun: { startedAt, turnId: `turn:${message.id}`, promptId: event.promptId },
 				pendingPrompt: { id: event.promptId, userMessage: message },
 			};
@@ -62,7 +75,6 @@ function reduceChat(state: SessionState, event: RpcEvent, options: ReducerOption
 		}
 
 		case "agent_settled":
-		case "agent_end":
 		case "bridge_exit": {
 			const settled = state.activeRun?.turnId && typeof event.durationMs === "number"
 				? reduceChat(state, { type: "turn_duration", turnId: state.activeRun.turnId, durationMs: event.durationMs, completedAt: event.completedAt }, options)
@@ -73,7 +85,7 @@ function reduceChat(state: SessionState, event: RpcEvent, options: ReducerOption
 				activeRun: undefined,
 				pendingPrompt: undefined,
 				messages: settled.messages.map((m) => (m.streaming ? { ...m, streaming: false } : m)),
-				...(event.type === "bridge_exit" ? { lastError: String(event.message) } : {}),
+				...(event.type === "bridge_exit" ? { lastError: String(event.message), dialogs: [], queue: { steering: [], followUp: [] }, stopping: false } : {}),
 			};
 		}
 
@@ -197,7 +209,7 @@ function reduceChat(state: SessionState, event: RpcEvent, options: ReducerOption
 			if (index < 0) return { ...state, messages: [...state.messages, finalised] };
 			const messages = [...state.messages];
 			messages[index] = finalised;
-			return { ...state, messages, ...(typeof message?.errorMessage === "string" ? { lastError: message.errorMessage } : {}) };
+			return { ...state, messages, ...(role === "assistant" && ["stop", "length", "error", "aborted"].includes(String(message?.stopReason)) ? { lastOutcome: { reason: String(message?.stopReason), turnId: state.activeRun?.turnId } } : {}), ...(typeof message?.errorMessage === "string" ? { lastError: message.errorMessage } : {}) };
 		}
 
 		case "turn_duration": {
@@ -217,6 +229,8 @@ function reduceChat(state: SessionState, event: RpcEvent, options: ReducerOption
 			return { ...state, thinkingLevel: typeof event.level === "string" ? event.level : state.thinkingLevel };
 
 		case "extension_ui_request": {
+			const dialog = extensionDialog(event, timestamp(event.voyageAt) ?? Date.now());
+			if (dialog) return state.dialogs?.some((item) => item.id === dialog.id) ? state : { ...state, dialogs: [...(state.dialogs ?? []), dialog] };
 			if (event.method === "notify" && typeof event.message === "string") {
 				const kind = event.notifyType === "error" || event.notifyType === "warning" ? event.notifyType : "info";
 				return {
@@ -231,6 +245,7 @@ function reduceChat(state: SessionState, event: RpcEvent, options: ReducerOption
 			return {
 				...state,
 				lastError: String(event.errorMessage ?? event.message ?? "unknown error"),
+				lastOutcome: { reason: "error", turnId: state.activeRun?.turnId },
 			};
 
 		default:
@@ -285,9 +300,9 @@ function voyageEventsFor(state: SessionState, event: RpcEvent): VoyageEvent[] {
 		return [{ type: "run_start", key: `run:${run?.promptId ?? run?.startedAt ?? at}`, at, phase: "thinking" }];
 	}
 	if (event.type === "prompt_cancel") return state.activeRun?.promptId === event.promptId ? [{ type: "run_end", at, status: "aborted" }] : [];
-	if (event.type === "agent_end" || event.type === "agent_settled") return [{ type: "run_end", at, status: "completed" }];
+	if (event.type === "agent_settled") return [{ type: "run_end", at, status: state.lastOutcome?.reason === "length" ? "truncated" : state.lastOutcome?.reason === "error" ? "failed" : state.lastOutcome?.reason === "aborted" ? "aborted" : "completed" }];
 	if (event.type === "bridge_exit") return [{ type: "run_end", at, status: "failed" }];
-	if (event.type === "error") return [{ type: "run_end", at, status: "failed" }];
+
 	if (event.type === "message_update") {
 		const delta = record(event.assistantMessageEvent);
 		if (!delta) return [];
@@ -316,8 +331,7 @@ function voyageEventsFor(state: SessionState, event: RpcEvent): VoyageEvent[] {
 			}
 			const usage = usageEvent(at, message.usage);
 			if (usage) events.push(usage);
-			const stop = String(message.stopReason ?? "");
-			if (["stop", "length", "error", "aborted"].includes(stop)) events.push({ type: "run_end", at, status: stop === "aborted" ? "aborted" : stop === "error" ? "failed" : "completed" });
+			// Keep the timeline open through queued work, retries and compaction.
 		}
 		return events;
 	}

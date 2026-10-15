@@ -1,4 +1,5 @@
-import { TextArea, IconButton } from "./ui";
+import type { Delivery } from "../chat/interactions";
+import { TextArea, IconButton, Button, Select } from "./ui";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import type { ImageAttachment, ModelInfo } from "../chat/types";
 import { readImages } from "../chat/images";
@@ -17,6 +18,7 @@ const IMAGE_CAPABILITY_ERROR = "当前模型未启用图片输入，请在模型
 export function Composer({
 	disabled,
 	streaming,
+	stopping = false,
 	onSend,
 	onAbort,
 	text,
@@ -37,10 +39,12 @@ export function Composer({
 	getCommands,
 	search,
 	onConfigureSearch,
+	onAttachmentsChange,
 }: {
 	disabled: boolean;
 	streaming: boolean;
-	onSend: (text: string, images?: ImageAttachment[]) => Promise<boolean>;
+	stopping?: boolean;
+	onSend: (text: string, images?: ImageAttachment[], delivery?: Delivery) => Promise<boolean>;
 	onAbort: () => void;
 	text: string;
 	onTextChange: (text: string) => void;
@@ -60,14 +64,21 @@ export function Composer({
 	getCommands: () => Promise<PiCommand[]>;
 	search: WebSearchControls;
 	onConfigureSearch: () => void;
+	onAttachmentsChange?: (images: ImageAttachment[], files: TextAttachment[]) => void;
 }) {
 	const inputRef = useRef<HTMLTextAreaElement>(null);
 	const sendingRef = useRef(false);
+	const [delivery, setDelivery] = useState<Delivery>("steer");
 	const textRef = useRef(text);
 	textRef.current = text;
 	const fileRef = useRef<HTMLInputElement>(null);
 	const [images, setImages] = useState<ImageAttachment[]>([]);
 	const [files, setFiles] = useState<TextAttachment[]>([]);
+	const attachmentsRef = useRef({ images, files }); attachmentsRef.current = { images, files };
+	const updateAttachments = (nextImages: ImageAttachment[], nextFiles: TextAttachment[]) => {
+		attachmentsRef.current = { images: nextImages, files: nextFiles };
+		setImages(nextImages); setFiles(nextFiles); onAttachmentsChange?.(nextImages, nextFiles);
+	};
 	const [commands, setCommands] = useState<{ name: string; description?: string }[]>([]);
 	const [commandError, setCommandError] = useState(false);
 	const [menuDismissed, setMenuDismissed] = useState(false);
@@ -95,13 +106,13 @@ export function Composer({
 	const canUseImages = model?.input?.includes("image") ?? false;
 	useEffect(() => { setImageError(undefined); }, [model?.provider, model?.id, canUseImages]);
 	const addAttachments = async (selected: File[]) => {
-		if (!selected.length || addingRef.current || sendingRef.current || streaming) return;
+		if (!selected.length || addingRef.current || sendingRef.current ) return;
 		addingRef.current = true; setReading(true); setImageError(undefined);
 		try {
 			const imageFiles = selected.filter((file) => !isWordFile(file) && file.type.startsWith("image/"));
 			const textFiles = selected.filter((file) => isWordFile(file) || !file.type.startsWith("image/"));
 			const [addedImages, addedFiles] = await Promise.all([readImages(imageFiles, images.length), readTextFiles(textFiles, files.length)]);
-			setImages((previous) => [...previous, ...addedImages]); setFiles((previous) => [...previous, ...addedFiles]);
+			updateAttachments([...attachmentsRef.current.images, ...addedImages], [...attachmentsRef.current.files, ...addedFiles]);
 		}
 		catch (error) { setImageError(error instanceof Error ? error.message : String(error)); }
 		finally { addingRef.current = false; setReading(false); }
@@ -115,21 +126,21 @@ export function Composer({
 
 	const submit = async () => {
 		const trimmed = text.trim();
-		if ((!trimmed && !images.length && !files.length) || disabled || streaming || sendingRef.current || reading) return;
+		if ((!trimmed && !images.length && !files.length) || disabled || sendingRef.current || reading) return;
 		if (images.length && !canUseImages) { setImageError(IMAGE_CAPABILITY_ERROR); return; }
 		sendingRef.current = true;
 		const sentIds = new Set(images.map((image) => image.id));
 		const sentFiles = new Set(files.map((file) => file.id));
-		try { if (await onSend(appendTextFiles(trimmed, files), images)) { if (textRef.current === text) onTextChange(""); setImages((current) => current.filter((image) => !sentIds.has(image.id))); setFiles((current) => current.filter((file) => !sentFiles.has(file.id))); } } finally { sendingRef.current = false; }
+		try { if (await onSend(appendTextFiles(trimmed, files), images, delivery)) { if (textRef.current === text) onTextChange(""); updateAttachments(attachmentsRef.current.images.filter((image) => !sentIds.has(image.id)), attachmentsRef.current.files.filter((file) => !sentFiles.has(file.id))); } } finally { sendingRef.current = false; }
 	};
 
 	const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
 		if (event.nativeEvent.isComposing || event.keyCode === 229) return;
+		if (event.ctrlKey && event.shiftKey && event.key === "Backspace" && streaming) { event.preventDefault(); onAbort(); return; }
 		if (event.key === "Escape") {
 			event.preventDefault();
 			if (menuOpen) setMenuDismissed(true);
-			else if (streaming) onAbort();
-			else if (!reading && !sendingRef.current) { if (editing) onCancelEdit(); else onTextChange(""); setImages([]); setFiles([]); setImageError(undefined); }
+			else if (!reading && !sendingRef.current) { if (editing) onCancelEdit(); else { onTextChange(""); updateAttachments([], []); } setImageError(undefined); }
 			return;
 		}
 		if (menuOpen && (event.key === "ArrowDown" || event.key === "ArrowUp") && slash) { event.preventDefault(); setActiveOption((index) => Math.max(0, Math.min(options.length - 1, index + (event.key === "ArrowDown" ? 1 : -1)))); return; }
@@ -144,13 +155,13 @@ export function Composer({
 	};
 
 	return (
-		<div className="composer-wrap"><div className="composer" onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); void addAttachments(Array.from(event.dataTransfer.files)); }}>
-			{editing && <div className="editing-banner">编辑提问 · 发送后替换本轮及后续消息<button disabled={streaming || reading || sendingRef.current} onClick={() => { onCancelEdit(); setFiles([]); }} aria-label="取消编辑"><Icon name="close" size={14} /></button></div>}
+		<div className="composer-wrap">{streaming && <div className="delivery-control"><Select aria-label="投递时机" value={delivery} onChange={(event) => setDelivery(event.target.value as Delivery)}><option value="steer">插话</option><option value="follow_up">等本轮做完</option></Select><span>{delivery === "steer" ? "当前工具调用结束后、下一次模型请求前插入" : "本轮没有更多待处理工作时送达"}</span></div>}<div className="composer" onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); void addAttachments(Array.from(event.dataTransfer.files)); }}>
+			{editing && <div className="editing-banner">编辑提问 · 发送后替换本轮及后续消息<button disabled={disabled || reading || sendingRef.current} onClick={onCancelEdit} aria-label="取消编辑"><Icon name="close" size={14} /></button></div>}
 			{menuOpen && <div className="composer-menu" aria-label={slash ? "命令面板" : "文件引用"}>
 				{slash ? <>{options.map((command, index) => <button key={command.name} className={index === activeOption ? "focused" : ""} onClick={() => { onTextChange(`/${command.name} `); inputRef.current?.focus(); }} aria-label={`使用命令 ${command.name}`}><strong>/{command.name}</strong><span>{command.description}</span></button>)}{!options.length && <p>{commandError ? "无法读取 pi 命令，请重新连接后重试" : "暂无匹配命令"}</p>}</> : <p>输入项目相对路径，按 Enter 引用。<br />例如 @src/App.tsx · 外部文件可通过 + 添加文本或 Word 文件。</p>}
 			</div>}
-			{files.length > 0 && <div className="text-attachments">{files.map((file) => <div key={file.id}><Icon name={/\.docx$/i.test(file.name) ? "file" : "code"} size={14} /><span>{file.name}</span><button disabled={streaming || sendingRef.current} aria-label={`移除文件 ${file.name}`} onClick={() => setFiles((items) => items.filter((item) => item.id !== file.id))}><Icon name="close" size={12} /></button></div>)}</div>}
-			{images.length > 0 && <div className="attachment-list">{images.map((image) => <div className="attachment" key={image.id}><img src={`data:${image.mimeType};base64,${image.data}`} alt={image.name} /><button className="attachment-remove" aria-label={`移除图片 ${image.name}`} disabled={streaming || sendingRef.current} onClick={() => setImages((previous) => previous.filter((item) => item.id !== image.id))}><Icon name="close" size={12} /></button><span title={image.name}>{image.name}</span></div>)}</div>}
+			{files.length > 0 && <div className="text-attachments">{files.map((file) => <div key={file.id}><Icon name={/\.docx$/i.test(file.name) ? "file" : "code"} size={14} /><span>{file.name}</span><button disabled={disabled || sendingRef.current} aria-label={`移除文件 ${file.name}`} onClick={() => updateAttachments(images, files.filter((item) => item.id !== file.id))}><Icon name="close" size={12} /></button></div>)}</div>}
+			{images.length > 0 && <div className="attachment-list">{images.map((image) => <div className="attachment" key={image.id}><img src={`data:${image.mimeType};base64,${image.data}`} alt={image.name} /><button className="attachment-remove" aria-label={`移除图片 ${image.name}`} disabled={disabled || sendingRef.current} onClick={() => updateAttachments(images.filter((item) => item.id !== image.id), files)}><Icon name="close" size={12} /></button><span title={image.name}>{image.name}</span></div>)}</div>}
 			{(imageError || (images.length > 0 && !canUseImages)) && <p className="attachment-error" role="alert">{imageError ?? IMAGE_CAPABILITY_ERROR}</p>}
 			<TextArea
 				appearance="plain"
@@ -164,9 +175,10 @@ export function Composer({
 				onKeyDown={onKeyDown}
 				onPaste={(event) => { const selected = Array.from(event.clipboardData.files); if (selected.length) { event.preventDefault(); void addAttachments(selected); } }}
 			/>
-			<div className="composer-bottom"><span className="composer-context"><IconButton  onClick={() => fileRef.current?.click()} disabled={streaming || reading || sendingRef.current} aria-label="添加图片、文本或 Word 文件" title="添加图片、UTF-8 文本或 Word（.docx）文件（支持拖放或粘贴）；Word 提取正文，单个最大 10 MiB"><Icon name="plus" size={20} /></IconButton><ModelMenu models={models} model={model} onModel={onSelectModel} disabled={!connected || modelDisabled} /><WebSearchToggle search={search} disabled={disabled} onConfigure={onConfigureSearch} /><ReasoningChip level={thinkingLevel} levels={thinkingLevels} disabled={!connected || modelDisabled} onLevel={onThinkingLevel} />{reading && <span>读取中…</span>}</span><input ref={fileRef} type="file" hidden multiple accept="image/png,image/jpeg,image/webp,image/gif,text/*,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx,.log,.json,.ts,.tsx,.js,.rs,.py,.yaml,.yml,.toml" onChange={(event) => { void addAttachments(Array.from(event.target.files ?? [])); event.target.value = ""; }} /><div className="composer-actions">
+			<div className="composer-bottom"><span className="composer-context"><IconButton  onClick={() => fileRef.current?.click()} disabled={disabled || reading || sendingRef.current} aria-label="添加图片、文本或 Word 文件" title="添加图片、UTF-8 文本或 Word（.docx）文件（支持拖放或粘贴）；Word 提取正文，单个最大 10 MiB"><Icon name="plus" size={20} /></IconButton><ModelMenu models={models} model={model} onModel={onSelectModel} disabled={!connected || modelDisabled} /><WebSearchToggle search={search} disabled={disabled} onConfigure={onConfigureSearch} /><ReasoningChip level={thinkingLevel} levels={thinkingLevels} disabled={!connected || modelDisabled} onLevel={onThinkingLevel} />{reading && <span>读取中…</span>}</span><input ref={fileRef} type="file" hidden multiple accept="image/png,image/jpeg,image/webp,image/gif,text/*,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx,.log,.json,.ts,.tsx,.js,.rs,.py,.yaml,.yml,.toml" onChange={(event) => { void addAttachments(Array.from(event.target.files ?? [])); event.target.value = ""; }} /><div className="composer-actions">
+				{streaming && <><Button variant="primary" disabled={disabled || reading || (!text.trim() && !images.length && !files.length)} onClick={() => void submit()}>{delivery === "steer" ? "插话" : "排队发送"}</Button></>}
 				{streaming ? (
-					<IconButton className="send-btn" variant="primary" size="primary" onClick={onAbort} aria-label="停止生成" title="停止生成">
+					<IconButton className="send-btn" variant="primary" size="primary" onClick={onAbort} disabled={stopping || !connected} aria-label="停止生成" title="停止生成（Ctrl+Shift+Backspace）">
 						<Icon name="stop" size={17} />
 					</IconButton>
 				) : (
@@ -175,6 +187,6 @@ export function Composer({
 					</IconButton>
 				)}
 			</div></div>
-		</div><p className="composer-hint">Enter 发送 · Shift + Enter 换行<span>Ctrl K 聚焦 · Esc 清空 / 停止</span></p></div>
+		</div><p className="composer-hint">Enter 发送 · Shift + Enter 换行<span>Ctrl K 聚焦 · Esc 清空 · Ctrl Shift Backspace 停止</span></p></div>
 	);
 }

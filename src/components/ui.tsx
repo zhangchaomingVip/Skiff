@@ -2,7 +2,7 @@ import { cloneElement, isValidElement, forwardRef, useEffect, useId, useLayoutEf
 import { Icon } from "./Icon";
 
 type Size = "compact" | "regular" | "primary";
-type Variant = "secondary" | "primary" | "ghost" | "danger";
+type Variant = "secondary" | "primary" | "ghost" | "danger" | "setting";
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & { size?: Size; variant?: Variant; loading?: boolean };
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button({ size = "regular", variant = "secondary", loading, disabled, type = "button", className = "", children, ...props }, ref) {
 	return <button {...props} ref={ref} type={type} disabled={disabled || loading} aria-busy={loading || undefined} data-size={size} data-variant={variant} className={`ui-button ${className}`}><span className="ui-button-content">{loading && <Icon name="clock" size={16} />}{children}</span></button>;

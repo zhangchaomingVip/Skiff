@@ -103,7 +103,7 @@ fn discovery_http_error(status: u16, bytes: &[u8], key: &str) -> String {
 
 /// A model reported by an OpenAI-compatible `/models` endpoint. Only the
 /// capability flags Skiff can act on are kept; everything else is ignored.
-#[derive(Clone, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct DiscoveredModel {
 	pub id: String,
@@ -415,7 +415,7 @@ mod tests {
 	}
 	#[test]
 	fn discovery_times_out_while_reading_the_body() {
-		use std::io::{Read, Write};
+		use std::io::Read;
 		let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
 		let address = listener.local_addr().unwrap();
 		let server = std::thread::spawn(move || {
@@ -448,7 +448,7 @@ mod tests {
 			write!(stream, "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", body.len(), body).unwrap();
 		});
 		let models = tauri::async_runtime::block_on(discover(&format!("http://{address}/v1"), "test-key")).unwrap();
-		assert_eq!(models, ["a-model", "z-model"]); server.join().unwrap();
+		assert_eq!(models.iter().map(|model| model.id.as_str()).collect::<Vec<_>>(), ["a-model", "z-model"]); server.join().unwrap();
 	}
 	#[test]
 	fn fetched_page_serializes_camel_case_for_the_frontend_contract() {

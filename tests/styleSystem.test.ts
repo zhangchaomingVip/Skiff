@@ -10,6 +10,9 @@ test("visual tokens, selector scope and contrast pass the standalone style audit
 	assert.match(output, /style errors: 0/);
 	assert.match(output, /contrast failures: 0/);
 });
+test("visual audit rejects small SVG fonts, aliases, ancestor opacity and missing theme shadows", () => {
+	execFileSync(process.execPath, ["tests/style-audit.cases.mjs"], { encoding: "utf8" });
+});
 test("billing presentation distinguishes unknown prices from free and labels accounts", () => {
 	assert.match(offerPrice({ currency: "USD", inputCost: 0, outputCost: 2 }), /USD · 输入 \$0 · 输出 \$2 \/ 每百万 token/);
 	assert.match(offerPrice({ currency: "CNY" }), /待配置/);

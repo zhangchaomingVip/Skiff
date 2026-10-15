@@ -1,0 +1,190 @@
+import { createRequire } from "node:module";
+import assert from "node:assert/strict";
+import fs from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+
+const require = createRequire(import.meta.url);
+const { chromium } = require(process.env.SKIFF_PLAYWRIGHT_DIR || "playwright");
+const browser = await chromium.launch({ headless: true, channel: "msedge" });
+const page = await browser.newPage({ viewport: { width: 1440, height: 960 }, reducedMotion: "reduce" });
+const base = process.argv[2] ?? "http://127.0.0.1:1424";
+const output = new URL("../features/018-chat-interaction-integrity/", import.meta.url);
+await fs.mkdir(new URL("screenshots/", output), { recursive: true });
+const errors = [], evidence = { browser: browser.version(), mode: "Vite, headless Edge, simulated Tauri bridge; real pi verified separately", checks: [] };
+page.on("pageerror", (error) => errors.push(error.message));
+const wait = (fn, arg) => page.waitForFunction(fn, arg, { timeout: 20000 });
+const input = () => page.getByRole("textbox", { name: "聊天消息" });
+const ready = () => wait(() => window.switchFixture?.currentSession?.connected && !window.switchFixture.currentSession.loading);
+const commands = () => page.evaluate(() => window.switchFixture.mock.commands.filter((item) => item.command === "rpc_send").map((item) => JSON.parse(item.args.message)));
+const select = async (id) => { await page.locator(".chat-link").filter({ has: page.locator(".chat-title", { hasText: new RegExp(`^Session ${id}$`) }) }).click({ position: { x: 24, y: 16 } }); await wait((id) => window.switchFixture.currentSession?.owner.id === `s${id}` && window.switchFixture.currentSession.connected, id); };
+const freeze = () => page.evaluate(() => { const f = window.switchFixture; const session = f.currentSession; const process = f.mock.processes.get([...f.mock.processes.keys()].find((id) => f.mock.processes.get(id).file === session.sessionFile)); clearTimeout(process.timer); });
+const start = async (text) => { await input().fill(text); await input().press("Enter"); await wait(() => window.switchFixture.currentSession.state.isStreaming); await freeze(); };
+const emit = (event) => page.evaluate((event) => { const f = window.switchFixture; const id = [...f.mock.processes.keys()].find((id) => f.mock.processes.get(id).file === f.currentSession.sessionFile); f.mock.emit(id, event); }, event);
+const screenshot = (name) => page.screenshot({ path: fileURLToPath(new URL(`screenshots/${name}.png`, output)) });
+
+try {
+	await page.goto(`${base}/tests/session-switch.html?messages=4&chats=3&expanded=1`); await ready();
+	assert.equal(await page.getByRole("button", { name: "复制消息" }).count(), 4);
+	await input().fill("normal draft before edit");
+	await page.getByRole("button", { name: "编辑并重发" }).first().click();
+	await wait(() => !!document.querySelector(".editing-banner")); assert.equal(await input().inputValue(), "s0 fixture message 0");
+	await input().fill("edited but cancelled"); await input().press("Escape");
+	assert.equal(await input().inputValue(), "normal draft before edit");
+	await page.getByRole("button", { name: "编辑并重发" }).first().click(); await wait(() => !!document.querySelector(".editing-banner"));
+	await input().fill("edit persists across navigation"); await select(1); await select(0);
+	await wait(() => !!document.querySelector(".editing-banner")); assert.equal(await input().inputValue(), "edit persists across navigation");
+	await page.goto(`${base}/tests/session-switch.html?restore=1&messages=4&chats=3&expanded=1`); await ready();
+	await wait(() => !!document.querySelector(".editing-banner")); assert.equal(await input().inputValue(), "edit persists across navigation");
+	await input().press("Escape"); assert.equal(await input().inputValue(), "normal draft before edit");
+	evidence.checks.push("all historical assistant copy buttons; edit/cancel restores normal draft; edit survives navigation and reload on unchanged branch");
+	await page.getByRole("button", { name: "编辑并重发" }).first().click(); await wait(() => !!document.querySelector(".editing-banner"));
+	await page.evaluate(() => { const f = window.switchFixture; const process = [...f.mock.processes.values()].find((process) => process.file === f.currentSession.sessionFile); process.messages.push({ entryId: "new-branch-leaf", role: "assistant", content: "external branch change" }); });
+	const forksBefore = (await commands()).filter((command) => command.type === "fork").length;
+	await input().press("Enter"); await wait(() => !document.querySelector(".editing-banner"));
+	assert.match(await page.locator(".chat").innerText(), /已转为普通草稿/);
+	assert.equal((await commands()).filter((command) => command.type === "fork").length, forksBefore);
+	evidence.checks.push("changed branch rejects edit and degrades to ordinary draft without any fork");
+	// Reload the indexed original projection and perform a real fork + replacement.
+	await page.goto(`${base}/tests/session-switch.html?messages=4&chats=3&expanded=1`); await ready();
+	await page.getByRole("button", { name: "编辑并重发" }).first().click(); await wait(() => !!document.querySelector(".editing-banner"));
+	await input().fill("replacement prompt"); await input().press("Enter"); await wait(() => window.switchFixture.currentSession.state.isStreaming); await freeze();
+	assert.equal((await commands()).filter((command) => command.type === "fork").length, 1);
+	assert.equal(await page.locator(".msg.user").count(), 1); assert.match(await page.locator(".msg.user").innerText(), /replacement prompt/);
+	await input().fill("escape only clears"); const stopBefore = (await commands()).filter((command) => command.type === "abort").length;
+	await input().press("Escape"); assert.equal(await input().inputValue(), ""); assert.equal((await commands()).filter((command) => command.type === "abort").length, stopBefore);
+	await input().fill("first steering"); await input().press("Enter"); await wait(() => window.switchFixture.currentSession.state.queue?.steering.length === 1);
+	await input().fill("second steering"); await input().press("Enter"); await wait(() => window.switchFixture.currentSession.state.queue?.steering.length === 2);
+	await page.getByRole("combobox", { name: "投递时机" }).selectOption("follow_up");
+	await input().fill("follow later"); await page.getByRole("button", { name: "排队发送", exact: true }).click(); await wait(() => window.switchFixture.currentSession.state.queue?.followUp.length === 1);
+	assert.equal(await page.locator('.queue-panel[aria-label="待发送队列"] li').count(), 3);
+	assert.match(await page.locator('.queue-panel[aria-label="待发送队列"]').innerText(), /all/);
+	await screenshot("queue-light");
+	await input().fill("keep my current draft"); await page.getByRole("button", { name: "撤回全部" }).click();
+	await wait(() => !document.querySelector('[aria-label="待发送队列"]')); assert.equal(await input().inputValue(), "keep my current draft");
+	assert.match(await page.locator('[aria-label="已撤回输入"]').innerText(), /first steering/);
+	await page.getByRole("button", { name: "追加到草稿" }).click(); assert.match(await input().inputValue(), /^keep my current draft/);
+	const userCount = await page.locator(".msg.user").count();
+	await input().fill("/review now"); await input().press("Enter"); await wait(() => document.querySelector('[aria-label="聊天消息"]').value === "");
+	assert.equal((await commands()).findLast((command) => command.message === "/review now").type, "prompt"); assert.equal(await page.locator(".msg.user").count(), userCount);
+	await input().fill("/plan now"); await input().press("Enter"); await wait(() => window.switchFixture.currentSession.state.queue?.followUp.length === 1);
+	assert.equal((await commands()).findLast((command) => command.message === "/plan now").type, "follow_up");
+	evidence.checks.push("edit forks before original user; Escape preserves running task; rapid steer/follow_up, modes, snapshots, clear results preserve draft, extension slash handled without fake transcript");
+	// Valid pending dialogs are cancelled between clear_queue and abort.
+	await emit({ type: "extension_ui_request", id: "stop-dialog", method: "confirm", title: "Stop pending question" });
+	await page.getByRole("dialog", { name: "Stop pending question" }).waitFor();
+	await page.evaluate(() => void window.switchFixture.currentSession.actions.abort());
+	await wait(() => !window.switchFixture.currentSession.state.isStreaming && !window.switchFixture.currentSession.state.stopping);
+	const stopCommands = await commands(); const abortIndex = stopCommands.findLastIndex((command) => command.type === "abort"); const cancelIndex = stopCommands.findIndex((command) => command.type === "extension_ui_response" && command.id === "stop-dialog");
+	assert.ok(cancelIndex < abortIndex && stopCommands.slice(0, cancelIndex).findLast((command) => command.type === "clear_queue"));
+	assert.match(await page.locator(".chat").innerText(), /已手动停止/);
+	const abortCount = stopCommands.filter((command) => command.type === "abort").length;
+	await page.evaluate(async () => { await Promise.all([window.switchFixture.currentSession.actions.abort(), window.switchFixture.currentSession.actions.abort()]); });
+	assert.equal((await commands()).filter((command) => command.type === "abort").length, abortCount);
+	evidence.checks.push("stop clear_queue → original-id dialog cancellation → abort → verified idle; repeat stop idempotent");
+	// Continue appends without rewinding, length survives agent_end until settled.
+	const forkCount = (await commands()).filter((command) => command.type === "fork").length;
+	await page.getByRole("button", { name: "继续", exact: true }).first().click(); await wait(() => window.switchFixture.currentSession.state.isStreaming); await freeze();
+	assert.equal((await commands()).filter((command) => command.type === "fork").length, forkCount);
+	await emit({ type: "message_end", message: { role: "assistant", content: [{ type: "text", text: "partial answer" }], stopReason: "length" } });
+	await page.evaluate(() => { const f = window.switchFixture; const process = [...f.mock.processes.values()].find((process) => process.file === f.currentSession.sessionFile); process.isStreaming = false; });
+	await emit({ type: "agent_end" }); assert.equal(await page.evaluate(() => window.switchFixture.currentSession.state.isStreaming), true);
+	await emit({ type: "agent_settled" }); await wait(() => !window.switchFixture.currentSession.state.isStreaming);
+	assert.match(await page.locator(".chat").innerText(), /输出已达长度上限/); await screenshot("truncated-light");
+	await page.getByRole("button", { name: "收起航行台", exact: true }).click();
+	assert.equal(await page.locator(".voyage-summary .voyage-speed").count(), 0);
+	evidence.checks.push("Continue appends on same branch; length result visible after settled; agent_end does not unlock early; idle collapsed bar has no speed duplicate");
+	// FIFO, prefill and exactly one raw reply with the original id.
+	await emit({ type: "extension_ui_request", id: "editor-1", method: "editor", title: "Edit extension", prefill: "Line 1\nLine 2" });
+	await emit({ type: "extension_ui_request", id: "select-2", method: "select", title: "Choose extension", options: ["A", "B"] });
+	const editor = page.getByRole("dialog", { name: "Edit extension" }); await editor.waitFor(); assert.equal(await editor.getByRole("textbox").inputValue(), "Line 1\nLine 2");
+	await screenshot("dialog-light"); await editor.getByRole("textbox").fill("changed\nmultiline"); await editor.getByRole("button", { name: "提交" }).click();
+	const chooser = page.getByRole("dialog", { name: "Choose extension" }); await chooser.waitFor(); await chooser.getByRole("combobox").selectOption("B"); await chooser.getByRole("button", { name: "提交" }).click();
+	assert.deepEqual((await commands()).filter((command) => command.type === "extension_ui_response" && command.id === "editor-1"), [{ type: "extension_ui_response", id: "editor-1", value: "changed\nmultiline" }]);
+	await emit({ type: "extension_ui_request", id: "background", method: "input", title: "Background question", placeholder: "type here" });
+	await page.getByRole("dialog", { name: "Background question" }).waitFor();
+	await page.getByRole("dialog", { name: "Background question" }).getByRole("button", { name: "稍后处理" }).click();
+	await select(1);
+	assert.equal((await commands()).filter((command) => command.id === "background").length, 0);
+	await page.locator('.chat-row').filter({ has: page.locator('.chat-title', { hasText: /^Session 0$/ }) }).getByRole("status", { name: "需要确认" }).waitFor();
+	await select(0); await page.getByRole("dialog", { name: "Background question" }).waitFor(); await page.keyboard.press("Escape");
+	assert.equal((await commands()).find((command) => command.id === "background").cancelled, true);
+	await emit({ type: "extension_ui_request", id: "front", method: "input", title: "Front question" });
+	await emit({ type: "extension_ui_request", id: "expired-behind", method: "confirm", title: "Should never show", timeout: 80 });
+	await page.waitForTimeout(180); await page.getByRole("dialog", { name: "Front question" }).getByRole("button", { name: "取消" }).click();
+	assert.equal(await page.getByRole("dialog", { name: "Should never show" }).count(), 0); assert.equal((await commands()).filter((command) => command.id === "expired-behind").length, 0);
+	assert.match(await page.locator(".chat").innerText(), /等待已超时/);
+	evidence.checks.push("FIFO dialogs, editor multiline prefill, select raw original-id reply; hiding view preserves request and background confirmation badge; Escape cancels; queued deadline expires without response");
+	await start("stop failure example");
+	await page.evaluate(() => window.switchFixture.mock.failNextSend());
+	await input().fill("must survive failure"); await input().press("Enter"); await wait(() => !!window.switchFixture.currentSession.state.lastError);
+	assert.equal(await input().inputValue(), "must survive failure");
+	// Fail clear_queue specifically, while get_state remains available.
+	await page.evaluate(() => { const bridge = window.__TAURI_INTERNALS__; const invoke = bridge.invoke; let failed = false; bridge.invoke = async (command, args) => { if (!failed && command === "rpc_send" && JSON.parse(args.message).type === "clear_queue") { failed = true; throw new Error("clear queue unsupported"); } return invoke(command, args); }; });
+	await input().press("Control+Shift+Backspace"); await wait(() => !window.switchFixture.currentSession.state.stopping && !window.switchFixture.currentSession.state.isStreaming);
+	assert.match(await page.locator(".chat").innerText(), /未能确认队列已清空/);
+	assert.notEqual(await page.evaluate(() => window.switchFixture.currentSession.state.lastOutcome?.reason), "manual");
+	evidence.checks.push("failed queued send preserves input; stop shortcut reachable; failed queue clear still aborts, reports uncertainty and does not claim manual-stop success");
+	// Regeneration keeps image and text attachments from the corresponding user.
+	await page.goto(`${base}/tests/session-switch.html?messages=4&chats=3&expanded=1&kind=image`); await ready();
+	await page.evaluate(async () => {
+		const { appendTextFiles } = await import("/src/chat/textAttachments.ts");
+		const f = window.switchFixture; const process = [...f.mock.processes.values()].find((process) => process.file === f.currentSession.sessionFile);
+		process.messages[2].content[0].text = appendTextFiles("attached original", [{ id: "f", name: "source.txt", text: "attachment body" }]);
+		f.mock.saved[process.file] = structuredClone(process.messages); localStorage.setItem("skiff.test.sessions", JSON.stringify(f.mock.saved)); f.currentSession.reconnect();
+	}); await ready();
+	await wait(() => document.querySelector(".msg.user:last-of-type") || [...document.querySelectorAll(".msg.user")].some((node) => node.textContent.includes("attached original")));
+	await page.getByRole("button", { name: "编辑并重发" }).last().click(); await wait(() => !!document.querySelector(".editing-banner"));
+	assert.equal(await page.locator(".attachment-list img").count(), 1); assert.match(await page.locator(".text-attachments").innerText(), /source.txt/); assert.equal(await input().inputValue(), "attached original");
+	await input().press("Escape"); await page.getByRole("button", { name: "重新生成", exact: true }).click();
+	await wait(() => window.switchFixture.currentSession.state.isStreaming); await freeze();
+	const regenerated = (await commands()).findLast((command) => command.type === "prompt"); assert.equal(regenerated.images.length, 1); assert.match(regenerated.message, /attachment body/);
+	assert.equal((await commands()).filter((command) => command.type === "fork").length, 1);
+	// A background owner remains running when the active owner stops.
+	const backgroundFile = await page.evaluate(() => window.switchFixture.currentSession.sessionFile);
+	await select(1); await start("active owner only");
+	await page.evaluate(() => void window.switchFixture.currentSession.actions.abort()); await wait(() => !window.switchFixture.currentSession.state.stopping && !window.switchFixture.currentSession.state.isStreaming);
+	assert.equal(await page.evaluate((file) => [...window.switchFixture.mock.processes.values()].find((process) => process.file === file)?.isStreaming, backgroundFile), true);
+	// An IME combination must not invoke the stop shortcut.
+	await start("IME guard"); const imeBefore = (await commands()).filter((command) => command.type === "abort").length;
+	await input().evaluate((element) => element.dispatchEvent(new KeyboardEvent("keydown", { key: "Backspace", ctrlKey: true, shiftKey: true, isComposing: true, bubbles: true })));
+	assert.equal((await commands()).filter((command) => command.type === "abort").length, imeBefore);
+	await input().press("Control+Shift+Backspace"); await wait(() => !window.switchFixture.currentSession.state.stopping && !window.switchFixture.currentSession.state.isStreaming);
+	// Reconnection explicitly cancels known old-generation requests.
+	await emit({ type: "extension_ui_request", id: "old-generation", method: "input", title: "Old request" });
+	await page.getByRole("dialog", { name: "Old request" }).waitFor();
+	await page.evaluate(() => window.switchFixture.currentSession.reconnect()); await ready(); await wait(() => !document.querySelector(".extension-dialog"));
+	assert.equal((await commands()).filter((command) => command.id === "old-generation").length, 1);
+	assert.equal((await commands()).find((command) => command.id === "old-generation").cancelled, true);
+	evidence.checks.push("regenerate forks corresponding user with image and text attachments; stop affects only active owner; IME guard; reconnect cancels old-generation id once");
+	// Verify the state fallback on two runs of a bridge without agent_settled.
+	await page.goto(`${base}/tests/session-switch.html?messages=4&chats=3&expanded=1`); await ready();
+	for (const text of ["old protocol one", "old protocol two"]) {
+		await start(text);
+		await page.evaluate(() => { const f = window.switchFixture; const process = [...f.mock.processes.values()].find((process) => process.file === f.currentSession.sessionFile); process.isStreaming = false; });
+		await emit({ type: "agent_end" });
+		await emit({ type: text.endsWith("one") ? "auto_retry_start" : "auto_compaction_start" });
+		await page.waitForTimeout(300); assert.equal(await page.evaluate(() => window.switchFixture.currentSession.state.isStreaming), true);
+		await emit({ type: text.endsWith("one") ? "auto_retry_end" : "auto_compaction_end" });
+		await wait(() => !window.switchFixture.currentSession.state.isStreaming);
+	}
+	await emit({ type: "extension_ui_request", id: "uncertain", method: "input", title: "Uncertain reply" });
+	await page.getByRole("dialog", { name: "Uncertain reply" }).waitFor(); await page.evaluate(() => window.switchFixture.mock.failNextSend());
+	await page.getByRole("dialog", { name: "Uncertain reply" }).getByRole("button", { name: "提交" }).click();
+	await page.getByRole("dialog", { name: "Uncertain reply" }).getByRole("alert").waitFor();
+	assert.equal((await commands()).filter((command) => command.id === "uncertain").length, 1);
+	await page.evaluate(() => window.switchFixture.currentSession.reconnect()); await ready();
+	await wait(() => !document.querySelector(".extension-dialog"));
+	assert.equal((await commands()).filter((command) => command.id === "uncertain").length, 1);
+	const historicCopy = page.locator(".msg.assistant .message-buttons button").first(); await historicCopy.focus();
+	assert.equal(await historicCopy.evaluate((element) => getComputedStyle(element.closest(".message-buttons")).opacity), "1");
+	evidence.checks.push("two old-protocol runs settle via repeated verified get_state fallback; uncertain raw write cannot be retried; keyboard focus reveals historical copy action");
+	await page.goto(`${base}/tests/session-switch.html?messages=4&chats=3&expanded=1&theme=dark`); await ready();
+	await page.evaluate(async () => { const { drafts } = await import("/src/chat/drafts.ts"); drafts.save({ chatId: "s0", cwd: "D:\\workspace\\Skiff", sessionFile: window.switchFixture.currentSession.sessionFile, text: "", attachments: [] }); });
+	await emit({ type: "extension_ui_request", id: "dark", method: "confirm", title: "扩展确认", message: "是否继续处理当前任务？" }); await screenshot("dialog-dark");
+	await page.keyboard.press("Escape"); await page.getByRole("button", { name: "收起侧栏", exact: true }).click(); await page.setViewportSize({ width: 390, height: 844 }); await emit({ type: "extension_ui_request", id: "narrow", method: "confirm", title: "扩展确认", message: "是否继续处理当前任务？" }); await page.getByRole("dialog", { name: "扩展确认" }).waitFor(); await screenshot("dialog-narrow");
+	assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+	assert.deepEqual(errors, []); evidence.checks.push("light/dark/narrow visual evidence; no horizontal overflow or browser exceptions");
+	await fs.writeFile(new URL("browser-verification.json", output), JSON.stringify(evidence, null, 2) + "\n");
+	console.log(JSON.stringify(evidence, null, 2));
+} catch (error) { await screenshot("failure"); console.error("browser errors", errors); throw error; }
+finally { await browser.close(); }

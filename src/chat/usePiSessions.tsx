@@ -2,10 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePiSession, type SessionTarget } from "./usePiSession";
 import type { RuntimeOffer } from "./modelFamilies";
 import type { FamiliesConfig } from "./useModelFamilies";
+import { deriveTitle } from "./conversationDisplay";
+import { useRuntimeRoutes } from "./useRuntimeRoutes";
+import { conversationStatus } from "./sessionStatus";
 import { snapshotsForMessages } from "./routeSnapshot";
 import { isArchived, type Conversation, type Project } from "./workspace";
 
-type PiSession = ReturnType<typeof usePiSession>;
+type PiSession = ReturnType<typeof usePiSession> & ReturnType<typeof useRuntimeRoutes>;
 type Configuration = { config?: FamiliesConfig; ready: boolean };
 const sessionKey = (target: SessionTarget) => JSON.stringify([target.id, target.cwd]);
 
@@ -18,7 +21,9 @@ function SessionRuntime({ target, chat, offers, configuration, report, updateCha
 	report: (key: string, session: PiSession) => void;
 	updateChat: (id: string, patch: Partial<Conversation>) => void;
 }) {
-	const session = usePiSession(target, offers, configuration);
+	const base = usePiSession(target, offers, configuration);
+	const routes = useRuntimeRoutes(base, chat, offers, configuration, updateChat);
+	const session = useMemo(() => ({ ...base, ...routes }), [base, routes]);
 	useEffect(() => { report(sessionKey(target), session); }, [target.id, target.cwd, session, report]);
 	const latest = useRef({ chat, offers, updateChat });
 	latest.current = { chat, offers, updateChat };
@@ -27,11 +32,11 @@ function SessionRuntime({ target, chat, offers, configuration, report, updateCha
 		const { chat, offers, updateChat } = latest.current;
 		const { state } = session;
 		const firstUser = state.messages.find((message) => message.role === "user");
-		const title = firstUser?.blocks.filter((block) => block.kind === "text").map((block) => block.text).join(" ").replace(/\s+/g, " ").trim() || (firstUser ? "图片聊天" : "");
+		const title = deriveTitle(state.messages);
 		const patch: Partial<Conversation> = {
 			...(session.sessionFile ? { sessionFile: session.sessionFile } : {}),
 			hasMessages: !!firstUser,
-			...(!chat.customTitle ? { title: title ? title.slice(0, 48) : "新聊天" } : {}),
+			...(!chat.customTitle ? { title } : {}),
 			elapsedMs: session.elapsedMs,
 		};
 		if (state.model) {
@@ -39,6 +44,8 @@ function SessionRuntime({ target, chat, offers, configuration, report, updateCha
 			const offer = offers.find((item) => (model.routeId && item.routeId === model.routeId && item.modelId === model.id) || (item.providerKey === model.provider && item.modelId === model.id));
 			const selectedModel = { provider: model.provider, id: model.id, modelId: model.modelId ?? model.id, routeId: offer?.routeId ?? model.routeId, offerId: offer?.offerId ?? model.offerId };
 			if (JSON.stringify(chat.selectedModel) !== JSON.stringify(selectedModel)) patch.selectedModel = selectedModel;
+			const alias = offers.find((item) => item.offerId === selectedModel.offerId)?.alias?.trim();
+			if (chat.modelAlias !== alias) patch.modelAlias = alias;
 		}
 		const routeSnapshots = snapshotsForMessages(state.messages);
 		if (JSON.stringify(chat.routeSnapshots) !== JSON.stringify(routeSnapshots)) patch.routeSnapshots = routeSnapshots;
@@ -49,7 +56,10 @@ function SessionRuntime({ target, chat, offers, configuration, report, updateCha
 
 /** Open conversations own separate hooks/processes; navigation only selects a projection. */
 export function usePiSessions(activeId: string | undefined, chats: Conversation[], projects: Project[], offers: readonly RuntimeOffer[], configuration: Configuration, updateChat: (id: string, patch: Partial<Conversation>) => void) {
-	const empty = usePiSession();
+	const emptyBase = usePiSession();
+	const empty = useMemo<PiSession>(() => ({ ...emptyBase, modelNotice: undefined, setModelNotice: () => undefined, routeEvents: [], needsConfirmation: false, routeAuthorization: undefined, failover: undefined }), [emptyBase]);
+	const updateRef = useRef(updateChat); updateRef.current = updateChat;
+	const update = useCallback((id: string, patch: Partial<Conversation>) => updateRef.current(id, patch), []);
 	const [sessions, setSessions] = useState<Map<string, PiSession>>(() => new Map());
 	const visited = useRef(new Set<string>());
 	const targets = chats.flatMap((chat) => {
@@ -87,11 +97,16 @@ export function usePiSessions(activeId: string | undefined, chats: Conversation[
 		const runtime = sessions.get(sessionKey(target));
 		return runtime && (runtime.pending || runtime.state.isStreaming || !!runtime.state.activeRun);
 	}).map(({ target }) => target.id));
+	const statuses = new Map(opened.flatMap(({ target }) => {
+		const runtime = sessions.get(sessionKey(target));
+		return runtime?.isCurrent() ? [[target.id, conversationStatus({ needsConfirmation: runtime.needsConfirmation, error: runtime.state.lastError, running: runningIds.has(target.id) })] as const] : [];
+	}));
+	const messages = new Map(opened.flatMap(({ target }) => { const runtime = sessions.get(sessionKey(target)); return runtime?.isCurrent() ? [[target.id, runtime.state.messages] as const] : []; }));
 	const canClose = (id: string) => {
 		const target = targets.find((item) => item.target.id === id)?.target;
 		const runtime = target ? sessions.get(sessionKey(target)) : undefined;
 		return !runtime || (!runtime.loading && runtime.canNavigate());
 	};
-	const runtimes = opened.map(({ chat, target }) => <SessionRuntime key={sessionKey(target)} target={target} chat={chat} offers={offers} configuration={configuration} report={report} updateChat={updateChat} />);
-	return { session, runtimes, runningIds, canClose };
+	const runtimes = opened.map(({ chat, target }) => <SessionRuntime key={sessionKey(target)} target={target} chat={chat} offers={offers} configuration={configuration} report={report} updateChat={update} />);
+	return { session, runtimes, runningIds, statuses, messages, canClose };
 }

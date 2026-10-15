@@ -16,9 +16,11 @@ export function discoveredFamily(modelId: string): string | undefined {
  *  Discovered routes enable reasoning by default so thinking models work out of the box. */
 export function buildDiscoveredRoutes(models: DiscoveredModel[], relay: RelaySpec, families: ModelFamily[], fillModel: (id: string) => ModelSpec): RelayRouteSpec[] {
 	const groups = new Map<string, ModelSpec[]>();
+	const seen = new Set<string>();
 	for (const discovered of models) {
 		const id = discovered.id.trim();
-		if (!id) continue;
+		if (!id || seen.has(id)) continue;
+		seen.add(id);
 		const familyId = discoveredFamily(id);
 		if (!familyId || relay.excludedModelIds?.includes(id)) continue;
 		if (families.some((family) => family.id === familyId && family.routes.some((route) => route.relayId === relay.id))) continue;

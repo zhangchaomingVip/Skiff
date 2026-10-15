@@ -1,0 +1,12 @@
+{
+	"platform": "Windows, Intel Core Ultra 5 125H, 18 logical CPUs",
+	"mode": "Rust debug test; anonymous temporary JSONL; sequential file reads, no Tauri IPC",
+	"sessions": 100,
+	"messages": 10000,
+	"bytes": 1633890,
+	"coldMs": 176.5074,
+	"samplesMs": [54.9659, 50.8283, 50.9338, 67.47, 49.0371, 52.6839, 51.7271, 48.5746, 48.0295, 50.8293, 55.2131, 58.1111, 66.7490, 63.3578, 60.7452, 57.0754, 59.0344, 57.4583, 76.0694, 65.8221],
+	"hotP50Ms": 55.2131,
+	"hotP95Ms": 67.47,
+	"note": "Warm samples use previously validated unchanged versions. Frontend LRU and browser rendering are measured separately in browser-verification.json."
+}

@@ -25,7 +25,7 @@ test("run timing survives reasoning, tool waits, multiple steps and duplicate st
 	assert.equal(state.messages.every((message) => message.durationMs === undefined), true);
 });
 
-for (const type of ["agent_end", "agent_settled", "bridge_exit"]) {
+for (const type of ["agent_settled", "bridge_exit"]) {
 	test(`${type} freezes the current turn once and finalizes streamed content`, () => {
 		let state = startTurn(initialSessionState, 1000);
 		state = reduce(state, { type: "message_start", message: { role: "assistant", timestamp: 1200 } });
@@ -49,11 +49,11 @@ for (const type of ["agent_end", "agent_settled", "bridge_exit"]) {
 test("a new run without an assistant never overwrites the preceding turn", () => {
 	let state = startTurn(initialSessionState, 1000);
 	state = reduce(state, { type: "message_start", message: { role: "assistant" } });
-	state = reduce(state, { type: "agent_end", durationMs: 2000, completedAt: 3000 });
+	state = reduce(state, { type: "agent_settled", durationMs: 2000, completedAt: 3000 });
 	const previous = state.messages[1];
 	state = reduce(state, { type: "agent_start", startedAt: 4000 });
 	assert.equal(state.activeRun?.turnId, undefined);
-	state = reduce(state, { type: "agent_end", durationMs: 500, completedAt: 4500 });
+	state = reduce(state, { type: "agent_settled", durationMs: 500, completedAt: 4500 });
 	assert.equal(state.messages[1], previous);
 	state = startTurn(state, 5000);
 	state = reduce(state, { type: "bridge_exit", durationMs: 300, completedAt: 5300, message: "pi exited" });
@@ -66,7 +66,7 @@ test("an assistant-only run can settle without a user timestamp", () => {
 	let state = reduce(initialSessionState, { type: "agent_start", startedAt: 1000 });
 	state = reduce(state, { type: "message_start", message: { role: "assistant" } });
 	assert.equal(state.activeRun?.turnId, `turn:${state.messages[0].id}`);
-	state = reduce(state, { type: "agent_end", durationMs: 2000 });
+	state = reduce(state, { type: "agent_settled", durationMs: 2000 });
 	assert.equal(state.messages[0].durationMs, 2000);
 });
 
@@ -97,7 +97,7 @@ test("pi confirmation replaces the optimistic user and keeps the send-time origi
 	assert.equal(state.pendingPrompt, undefined);
 	state = reduce(state, { type: "message_update", assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: "reply" } });
 	assert.equal(groupTurns(state.messages)[1].stepCount, 0);
-	state = reduce(state, { type: "agent_end", durationMs: 6000, completedAt: 7000 });
+	state = reduce(state, { type: "agent_settled", durationMs: 6000, completedAt: 7000 });
 	assert.equal(state.messages[1].durationMs, 6000);
 	assert.equal(state.pendingPrompt, undefined);
 	assert.equal(state.activeRun, undefined);
@@ -117,9 +117,9 @@ test("failed or cancelled submissions clear only their own ephemeral state", () 
 test("settling before confirmation removes optimistic rows without overwriting the preceding turn", () => {
 	let state = startTurn(initialSessionState, 100);
 	state = reduce(state, { type: "message_start", message: { role: "assistant" } });
-	state = reduce(state, { type: "agent_end", durationMs: 500 });
+	state = reduce(state, { type: "agent_settled", durationMs: 500 });
 	const previous = state.messages[1];
-	for (const type of ["agent_end", "agent_settled", "bridge_exit"]) {
+	for (const type of ["agent_settled", "bridge_exit"]) {
 		const finished = reduce(submit(state), { type, durationMs: 5000 });
 		assert.equal(finished.messages[1], previous);
 		assert.equal(finished.pendingPrompt, undefined);

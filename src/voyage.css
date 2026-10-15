@@ -41,27 +41,9 @@
 .voyage-fishing .voyage-pill { color: var(--secondary); }
 .voyage-instrument { width: 100%; margin: 18px 0 15px; padding-top: 12px; }
 .voyage-gauge { display: block; width: min(100%, 210px); height: auto; margin: 0 auto; overflow: visible; }
-.voyage-gauge-track, .voyage-gauge-fill { fill: none; stroke-width: 7; stroke-linecap: round; }
-.voyage-gauge-track { stroke: var(--border); }
-.voyage-gauge-fill { stroke: var(--accent); }
-.voyage-gauge-tick { stroke: var(--secondary); stroke-width: 1.2; }
-.voyage-gauge-label, .voyage-gauge-number, .voyage-gauge-unit, .voyage-gauge-limit { text-anchor: middle; fill: var(--secondary); font-family: inherit; }
-.voyage-gauge-label { font-size: 9px; letter-spacing: 1.5px; }
-.voyage-gauge-number { fill: var(--text); font-size: 24px; font-weight: 600; }
-.voyage-gauge-unit { font-size: 9px; }
-.voyage-gauge-limit { font-size: 8px; }
-.voyage-gauge-needle { transform-origin: 110px 115px; transition: transform var(--transition-base) ease-out; }
-.voyage-gauge-needle line { stroke: var(--text); stroke-width: 2.5; stroke-linecap: round; }
-.voyage-gauge-hub { fill: var(--panel-2); stroke: var(--text); stroke-width: 1.5; }
 .voyage-sea { position: relative; width: 100%; height: 65px; overflow: hidden; }
-.voyage-scene-boat { position: absolute; z-index: 2; left: 50%; top: 17px; width: 55px; height: 28px; color: var(--text); transform: translateX(-50%); }
-.voyage-wake { position: absolute; z-index: 1; left: calc(50% - 76px); top: 26px; width: 65px; height: 30px; fill: none; stroke: var(--secondary); stroke-width: 2; stroke-linecap: round; stroke-dasharray: 2 7; opacity: 0; --wake-duration: 1.2s; --wave-duration: 2.5s; }
 .voyage-waves { position: absolute; left: 0; top: 30px; width: 100%; height: 42px; fill: none; stroke: var(--border); stroke-width: 1.5; }
 .voyage-wave-two { stroke: var(--secondary); opacity: .55; }
-.voyage-sailing .voyage-scene-boat { animation: voyage-bob 1.8s ease-in-out infinite; }
-.voyage-sailing .voyage-wake { opacity: 1; animation: voyage-wake var(--wake-duration) linear infinite; }
-.voyage-sailing .voyage-wave { animation: voyage-wave var(--wave-duration) linear infinite; }
-.voyage-fishing .voyage-scene-boat { top: 0; width: 85px; height: 45px; left: calc(50% + 15px); animation: voyage-bob 3.6s ease-in-out infinite; }
 .voyage-float { animation: voyage-float 2.8s ease-in-out infinite; }
 @keyframes voyage-float { 50% { transform: translateY(2px); } }
 .voyage-speed-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 10px 0; font-size: var(--font-size-sm); }
@@ -74,9 +56,6 @@
 .voyage-context-reminder svg { flex: none; margin-top: 2px; }
 .voyage-critical .voyage-context-reminder { color: var(--danger); }
 .voyage .model-status-notice { white-space: normal; overflow-wrap: anywhere; }
-@keyframes voyage-bob { 50% { transform: translate(-50%, -3px) rotate(2deg); } }
-@keyframes voyage-wake { to { stroke-dashoffset: -27; } }
-@keyframes voyage-wave { to { transform: translateX(-24px); } }
 
 .voyage-mileage { padding-top: 10px; border-top: 1px solid var(--border); }
 .voyage-mileage-title { display: flex; align-items: center; justify-content: space-between; gap: 5px; font-size: var(--font-size-sm); }
@@ -174,18 +153,20 @@
 	.voyage-status-dot.response { background: var(--accent); }
 	.voyage-status-pill .voyage-status-dot.stopped { background: var(--secondary); }
 	@keyframes voyage-pulse { 50% { opacity: .4; } }
-	.voyage-gauge-scene { position: relative; width: 100%; height: 180px; margin: 16px 0; }
-	.voyage-gauge-svg { display: block; width: 100%; height: 100%; overflow: visible; }
+	.voyage-gauge-scene { position: relative; width: 100%; margin: 16px 0; }
+	.voyage-gauge-svg { display: block; width: 100%; max-width: 320px; height: auto; margin: 0 auto; overflow: visible; }
 	.voyage-gauge-track, .voyage-gauge-fill { fill: none; stroke-width: 8; stroke-linecap: round; }
-	.voyage-gauge-track { stroke: var(--border); opacity: .3; }
+	.voyage-gauge-track { stroke: var(--gauge-track); }
 	.voyage-gauge-fill { stroke: var(--accent); transition: stroke-dasharray .3s ease-out; }
 	.voyage-gauge-fill.timer-thinking { stroke: var(--secondary); stroke-dasharray: 70 999 !important; animation: voyage-phase-sweep 2s linear infinite; }
 	.voyage-gauge-fill.timer-tool { stroke: var(--color-warning); stroke-dasharray: 70 999 !important; animation: voyage-phase-sweep 2s linear infinite; }
 	@keyframes voyage-phase-sweep { to { stroke-dashoffset: -283; } }
-	.voyage-gauge-label, .voyage-gauge-number, .voyage-gauge-unit, .voyage-gauge-limit { fill: var(--secondary); font-family: inherit; }
-	.voyage-gauge-label { font-size: 10px; letter-spacing: 1.2px; opacity: .8; }
-	.voyage-gauge-number { fill: var(--text); font-size: 28px; font-weight: var(--font-weight-semibold); }
-	.voyage-gauge-unit, .voyage-gauge-limit { font-size: 9px; }
+	.voyage-gauge-label, .voyage-gauge-number, .voyage-gauge-unit, .voyage-gauge-limit { fill: var(--secondary); color: var(--secondary); font-family: inherit; }
+	.voyage-gauge-readout { display: grid; justify-items: center; gap: var(--space-1); }
+	.voyage-gauge-label { font-size: var(--font-size-sm); letter-spacing: .5px; }
+	.voyage-gauge-number { color: var(--text); font-size: var(--font-size-page); line-height: var(--line-height-tight); font-weight: var(--font-weight-semibold); }
+	.voyage-gauge-unit { font-size: var(--font-size-sm); }
+	.voyage-gauge-limit { font-size: var(--font-size-gauge-min); }
 	.voyage-gauge-needle { transform-origin: 130px 130px; transition: transform .3s ease-out; }
 	.voyage-gauge-needle line { stroke: var(--text); stroke-width: 2.5; stroke-linecap: round; }
 	.voyage-gauge-hub { fill: var(--bg); stroke: var(--border); stroke-width: 2; }
@@ -193,8 +174,8 @@
 	.voyage-wave { animation: none; }
 	.voyage-sailing .voyage-wave { animation: voyage-wave-slide 2.5s linear infinite; }
 	.voyage-wave-move path { animation: voyage-wave-slide 2.5s linear infinite; }
-	/* SVG coordinates already place the boat; legacy HTML centering must not apply. */
-	.voyage-gauge-svg .voyage-scene-boat { position: static; transform: none; animation: voyage-boat-bob 1.8s ease-in-out infinite; }
+	/* Outer SVG group places the scene; only the inner group animates. */
+	.voyage-scene-boat { animation: voyage-boat-bob 1.8s ease-in-out infinite; }
 	.voyage-wake-dash { stroke-dasharray: 9 18; animation: voyage-wake-dash 1.2s linear infinite; }
 	@keyframes voyage-boat-bob { from, to { transform: translateY(0); } 50% { transform: translateY(-3px); } }
 	@keyframes voyage-wave-slide { to { transform: translateX(-24px); } }
@@ -260,6 +241,6 @@
 	.voyage-collapsed-content { display: flex; flex-direction: column; align-items: center; gap: 9px; }
 	.voyage-collapsed-content strong { max-width: 38px; overflow: hidden; font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); line-height: 1; white-space: nowrap; }
 	.voyage-collapsed-content small { color: var(--muted); font-size: var(--font-size-xs); line-height: 1; }
-	@media (max-width: 760px) { .chat-and-rail { grid-template-columns: minmax(0, 1fr) 40px; } .voyage-dashboard { width: min(480px, calc(100vw - 24px)); } }
+	@media (max-width: 760px) { .chat-and-rail { grid-template-columns: minmax(0, 1fr) 40px; } .voyage-dashboard { width: 100%; padding: var(--space-3); } }
 	@media (prefers-reduced-motion: reduce) { .voyage-dashboard *, .voyage-rail * { animation: none !important; transition: none !important; } }
 }

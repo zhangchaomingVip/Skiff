@@ -5,6 +5,8 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 	const processes = new Map();
 	const saved = sessionOverrides ?? JSON.parse(storage?.getItem("skiff.test.sessions") ?? "{}");
 	const commands = [];
+	let historyTargets = [];
+	const histories = new Map();
 	let sequence = 0;
 	let failSend = false;
 	const providerKey = (familyId, relayId) => `skiff-relay-${relayId}-${familyId}`;
@@ -79,6 +81,15 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 			commands.push({ command, args: command === "discover_relay_models" ? { baseUrl: args.baseUrl } : args });
 			if (command === "plugin:event|listen") { const id = ++sequence; listeners.set(id, args); return id; }
 			if (command === "plugin:event|unlisten") return;
+			if (command === "set_history_workspace") { historyTargets = args.targets; return; }
+			if (command === "read_session_history") {
+				if (!historyTargets.some((item) => item.chatId === args.chatId && item.sessionFile === args.sessionFile)) throw new Error("Not indexed");
+				const messages = histories.get(args.sessionFile) ?? saved[args.sessionFile];
+				if (!messages || messages instanceof Error) throw new Error("Unreadable history");
+				const projection = messages.filter((message) => message.role === "user" || message.role === "assistant").map((message, index) => ({ entryId: message.entryId ?? `mock:${index}`, role: message.role, timestamp: message.timestamp, text: typeof message.content === "string" ? message.content : (message.content ?? []).filter((block) => block.type === "text").map((block) => block.text).join("\n\n") }));
+				const version = JSON.stringify(projection);
+				return { version, unchanged: args.knownVersion === version, messages: args.knownVersion === version ? [] : projection };
+			}
 			if (command === "get_workspace_directory") return { name: "Skiff", path: "D:\\workspace\\Skiff" };
 			if (command === "list_model_families") {
 				if (fixture === "loading") await new Promise(() => {});
@@ -184,7 +195,7 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 			}
 			if (command === "rpc_start") {
 				const file = `mock-session-${crypto.randomUUID()}.jsonl`;
-				processes.set(args.options.instanceId, { file, messages: [], model: models[0], thinkingLevel: "high", isStreaming: false });
+				processes.set(args.options.instanceId, { file, queue: { steering: [], followUp: [] }, messages: [], model: models[0], thinkingLevel: "high", isStreaming: false });
 				return;
 			}
 			if (command === "rpc_stop") { target.clearTimeout(processes.get(args.instanceId)?.timer); processes.delete(args.instanceId); return; }
@@ -202,7 +213,7 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 					});
 					respond({ entries, leafId: entries.at(-1)?.id ?? null }); break;
 				}
-				case "get_commands": respond({ commands: [{ name: "review", description: "检查当前项目的代码" }, { name: "plan", description: "制定实现计划" }] }); break;
+				case "get_commands": respond({ commands: [{ name: "review", source: "extension", description: "检查当前项目的代码" }, { name: "plan", source: "prompt", description: "制定实现计划" }] }); break;
 				case "get_fork_messages": respond({ messages: session.messages.filter((message) => message.role === "user").map((message) => { message.entryId ??= crypto.randomUUID(); return { entryId: message.entryId, text: message.content }; }) }); break;
 				case "fork": {
 					if (request.entryId === "cancelled") { respond({ cancelled: true }); break; }
@@ -215,7 +226,7 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 					respond({ text, cancelled: false }); break;
 				}
 				case "never_reply": break;
-				case "get_state": respond({ model: session.model, thinkingLevel: session.thinkingLevel, sessionFile: session.file, isStreaming: session.isStreaming }); break;
+				case "get_state": respond({ model: session.model, thinkingLevel: session.thinkingLevel, sessionFile: session.file, isStreaming: session.isStreaming, isCompacting: false, steeringMode: "all", followUpMode: "one-at-a-time", pendingMessageCount: session.queue.steering.length + session.queue.followUp.length }); break;
 				case "get_session_stats": {
 					const latest = [...session.messages].reverse().find((message) => message.role === "assistant" && message.usage);
 					const usage = latest?.usage;
@@ -235,7 +246,16 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 					break;
 				}
 				case "set_model": session.model = familyModels().find((m) => m.id === request.modelId && m.provider === request.provider) ?? { provider: request.provider, id: request.modelId, name: request.modelId }; if (!session.model.reasoning) session.thinkingLevel = "off"; respond(session.model); break;
+				case "extension_ui_response": break;
+				case "clear_queue": { const removed = session.queue; session.queue = { steering: [], followUp: [] }; emit(args.instanceId, { type: "queue_update", ...session.queue }); respond(removed); break; }
+				case "steer":
+				case "follow_up": {
+					if (String(request.message).startsWith("/review")) { respond("Extension command cannot be queued", false); break; }
+					session.queue[request.type === "steer" ? "steering" : "followUp"].push(request.message);
+					emit(args.instanceId, { type: "queue_update", ...session.queue }); respond({ disposition: "queued" }); break;
+				}
 				case "prompt": {
+					if (String(request.message).startsWith("/review")) { emit(args.instanceId, { type: "extension_ui_request", id: crypto.randomUUID(), method: "notify", message: "Review handled" }); respond({ disposition: "handled" }); break; }
 					const user = { role: "user", content: request.images?.length ? [...(request.message ? [{ type: "text", text: request.message }] : []), ...request.images] : request.message };
 					session.messages.push(user);
 					saved[session.file] = session.messages;
@@ -244,7 +264,7 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 						session.isStreaming = false;
 						emit(args.instanceId, { type: "agent_start" });
 						emit(args.instanceId, { type: "error", errorMessage: String(request.message).includes("触发跨账户") ? "503 Service Unavailable：提供商暂时不可用" : "401 Unauthorized：提供商拒绝了这次请求" });
-						emit(args.instanceId, { type: "agent_end" });
+						emit(args.instanceId, { type: "agent_end" }); emit(args.instanceId, { type: "agent_settled" });
 						respond({ disposition: "started" });
 						break;
 					}
@@ -274,15 +294,15 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 						session.messages.push(assistant);
 						persist();
 						session.isStreaming = false;
-						emit(args.instanceId, { type: "agent_end" });
+						emit(args.instanceId, { type: "agent_end" }); emit(args.instanceId, { type: "agent_settled" });
 					};
 					session.timer = target.setTimeout(stream, 100);
 					break;
 				}
-				case "abort": target.clearTimeout(session.timer); session.isStreaming = false; emit(args.instanceId, { type: "agent_end" }); respond({}); break;
+				case "abort": target.clearTimeout(session.timer); session.isStreaming = false; emit(args.instanceId, { type: "agent_end" }); emit(args.instanceId, { type: "agent_settled" }); respond({}); break;
 				default: respond("Unsupported command", false);
 			}
 		},
 	};
-	return { commands, processes, listeners, callbacks, emit, failNextSend: () => { failSend = true; } };
+	return { histories, saved, commands, processes, listeners, callbacks, emit, failNextSend: () => { failSend = true; } };
 }

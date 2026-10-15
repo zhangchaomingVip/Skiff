@@ -1,0 +1,16 @@
+{
+  "browser": "151.0.4129.101",
+  "mode": "Vite, headless Edge, simulated Tauri bridge; real pi verified separately",
+  "checks": [
+    "all historical assistant copy buttons; edit/cancel restores normal draft; edit survives navigation and reload on unchanged branch",
+    "changed branch rejects edit and degrades to ordinary draft without any fork",
+    "edit forks before original user; Escape preserves running task; rapid steer/follow_up, modes, snapshots, clear results preserve draft, extension slash handled without fake transcript",
+    "stop clear_queue → original-id dialog cancellation → abort → verified idle; repeat stop idempotent",
+    "Continue appends on same branch; length result visible after settled; agent_end does not unlock early; idle collapsed bar has no speed duplicate",
+    "FIFO dialogs, editor multiline prefill, select raw original-id reply; hiding view preserves request and background confirmation badge; Escape cancels; queued deadline expires without response",
+    "failed queued send preserves input; stop shortcut reachable; failed queue clear still aborts, reports uncertainty and does not claim manual-stop success",
+    "regenerate forks corresponding user with image and text attachments; stop affects only active owner; IME guard; reconnect cancels old-generation id once",
+    "two old-protocol runs settle via repeated verified get_state fallback; uncertain raw write cannot be retried; keyboard focus reveals historical copy action",
+    "light/dark/narrow visual evidence; no horizontal overflow or browser exceptions"
+  ]
+}

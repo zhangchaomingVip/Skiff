@@ -26,8 +26,8 @@ const data = () => page.evaluate(() => {
 	return { spans: f.spans, renders: f.renders, clicks: f.clicks, tasks: f.tasks, commits: f.commits, timings: f.timings, scale: f.scale, sidebarRows: document.querySelectorAll(".chat-link").length, processes: f.mock.processes.size, listeners: f.mock.listeners.size };
 });
 const ready = (id) => page.waitForFunction((id) => window.switchFixture?.renders.at(-1)?.id === id && window.switchFixture.renders.at(-1)?.connected, id, { timeout: 60000 });
-const open = async (query = fixtureQuery) => { await page.goto(`${origin}/tests/session-switch.html?fixture=sidebar&${query}`); await ready("s0"); };
-const row = (id) => page.locator(`.sidebar-recent .chat-link[title="Session ${id}"]`);
+const open = async (query = fixtureQuery) => { await page.goto(`${origin}/tests/session-switch.html?fixture=sidebar&expanded=1&${query}`); await ready("s0"); };
+const row = (id) => page.locator(".project-chats .chat-link").filter({ has: page.getByText(`Session ${id}`, { exact: true }) });
 const select = (id) => row(id).click({ timeout: perfOnly ? 60000 : 800, position: { x: 20, y: 15 } });
 async function stopSampling() {
 	report.failure = "Fixture exceeded the 5 minute sampling budget; incomplete, not a passing measurement.";
@@ -52,7 +52,7 @@ async function regressions() {
 		const old = await page.evaluate(() => [...window.switchFixture.mock.processes.keys()][0]);
 		await select(2);
 		await ready("s2"); // Barrier stays held: another runtime starts independently.
-		check(await page.locator('.selected .chat-link').getAttribute("title") === "Session 2", `${type} 挂起时真实导航不等待 35 秒超时`);
+		check((await page.locator('.selected .chat-link').getAttribute("title")).startsWith("Session 2\n"), `${type} 挂起时真实导航不等待 35 秒超时`);
 		const before = await page.evaluate(() => JSON.stringify(Object.fromEntries(Object.entries(window.switchFixture.renders.at(-1)).filter(([key]) => key !== "time"))));
 		await page.evaluate((old) => {
 			const f = window.switchFixture;
@@ -225,8 +225,8 @@ try {
 	await page.waitForFunction(() => window.switchFixture.held());
 	check(!await row(2).isDisabled(), "启动挂起时跨项目会话按钮可用");
 	try { await select(2); } catch (error) { if (!baseline) throw error; }
-	check(await page.locator('.sidebar-recent .selected .chat-link').getAttribute("title") === "Session 2", "A 启动未释放即可真实点击选中 B");
-	check((await data()).clicks.some((event) => event.title === "Session 2" && event.trusted), "B 点击进入真实事件处理入口");
+	check((await page.locator('.project-chats .selected .chat-link').getAttribute("title")).startsWith("Session 2\n"), "A 启动未释放即可真实点击选中 B");
+	check((await data()).clicks.some((event) => event.title.startsWith("Session 2\n") && event.trusted), "B 点击进入真实事件处理入口");
 	check(await page.locator('[aria-label="正在加载会话"]').count() === 1 || await page.evaluate(() => window.switchFixture.currentSession?.owner.id === "s2" && window.switchFixture.currentSession.connected), "目标会话立即显示加载反馈或已完成加载");
 	await page.screenshot({ path: destination.replace(/\.json$/, ".loading.png"), fullPage: true });
 	await page.evaluate(() => window.switchFixture.release());
@@ -250,7 +250,7 @@ try {
 			window.switchMeasurement = result;
 			const observe = () => {
 				if (!result.start) return;
-				const selected = document.querySelector('.sidebar-recent .selected .chat-link')?.title === `Session ${id}`;
+				const selected = document.querySelector('.project-chats .selected .chat-link')?.title.startsWith(`Session ${id}\n`);
 				if (selected && result.highlight === undefined) { result.highlight = performance.now() - result.start; result.mountedAtHighlight = document.querySelectorAll('.msg').length; requestAnimationFrame(() => requestAnimationFrame(() => { result.paintOpportunity = performance.now() - result.start; })); }
 				if (selected && document.querySelector('[aria-label="正在加载会话"]') && result.loading === undefined) result.loading = performance.now() - result.start;
 				const snapshot = window.switchFixture.renders.at(-1);

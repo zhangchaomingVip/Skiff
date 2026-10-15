@@ -1,9 +1,11 @@
+import { fingerprint, locateMessage, runtimeHistory, type MessageLocation } from "./historySearch";
+import { DialogRuntime, emptyQueue, extensionDialog, queueSize, type Delivery, type DialogReply } from "./interactions";
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { PiRpc, type RpcEvent } from "../rpc/RpcClient";
 import { parseMessages, parseModels } from "./parse";
 import { reduce } from "./reducer";
-import { forkTurn } from "./turns";
+import { forkEntry, forkTurn } from "./turns";
 import { loadAppendPrompt } from "./prompt";
 import { initialSessionState, type ContextUsage, type ImageAttachment, type ModelInfo, type SessionState } from "./types";
 import type { RuntimeOffer } from "./modelFamilies";
@@ -27,10 +29,14 @@ export interface PiCommand {
 }
 
 export interface PiSessionActions {
-	rewind: (id: string) => Promise<boolean>;
+	rewind: (id: string, expected?: { target: MessageLocation; branchVersion: string }, onFork?: (sessionFile?: string) => void) => Promise<boolean>;
 	getCommands: () => Promise<PiCommand[]>;
-	prompt: (text: string, images?: ImageAttachment[]) => Promise<boolean>;
+	captureEdit: (id: string) => Promise<{ target: MessageLocation; branchVersion: string } | undefined>;
+	validateEdit: (target: MessageLocation, branchVersion: string) => Promise<string | undefined>;
+	prompt: (text: string, images?: ImageAttachment[], delivery?: Delivery) => Promise<boolean>;
 	abort: () => Promise<void>;
+	clearQueue: () => Promise<void>;
+	replyDialog: (id: string, reply: DialogReply) => Promise<boolean>;
 	setModel: (model: ModelInfo) => Promise<boolean>;
 	setThinkingLevel: (level: string) => Promise<void>;
 	/** Toggles the pi extension's `web_search` tool via its `/web` command. */
@@ -94,6 +100,11 @@ export function usePiSession(target?: SessionTarget, runtimeOffers: readonly Run
 	const rpcRef = useRef<PiRpc | null>(null);
 	const busyRef = useRef(false);
 	const streamingRef = useRef(false);
+	const stoppingRef = useRef(false);
+	const submissionsRef = useRef(0);
+	const startsRef = useRef(0);
+	const dialogsRef = useRef<DialogRuntime>();
+	const queueRef = useRef(emptyQueue());
 	const [revision, setRevision] = useState(0);
 	const runStarted = useRef<number>();
 	const contextVersionRef = useRef(0);
@@ -198,34 +209,74 @@ export function usePiSession(target?: SessionTarget, runtimeOffers: readonly Run
 		promptRef.current = undefined;
 		busyRef.current = false;
 		streamingRef.current = false;
-		const offEvent = rpc.onEvent((event: RpcEvent) => {
+		stoppingRef.current = false;
+		submissionsRef.current = 0;
+		queueRef.current = emptyQueue();
+		const dispatch = (event: RpcEvent) => setState((s) => reduce(s, event, { offers: runtimeOffersRef.current }));
+		const dialogs = new DialogRuntime((command) => rpc.sendCommand(command), dispatch);
+		dialogsRef.current = dialogs;
+		const recheckDialogs = () => dialogs.recheck();
+		window.addEventListener("focus", recheckDialogs);
+		document.addEventListener("visibilitychange", recheckDialogs);
+		let fallbackTimer: ReturnType<typeof setTimeout> | undefined;
+		let lifecycle = 0;
+		let hasSettled = false;
+		let maintenance = false;
+		const settleFallback = async (epoch: number) => {
+			try {
+				const data = await rpc.request<Record<string, unknown>>({ type: "get_state" });
+				if (!current() || hasSettled || maintenance || epoch !== lifecycle) return;
+				if (data.isStreaming || data.isCompacting || Number(data.pendingMessageCount) > 0) {
+					fallbackTimer = setTimeout(() => void settleFallback(epoch), 150); return;
+				}
+				// Recheck across a second event-loop boundary for older pi versions.
+				fallbackTimer = setTimeout(() => { void rpc.request<Record<string, unknown>>({ type: "get_state" }).then((again) => {
+					if (!current() || hasSettled || maintenance || epoch !== lifecycle) return;
+					if (again.isStreaming || again.isCompacting || Number(again.pendingMessageCount) > 0) { void settleFallback(epoch); return; }
+					onEvent({ type: "agent_settled", synthetic: true });
+				}).catch(() => {}); }, 100);
+			} catch { /* Do not unlock on an unverified idle state. */ }
+		};
+		const onEvent = (event: RpcEvent) => {
 			if (!current()) return;
 			if (isContextRefreshEvent(event.type)) {
 				if (/compaction|compact|context_reset/i.test(event.type ?? "")) invalidateContext();
 				void refreshContext();
 			}
 			const now = Date.now();
+			if (extensionDialog(event, now) && !dialogs.add(event)) return;
+			if (event.type === "queue_update") queueRef.current = { steering: Array.isArray(event.steering) ? event.steering as string[] : [], followUp: Array.isArray(event.followUp) ? event.followUp as string[] : [] };
+			if (event.type === "agent_start") { startsRef.current++; lifecycle++; clearTimeout(fallbackTimer); }
+			if (event.type === "agent_settled") { if (!event.synthetic) hasSettled = true; lifecycle++; clearTimeout(fallbackTimer); }
+			if (event.type === "auto_retry_start" || event.type === "auto_compaction_start") { maintenance = true; lifecycle++; clearTimeout(fallbackTimer); }
+			if (event.type === "auto_retry_end" || event.type === "auto_compaction_end") {
+				maintenance = false;
+				if (!hasSettled) { const epoch = lifecycle; clearTimeout(fallbackTimer); fallbackTimer = setTimeout(() => void settleFallback(epoch), 150); }
+			}
+			if (event.type === "agent_end" && !hasSettled && !event.willRetry && !maintenance) { const epoch = lifecycle; clearTimeout(fallbackTimer); fallbackTimer = setTimeout(() => void settleFallback(epoch), 150); }
 			if (event.type === "agent_start" && runStarted.current === undefined) runStarted.current = now;
 			let duration: number | undefined;
-			if (["agent_end", "agent_settled", "bridge_exit"].includes(String(event.type)) && runStarted.current !== undefined) {
+			if (["agent_settled", "bridge_exit"].includes(String(event.type)) && runStarted.current !== undefined) {
 				duration = Math.max(0, now - runStarted.current);
 				setElapsedMs((ms) => ms + (duration ?? 0));
 				runStarted.current = undefined;
 			}
 			if (event.type === "bridge_exit") {
+				dialogs.dispose();
 				setPhase("error");
 				setReadyId(undefined);
 				setPending(false);
 				streamingRef.current = false;
 			}
 			if (event.type === "agent_start") streamingRef.current = true;
-			if (event.type === "agent_end" || event.type === "agent_settled") streamingRef.current = false;
+			if (event.type === "agent_settled") streamingRef.current = false;
 			const timedEvent = { ...event, voyageAt: now, ...(event.type === "agent_start" ? { startedAt: runStarted.current } : {}), ...(duration === undefined ? {} : { durationMs: duration, completedAt: now }) };
 			setState((s) => {
 				const options = { offers: runtimeOffersRef.current };
 				return reduce(s, timedEvent, options);
 			});
-		});
+		};
+		const offEvent = rpc.onEvent(onEvent);
 		const offLine = rpc.onLine((line) => {
 			if (current()) setRawLines((prev) => [...prev.slice(-499), line]);
 		});
@@ -270,15 +321,17 @@ export function usePiSession(target?: SessionTarget, runtimeOffers: readonly Run
 				const user = [...messages].reverse().find((message) => message.role === "user");
 				const startedAt = Boolean(data.isStreaming) ? runStarted.current ?? user?.timestamp ?? Date.now() : undefined;
 				runStarted.current = startedAt;
-				setState({
-					...initialSessionState, model: restoredModel,
+				setState((previous) => ({
+					...initialSessionState, dialogs: previous.dialogs, queue: previous.queue, notices: previous.notices, model: restoredModel,
+					steeringMode: typeof data.steeringMode === "string" ? data.steeringMode : undefined,
+					followUpMode: typeof data.followUpMode === "string" ? data.followUpMode : undefined,
 					thinkingLevel: typeof data.thinkingLevel === "string" ? data.thinkingLevel : undefined,
 					thinkingLevels: levels.levels ?? [],
 						availableModels, messages,
 					isStreaming: Boolean(data.isStreaming),
 					activeRun: startedAt === undefined ? undefined : { startedAt, turnId: user ? `turn:${user.id}` : undefined },
 					contextUsage: parseContextUsage(stats, contextVersionRef.current),
-				});
+				}));
 				streamingRef.current = Boolean(data.isStreaming);
 				setSessionFile(typeof data.sessionFile === "string" ? data.sessionFile : undefined);
 				setLoadedId(selected.id);
@@ -290,6 +343,10 @@ export function usePiSession(target?: SessionTarget, runtimeOffers: readonly Run
 			}
 		})();
 		return () => {
+			const cancellation = dialogs.cancelAll().finally(() => dialogs.dispose());
+			window.removeEventListener("focus", recheckDialogs);
+			document.removeEventListener("visibilitychange", recheckDialogs);
+			clearTimeout(fallbackTimer);
 			cancelled = true;
 			if (ownerRef.current === owner) ownerRef.current = undefined;
 			runStarted.current = undefined;
@@ -298,9 +355,9 @@ export function usePiSession(target?: SessionTarget, runtimeOffers: readonly Run
 			offEvent();
 			offLine();
 			// A late spawn must not become an orphan after switching conversations.
-			// Wait only for the spawn, then stop immediately to reject outstanding
-			// initialization requests instead of waiting for their RPC timeout.
-			previousTeardown.current = spawned.catch(() => {}).then(() => rpc.stop()).catch(() => {});
+			// Cancel valid dialogs before stopping this generation. Only the spawn
+			// and bounded cancellation writes delay teardown, never initialization RPCs.
+			previousTeardown.current = spawned.catch(() => {}).then(() => cancellation).then(() => rpc.stop()).catch(() => {});
 			if (rpcRef.current === rpc) rpcRef.current = null;
 		};
 	}, [owner, configurationReady, fail, isCurrent, setters]);
@@ -312,13 +369,45 @@ export function usePiSession(target?: SessionTarget, runtimeOffers: readonly Run
 			const result = await rpc.request<{ commands?: unknown }>({ type: "get_commands" });
 			return ownsRpc(rpc) ? parseCommands(result?.commands) : [];
 		},
-		rewind: async (id) => {
+		captureEdit: async (id) => {
 			const rpc = rpcRef.current;
-			if (!connected || !ownsRpc(rpc) || !rpc || busyRef.current || streamingRef.current) return false;
+			if (!rpc || !ownsRpc(rpc) || streamingRef.current || stoppingRef.current || queueSize(queueRef.current)) return;
+			try {
+				const data = await rpc.request<{ entries: Parameters<typeof forkEntry>[2]; leafId: string | null }>({ type: "get_entries" });
+				if (!ownsRpc(rpc)) return;
+				const entryId = forkEntry(stateRef.current.messages, id, data.entries, data.leafId);
+				const message = stateRef.current.messages.find((message) => message.id === id);
+				if (!message || message.role !== "user") return;
+				const version = JSON.stringify([sessionFile, data.leafId]);
+				const history = runtimeHistory(stateRef.current.messages);
+				const index = stateRef.current.messages.indexOf(message), key = fingerprint(history[index]);
+				const matches = history.flatMap((item, i) => fingerprint(item) === key ? [i] : []);
+				const location: MessageLocation = { chatId: owner.id!, sessionFile, version, fingerprint: key, occurrence: matches.indexOf(index), occurrences: matches.length, query: "" };
+				return { target: { ...location, entryId }, branchVersion: version };
+			} catch (error) { if (ownsRpc(rpc)) fail(error); }
+		},
+		validateEdit: async (target, branchVersion) => {
+			const rpc = rpcRef.current;
+			if (!rpc || !ownsRpc(rpc) || streamingRef.current || stoppingRef.current || queueSize(queueRef.current) || target.chatId !== owner.id || target.sessionFile !== sessionFile) return;
+			const data = await rpc.request<{ entries: Parameters<typeof forkEntry>[2]; leafId: string | null }>({ type: "get_entries" });
+			if (!ownsRpc(rpc) || JSON.stringify([sessionFile, data.leafId]) !== branchVersion) return;
+			const index = locateMessage(runtimeHistory(stateRef.current.messages), target);
+			const message = index === undefined ? undefined : stateRef.current.messages[index];
+			if (!message || forkEntry(stateRef.current.messages, message.id, data.entries, data.leafId) !== target.entryId) return;
+			return message.id;
+		},
+		rewind: async (id, expected, onFork) => {
+			const rpc = rpcRef.current;
+			if (!connected || !ownsRpc(rpc) || !rpc || busyRef.current || streamingRef.current || stoppingRef.current || queueSize(queueRef.current)) return false;
 			busyRef.current = true; setPending(true);
 			let forked = false;
 			try {
-				const accepted = await forkTurn(rpc, stateRef.current.messages, id);
+				let accepted: boolean;
+				if (expected) {
+					const data = await rpc.request<{ entries: Parameters<typeof forkEntry>[2]; leafId: string | null }>({ type: "get_entries" });
+					if (!ownsRpc(rpc) || JSON.stringify([sessionFile, data.leafId]) !== expected.branchVersion || expected.target.entryId !== forkEntry(stateRef.current.messages, id, data.entries, data.leafId)) throw new Error("聊天分支已变化，未执行编辑重发。");
+					accepted = !(await rpc.request<{ cancelled?: boolean }>({ type: "fork", entryId: expected.target.entryId })).cancelled;
+				} else accepted = await forkTurn(rpc, stateRef.current.messages, id);
 				if (!ownsRpc(rpc)) return false;
 				if (!accepted) { fail("pi 扩展取消了消息操作。"); return false; }
 				forked = true;
@@ -330,6 +419,7 @@ export function usePiSession(target?: SessionTarget, runtimeOffers: readonly Run
 				contextVersionRef.current++;
 				setState((s) => ({ ...s, contextUsage: undefined }));
 				setSessionFile(typeof data.sessionFile === "string" ? data.sessionFile : undefined);
+				onFork?.(typeof data.sessionFile === "string" ? data.sessionFile : undefined);
 				try {
 					const stats = await rpc.request<Record<string, unknown>>({ type: "get_session_stats" });
 					if (ownsRpc(rpc)) setState((s) => ({ ...s, contextUsage: parseContextUsage(stats, contextVersionRef.current) }));
@@ -345,66 +435,101 @@ export function usePiSession(target?: SessionTarget, runtimeOffers: readonly Run
 			}
 			finally { if (ownsRpc(rpc)) { busyRef.current = false; setPending(false); } }
 		},
-		prompt: async (text, images = []) => {
+		prompt: async (text, images = [], delivery = "steer") => {
 			const rpc = rpcRef.current;
-			if (!connected || !ownsRpc(rpc) || !rpc || busyRef.current || streamingRef.current || runStarted.current !== undefined || (!text.trim() && !images.length)) return false;
-			busyRef.current = true;
+			if (!connected || !ownsRpc(rpc) || !rpc || busyRef.current || stoppingRef.current || (!text.trim() && !images.length)) return false;
+			const running = streamingRef.current || runStarted.current !== undefined;
+			const startVersion = startsRef.current;
+			// Reserve the run synchronously so rapid subsequent submissions queue.
+			if (!running) { streamingRef.current = true; runStarted.current = Date.now(); }
+			submissionsRef.current++;
 			setPending(true);
 			const prompt = { id: crypto.randomUUID(), cancelled: false };
-			promptRef.current = prompt;
-			const startedAt = Date.now();
-			runStarted.current = startedAt;
-			setState((s) => reduce(s, {
-				type: "prompt_start", promptId: prompt.id, startedAt,
-				message: { id: `pending_${prompt.id}`, role: "user", timestamp: startedAt, blocks: [...(text.trim() ? [{ kind: "text", text: text.trim() }] : []), ...images.map(({ data, mimeType }) => ({ kind: "image", data, mimeType }))] },
-			}));
+			if (!running) {
+				promptRef.current = prompt;
+				setState((s) => reduce(s, { type: "prompt_start", promptId: prompt.id, startedAt: runStarted.current,
+					message: { id: `pending_${prompt.id}`, role: "user", timestamp: runStarted.current, blocks: [...(text.trim() ? [{ kind: "text", text: text.trim() }] : []), ...images.map(({ data, mimeType }) => ({ kind: "image", data, mimeType }))] } }));
+			}
 			try {
-				await rpc.request({ type: "prompt", message: text.trim(), ...(images.length ? { images: images.map(({ data, mimeType }) => ({ type: "image", data, mimeType })) } : {}) });
-				if (!ownsRpc(rpc) || promptRef.current !== prompt || prompt.cancelled) return false;
-				// pi may assign its file lazily on the first message.
+				let type: string = running ? delivery : "prompt";
+				if (running && text.trim().startsWith("/")) {
+					const commands = await rpc.request<{ commands?: unknown }>({ type: "get_commands" });
+					const name = text.trim().slice(1).split(/\s/)[0];
+					if (parseCommands(commands.commands).some((command) => command.name === name && command.source === "extension")) type = "prompt";
+				}
+				if (!ownsRpc(rpc) || stoppingRef.current) return false;
+				const result = await rpc.request<{ disposition?: string }>({ type, message: text.trim(), ...(running && type === "prompt" ? { streamingBehavior: delivery } : {}), ...(images.length ? { images: images.map(({ data, mimeType }) => ({ type: "image", data, mimeType })) } : {}) });
+				if (!ownsRpc(rpc)) return false;
+				if (result?.disposition === "handled") {
+					if (!running) { runStarted.current = undefined; streamingRef.current = false; }
+					setState((s) => ({ ...(running ? s : reduce(s, { type: "prompt_cancel", promptId: prompt.id })), notices: [...s.notices, { id: prompt.id, kind: "info", text: "输入已由扩展处理。" }] }));
+				}
+				// Old pi may omit disposition. Its events and verified state remain authoritative.
 				try {
 					const data = await rpc.request<Record<string, unknown>>({ type: "get_state" });
-					if (ownsRpc(rpc) && promptRef.current === prompt && !prompt.cancelled) {
+					if (ownsRpc(rpc)) {
 						setSessionFile(typeof data.sessionFile === "string" ? data.sessionFile : undefined);
-						// Extension commands may complete without starting an agent run.
-						if (text.trim().startsWith("/") && !data.isStreaming && !streamingRef.current) {
-							runStarted.current = undefined;
+						if (!running && text.trim().startsWith("/") && !data.isStreaming && !data.isCompacting && !Number(data.pendingMessageCount)) {
+							runStarted.current = undefined; streamingRef.current = false;
 							setState((s) => reduce(s, { type: "prompt_cancel", promptId: prompt.id }));
 						}
 					}
-				} catch (error) { if (ownsRpc(rpc) && promptRef.current === prompt && !prompt.cancelled) fail(error); }
-				return ownsRpc(rpc) && promptRef.current === prompt && !prompt.cancelled;
+				} catch { /* Acceptance already succeeded; a state refresh cannot unaccept input. */ }
+				return true;
 			} catch (error) {
-				if (ownsRpc(rpc) && promptRef.current === prompt && !prompt.cancelled) {
-					if (!streamingRef.current) {
-						runStarted.current = undefined;
-						setState((s) => reduce(s, { type: "prompt_cancel", promptId: prompt.id }));
-					}
-					fail(error);
+				if (ownsRpc(rpc)) {
+					if (!running && promptRef.current === prompt && startsRef.current === startVersion) { runStarted.current = undefined; streamingRef.current = false; setState((s) => reduce(s, { type: "prompt_cancel", promptId: prompt.id })); }
+					fail(`发送未被确认（请确认 pi 支持当前投递方式）：${error instanceof Error ? error.message : String(error)}`);
 				}
 				return false;
-			} finally {
-				if (ownsRpc(rpc) && promptRef.current === prompt) { setPending(false); busyRef.current = false; }
-			}
+			} finally { if (ownsRpc(rpc)) { submissionsRef.current--; setPending(submissionsRef.current > 0); } }
 		},
+		clearQueue: async () => {
+			const rpc = rpcRef.current;
+			if (!connected || !rpc || !ownsRpc(rpc) || stoppingRef.current) return;
+			try { const result = await rpc.request<Record<string, unknown>>({ type: "clear_queue" }); if (ownsRpc(rpc)) setState((s) => reduce(s, { type: "queue_withdrawn", ...result })); }
+			catch (error) { if (ownsRpc(rpc)) fail(error); }
+		},
+		replyDialog: async (id, reply) => await dialogsRef.current?.reply(id, reply) ?? false,
 		abort: async () => {
 			const rpc = rpcRef.current;
-			if (!connected || !ownsRpc(rpc)) return;
-			const prompt = promptRef.current;
+			if (!connected || !ownsRpc(rpc) || !rpc || stoppingRef.current || (!streamingRef.current && runStarted.current === undefined && !queueSize(queueRef.current))) return;
+			stoppingRef.current = true;
+			const turnId = stateRef.current.activeRun?.turnId;
+			setState((s) => reduce(s, { type: "stop_pending" }));
+			let cleared = true; let stopped = false;
+			let wasRunning = true;
 			try {
-				await rpc?.request({ type: "abort" });
-				if (ownsRpc(rpc) && promptRef.current === prompt && prompt && !streamingRef.current) {
-					prompt.cancelled = true;
-					runStarted.current = undefined;
-					busyRef.current = false;
-					setPending(false);
-					setState((s) => reduce(s, { type: "prompt_cancel", promptId: prompt.id }));
+				const before = await rpc.request<Record<string, unknown>>({ type: "get_state" }).catch(() => undefined);
+				wasRunning = !before || !!before.isStreaming || !!before.isCompacting || Number(before.pendingMessageCount) > 0 || !!stateRef.current.dialogs?.length;
+				if (!ownsRpc(rpc) || !wasRunning) return;
+				try { const result = await rpc.request<Record<string, unknown>>({ type: "clear_queue" }); if (ownsRpc(rpc)) setState((s) => reduce(s, { type: "queue_withdrawn", ...result })); }
+				catch { cleared = false; if (ownsRpc(rpc)) fail("未能确认队列已清空，仍将尝试中止运行。"); }
+				await dialogsRef.current?.cancelAll();
+				if (!ownsRpc(rpc)) return;
+				await rpc.request({ type: "abort" });
+				const deadline = Date.now() + 10000;
+				while (ownsRpc(rpc)) {
+					const data = await rpc.request<Record<string, unknown>>({ type: "get_state" });
+					if (!data.isStreaming && !data.isCompacting && !Number(data.pendingMessageCount)) { stopped = true; break; }
+					if (Date.now() >= deadline) throw new Error("尚未确认运行收束，请稍后再试。");
+					await new Promise((resolve) => setTimeout(resolve, 100));
+				}
+				if (ownsRpc(rpc) && stopped) {
+					const now = Date.now(), duration = runStarted.current === undefined ? undefined : Math.max(0, now - runStarted.current);
+					if (duration !== undefined) setElapsedMs((value) => value + duration);
+					streamingRef.current = false; runStarted.current = undefined;
+					setState((s) => reduce(s, { type: "agent_settled", voyageAt: now, durationMs: duration, completedAt: now }));
 				}
 			} catch (error) { if (ownsRpc(rpc)) fail(error); }
+			finally { if (ownsRpc(rpc)) {
+				stoppingRef.current = false;
+				setState((s) => ({ ...reduce(s, { type: "stop_finished", success: stopped && cleared && wasRunning, turnId }), ...(!cleared ? { notices: [...s.notices, { id: crypto.randomUUID(), kind: "warning" as const, text: "未能确认队列已清空；本次停止未获完整确认。" }] } : {}) }));
+			} }
 		},
 		setModel: async (model) => {
 			const rpc = rpcRef.current;
-			if (!connected || !ownsRpc(rpc) || !rpc || busyRef.current || streamingRef.current) return false;
+			if (!connected || !ownsRpc(rpc) || !rpc || busyRef.current || streamingRef.current || stoppingRef.current || queueSize(queueRef.current)) return false;
 			busyRef.current = true;
 			setPending(true);
 			try {
@@ -449,7 +574,7 @@ export function usePiSession(target?: SessionTarget, runtimeOffers: readonly Run
 			} catch (error) { if (ownsRpc(rpc)) fail(error); } finally { if (ownsRpc(rpc)) { busyRef.current = false; setPending(false); } }
 		},
 		clearError: () => setState((s) => ({ ...s, lastError: undefined })),
-	}), [connected, fail, ownsRpc, setters]);
+	}), [connected, fail, ownsRpc, setters, sessionFile, owner.id]);
 
 	// Stable identity: callers restart the session from effects and must not
 	// re-trigger on every render.
@@ -459,7 +584,7 @@ export function usePiSession(target?: SessionTarget, runtimeOffers: readonly Run
 		ownerRef.current = undefined;
 		setRevision((revision) => revision + 1);
 	}, []);
-	const canNavigate = useCallback(() => !busyRef.current && !streamingRef.current && runStarted.current === undefined, []);
+	const canNavigate = useCallback(() => !busyRef.current && !streamingRef.current && !stoppingRef.current && !submissionsRef.current && !queueSize(queueRef.current) && runStarted.current === undefined, []);
 
 	return useMemo(() => ({ owner, phase, loading: !!target && phase === "loading", isCurrent, canNavigate, state, connected, rawLines, actions, sessionFile, loadedId, loadedConfig, pending, elapsedMs, reconnect }), [owner, phase, !!target, isCurrent, canNavigate, state, connected, rawLines, actions, sessionFile, loadedId, loadedConfig, pending, elapsedMs, reconnect]);
 }

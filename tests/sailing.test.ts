@@ -20,9 +20,9 @@ test("gauge clamps at 300 tok/s while activity remains independent of context", 
 	assert.equal(-90 + gaugePosition(0) * 180, -90);
 	assert.equal(-90 + gaugePosition(150) * 180, 0);
 	assert.equal(-90 + gaugePosition(400) * 180, 90);
-	assert.equal(voyageStatus("sailing", "response"), "航行中");
+	assert.equal(voyageStatus("sailing", "response"), "运行中");
 	assert.equal(voyageStatus("fishing", "response"), "等待响应");
-	assert.equal(voyageStatus("moored", "thinking"), "已停泊");
+	assert.equal(voyageStatus("moored", "thinking"), "空闲");
 });
 
 const usage = (output: number) => ({ input: 0, cacheRead: 0, cacheWrite: 0, output, totalTokens: output });
@@ -51,8 +51,8 @@ test("sampler waits immediately, sails for output and handles the exact 800ms bo
 	sample = sampleVoyage(sample, 2, 1200, true);
 	assert.equal(sample.activity, "sailing");
 	assert(sample.speed > 0 && sample.speed < 5);
-	assert.equal(voyageStatus(sample.activity, voyagePhase([assistant])), "航行中");
-	assert.equal(voyageStatus(sample.activity, voyagePhase([{ ...assistant, blocks: [{ kind: "thinking", text: "思考" }] }])), "思考中");
+	assert.equal(voyageStatus(sample.activity, voyagePhase([assistant])), "运行中");
+	assert.equal(voyageStatus(sample.activity, voyagePhase([{ ...assistant, blocks: [{ kind: "thinking", text: "思考" }] }])), "运行中");
 	const peak = sample.peak;
 	sample = sampleVoyage(sample, 2, 1999, true);
 	assert.equal(sample.activity, "sailing");
@@ -87,7 +87,7 @@ test("peak uses the smoothed 500ms window across steps, is uncapped and never co
 
 test("unconfirmed submissions exclude the previous turn and cancellation/failure settle once", () => {
 	const messages = [user, { ...assistant, streaming: false, usage: usage(100), durationMs: 1000 }];
-	for (const end of ["prompt_cancel", "agent_end", "bridge_exit"]) {
+	for (const end of ["prompt_cancel", "agent_settled", "bridge_exit"]) {
 		let state = reduce({ ...initialSessionState, messages }, { type: "prompt_start", promptId: "next", startedAt: 4000, message: { ...user, id: "pending" } });
 		assert.deepEqual(currentTurnMessages(state.messages, state.activeRun), []);
 		let sample = sampleVoyage(startVoyage("next", 4000, state.activeRun?.startedAt), visibleOutputUnits(currentTurnMessages(state.messages, state.activeRun)), 4500, true);
@@ -102,7 +102,7 @@ test("unconfirmed submissions exclude the previous turn and cancellation/failure
 
 test("tool results determine tool wait; missing information falls back to response wait", () => {
 	const tool: ChatMessage = { id: "tool", role: "assistant", blocks: [{ kind: "tool", id: "call", name: "read", argsText: "", done: true }] };
-	assert.equal(voyageStatus("fishing", voyagePhase([tool])), "工具执行中");
+	assert.equal(voyageStatus("fishing", voyagePhase([tool])), "运行中");
 	assert.equal(pendingToolCallId([tool]), "call");
 	assert.equal(voyagePhase([{ ...tool, blocks: [...tool.blocks, { kind: "toolResult", id: "call", name: "read", text: "done", isError: false }] }]), "response");
 	assert.equal(pendingToolCallId([{ ...tool, blocks: [...tool.blocks, { kind: "toolResult", id: "call", name: "read", text: "done", isError: false }] }]), undefined);

@@ -1,4 +1,11 @@
 @layer components {
+.msg .message-buttons { opacity: 0; }
+.msg:hover .message-buttons, .msg:focus-within .message-buttons { opacity: 1; }
+@media (hover: none) { .msg .message-buttons { opacity: 1; } }
+.delivery-control > .ui-input { width: auto; max-width: 50%; flex: 0 0 auto; }
+.extension-dialog { width: min(520px, calc(100vw - 32px)); padding: var(--space-5); display: flex; flex-direction: column; gap: var(--space-4); }
+.extension-dialog p { white-space: pre-wrap; overflow-wrap: anywhere; }
+.extension-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-2); }
 	.ui-button { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; height: var(--control-regular); padding: 0 var(--space-3); border: 1px solid var(--boundary); border-radius: var(--radius-md); background: var(--surface); color: var(--foreground); font-size: var(--font-size-base); line-height: var(--line-height-base); font-weight: var(--font-weight-medium); white-space: nowrap; transition: background-color var(--transition-fast), border-color var(--transition-fast), transform var(--transition-fast); }
 	.ui-button-content { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2); min-width: 0; }
 	.ui-button-content > svg { flex-shrink: 0; }
@@ -13,7 +20,9 @@
 	.ui-button[data-variant=ghost]:hover:not(:disabled), .ui-icon-button[data-variant=secondary]:hover:not(:disabled) { background: var(--hover); color: var(--foreground); }
 	.ui-button[data-variant=danger] { color: var(--danger); border-color: var(--danger); background: var(--error-bg); }
 	.ui-button[aria-pressed=true], .ui-button[aria-checked=true], .ui-button.active { background: var(--selected); color: var(--accent); border-color: var(--accent); }
-	.ui-button:disabled { opacity: .5; cursor: default; }
+	.ui-button:disabled { cursor: default; }
+	.ui-button[data-variant=setting] { background: transparent; color: var(--secondary); }
+	.ui-button[data-variant=setting].active, .ui-button[data-variant=setting][aria-pressed=true] { background: transparent; color: var(--accent); border-color: var(--accent); box-shadow: inset 2px 0 0 var(--accent); }
 	.ui-icon-button { width: var(--control-regular); padding: 0; }
 	.ui-icon-button[data-size=compact] { width: var(--control-compact); padding: 0; }
 	.ui-icon-button[data-size=primary] { width: var(--control-primary); }
@@ -27,7 +36,6 @@
 	.ui-chip[data-tone=danger] { color: var(--danger); }
 	.ui-input { min-width: 0; width: 100%; height: var(--control-regular); padding: 0 var(--space-2); border: 1px solid var(--boundary); border-radius: var(--radius-md); background: var(--surface); color: var(--foreground); font: inherit; font-size: var(--font-size-base); }
 	.ui-input::placeholder { color: var(--muted); opacity: 1; }
-	.ui-input:disabled { opacity: .5; }
 	.ui-input[aria-invalid=true] { border-color: var(--danger); }
 	.ui-textarea { height: auto; padding: var(--space-2); line-height: var(--line-height-relaxed); resize: vertical; }
 	.ui-input[data-appearance=plain] { border: 0; background: transparent; padding-inline: var(--space-1); }
@@ -50,7 +58,20 @@
 	.ui-tooltip[data-align=start] { left: 0; right: auto; }
 	@keyframes ui-enter { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: translateY(0); } }
 }
+@layer components {
+	.process-disclosure, .thinking > summary.process-disclosure { display: inline-flex; align-items: center; gap: var(--space-2); max-width: 100%; padding: var(--space-1) var(--space-2); border: 0; border-radius: var(--radius-base); background: transparent; color: var(--secondary); font-size: var(--font-size-sm); line-height: var(--line-height-base); font-variant-numeric: tabular-nums; text-align: left; cursor: pointer; list-style: none; }
+	.process-disclosure:hover { background: var(--hover); color: var(--text); }
+	.process-disclosure .disclosure { display: inline-flex; flex: none; color: var(--muted); transform: rotate(0deg); transition: transform var(--transition-base); }
+	.process-disclosure[aria-expanded=true] .disclosure, details[open] > summary.process-disclosure .disclosure { transform: rotate(90deg); }
+	.process-disclosure-status { color: var(--muted); margin-left: auto; }
+	.usage-route-details { display: grid; gap: var(--space-2); margin-bottom: var(--space-3); padding-bottom: var(--space-3); border-bottom: 1px solid var(--border); }
+	.usage-route-details .usage-model { white-space: normal; text-align: left; overflow-wrap: anywhere; }
+}
 @layer accessibility {
+	:is(button, input, textarea, select):disabled, .ui-button:disabled, .ui-input:disabled, .model-discovery-option:disabled { opacity: 1; color: var(--disabled-text); border-color: var(--disabled-text); background: var(--surface); text-shadow: none; }
+
+	.turn-usage .usage-cost:disabled { background: transparent; }
+	.switch:has(input:focus-visible) .slider { outline: 2px solid var(--accent); outline-offset: 2px; }
 	:where(button, input, textarea, select, summary, [tabindex]):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 	.ui-input[data-appearance=plain]:focus-visible { outline: none; }
 	[data-theme-changing] *, [data-theme-changing] *::before, [data-theme-changing] *::after { transition: none !important; }

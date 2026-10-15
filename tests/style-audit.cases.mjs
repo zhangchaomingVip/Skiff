@@ -1,0 +1,20 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import { auditStyles } from "../scripts/check-styles.mjs";
+
+const read = (file) => fs.readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
+const css = "src/voyage.css";
+const tokens = "src/tokens.css";
+const component = "src/components/VoyageRail.tsx";
+const rejected = (overrides, pattern) => assert.ok(auditStyles(overrides).errors.some((error) => pattern.test(error)), `Expected ${pattern}`);
+rejected({ [css]: `${read(css)}\n@layer pages { .voyage-gauge-new { font-size: 9px; } }` }, /Font outside scale/);
+rejected({ [tokens]: read(tokens).replace("--font-size-gauge-min: 14px", "--font-size-gauge-min: var(--font-size-tiny); --font-size-tiny: 9px") }, /Gauge font below minimum/);
+rejected({ [component]: read(component).replace('<text x="42"', '<text fontSize="9px" x="42"') }, /Gauge font below minimum/);
+rejected({ [component]: read(component).replace('<text x="42"', '<text style={{ fontSize: "9px" }} x="42"') }, /Gauge font below minimum/);
+rejected({ [css]: `${read(css)}\n@layer pages { .voyage-gauge-scene { opacity: .5; } }` }, /Gauge text ancestor opacity/);
+rejected({ [component]: read(component).replace('<svg className="voyage-gauge-svg"', '<svg opacity=".5" className="voyage-gauge-svg"') }, /Gauge text ancestor opacity/);
+rejected({ [component]: read(component).replace('<svg className="voyage-gauge-svg"', '<svg style={{ opacity: .5 }} className="voyage-gauge-svg"') }, /Gauge text ancestor opacity/);
+rejected({ [tokens]: read(tokens).replace("--shadow-elevation-2: 0 4px 12px rgba(0, 0, 0, .08);", "") }, /Missing paired shadow/);
+rejected({ [tokens]: read(tokens).replace("--shadow-color: rgb(0 0 0 / .1)", "--shadow-color: rgb(0 0 0 / .3)") }, /Light shadow alpha/);
+assert.deepEqual(auditStyles().errors, []);
+console.log("PASS: 9 style audit regressions are rejected; current sources pass");

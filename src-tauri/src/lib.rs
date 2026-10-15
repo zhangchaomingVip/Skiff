@@ -11,6 +11,7 @@ mod crypto;
 mod families;
 mod providers;
 mod search;
+mod history;
 
 /// One spawned `pi --mode rpc` session. `child` is kept only so we can kill it
 /// on stop; `stdin` is shared with the reader threads so we can write lines.
@@ -425,6 +426,7 @@ fn open_url(url: String) -> Result<(), String> {
 pub fn run() {
 	tauri::Builder::default()
 		.manage(AppState::default())
+		.manage(history::HistoryWorkspace::default())
 		.invoke_handler(tauri::generate_handler![
 			rpc_start,
 			rpc_send,
@@ -434,6 +436,7 @@ pub fn run() {
 			validate_project_directory,
 			get_workspace_directory,
 			read_system_prompt,
+			history::set_history_workspace, history::read_session_history,
 			families::list_model_families, families::list_model_runtime,
 			families::save_relay, families::delete_relay, families::set_relay_enabled,
 			families::save_route, families::delete_route, families::reorder_routes,

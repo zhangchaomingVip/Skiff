@@ -34,6 +34,7 @@ export function WebSearchToggle({ search, disabled, onConfigure }: {
 
 	return <Button
 		type="button"
+		variant="setting"
 		className={`web-trigger${active ? " active" : ""}${!search.available || !search.configured || search.validated === false ? " unavailable" : ""}`}
 		disabled={disabled || search.busy || search.validating}
 		aria-pressed={active}

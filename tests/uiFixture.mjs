@@ -1,6 +1,6 @@
 import { seedPolishPreview } from "./polishFixture.mjs";
 
-export const fixtures = ["launcher", "single", "multi", "unknown", "empty", "loading", "error", "chat", "long", "settings", "picker", "voyage", "voyage-output", "voyage-thinking", "voyage-fishing", "voyage-tool", "voyage-moored", "voyage-high", "authorization", "sidebar", "archive"];
+export const fixtures = ["launcher", "single", "multi", "unknown", "empty", "loading", "error", "chat", "long", "settings", "picker", "voyage", "voyage-output", "voyage-thinking", "voyage-fishing", "voyage-tool", "voyage-moored", "voyage-high", "authorization", "sidebar", "archive", "visual"];
 
 // This entry runs only on the separate preview origin. It never uses real pi.
 export function preparePreview(target) {
@@ -59,9 +59,19 @@ export function preparePreview(target) {
 		}));
 		for (const chat of chats) if (chat.hasMessages) chat.selectedModel = { provider: "skiff-relay-r1-deepseek", id: "deepseek-chat", modelId: "deepseek-chat", routeId: "route-deepseek-r1", offerId: "route-deepseek-r1/deepseek-chat" };
 		storage.setItem("skiff.workspace.v1", JSON.stringify({ version: 1, projects: [project, otherProject], chats, activeId: "archive-active" }));
-	} else if (["chat", "long", "picker", "voyage", "authorization"].includes(fixture) || fixture.startsWith("voyage-")) {
+	} else if (["chat", "long", "picker", "voyage", "authorization", "visual"].includes(fixture) || fixture.startsWith("voyage-")) {
 		seedPolishPreview(storage, fixture === "long");
 		const sessions = JSON.parse(storage.getItem("skiff.test.sessions"));
+		if (fixture === "visual") sessions["polish-preview.jsonl"] = [
+			{ role: "user", content: "检查仪表盘的读数、主题与窄屏布局。" },
+			{ role: "assistant", content: [
+				{ type: "thinking", thinking: "先核对指针的实际旋转中心与扫掠范围，再检查浅色和深色主题下的刻度、边框与文字对比度。\n最后验证窄屏换行、键盘折叠和用量明细。" },
+				{ type: "toolCall", id: "visual-read", name: "read", arguments: { path: "src/components/VoyageRail.tsx" } },
+			] },
+			{ role: "toolResult", toolCallId: "visual-read", toolName: "read", content: "已读取仪表组件。" },
+			{ role: "assistant", content: "### 检查完成\n\n读数已移出指针扫掠区域。船、波浪与航程保留，刻度在两种主题下均清晰可读。\n\n- 指针与中心保持连接\n- 过程信息可通过键盘折叠\n- Token 与费用明细可展开查看", usage: { input: 73, cacheRead: 1917, cacheWrite: 0, output: 190, totalTokens: 2180 }, durationMs: 3000,
+				routeSnapshot: { providerKey: "skiff-relay-r1-deepseek", familyId: "deepseek", familyName: "DeepSeek", relayId: "r1", modelId: "deepseek-chat", relayName: "官方直连", billingAccountId: "演示账户", currency: "CNY", inputCost: .3, outputCost: 1.2, cacheReadCost: .3, cacheWriteCost: .3 } },
+		];
 		for (const messages of Object.values(sessions)) messages.forEach((message, index) => {
 			message.timestamp = now - 60000 + index * 1000;
 			message.entryId = `preview-entry-${index}`;
@@ -76,6 +86,7 @@ export function preparePreview(target) {
 		}
 		storage.setItem("skiff.test.sessions", JSON.stringify(sessions));
 		const workspace = JSON.parse(storage.getItem("skiff.workspace.v1"));
+		if (fixture === "visual") workspace.chats[0].routeSnapshots = sessions["polish-preview.jsonl"].filter((message) => message.role === "assistant").map((message) => message.routeSnapshot ?? null);
 		workspace.chats[0].selectedModel = { provider: "skiff-relay-r1-deepseek", id: "deepseek-chat", modelId: "deepseek-chat", routeId: "route-deepseek-r1", offerId: "route-deepseek-r1/deepseek-chat" };
 		storage.setItem("skiff.workspace.v1", JSON.stringify(workspace));
 	} else {

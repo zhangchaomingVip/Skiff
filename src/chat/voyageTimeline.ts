@@ -32,6 +32,7 @@ export interface VoyageTimeline {
 	startedAt: number;
 	at: number;
 	endedAt?: number;
+	outcome?: "completed" | "truncated" | "failed" | "aborted" | "interrupted";
 	phase: VoyagePhase;
 	segments: PhaseSegment[];
 	tools: VoyageTool[];
@@ -61,7 +62,7 @@ export type VoyageEvent =
 	| { type: "output_delta"; at: number; estimatedTokens?: number }
 	| { type: "usage"; at: number; output?: number; context?: number; limit?: number }
 	| { type: "context"; at: number; used: number; limit?: number; estimated?: boolean }
-	| { type: "run_end"; at: number; status?: "completed" | "failed" | "aborted" | "interrupted" };
+	| { type: "run_end"; at: number; status?: "completed" | "truncated" | "failed" | "aborted" | "interrupted" };
 
 const validTime = (value: number) => Number.isFinite(value) ? value : 0;
 const compact = (text: string) => text.replace(/\s+/g, " ").trim().slice(0, 120);
@@ -164,6 +165,7 @@ export function processEvent(previous: VoyageTimeline | undefined, event: Voyage
 		if (event.limit !== undefined && Number.isFinite(event.limit) && event.limit > 0) next.contextLimit = event.limit;
 		next.contextEstimated = event.estimated ?? false;
 	} else if (event.type === "run_end") {
+		next.outcome = event.status;
 		for (const tool of next.tools) if (tool.status === "running") finish(tool, event.status === "aborted" ? "interrupted" : event.status === "failed" ? "failed" : "missing", event.status === "completed" ? undefined : "本轮已结束，未收到工具结果");
 		const open = next.segments[next.segments.length - 1];
 		if (open && open.endedAt === undefined) open.endedAt = at;

@@ -77,6 +77,6 @@ test("finalized provider errors reach the UI and settling clears streaming", () 
 	state = reduce(state, { type: "message_start", message: { role: "assistant" } });
 	state = reduce(state, { type: "message_end", message: { role: "assistant", content: [], errorMessage: "Unsupported reasoning effort" } });
 	assert.equal(state.lastError, "Unsupported reasoning effort");
-	state = reduce(state, { type: "agent_end" });
+	state = reduce(state, { type: "agent_settled" });
 	assert.equal(state.isStreaming, false);
 });

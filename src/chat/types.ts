@@ -1,4 +1,5 @@
 import type { VoyageTimeline } from "./voyageTimeline";
+import type { ExtensionDialog, QueueSnapshot } from "./interactions";
 
 /** Model descriptor as reported by pi's `get_available_models` / `get_state`. */
 export type Currency = "CNY" | "USD";
@@ -64,6 +65,7 @@ export type ContentBlock =
 	| { kind: "toolResult"; id?: string; name: string; text: string; isError: boolean; diff?: string };
 
 export interface ChatMessage {
+	entryId?: string;
 	id: string;
 	role: "user" | "assistant";
 	blocks: ContentBlock[];
@@ -74,6 +76,8 @@ export interface ChatMessage {
 	routeSnapshot?: RouteSnapshot;
 	/** pi finish reason, e.g. `stop`, `length`, `toolUse`, `aborted`. */
 	stopReason?: string;
+	/** Client result retained for a manual stop, including a turn with no assistant. */
+	turnResult?: string;
 	/** Wall-clock duration of the turn, attached when the agent run settles. */
 	durationMs?: number;
 	/** pi message time in ms; for the settling assistant message it is the turn's completion time. */
@@ -101,6 +105,13 @@ export interface ContextUsage {
 }
 
 export interface SessionState {
+	queue?: QueueSnapshot;
+	withdrawn?: QueueSnapshot;
+	steeringMode?: string;
+	followUpMode?: string;
+	dialogs?: ExtensionDialog[];
+	stopping?: boolean;
+	lastOutcome?: { reason: string; turnId?: string };
 	messages: ChatMessage[];
 	isStreaming: boolean;
 	/** Ephemeral event ledger for the current run; reset on every prompt/session. */
