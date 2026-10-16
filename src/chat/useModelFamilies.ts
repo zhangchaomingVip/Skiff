@@ -4,7 +4,7 @@ import type { RuntimeOffer } from "./modelFamilies";
 import type { Currency } from "./types";
 import type { DiscoveredModel } from "../rpc/modelDiscovery";
 
-const FAMILY_IDS = ["deepseek", "kimi", "glm"] as const;
+const FAMILY_IDS = ["deepseek", "kimi", "glm", "auto"] as const;
 export type FamilyId = (typeof FAMILY_IDS)[number];
 
 export interface ModelSpec {
@@ -92,7 +92,7 @@ export interface TestResult {
 	error: string | null;
 }
 
-export const FAMILY_LABELS: Record<string, string> = { deepseek: "DeepSeek", kimi: "Kimi", glm: "GLM" };
+export const FAMILY_LABELS: Record<string, string> = { deepseek: "DeepSeek", kimi: "Kimi", glm: "GLM", auto: "Auto" };
 
 export function blankRelay(): RelaySpec {
 	return { id: "", name: "", baseUrl: "", apiKey: "", timeoutSeconds: 60, enabled: true, billingAccountId: "", excludedModelIds: [] };

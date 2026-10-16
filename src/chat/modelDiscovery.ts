@@ -4,6 +4,7 @@ export const FAMILY_KEYWORDS: Record<string, string[]> = {
 	deepseek: ["deepseek"],
 	kimi: ["kimi", "moonshot"],
 	glm: ["glm", "chatglm"],
+	auto: ["auto"],
 };
 
 export function sortDiscoveredModels(models: DiscoveredModel[], familyId: string): string[] {

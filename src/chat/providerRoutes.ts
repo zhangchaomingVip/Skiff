@@ -9,6 +9,8 @@ export function discoveredFamily(modelId: string): string | undefined {
 	if (/^deepseek(?:$|[-_.])/.test(id)) return "deepseek";
 	if (/^(?:kimi|moonshot)(?:$|[-_.])/.test(id)) return "kimi";
 	if (/^(?:glm|chatglm)(?:$|[-_.])/.test(id)) return "glm";
+	// Auto-routing models with no vendor prefix (e.g. `openrouter/auto`, `auto`) go to the Auto family.
+	if (/^auto(?:$|[-_.])|(?:$|[-_.])auto$/.test(id)) return "auto";
 	return undefined;
 }
 
@@ -28,7 +30,7 @@ export function buildDiscoveredRoutes(models: DiscoveredModel[], relay: RelaySpe
 		list.push({ ...fillModel(id), modelId: id });
 		groups.set(familyId, list);
 	}
-	return ["deepseek", "kimi", "glm"].flatMap((familyId) => {
+	return ["deepseek", "kimi", "glm", "auto"].flatMap((familyId) => {
 		const models = groups.get(familyId);
 		return models ? [{ familyId, route: { id: "", relayId: relay.id, enabled: true, models, streaming: true, tools: true, vision: false, reasoning: true } }] : [];
 	});

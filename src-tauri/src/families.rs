@@ -1,9 +1,9 @@
 //! Model families: the user-facing way to organise models.
 //!
-//! Skiff fixes three model families (DeepSeek, Kimi, GLM). Endpoints live in
-//! relays — one base URL plus one API key. A route binds a relay to a family
+//! Skiff fixes four model families (DeepSeek, Kimi, GLM, Auto). Endpoints live
+//! in relays — one base URL plus one API key. A route binds a relay to a family
 //! and lists the models (with per-model prices and limits) the relay serves
-//! for that family, so one relay can back all three families without retyping
+//! for that family, so one relay can back all four families without retyping
 //! credentials. The routes array order is the family's priority: it drives
 //! default-route resolution and failover. Selection happens on (family, model)
 //! and pins the concrete route; each route is projected into pi's
@@ -22,8 +22,8 @@ use serde_json::{json, Value};
 use super::crypto;
 use super::providers;
 
-/// The three families are fixed by design: users add relays and routes, never families.
-pub const FAMILY_IDS: [&str; 3] = ["deepseek", "kimi", "glm"];
+/// The families are fixed by design: users add relays and routes, never families.
+pub const FAMILY_IDS: [&str; 4] = ["deepseek", "kimi", "glm", "auto"];
 
 /// Route projection prefix; keys look like `skiff-relay-<relay>-<family>`.
 const KEY_PREFIX: &str = "skiff-relay-";
@@ -35,6 +35,7 @@ pub fn family_display(id: &str) -> &'static str {
 		"deepseek" => "DeepSeek",
 		"kimi" => "Kimi",
 		"glm" => "GLM",
+		"auto" => "Auto",
 		_ => "未知家族",
 	}
 }
@@ -1439,6 +1440,33 @@ mod connection_test_tests {
 		config.relays[0].excluded_model_ids.clear();
 		save(&dir, &config).unwrap();
 		assert_eq!(runtime_offers(&load_plain(&dir).unwrap()).len(), 3);
+		std::fs::remove_dir_all(dir).unwrap();
+	}
+
+	#[test]
+	fn auto_family_is_fixed_displayed_and_accepts_routes_and_projection() {
+		let dir = std::env::temp_dir().join(format!("skiff-auto-family-{}", next_id()));
+		std::fs::create_dir_all(&dir).unwrap();
+		assert_eq!(family_display("auto"), "Auto");
+		let relay: RelaySpec = serde_json::from_value(json!({
+			"id": "", "name": "Router", "baseUrl": "https://router.example/v1", "apiKey": "sk-test-auto"
+		})).unwrap();
+		let saved = save_relay_with_routes_in(&dir, relay, vec![serde_json::from_value(json!({
+			"familyId": "auto", "route": { "relayId": "",
+				"models": [{ "modelId": "auto", "contextWindow": 128000, "maxTokens": 8192 }]
+			}
+		})).unwrap()]).unwrap();
+		let relay = saved.relays[0].clone();
+		assert_eq!(runtime_offers(&saved).iter().map(|offer| (offer.family_id.as_str(), offer.model_id.as_str())).collect::<Vec<_>>(), [("auto", "auto")]);
+		let projected = providers::read_config(&dir.join("models.json")).unwrap();
+		assert_eq!(projected["providers"][provider_key("auto", &relay.id)]["models"][0]["id"], "auto");
+
+		// Older files predating the auto family get it reinstated empty on load.
+		save(&dir, &serde_json::from_value::<FamiliesConfig>(json!({
+			"version": 4, "relays": [], "families": [{ "id": "kimi", "displayName": "Kimi", "routes": [] }]
+		})).unwrap()).unwrap();
+		let loaded = load_plain(&dir).unwrap();
+		assert_eq!(loaded.families.iter().map(|family| family.id.as_str()).collect::<Vec<_>>(), ["deepseek", "kimi", "glm", "auto"]);
 		std::fs::remove_dir_all(dir).unwrap();
 	}
 }

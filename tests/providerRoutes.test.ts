@@ -10,12 +10,13 @@ test("Bailian discovery groups direct and namespaced models without changing API
 	const routes = buildDiscoveredRoutes(asDiscovered([
 		"vanchin/deepseek-v4.1-flash", "deepseek-v4.1-flash", "deepseek-v4.1-flash",
 		"kimi/kimi-k2.8-preview", "kimi-k3", "ZHIPU/GLM-5.3-FlashX", "glm-5.3",
-		"qwen3.8-max", "MiniMax/MiniMax-M3", "vanchin/deepseek-ocr", "glm-embedding", "",
+		"qwen3.8-max", "MiniMax/MiniMax-M3", "vanchin/deepseek-ocr", "glm-embedding", "openrouter/auto", "",
 	]), blankRelay(), [], fillModel);
 	assert.deepEqual(routes.map((item) => [item.familyId, item.route.models.map((model) => model.modelId)]), [
 		["deepseek", ["vanchin/deepseek-v4.1-flash", "deepseek-v4.1-flash"]],
 		["kimi", ["kimi/kimi-k2.8-preview", "kimi-k3"]],
 		["glm", ["ZHIPU/GLM-5.3-FlashX", "glm-5.3"]],
+		["auto", ["openrouter/auto"]],
 	]);
 	assert.equal(routes[2].route.models[0].inputCost, 1.5);
 	assert.equal(routes[2].route.models[0].vision, true);
@@ -37,7 +38,13 @@ test("discovery repairs missing routes, retaining existing models and exclusions
 test("classification uses basename boundaries and accepts legacy family aliases", () => {
 	assert.equal(discoveredFamily("vendor/moonshot-v1"), "kimi");
 	assert.equal(discoveredFamily("vendor/ChatGLM-6B"), "glm");
-	for (const id of ["not-deepseek-chat", "deepseek-ai/qwen-max", "glm4-fake", "deepseek-ocr", "kimi-tts", "glm-rerank"]) {
+	// Auto-routing ids without a vendor prefix join the Auto family.
+	assert.equal(discoveredFamily("auto"), "auto");
+	assert.equal(discoveredFamily("openrouter/auto"), "auto");
+	assert.equal(discoveredFamily("vendor/auto-moe"), "auto");
+	// Vendor-prefixed auto models stay with their maker's family.
+	assert.equal(discoveredFamily("moonshot-v1-auto"), "kimi");
+	for (const id of ["not-deepseek-chat", "deepseek-ai/qwen-max", "glm4-fake", "deepseek-ocr", "kimi-tts", "glm-rerank", "autogen", "x-automation"]) {
 		assert.equal(discoveredFamily(id), undefined, id);
 	}
 });

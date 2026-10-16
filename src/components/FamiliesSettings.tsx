@@ -320,7 +320,7 @@ export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, o
 					setAdded({ relayId: saved.id, relayName: saved.name, familyId: draft.preset.familyId });
 					setTab("families");
 				} else if (testModels.length && !testModels.some((id) => discoveredFamily(id))) {
-					setRouteNotice(`已保存「${saved.name}」，未发现支持的 DeepSeek、Kimi 或 GLM 模型，请手动配置线路。`);
+					setRouteNotice(`已保存「${saved.name}」，未发现支持的 DeepSeek、Kimi、GLM 或 Auto 模型，请手动配置线路。`);
 				}
 				setDraft(undefined);
 			} else {
