@@ -7,7 +7,7 @@ export function preparePreview(target) {
 	const params = new URLSearchParams(target.location.search);
 	const fixture = params.get("fixture") || "launcher";
 	const storage = target.localStorage;
-	const preservedPreferences = params.get("persist") === "1" ? ["skiff.sidebar.width", "skiff.voyage.width", "skiff.sidebar.recent-expanded"].map((key) => [key, storage.getItem(key)]).filter((entry) => entry[1] !== null) : [];
+	const preservedPreferences = params.get("persist") === "1" ? ["skiff.sidebar.width", "skiff.voyage.width", "skiff.sidebar.recent-expanded", "skiff.theme"].map((key) => [key, storage.getItem(key)]).filter((entry) => entry[1] !== null) : [];
 	for (let index = storage.length - 1; index >= 0; index--) {
 		const key = storage.key(index);
 		if (key?.startsWith("skiff.")) storage.removeItem(key);
@@ -18,7 +18,7 @@ export function preparePreview(target) {
 		Date.now = () => now;
 		document.documentElement.dataset.previewStatic = "true";
 	}
-	const theme = params.get("theme") || "system";
+	const theme = params.get("theme") || storage.getItem("skiff.theme") || "system";
 	storage.setItem("skiff.theme", theme);
 	document.documentElement.dataset.theme = theme === "system" ? target.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light" : theme;
 	storage.setItem("skiff.sidebar.open", String(target.innerWidth > 760));

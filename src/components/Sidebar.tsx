@@ -8,6 +8,8 @@ import { calendarGroup, conversationLabel, conversationTooltip } from "../chat/c
 import { statusLabels, statusSymbols, type ConversationStatus } from "../chat/sessionStatus";
 import type { MessageLocation, SearchProgress } from "../chat/historySearch";
 import { SearchText } from "./SearchText";
+import { SettingsMenu } from "./SettingsMenu";
+import type { SettingsCategory, SettingsRestrictions } from "./settingsNavigation";
 import { ConfirmDialog } from "./ConfirmDialog";
 
 
@@ -44,7 +46,7 @@ export function SidebarCollapse({ open, id, children }: { open: boolean; id?: st
 	</div>;
 }
 
-export function Sidebar({ projects, chats, activeId, activeProjectId, homeActive, disabled, navigationDisabled = disabled, runningIds, statuses, searchProgress, searchQuery, onSearch, onSearchMatch, canCloseChat, connected, onHome, onNewChat, onSelectChat, onSelectProject, onAddProject, onClose, onRenameChat, onRenameProject, onDeleteChat, onDeleteProject, onArchiveChat, onTogglePinChat }: {
+export function Sidebar({ projects, chats, activeId, activeProjectId, homeActive, disabled, navigationDisabled = disabled, runningIds, statuses, searchProgress, searchQuery, onSearch, onSearchMatch, canCloseChat, connected, settingsRestrictions, onSettings, onHome, onNewChat, onSelectChat, onSelectProject, onAddProject, onClose, onRenameChat, onRenameProject, onDeleteChat, onDeleteProject, onArchiveChat, onTogglePinChat }: {
 	projects: Project[];
 	chats: Conversation[];
 	activeId?: string;
@@ -60,6 +62,8 @@ export function Sidebar({ projects, chats, activeId, activeProjectId, homeActive
 	onSearchMatch?: (location: MessageLocation) => void;
 	canCloseChat?: (id: string) => boolean;
 	connected: boolean;
+	settingsRestrictions: SettingsRestrictions;
+	onSettings: (category: SettingsCategory) => void;
 	onHome: () => void;
 	onNewChat: () => void;
 	onSelectChat: (id: string) => void;
@@ -243,7 +247,7 @@ export function Sidebar({ projects, chats, activeId, activeProjectId, homeActive
 				</SidebarCollapse>
 				</>}
 			</div>
-			<div className="sidebar-footer"><span className={`dot ${connected ? "on" : "off"}`} /><span>{connected ? "pi 已连接" : "pi 未连接"} · 本地工作区</span></div>
+			<SettingsMenu connected={connected} active={!!activeId} restrictions={settingsRestrictions} onOpen={onSettings} />
 			{menu && menuChat && <div className="sidebar-menu" ref={menuRef} style={{ left: menu.x, top: menu.y }} role="menu">
 				<button disabled={navigationDisabled} onClick={() => { onSelectChat(menu.chatId); closeMenu(); }}><Icon name="message" size={14} />打开</button>
 				<button disabled={disabled} onClick={() => { startEdit({ id: menu.chatId, kind: "chat", text: menuChat.title, scope: menu.scope }); closeMenu(); }}><Icon name="edit" size={14} />重命名</button>

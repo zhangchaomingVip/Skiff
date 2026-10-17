@@ -1,5 +1,5 @@
-import { Dialog, Input, IconButton, Button, Select, Tooltip } from "./ui";
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { Input, IconButton, Button, Select, Tooltip } from "./ui";
+import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { TestResult } from "../chat/useModelFamilies";
 import { slowOrFailedModels, testModelsConcurrently } from "../chat/providerConnection";
@@ -18,8 +18,6 @@ import { Icon } from "./Icon";
 import { ModelIdField } from "./ModelIdField";
 import { PriceImport, type ExtractorPick } from "./PriceImport";
 import { ProviderIcon } from "./ProviderIcon";
-import { ArchivedSessions } from "./ArchivedSessions";
-import type { Conversation, Project } from "../chat/workspace";
 
 const BRANDABLE = ["deepseek", "kimi", "glm"] as const;
 const brand = (familyId: string): BrandName | undefined => BRANDABLE.find((name) => name === familyId);
@@ -37,19 +35,13 @@ type Draft =
  * over the preset's endpoint. Forms take over the dialog body so the lists
  * stay uncluttered.
  */
-export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, onSaveRate, onClose, onSaveRelay, onDeleteRelay, onSetRelayEnabled, onSaveRoute, onDeleteRoute, onReorderRoutes, onSetDefaultRoute, onAutoFailover, onTest, onCancelTest, onDiscover, configError, chats = [], projects = [], navigationBusy = false, onRestoreArchive = () => {}, onDeleteArchive = () => {} }: {
+export type FamiliesSettingsProps = {
 	families: ModelFamily[];
 	relays: RelaySpec[];
 	autoFailover: boolean;
 	usdCnyRate: number;
 	onSaveRate: (rate: number) => Promise<boolean>;
 	configError?: string;
-	chats?: Conversation[];
-	projects?: Project[];
-	navigationBusy?: boolean;
-	onRestoreArchive?: (id: string) => void;
-	onDeleteArchive?: (id: string) => void;
-	onClose: () => void;
 	onSaveRelay: (relay: RelaySpec, routes?: RelayRouteSpec[]) => Promise<RelaySpec | undefined>;
 	onDeleteRelay: (relayId: string) => Promise<boolean>;
 	onSetRelayEnabled: (relayId: string, enabled: boolean) => Promise<boolean>;
@@ -61,8 +53,13 @@ export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, o
 	onTest: (baseUrl: string, apiKey: string, modelId: string, timeoutSeconds: number, requestId?: string) => Promise<TestResult>;
 	onCancelTest: (requestId: string) => Promise<unknown>;
 	onDiscover: (baseUrl: string, apiKey: string) => Promise<DiscoveredModel[]>;
-}) {
-	const [tab, setTab] = useState<"relays" | "families" | "archives">(relays.length ? "families" : "relays");
+	onLockChange: (locked: boolean, pending: boolean) => void;
+};
+
+export type FamiliesSettingsHandle = { pending: boolean; editing: boolean; back: () => void };
+
+export const FamiliesSettingsContent = forwardRef<FamiliesSettingsHandle, FamiliesSettingsProps>(function FamiliesSettingsContent({ families, relays, autoFailover, usdCnyRate, onSaveRate, onSaveRelay, onDeleteRelay, onSetRelayEnabled, onSaveRoute, onDeleteRoute, onReorderRoutes, onSetDefaultRoute, onAutoFailover, onTest, onCancelTest, onDiscover, configError, onLockChange }, ref) {
+	const [tab, setTab] = useState<"relays" | "families">("relays");
 	// 模型选择 tab 内的家族筛选：undefined 表示「全部线路」。
 	const [selectedFamily, setSelectedFamily] = useState<string>();
 	const [draft, setDraft] = useState<Draft>();
@@ -128,7 +125,29 @@ export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, o
 		setCompletedTestModels([]); setTestStopped(false);
 		setRunningTestModels([]); setStoppedTestModels([]);
 	};
+	const editorTrigger = useRef<HTMLElement | null>(null);
+	const editorTriggerLabel = useRef<string | null>(null);
+	const contentRef = useRef<HTMLDivElement>(null);
+	const rememberEditorTrigger = () => {
+		if (!editorTrigger.current && document.activeElement instanceof HTMLElement) {
+			editorTrigger.current = document.activeElement;
+			editorTriggerLabel.current = document.activeElement.getAttribute("aria-label");
+		}
+	};
 	const closeDraft = () => { resetConnectionTest(); setDraft(undefined); };
+	useImperativeHandle(ref, () => ({ pending, editing: !!draft, back: closeDraft }));
+	useLayoutEffect(() => { onLockChange(pending || !!draft, pending); }, [pending, !!draft, onLockChange]);
+	useLayoutEffect(() => {
+		if (draft) {
+			(contentRef.current?.querySelector<HTMLElement>("input:not([type=checkbox]):not(:disabled), select:not(:disabled)") ?? contentRef.current?.querySelector<HTMLElement>("button:not(:disabled)"))?.focus();
+		} else if (editorTrigger.current) {
+			const target = editorTrigger.current;
+			const replacement = Array.from(contentRef.current?.querySelectorAll<HTMLElement>("button[aria-label]") ?? []).find((element) => element.getAttribute("aria-label") === editorTriggerLabel.current);
+			editorTrigger.current = null;
+			editorTriggerLabel.current = null;
+			(target.isConnected ? target : replacement ?? contentRef.current?.querySelector<HTMLElement>("button:not(:disabled)"))?.focus();
+		}
+	}, [draft?.kind]);
 	const stopConnectionTest = () => {
 		testRequest.current += 1;
 		setStoppedTestModels([...activeTests.current.values()]);
@@ -146,12 +165,14 @@ export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, o
 	};
 
 	const openPick = () => {
+		rememberEditorTrigger();
 		resetConnectionTest();
 		setRouteNotice(undefined); setAdded(undefined);
 		setError(undefined); setReveal(false); setQuery("");
 		setDraft({ kind: "pick" });
 	};
 	const openRelay = (relay?: RelaySpec, preset?: ProviderPreset) => {
+		rememberEditorTrigger();
 		resetConnectionTest();
 		setRouteNotice(undefined); setAdded(undefined);
 		setError(undefined); setReveal(false);
@@ -164,6 +185,7 @@ export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, o
 		}
 	};
 	const openRoute = (familyId: string, route?: RouteSpec, preferredRelayId?: string) => {
+		rememberEditorTrigger();
 		resetConnectionTest();
 		setError(undefined); setReveal(false);
 		const fallbackRelay = preferredRelayId ?? relays[0]?.id ?? "";
@@ -390,13 +412,13 @@ export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, o
 		return ids;
 	};
 
-	return <Dialog onClose={onClose} pending={pending} onEscape={() => { if (draft) closeDraft(); else onClose(); }}  className={`project-dialog provider-dialog family-dialog ${draft ? "" : "family-dialog-overview"}`} aria-labelledby="families-title" >
+	return <div ref={contentRef} className={`family-settings-content ${draft ? "is-editing" : ""}`}>
 		{draft?.kind === "pick" ? (
 			<div className="provider-sheet">
 				<div className="dialog-heading provider-sheet-head">
 					<h2 id="families-title">{relays.length ? "添加供应商" : "添加第一个供应商"}</h2>
 					<span className="provider-sheet-search"><Icon name="search" size={15} /><Input appearance="plain" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索供应商…" aria-label="搜索供应商" autoFocus /></span>
-					<IconButton type="button"  onClick={() => setDraft(undefined)} aria-label="返回列表"><Icon name="close" /></IconButton>
+					<IconButton type="button"  onClick={closeDraft} aria-label="返回列表"><Icon name="close" /></IconButton>
 				</div>
 				<div className="provider-sheet-body">
 					{PRESET_KINDS.map(({ kind, title, hint }) => {
@@ -534,7 +556,7 @@ export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, o
 			})()
 		) : draft?.kind === "route" ? (
 			<form onSubmit={(event) => void submitRoute(event)}>
-				<div className="dialog-heading"><h2 id="families-title">{draft.isNew ? "添加线路" : "编辑线路"} · {FAMILY_LABELS[draft.familyId] ?? draft.familyId}</h2><IconButton type="button"  onClick={() => setDraft(undefined)} disabled={pending} aria-label="返回列表"><Icon name="close" /></IconButton></div>
+				<div className="dialog-heading"><h2 id="families-title">{draft.isNew ? "添加线路" : "编辑线路"} · {FAMILY_LABELS[draft.familyId] ?? draft.familyId}</h2><IconButton type="button"  onClick={closeDraft} disabled={pending} aria-label="返回列表"><Icon name="close" /></IconButton></div>
 				<p className="muted">图片输入按模型单独设置，目录导入会填入已知能力；流式、工具与推理开关按线路生效。</p>
 				<div className="provider-field"><label htmlFor="route-relay">所属中转</label><Select id="route-relay" required value={draft.route.relayId} onChange={(event) => patchRoute({ relayId: event.target.value })} disabled={pending || !draft.isNew}>
 					<option value="" disabled>选择中转…</option>
@@ -571,22 +593,21 @@ export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, o
 				</div>
 				<div className="provider-capabilities"><label><input type="checkbox" checked={draft.route.streaming} onChange={(event) => patchRoute({ streaming: event.target.checked })} disabled={pending} />流式输出</label><label><input type="checkbox" checked={draft.route.tools} onChange={(event) => patchRoute({ tools: event.target.checked })} disabled={pending} />工具调用</label><label><input type="checkbox" checked={draft.route.vision} onChange={(event) => patchRoute({ vision: event.target.checked })} disabled={pending} />默认支持图片</label><label><input type="checkbox" checked={draft.route.reasoning} onChange={(event) => patchRoute({ reasoning: event.target.checked })} disabled={pending} />推理输出</label></div>
 				{(configError || error) && <p className="form-error" role="alert">{configError || error}</p>}
-				<div className="dialog-actions"><Button type="button" variant="ghost" onClick={() => setDraft(undefined)} disabled={pending}>返回</Button><Button type="submit" variant="primary" size="primary" disabled={pending}>{pending ? "保存中…" : "保存"}</Button></div>
+				<div className="dialog-actions"><Button type="button" variant="ghost" onClick={closeDraft} disabled={pending}>返回</Button><Button type="submit" variant="primary" size="primary" disabled={pending}>{pending ? "保存中…" : "保存"}</Button></div>
 			</form>
 		) : (
 			<>
-				<div className="dialog-heading"><h2 id="families-title">设置</h2><IconButton type="button"  onClick={onClose} aria-label="关闭设置"><Icon name="close" /></IconButton></div>
-				{tab === "archives" ? <p className="muted">管理已归档的会话。</p> : <p className="muted">添加供应商并通过连接测试后，保存会自动生成支持的模型线路；共 {`${total}`} 条线路。</p>}
+				<h2 id="families-title">模型与提供商</h2>
+				<p className="muted">添加供应商并通过连接测试后，保存会自动生成支持的模型线路；共 {`${total}`} 条线路。</p>
 				{routeNotice && <p className="family-added-hint" role="status">{routeNotice}</p>}
-				<div className="dialog-tabs" role="tablist" aria-label="模型配置分类">
-					<button type="button" role="tab" id="families-tab-relays" aria-selected={tab === "relays"} aria-controls="families-panel-relays" className={`dialog-tab ${tab === "relays" ? "active" : ""}`} onClick={() => setTab("relays")}>供应商<small>{relays.length} 个</small></button>
-					<button type="button" role="tab" id="families-tab-models" aria-selected={tab === "families"} aria-controls="families-panel-models" className={`dialog-tab ${tab === "families" ? "active" : ""}`} onClick={() => setTab("families")}>模型选择<small>{total} 条线路</small></button>
-					<button type="button" role="tab" id="families-tab-archives" aria-selected={tab === "archives"} aria-controls="families-panel-archives" className={`dialog-tab ${tab === "archives" ? "active" : ""}`} onClick={() => setTab("archives")}>归档会话<small>{chats.filter((chat) => typeof chat.archivedAt === "number").length} 条</small></button>
+				<div className="dialog-tabs" role="group" aria-label="模型配置分类">
+					<button type="button" id="families-tab-relays" aria-pressed={tab === "relays"} aria-controls="families-panel-relays" className={`dialog-tab ${tab === "relays" ? "active" : ""}`} onClick={() => setTab("relays")}>供应商<small>{relays.length} 个</small></button>
+					<button type="button" id="families-tab-models" aria-pressed={tab === "families"} aria-controls="families-panel-models" className={`dialog-tab ${tab === "families" ? "active" : ""}`} onClick={() => setTab("families")}>模型线路<small>{total} 条线路</small></button>
 				</div>
 				<div className="family-tab-content">
-					{tab === "archives" ? <ArchivedSessions chats={chats} projects={projects} busy={navigationBusy} onRestore={onRestoreArchive} onDelete={onDeleteArchive} /> : tab === "relays" ? (
+					{tab === "relays" ? (
 						<>
-						<section className="family-card" id="families-panel-relays" role="tabpanel" aria-labelledby="families-tab-relays">
+						<section className="family-card" id="families-panel-relays" role="region" aria-labelledby="families-tab-relays">
 							{relays.length === 0 && <p className="family-empty">还没添加供应商，从下面的目录挑一个，或用自定义地址。</p>}
 							{relays.map((relay) => {
 								const preset = matchPreset(relay.baseUrl);
@@ -615,7 +636,7 @@ export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, o
 						</button>
 						</>
 					) : (
-						<div id="families-panel-models" role="tabpanel" aria-labelledby="families-tab-models">
+						<div id="families-panel-models" role="region" aria-labelledby="families-tab-models">
 							{added && <p className="family-added-hint" role="status">已添加「{added.relayName}」，去 {FAMILY_LABELS[added.familyId]} 家族配置模型线路：<Button type="button" variant="ghost" size="compact" disabled={pending || !relays.some((relay) => relay.id === added.relayId)} onClick={() => { setSelectedFamily(added.familyId); openRoute(added.familyId, undefined, added.relayId); setAdded(undefined); }}>添加线路</Button></p>}
 							{relays.length === 0 && <section className="family-card">
 								<div className="family-card-head">
@@ -669,9 +690,8 @@ export function FamiliesSettings({ families, relays, autoFailover, usdCnyRate, o
 					)}
 					{(configError || error) && <p className="form-error" role="alert">{configError || error}</p>}
 				</div>
-				<div className="dialog-actions"><Button type="button" variant="primary" size="primary" onClick={onClose} disabled={pending}>完成</Button></div>
 			</>
 		)}
 		{removing && <ConfirmDialog title={removing.title} description={removing.description} onConfirm={() => void mutate(removing.action)} onClose={() => setRemoving(undefined)} />}
-	</Dialog>;
-}
+	</div>;
+});

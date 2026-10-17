@@ -140,7 +140,7 @@ try {
 	const activeRow = page.locator('.project-chats .chat-row').filter({ has: page.locator('.chat-title', { hasText: /^Session 0$/ }) });
 	await activeRow.hover(); await activeRow.getByRole("button", { name: "归档聊天 Session 0", exact: true }).click();
 	await page.evaluate(() => window.retrievalFixture.drafts.flush()); assert.equal(await persisted("s0"), undefined);
-	await page.getByRole("button", { name: "设置", exact: true }).click(); await page.getByRole("tab", { name: /归档会话/ }).click();
+	await page.getByRole("button", { name: "设置", exact: true }).click(); await page.getByRole("button", { name: "归档会话", exact: true }).click();
 	await page.locator(".archive-session-row").filter({ hasText: "Session 0" }).getByRole("button", { name: "恢复", exact: true }).click(); await ready();
 	assert.equal(await message().inputValue(), "");
 	const draftRow = page.locator('.project-chats .chat-row').filter({ has: page.locator('.chat-draft') }).filter({ hasText: "新聊天" });

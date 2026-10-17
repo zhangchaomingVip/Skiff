@@ -23,7 +23,7 @@ const countPreviewListeners = () => page.evaluate(() => window.skiffPreview.list
 const commandTypes = (prefix) => page.evaluate((prefix) => window.skiffPreview.commands.filter((item) => item.command === "rpc_send" && item.args.instanceId.startsWith(prefix)).map((item) => JSON.parse(item.args.message).type), prefix);
 const openSettings = async () => {
 	await page.getByRole("button", { name: "设置" }).click();
-	await page.getByRole("tab", { name: /归档会话/ }).click();
+	await page.getByRole("button", { name: "归档会话", exact: true }).click();
 };
 const title = () => page.locator(".header-title-row > span:first-child").textContent();
 
@@ -119,7 +119,7 @@ try {
 	await page.getByRole("button", { name: "确认删除" }).click();
 	await waitUntil(() => ![...document.querySelectorAll(".archive-session-row")].some((row) => row.textContent.includes("已归档会话")), "Archive index entry was not deleted");
 	assert.ok(await page.evaluate(() => JSON.parse(localStorage.getItem("skiff.test.sessions"))["archive-record.jsonl"]), "Deleting the archive must retain its pi session file");
-	await page.getByRole("button", { name: "完成", exact: true }).click();
+	await page.getByRole("button", { name: "关闭设置", exact: true }).click();
 
 	await page.locator(".project-chats .chat-link[title^='同项目候选']").click({ position: { x: 20, y: 16 } });
 	await waitUntil(() => document.querySelector(".voyage-rail.expanded"), "Desktop rail did not expand");
@@ -140,7 +140,9 @@ try {
 	await waitUntil(() => JSON.parse(localStorage.getItem("skiff.workspace.v1")).chats.find((chat) => chat.id === "archive-candidate")?.selectedModel?.routeId === "route-deepseek-r2", "Keyboard model selection did not switch to the selected route");
 	assert.match(await modelTrigger.getAttribute("title"), /route-deepseek-r2/);
 	assert.equal(await page.locator(".model-trigger-label").evaluate((element) => getComputedStyle(element).textOverflow), "ellipsis", "Long model aliases should truncate without changing the trigger layout");
-	await page.getByRole("button", { name: "主题：浅色，点击切换" }).click();
+	await page.keyboard.press("Control+Comma");
+	await page.getByRole("button", { name: "深色", exact: true }).click();
+	await page.getByRole("button", { name: "关闭设置", exact: true }).click();
 	await waitUntil(() => document.documentElement.dataset.theme === "dark", "Dark theme did not apply");
 	assert.ok(await modelTrigger.isVisible(), "Model selector should remain visible in dark theme");
 

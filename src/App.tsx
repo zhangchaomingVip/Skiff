@@ -5,7 +5,7 @@ import { conversationLabel } from "./chat/conversationDisplay";
 import { BackgroundSessions } from "./components/BackgroundSessions";
 import { HistorySearchDialog } from "./components/HistorySearchDialog";
 import { SidebarPresentation } from "./components/SidebarPresentation";
-import { IconButton, Button, Tooltip } from "./components/ui";
+import { dismissPopovers, IconButton, Button, Tooltip } from "./components/ui";
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { usePiSessions } from "./chat/usePiSessions";
 import { useSessionRef } from "./chat/useSessionValue";
@@ -23,9 +23,9 @@ import { LauncherView } from "./components/LauncherView";
 import { TitleBar } from "./components/TitleBar";
 import { ProjectDialog } from "./components/ProjectDialog";
 import { Icon } from "./components/Icon";
-import { ThemeToggle } from "./components/ThemeToggle";
 import type { ImageAttachment } from "./chat/types";
-import { FamiliesSettings } from "./components/FamiliesSettings";
+import { SettingsDialog } from "./components/SettingsDialog";
+import { isMacPlatform, type SettingsCategory, type SettingsRestrictions } from "./components/settingsNavigation";
 import { PromptDialog } from "./components/PromptDialog";
 import { SearchDialog } from "./components/SearchDialog";
 import { ShareDialog } from "./components/ShareDialog";
@@ -70,7 +70,7 @@ export default function App() {
 		return () => window.removeEventListener("resize", resize);
 	}, []);
 	const [projectDialogOpen, setProjectDialogOpen] = useState(false);
-	const [providerDialogOpen, setProviderDialogOpen] = useState(false);
+	const [settingsCategory, setSettingsCategory] = useState<SettingsCategory>();
 	const [promptDialogOpen, setPromptDialogOpen] = useState(false);
 	const [searchDialogOpen, setSearchDialogOpen] = useState(false);
 	const [shareDialogOpen, setShareDialogOpen] = useState(false);
@@ -101,7 +101,21 @@ export default function App() {
 	useEffect(() => { void showVoyageIcon(pool.runningIds.size > 0).catch(() => undefined); }, [pool.runningIds.size > 0]);
 	const navigationDisabled = search.busy || !library.workspace;
 	const locked = navigationDisabled || session.loading;
+	const settingsRestrictions = useMemo<SettingsRestrictions>(() => ({
+		models: busy ? "当前会话运行中，请等待完成后修改模型配置" : locked || modelFamilies.loading ? "正在加载会话或更新配置，请稍后再试" : undefined,
+		archives: locked ? "正在加载会话或切换工作区，请稍后再试" : undefined,
+	}), [busy, locked, modelFamilies.loading]);
+	const openSettings = useCallback((category: SettingsCategory = "appearance") => {
+		if (settingsCategory) return;
+		// Only the navigation drawer may yield to settings; business dialogs
+		// keep their ownership of keyboard and focus.
+		if (document.querySelector("dialog[open]:not([data-variant='drawer'])")) return;
+		dismissPopovers();
+		if (window.innerWidth <= 760) setSidebarOpen(false);
+		setSettingsCategory(settingsRestrictions[category] ? "appearance" : category);
+	}, [settingsCategory, settingsRestrictions]);
 	const narrowViewport = viewportWidth <= 760;
+	useEffect(() => { if (narrowViewport && settingsCategory) setSidebarOpen(false); }, [narrowViewport, settingsCategory]);
 	const desktopSidebarOpen = sidebarOpen && !narrowViewport;
 	const rawColumnWidth = rawOpen && currentView === "chat" && viewportWidth > 1100 ? 350 : 0;
 	const sidebarBounds = { min: 200, max: Math.max(200, Math.min(420, viewportWidth - rawColumnWidth - 416)) };
@@ -123,12 +137,12 @@ export default function App() {
 		}
 	}, [activeChat?.id, library, navigationDisabled, narrowViewport, pool.canClose]);
 	const restoreArchivedChat = useCallback((id: string) => {
-		if (navigationDisabled) return;
+		if (locked || !pool.canClose(id)) return;
 		library.restoreChat(id);
-		setProviderDialogOpen(false);
+		setSettingsCategory(undefined);
 		setView("chat");
 		if (narrowViewport) setSidebarOpen(false);
-	}, [library, navigationDisabled, narrowViewport]);
+	}, [library, locked, narrowViewport, pool.canClose]);
 	const deleteArchivedChat = useCallback((id: string) => {
 		if (navigationDisabled || !pool.canClose(id)) return;
 		library.deleteChat(id);
@@ -180,7 +194,11 @@ export default function App() {
 	}, [activeChat, activeProject, actions, displayModels, library, navigationDisabled, modelFamilies.loading, busy, session.loading, session.isCurrent, allChats, pool.canClose]);
 	useEffect(() => {
 		const onKeyDown = (event: KeyboardEvent) => {
-			if (document.querySelector("dialog[open]")) return;
+			if (event.isComposing || event.keyCode === 229 || event.defaultPrevented) return;
+			if ((isMacPlatform() ? event.metaKey : event.ctrlKey) && !event.altKey && !event.shiftKey && event.key === ",") {
+				event.preventDefault(); openSettings(); return;
+			}
+			if (settingsCategory || document.querySelector("dialog[open]")) return;
 			if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "n") {
 				event.preventDefault();
 				newDraft();
@@ -188,7 +206,7 @@ export default function App() {
 		};
 		window.addEventListener("keydown", onKeyDown);
 		return () => window.removeEventListener("keydown", onKeyDown);
-	}, [newDraft]);
+	}, [newDraft, openSettings, settingsCategory]);
 
 	const send = async (text: string, images?: ImageAttachment[], delivery?: Delivery) => {
 		if (!activeChat) return false;
@@ -217,8 +235,8 @@ export default function App() {
 			const family = modelFamilies.families.find((item) => item.id === owner.id);
 			return { id: owner.id, name: family?.displayName ?? owner.label };
 		},
-		manage: () => setProviderDialogOpen(true),
-	}), [modelFamilies.offers, modelFamilies.families, displayModels, displayModel, selectModel, pricingModels]);
+		manage: () => openSettings("models"),
+	}), [modelFamilies.offers, modelFamilies.families, displayModels, displayModel, selectModel, pricingModels, openSettings]);
 
 	const headerModel: ModelInfo | undefined = displayModel ?? state.model ?? (activeChat?.selectedModel ? { ...activeChat.selectedModel, modelId: activeChat.selectedModel.modelId ?? activeChat.selectedModel.id, name: activeChat.selectedModel.modelId ?? activeChat.selectedModel.id, providerName: activeChat.selectedModel.routeId ?? activeChat.selectedModel.provider } : undefined);
 	const headerFamily = headerModel ? familyContext.familyOf(headerModel) : undefined;
@@ -229,7 +247,7 @@ export default function App() {
 		<div className={`app ${sidebarOpen ? "with-sidebar" : ""}`}>
 			<TitleBar />
 			<div className="app-body" style={{ "--sidebar-width": `${shownSidebarWidth}px` } as CSSProperties}>
-			{sidebarOpen && <SidebarPresentation onClose={() => setSidebarOpen(false)}><Sidebar projects={library.workspace?.projects ?? []} chats={visibleChats} activeId={activeChat?.id} activeProjectId={activeProject?.id} homeActive={currentView === "launcher"} disabled={navigationDisabled} runningIds={pool.runningIds} canCloseChat={pool.canClose} navigationDisabled={navigationDisabled} connected={connected} onHome={openLauncher} onNewChat={newDraft} statuses={pool.statuses} searchProgress={retrieval.progress} searchQuery={retrieval.query} onSearch={retrieval.setQuery} onSearchMatch={retrieval.openMatch} onSelectChat={selectChat} onSelectProject={selectProject} onAddProject={() => setProjectDialogOpen(true)} onClose={() => setSidebarOpen(false)} onRenameChat={library.renameChat} onRenameProject={library.renameProject} onDeleteChat={deleteArchivedChat} onDeleteProject={(id) => { if (allChats.filter((chat) => chat.projectId === id).every((chat) => pool.canClose(chat.id))) library.deleteProject(id); }} onArchiveChat={archiveChat} onTogglePinChat={(id, pinned) => library.updateChat(id, { pinned })} /></SidebarPresentation>}
+			{sidebarOpen && !(narrowViewport && settingsCategory) && <SidebarPresentation onClose={() => setSidebarOpen(false)}><Sidebar projects={library.workspace?.projects ?? []} chats={visibleChats} activeId={activeChat?.id} activeProjectId={activeProject?.id} homeActive={currentView === "launcher"} disabled={navigationDisabled} runningIds={pool.runningIds} canCloseChat={pool.canClose} navigationDisabled={navigationDisabled} connected={connected} settingsRestrictions={settingsRestrictions} onSettings={openSettings} onHome={openLauncher} onNewChat={newDraft} statuses={pool.statuses} searchProgress={retrieval.progress} searchQuery={retrieval.query} onSearch={retrieval.setQuery} onSearchMatch={retrieval.openMatch} onSelectChat={selectChat} onSelectProject={selectProject} onAddProject={() => setProjectDialogOpen(true)} onClose={() => setSidebarOpen(false)} onRenameChat={library.renameChat} onRenameProject={library.renameProject} onDeleteChat={deleteArchivedChat} onDeleteProject={(id) => { if (allChats.filter((chat) => chat.projectId === id).every((chat) => pool.canClose(chat.id))) library.deleteProject(id); }} onArchiveChat={archiveChat} onTogglePinChat={(id, pinned) => library.updateChat(id, { pinned })} /></SidebarPresentation>}
 			{desktopSidebarOpen && <ResizeSeparator label="调整左侧导航宽度" value={shownSidebarWidth} bounds={sidebarBounds} onResize={setSidebarWidthFromDrag} onCommit={commitSidebarWidth} />}
 			<main className="workspace">
 				<header className="chat-header">
@@ -238,13 +256,13 @@ export default function App() {
 						<div className="header-title-row"><span>{currentView === "launcher" ? "主页" : activeChat ? conversationLabel(activeChat, visibleChats) : "新聊天"}</span>{currentView === "chat" && activeProject && <span className="header-project" title={activeProject.path}><Icon name="folder" size={14} />{activeProject.name}</span>}</div>
 						{currentView === "launcher" ? <span className="header-subtitle">模型优先的任务入口</span> : headerModel && <span className="header-model" title={`${headerFamily?.name ?? headerModel.familyName ?? headerModel.provider} · ${headerModel.providerName ?? headerModel.provider} · ${headerModel.id}`}><span>{headerFamily?.name ?? headerModel.familyName ?? headerModel.provider}</span><span className="header-model-sep">·</span><span>{headerModel.modelId ?? headerModel.id}</span><span className="header-model-sep">·</span><span>{headerModel.providerName ?? headerModel.provider}</span></span>}
 					</div>
-					<div className="header-actions"><BackgroundSessions statuses={pool.statuses} activeId={activeChat?.id} chats={visibleChats} onSelect={selectChat} disabled={navigationDisabled} />{busy && <span className="working"><span className="dot busy" />{state.isStreaming ? "运行中" : "等待响应"}</span>}<ThemeToggle />{currentView === "chat" && state.messages.length > 0 && <Tooltip text="分享对话"><IconButton onClick={() => setShareDialogOpen(true)} disabled={busy} aria-label="分享对话"><Icon name="share" /></IconButton></Tooltip>}<Tooltip text="系统提示词"><IconButton onClick={() => setPromptDialogOpen(true)} disabled={busy} aria-label="系统提示词"><Icon name="message" /></IconButton></Tooltip><Tooltip text="设置"><IconButton onClick={() => setProviderDialogOpen(true)} disabled={busy} aria-label="设置"><Icon name="settings" /></IconButton></Tooltip><Tooltip text="诊断日志"><IconButton className={`${rawOpen ? "active" : ""}`} onClick={() => setRawOpen((open) => !open)} aria-label="诊断日志" aria-pressed={rawOpen}><Icon name="code" /></IconButton></Tooltip></div>
+					<div className="header-actions"><BackgroundSessions statuses={pool.statuses} activeId={activeChat?.id} chats={visibleChats} onSelect={selectChat} disabled={navigationDisabled} />{busy && <span className="working"><span className="dot busy" />{state.isStreaming ? "运行中" : "等待响应"}</span>}{currentView === "chat" && state.messages.length > 0 && <Tooltip text="分享对话"><IconButton onClick={() => setShareDialogOpen(true)} disabled={busy} aria-label="分享对话"><Icon name="share" /></IconButton></Tooltip>}<Tooltip text="系统提示词"><IconButton onClick={() => setPromptDialogOpen(true)} disabled={busy} aria-label="系统提示词"><Icon name="message" /></IconButton></Tooltip>{!desktopSidebarOpen && <Tooltip text="设置"><IconButton className="header-settings" onClick={() => openSettings()} aria-label="设置"><Icon name="settings" /></IconButton></Tooltip>}<Tooltip text="诊断日志"><IconButton className={`${rawOpen ? "active" : ""}`} onClick={() => setRawOpen((open) => !open)} aria-label="诊断日志" aria-pressed={rawOpen}><Icon name="code" /></IconButton></Tooltip></div>
 				</header>
 				{retrieval.notice && <div className="workspace-alert" role="status">{retrieval.notice}<Button variant="ghost" onClick={retrieval.closeNotice}>关闭</Button></div>}
 				{library.error && <div className="workspace-alert" role="alert"><span>{library.error}</span><Button variant="ghost" onClick={library.workspace ? library.clearError : () => void library.initialize()} disabled={library.loading}>{library.workspace ? "关闭" : "重试"}</Button></div>}
 				{currentView === "launcher" && (session.loading || (!connected && state.lastError)) && <div className="workspace-alert" role={session.loading ? "status" : "alert"} aria-label={session.loading ? "正在加载会话" : undefined}><span>{session.loading ? "正在加载会话…" : state.lastError}</span>{!session.loading && <Button variant="ghost" onClick={() => session.reconnect()}>重新连接</Button>}</div>}
 				<div className="body">
-					{currentView === "launcher" ? <LauncherView activeChat={activeChat} activeProject={activeProject} projects={library.workspace?.projects ?? []} chats={visibleChats} offers={modelFamilies.offers} recentOfferIds={recentOfferIds} familyDefaults={modelFamilies.families} disabled={navigationDisabled || modelFamilies.loading} navigationDisabled={navigationDisabled} loading={modelFamilies.loading} error={modelFamilies.error} onResume={resumeChat} onSelectProject={selectProject} onAddProject={() => setProjectDialogOpen(true)} onManageProviders={() => setProviderDialogOpen(true)} onRetryModels={modelFamilies.refresh} onStartChat={startLauncherChat} onOpenChat={selectChat} /> : <VoyageWorkspace draftTarget={activeChat && activeProject ? { chatId: activeChat.id, cwd: activeProject.path, sessionFile: activeChat.hasMessages ? activeChat.sessionFile : undefined } : undefined} revealMessage={retrieval.reveal} modelNotice={modelNotice} key={`${session.owner.id ?? "loading"}:${session.owner.cwd ?? ""}`} state={displayState} loading={session.loading} connected={connected} pending={session.pending} actions={actions} onSend={send} onReconnect={session.reconnect} projectName={activeProject?.name} search={search} onConfigureSearch={() => setSearchDialogOpen(true)} failover={failover} routeAuthorization={routeAuthorizationPrompt} railWidth={shownVoyageWidth} availableWidth={workspaceWidth} onRailWidth={setVoyageWidthFromDrag} onRailWidthCommit={commitVoyageWidth} />}
+					{currentView === "launcher" ? <LauncherView activeChat={activeChat} activeProject={activeProject} projects={library.workspace?.projects ?? []} chats={visibleChats} offers={modelFamilies.offers} recentOfferIds={recentOfferIds} familyDefaults={modelFamilies.families} disabled={navigationDisabled || modelFamilies.loading} navigationDisabled={navigationDisabled} loading={modelFamilies.loading} error={modelFamilies.error} onResume={resumeChat} onSelectProject={selectProject} onAddProject={() => setProjectDialogOpen(true)} onManageProviders={() => openSettings("models")} onRetryModels={modelFamilies.refresh} onStartChat={startLauncherChat} onOpenChat={selectChat} /> : <VoyageWorkspace draftTarget={activeChat && activeProject ? { chatId: activeChat.id, cwd: activeProject.path, sessionFile: activeChat.hasMessages ? activeChat.sessionFile : undefined } : undefined} revealMessage={retrieval.reveal} modelNotice={modelNotice} key={`${session.owner.id ?? "loading"}:${session.owner.cwd ?? ""}`} state={displayState} loading={session.loading} connected={connected} pending={session.pending} actions={actions} onSend={send} onReconnect={session.reconnect} projectName={activeProject?.name} search={search} onConfigureSearch={() => setSearchDialogOpen(true)} failover={failover} routeAuthorization={routeAuthorizationPrompt} railWidth={shownVoyageWidth} availableWidth={workspaceWidth} onRailWidth={setVoyageWidthFromDrag} onRailWidthCommit={commitVoyageWidth} />}
 					{rawOpen && currentView === "chat" && <div className="raw-panel"><IconButton className="raw-close" onClick={() => setRawOpen(false)} aria-label="关闭诊断日志"><Icon name="close" /></IconButton><RawDrawer lines={rawLines} /></div>}
 				</div>
 				{shareDialogOpen && currentView === "chat" && <ShareDialog title={activeChat?.title} messages={state.messages} onClose={() => setShareDialogOpen(false)} />}
@@ -252,7 +270,7 @@ export default function App() {
 			</div>
 			{retrieval.historyView && <HistorySearchDialog {...retrieval.historyView} onClose={retrieval.closeHistory} />}
 			{projectDialogOpen && <ProjectDialog onAdd={library.addProject} onClose={() => setProjectDialogOpen(false)} />}
-			{providerDialogOpen && <FamiliesSettings configError={modelFamilies.error} families={modelFamilies.families} relays={modelFamilies.relays} autoFailover={modelFamilies.config?.autoFailover ?? false} usdCnyRate={modelFamilies.usdCnyRate} onSaveRate={modelFamilies.setUsdCnyRate} onSaveRelay={modelFamilies.saveRelay} onDeleteRelay={modelFamilies.deleteRelay} onSetRelayEnabled={modelFamilies.setRelayEnabled} onSaveRoute={modelFamilies.saveRoute} onDeleteRoute={modelFamilies.deleteRoute} onReorderRoutes={modelFamilies.reorderRoutes} onSetDefaultRoute={modelFamilies.setDefaultRoute} onAutoFailover={modelFamilies.setAutoFailover} onTest={modelFamilies.test} onCancelTest={modelFamilies.cancelTest} onDiscover={modelFamilies.discover} chats={archivedChats} projects={library.workspace?.projects ?? []} navigationBusy={locked} onRestoreArchive={restoreArchivedChat} onDeleteArchive={deleteArchivedChat} onClose={() => setProviderDialogOpen(false)} />}
+			{settingsCategory && <SettingsDialog onRetryModels={() => void modelFamilies.refresh()} initialCategory={settingsCategory} restrictions={settingsRestrictions} models={{ configError: modelFamilies.error, families: modelFamilies.families, relays: modelFamilies.relays, autoFailover: modelFamilies.config?.autoFailover ?? false, usdCnyRate: modelFamilies.usdCnyRate, onSaveRate: modelFamilies.setUsdCnyRate, onSaveRelay: modelFamilies.saveRelay, onDeleteRelay: modelFamilies.deleteRelay, onSetRelayEnabled: modelFamilies.setRelayEnabled, onSaveRoute: modelFamilies.saveRoute, onDeleteRoute: modelFamilies.deleteRoute, onReorderRoutes: modelFamilies.reorderRoutes, onSetDefaultRoute: modelFamilies.setDefaultRoute, onAutoFailover: modelFamilies.setAutoFailover, onTest: modelFamilies.test, onCancelTest: modelFamilies.cancelTest, onDiscover: modelFamilies.discover }} archives={{ chats: archivedChats, projects: library.workspace?.projects ?? [], busy: locked, canClose: pool.canClose, onRestore: restoreArchivedChat, onDelete: deleteArchivedChat }} onClose={() => setSettingsCategory(undefined)} />}
 			{promptDialogOpen && <PromptDialog sessionPath={session.sessionFile} onSaved={() => { setPromptDialogOpen(false); session.reconnect(); }} onClose={() => setPromptDialogOpen(false)} />}
 			{searchDialogOpen && <SearchDialog search={search} onClose={() => setSearchDialogOpen(false)} />}
 		</div>

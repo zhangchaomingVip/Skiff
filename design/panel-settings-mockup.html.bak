@@ -1,0 +1,1077 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Skiff 主面板改造原型 — 统一设置入口</title>
+<style>
+	:root {
+		--bg: #ffffff;
+		--bg-sidebar: #fafafa;
+		--bg-main: #ffffff;
+		--border: #e8e8e8;
+		--text: #1a1a1a;
+		--text-secondary: #6b6b6b;
+		--text-tertiary: #9b9b9b;
+		--accent: #4f6ef7;
+		--accent-soft: #eef1fe;
+		--hover: rgba(0, 0, 0, 0.045);
+		--menu-bg: #ffffff;
+		--menu-shadow: 0 8px 32px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.06);
+		--dot-on: #34c759;
+		--radius: 10px;
+	}
+	[data-theme="dark"] {
+		--bg: #1e1e1e;
+		--bg-sidebar: #191919;
+		--bg-main: #212121;
+		--border: #2e2e2e;
+		--text: #ececec;
+		--text-secondary: #a0a0a0;
+		--text-tertiary: #6e6e6e;
+		--accent: #7b91f9;
+		--accent-soft: #2a2f45;
+		--hover: rgba(255, 255, 255, 0.06);
+		--menu-bg: #262626;
+		--menu-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.3);
+	}
+	* { margin: 0; padding: 0; box-sizing: border-box; }
+	html, body { height: 100%; }
+	body {
+		font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+		font-size: 14px;
+		color: var(--text);
+		background: var(--bg);
+		overflow: hidden;
+	}
+	.app { display: flex; height: 100vh; }
+
+	/* ---------- Sidebar ---------- */
+	.sidebar {
+		width: 280px;
+		min-width: 280px;
+		background: var(--bg-sidebar);
+		border-right: 1px solid var(--border);
+		display: flex;
+		flex-direction: column;
+	}
+	.sidebar-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 16px 16px 8px;
+	}
+	.logo { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 16px; }
+	.logo-mark {
+		width: 26px; height: 26px; border-radius: 8px;
+		background: linear-gradient(135deg, #4f6ef7, #8b5cf6);
+		display: grid; place-items: center;
+		color: #fff; font-size: 13px; font-weight: 800;
+	}
+	.header-actions { display: flex; gap: 4px; }
+	.icon-btn {
+		width: 30px; height: 30px; border: none; border-radius: 8px;
+		background: transparent; color: var(--text-secondary);
+		display: grid; place-items: center; cursor: pointer;
+	}
+	.icon-btn:hover { background: var(--hover); color: var(--text); }
+
+	.sidebar-scroll { flex: 1; overflow-y: auto; padding: 4px 8px; }
+	.nav-item {
+		display: flex; align-items: center; gap: 10px;
+		padding: 8px 10px; border-radius: 8px;
+		color: var(--text); cursor: pointer; user-select: none;
+	}
+	.nav-item:hover { background: var(--hover); }
+	.nav-item.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+	.nav-item .kbd {
+		margin-left: auto; font-size: 11px; color: var(--text-tertiary);
+		border: 1px solid var(--border); border-radius: 5px; padding: 1px 6px;
+		background: var(--bg);
+	}
+	.section-label {
+		display: flex; align-items: center; gap: 4px;
+		padding: 14px 10px 6px; font-size: 12px; color: var(--text-tertiary);
+	}
+	.section-label .icon-btn { width: 24px; height: 24px; margin-left: auto; }
+	.project-row { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 8px; cursor: pointer; color: var(--text); }
+	.project-row:hover { background: var(--hover); }
+	.project-row .chev { color: var(--text-tertiary); font-size: 10px; width: 12px; }
+	.project-row .count {
+		margin-left: auto; font-size: 11px; color: var(--text-tertiary);
+		background: var(--hover); border-radius: 10px; padding: 1px 8px;
+	}
+	.folder-icon { color: var(--accent); }
+
+	/* ---------- Sidebar footer: unified settings entry ---------- */
+	.sidebar-footer { padding: 10px; border-top: 1px solid var(--border); position: relative; }
+	.entry-btn {
+		width: 100%; display: flex; align-items: center; gap: 10px;
+		padding: 9px 10px; border: none; border-radius: var(--radius);
+		background: transparent; cursor: pointer;
+		color: var(--text); font-size: 14px; font-family: inherit;
+	}
+	.entry-btn:hover, .entry-btn.open { background: var(--hover); }
+	.entry-avatar {
+		width: 28px; height: 28px; border-radius: 8px;
+		display: grid; place-items: center; flex-shrink: 0;
+		background: var(--hover); border: 1px solid var(--border);
+		cursor: pointer; transition: transform 0.15s, box-shadow 0.15s;
+	}
+	.entry-avatar:hover { transform: scale(1.08); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12); }
+	.entry-avatar svg { width: 17px; height: 17px; color: var(--text); }
+	.entry-title { font-weight: 600; font-size: 13px; }
+	.entry-sub { font-size: 11px; color: var(--text-tertiary); margin-top: 1px; display: flex; align-items: center; gap: 5px; }
+	.dot { width: 6px; height: 6px; border-radius: 50%; background: var(--dot-on); flex-shrink: 0; }
+	.entry-gear { margin-left: auto; color: var(--text-secondary); transition: transform 0.2s; }
+	.entry-btn.open .entry-gear { transform: rotate(60deg); }
+
+	/* ---------- Kimi-style popup menu ---------- */
+	.menu {
+		position: absolute; bottom: 56px; left: 10px; width: 248px;
+		background: var(--menu-bg); border: 1px solid var(--border);
+		border-radius: 14px; box-shadow: var(--menu-shadow);
+		padding: 6px; z-index: 100;
+		opacity: 0; transform: translateY(6px) scale(0.98); pointer-events: none;
+		transition: opacity 0.14s ease, transform 0.14s ease;
+	}
+	.menu.show { opacity: 1; transform: translateY(0) scale(1); pointer-events: auto; }
+	.menu-item {
+		width: 100%; display: flex; align-items: center; gap: 10px;
+		padding: 9px 10px; border: none; border-radius: 9px;
+		background: transparent; cursor: pointer;
+		color: var(--text); font-size: 13.5px; font-family: inherit; text-align: left;
+	}
+	.menu-item:hover { background: var(--hover); }
+	.menu-item .mi-icon { color: var(--text-secondary); display: grid; place-items: center; width: 18px; }
+	.menu-item .mi-value { margin-left: auto; color: var(--text-tertiary); font-size: 12.5px; display: flex; align-items: center; gap: 6px; }
+	.menu-item .mi-arrow { color: var(--text-tertiary); font-size: 11px; }
+	.menu-sep { height: 1px; background: var(--border); margin: 6px 8px; }
+	.menu-item.danger { color: var(--text); }
+	.kbd-group { display: flex; gap: 3px; }
+	.kbd-group span {
+		font-size: 11px; color: var(--text-secondary);
+		border: 1px solid var(--border); border-radius: 5px;
+		padding: 1px 6px; background: var(--bg);
+	}
+
+	/* submenu (外观 / 语言) */
+	.menu-item.has-sub { position: relative; }
+	.submenu {
+		position: absolute; left: calc(100% + 6px); top: -6px; width: 160px;
+		background: var(--menu-bg); border: 1px solid var(--border);
+		border-radius: 12px; box-shadow: var(--menu-shadow);
+		padding: 5px; display: none; z-index: 101;
+	}
+	.menu-item.has-sub:hover .submenu, .menu-item.has-sub.expanded .submenu { display: block; }
+	.sub-item {
+		display: flex; align-items: center; justify-content: space-between;
+		padding: 8px 10px; border-radius: 8px; cursor: pointer; font-size: 13px;
+	}
+	.sub-item:hover { background: var(--hover); }
+	.sub-item .check { color: var(--accent); visibility: hidden; }
+	.sub-item.selected .check { visibility: visible; }
+
+	/* ---------- Main area ---------- */
+	.main { flex: 1; display: flex; flex-direction: column; background: var(--bg-main); min-width: 0; }
+	.main-header {
+		display: flex; align-items: center; justify-content: space-between;
+		padding: 14px 24px; border-bottom: 1px solid var(--border);
+	}
+	.main-header .title { font-weight: 700; font-size: 16px; }
+	.main-header .sub { font-size: 12px; color: var(--text-tertiary); margin-top: 2px; }
+	.header-right { display: flex; gap: 8px; align-items: center; }
+	.pill {
+		display: flex; align-items: center; gap: 6px;
+		border: 1px solid var(--border); border-radius: 8px;
+		padding: 5px 12px; font-size: 13px; cursor: pointer; background: transparent; color: var(--text);
+	}
+	.pill:hover { background: var(--hover); }
+
+	.hero { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; }
+	.hero .spark { font-size: 28px; }
+	.hero h1 { font-size: 28px; font-weight: 800; }
+	.hero p { color: var(--text-secondary); }
+	.hero .tag {
+		margin-top: 8px; display: flex; align-items: center; gap: 6px;
+		border: 1px solid var(--border); border-radius: 8px; padding: 6px 14px;
+		font-size: 13px; color: var(--text-secondary); cursor: pointer;
+	}
+	.hero .tag:hover { background: var(--hover); }
+
+	/* ---------- Settings modal ---------- */
+	.overlay {
+		position: fixed; inset: 0; background: rgba(0, 0, 0, 0.35);
+		z-index: 200; display: none; align-items: center; justify-content: center;
+	}
+	.overlay.show { display: flex; }
+	.settings {
+		width: 720px; max-width: 92vw; height: 480px; max-height: 85vh;
+		background: var(--menu-bg); border: 1px solid var(--border);
+		border-radius: 16px; box-shadow: var(--menu-shadow);
+		display: flex; overflow: hidden;
+	}
+	.settings-nav {
+		width: 176px; background: var(--bg-sidebar);
+		border-right: 1px solid var(--border); padding: 14px 10px;
+		display: flex; flex-direction: column; gap: 2px;
+	}
+	.settings-nav .nav-item { padding: 8px 10px; font-size: 13.5px; border-radius: 8px; }
+	.settings-body { flex: 1; padding: 22px 26px; overflow-y: auto; }
+	.settings-body h2 { font-size: 17px; margin-bottom: 18px; }
+	.setting-row {
+		display: flex; align-items: center; justify-content: space-between;
+		padding: 13px 0; border-bottom: 1px solid var(--border);
+	}
+	.setting-row .label { font-size: 14px; }
+	.setting-row .desc { font-size: 12px; color: var(--text-tertiary); margin-top: 3px; }
+	.seg {
+		display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+	}
+	.seg button {
+		border: none; background: transparent; color: var(--text-secondary);
+		padding: 5px 14px; font-size: 12.5px; cursor: pointer; font-family: inherit;
+	}
+	.seg button.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+	.toggle {
+		width: 38px; height: 22px; border-radius: 11px; border: none;
+		background: var(--border); cursor: pointer; position: relative; transition: background 0.2s;
+	}
+	.toggle::after {
+		content: ""; position: absolute; top: 2px; left: 2px;
+		width: 18px; height: 18px; border-radius: 50%; background: #fff;
+		transition: left 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+	}
+	.toggle.on { background: var(--accent); }
+	.toggle.on::after { left: 18px; }
+	select {
+		border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px;
+		background: var(--bg); color: var(--text); font-family: inherit; font-size: 13px;
+	}
+	.toast {
+		position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%) translateY(20px);
+		background: var(--text); color: var(--bg); padding: 9px 18px; border-radius: 10px;
+		font-size: 13px; opacity: 0; pointer-events: none; transition: all 0.25s; z-index: 300;
+	}
+	.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+	.menu-hint {
+		padding: 7px 10px 5px; font-size: 11px; color: var(--text-tertiary);
+		display: flex; gap: 10px; flex-wrap: wrap;
+	}
+	.menu-hint b { font-weight: 600; color: var(--text-secondary); }
+
+	/* ---------- Conversation + composer ---------- */
+	.conversation { flex: 1; overflow-y: auto; padding: 24px 26px; display: none; gap: 14px; flex-direction: column; }
+	.conversation.on { display: flex; }
+	.bubble { max-width: 72%; padding: 10px 14px; border-radius: 12px; font-size: 14px; line-height: 1.6; }
+	.bubble.user { align-self: flex-end; background: var(--accent-soft); color: var(--text); }
+	.bubble.bot { align-self: flex-start; background: var(--hover); }
+	.bubble .meta { font-size: 11px; color: var(--text-tertiary); margin-bottom: 4px; }
+
+	.composer { padding: 12px 24px 18px; }
+	.composer-box {
+		border: 1px solid var(--border); border-radius: 14px;
+		background: var(--bg); padding: 10px 12px;
+	}
+	/* clickable status chips under the composer */
+	.status-line {
+		display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+		margin-top: 9px; padding: 0 4px;
+		font-size: 12px; color: var(--text-secondary);
+	}
+	.st-wrap { position: relative; display: inline-flex; }
+	.st-wrap.align-right .pop { left: auto; right: 0; }
+	.st-chip {
+		display: flex; align-items: center; gap: 6px;
+		border: 1px solid var(--border); border-radius: 9px; padding: 4px 10px;
+		font-size: 12px; background: transparent; color: var(--text);
+		cursor: pointer; font-family: inherit;
+	}
+	.st-chip:hover { background: var(--hover); }
+	.st-chip .chev { color: var(--text-tertiary); font-size: 9px; }
+	.st-chip .st-logo { display: grid; place-items: center; width: 14px; height: 14px; }
+	.st-chip .st-logo svg { width: 14px; height: 14px; color: var(--text); }
+	.status-line .st-hint { margin-left: auto; color: var(--text-tertiary); font-size: 11.5px; }
+	.status-line .st-hint b { color: var(--text-secondary); font-weight: 600; }
+	#chipReason.off { color: var(--text-tertiary); }
+
+	/* popovers open upward from the chips */
+	.pop {
+		position: absolute; bottom: calc(100% + 8px); left: 0; min-width: 200px;
+		background: var(--menu-bg); border: 1px solid var(--border);
+		border-radius: 12px; box-shadow: var(--menu-shadow);
+		padding: 5px; display: none; z-index: 120; text-align: left;
+	}
+	.pop.show { display: block; }
+	.pop-item {
+		display: flex; align-items: center; gap: 8px;
+		padding: 7px 9px; border-radius: 8px; font-size: 12.5px; cursor: pointer; color: var(--text);
+	}
+	.pop-item:hover { background: var(--hover); }
+	.pop-item .p-logo { display: grid; place-items: center; width: 15px; height: 15px; }
+	.pop-item .p-logo svg { width: 15px; height: 15px; }
+	.pop-item .p-sub { color: var(--text-tertiary); font-size: 11px; }
+	.pop-item .check { margin-left: auto; color: var(--accent); visibility: hidden; }
+	.pop-item.selected .check { visibility: visible; }
+	.pop-item.disabled { opacity: 0.45; }
+	.pop-item.disabled:hover { background: transparent; }
+
+	/* GPT-style reasoning popover: big level label + model + slider */
+	.pop-gpt { min-width: 250px; padding: 14px 16px 16px; text-align: center; }
+	.gpt-reset {
+		position: absolute; top: 10px; right: 10px;
+		width: 26px; height: 26px; border: none; border-radius: 8px;
+		background: transparent; color: var(--text-tertiary); cursor: pointer;
+		display: grid; place-items: center;
+	}
+	.gpt-reset:hover { background: var(--hover); color: var(--text); }
+	.gpt-level { font-size: 17px; font-weight: 700; color: var(--accent); }
+	.gpt-level.mute { color: var(--text); }
+	.gpt-level.na { color: var(--text-tertiary); }
+	.gpt-model { font-size: 11.5px; color: var(--text-tertiary); margin-top: 2px; }
+	.gpt-track {
+		position: relative; height: 8px; border-radius: 4px;
+		background: var(--hover); margin: 16px 6px 4px; cursor: pointer;
+	}
+	.gpt-fill {
+		position: absolute; left: 0; top: 0; bottom: 0; width: 6%;
+		background: var(--accent); border-radius: 4px; transition: width 0.15s;
+	}
+	.gpt-dot {
+		position: absolute; top: 50%; transform: translate(-50%, -50%);
+		width: 6px; height: 6px; border-radius: 50%;
+		background: var(--border); z-index: 1;
+	}
+	.gpt-knob {
+		position: absolute; top: 50%; left: 6%; transform: translate(-50%, -50%);
+		width: 20px; height: 20px; border-radius: 50%;
+		background: #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+		z-index: 2; transition: left 0.15s;
+	}
+	.gpt-track.na { opacity: 0.45; cursor: not-allowed; }
+	.composer-input {
+		width: 100%; border: none; background: transparent; color: var(--text);
+		font-family: inherit; font-size: 14px; resize: none; outline: none; min-height: 42px;
+	}
+	.composer-hint { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 8px; font-size: 11.5px; color: var(--text-tertiary); }
+	.composer-hint b { color: var(--text-secondary); font-weight: 600; }
+	.composer-foot { display: flex; align-items: center; justify-content: flex-end; margin-top: 8px; }
+
+	/* ---------- Two-step confirm ---------- */
+	.confirm {
+		width: 440px; max-width: 90vw; background: var(--menu-bg);
+		border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--menu-shadow);
+		padding: 22px 24px;
+	}
+	.confirm h3 { font-size: 16px; margin-bottom: 10px; }
+	.confirm p { font-size: 13.5px; color: var(--text-secondary); line-height: 1.7; }
+	.confirm .warn { color: #d97706; font-weight: 600; }
+	.confirm .steps { display: flex; gap: 6px; margin: 14px 0 4px; }
+	.confirm .step-dot { width: 26px; height: 4px; border-radius: 2px; background: var(--border); }
+	.confirm .step-dot.on { background: var(--accent); }
+	.confirm-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+	.btn {
+		border: 1px solid var(--border); background: transparent; color: var(--text);
+		border-radius: 9px; padding: 7px 16px; font-size: 13px; cursor: pointer; font-family: inherit;
+	}
+	.btn:hover { background: var(--hover); }
+	.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+	.btn.danger { background: #d97706; border-color: #d97706; color: #fff; font-weight: 600; }
+
+	/* ---------- Share dialog ---------- */
+	.share-dialog {
+		width: 560px; max-width: 92vw; background: var(--menu-bg);
+		border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--menu-shadow);
+		padding: 20px 22px;
+	}
+	.share-dialog .dialog-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+	.share-dialog h2 { font-size: 16px; }
+	.share-hint { font-size: 12px; color: var(--text-tertiary); margin-top: 4px; line-height: 1.6; }
+	.share-preview {
+		width: 100%; height: 200px; margin-top: 14px; resize: none;
+		border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px;
+		background: var(--bg); color: var(--text); font-family: ui-monospace, Consolas, monospace;
+		font-size: 12px; line-height: 1.6; outline: none;
+	}
+	.share-status { margin-top: 8px; font-size: 12px; color: var(--dot-on); min-height: 16px; }
+	.dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+</style>
+</head>
+<body>
+<div class="app">
+
+	<!-- Sidebar -->
+	<aside class="sidebar">
+		<div class="sidebar-header">
+			<div class="logo"><div class="logo-mark">S</div>Skiff</div>
+			<div class="header-actions">
+				<button class="icon-btn" title="搜索">
+					<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+				</button>
+				<button class="icon-btn" title="折叠侧栏">
+					<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg>
+				</button>
+			</div>
+		</div>
+
+		<div class="sidebar-scroll">
+			<div class="nav-item active" id="newChatNav">
+				<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+				新聊天
+				<span class="kbd">Ctrl N</span>
+			</div>
+			<div class="nav-item">
+				<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 10.5L12 3l9 7.5V21H3z"/></svg>
+				主页
+			</div>
+
+			<div class="section-label">
+				项目
+				<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+				<button class="icon-btn" title="新建项目">
+					<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+				</button>
+			</div>
+
+			<div class="project-row"><span class="chev">›</span><span class="folder-icon">📁</span>Skiff<span class="count">35</span></div>
+			<div class="project-row"><span class="chev">›</span><span class="folder-icon">📁</span>aiagent<span class="count">16</span></div>
+			<div class="project-row"><span class="chev">›</span><span class="folder-icon">📁</span>zhikuncode<span class="count">1</span></div>
+			<div class="project-row"><span class="chev">›</span><span class="folder-icon">📁</span>emptyForTest<span class="count">13</span></div>
+			<div class="project-row"><span class="chev">›</span><span class="folder-icon">📁</span>sre<span class="count">2</span></div>
+		</div>
+
+		<!-- Footer: unified settings entry (replaces "pi 已连接 · 本地工作区") -->
+		<div class="sidebar-footer">
+			<button class="entry-btn" id="entryBtn">
+				<div class="entry-avatar" id="familyAvatar" title="点击切换模型家族（演示）"></div>
+				<div style="min-width:0">
+					<div class="entry-title" id="familyName">DeepSeek</div>
+					<div class="entry-sub"><span class="dot"></span><span id="familyModel">deepseek-v4.1-flash</span> · 已连接</div>
+				</div>
+				<svg class="entry-gear" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.9l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.9-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1-1.6 1.7 1.7 0 00-1.9.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.9 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.6-1 1.7 1.7 0 00-.3-1.9l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.9.3h0a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5h0a1.7 1.7 0 001.9-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.9v0a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/></svg>
+			</button>
+
+			<!-- Kimi-style popup menu -->
+			<div class="menu" id="menu" role="menu">
+				<button class="menu-item" data-action="usage">
+					<span class="mi-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M10 20V4M16 20v-7M21 20H3"/></svg></span>
+					用量统计
+					<span class="mi-value"><span class="mi-arrow">›</span></span>
+				</button>
+				<button class="menu-item" data-action="providers">
+					<span class="mi-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L4.5 13.5H11L10 22l8.5-11.5H12z"/></svg></span>
+					模型与提供商
+					<span class="mi-value"><span class="mi-arrow">›</span></span>
+				</button>
+				<div class="menu-sep"></div>
+				<div class="menu-item has-sub" id="themeItem">
+					<span class="mi-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 010 18z" fill="currentColor" stroke="none"/></svg></span>
+					外观
+					<span class="mi-value" id="themeValue">跟随系统 <span class="mi-arrow">›</span></span>
+					<div class="submenu">
+						<div class="sub-item selected" data-theme-choice="跟随系统">跟随系统 <span class="check">✓</span></div>
+						<div class="sub-item" data-theme-choice="浅色">浅色 <span class="check">✓</span></div>
+						<div class="sub-item" data-theme-choice="深色">深色 <span class="check">✓</span></div>
+					</div>
+				</div>
+				<div class="menu-item has-sub" id="langItem">
+					<span class="mi-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 5h10M8 3v2M11 5c-1 4-4 7-7 9M6 9c1.5 3 4 5.5 7 7"/><path d="M14 21l4-9 4 9M15.2 18h5.6"/></svg></span>
+					语言
+					<span class="mi-value">简体中文 <span class="mi-arrow">›</span></span>
+					<div class="submenu">
+						<div class="sub-item selected">简体中文 <span class="check">✓</span></div>
+						<div class="sub-item">English <span class="check">✓</span></div>
+					</div>
+				</div>
+				<button class="menu-item" data-action="settings">
+					<span class="mi-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.9l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.9-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1-1.6 1.7 1.7 0 00-1.9.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.9 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.6-1 1.7 1.7 0 00-.3-1.9l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.9.3h0a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5h0a1.7 1.7 0 001.9-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.9v0a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/></svg></span>
+					设置
+					<span class="mi-value"><span class="kbd-group"><span>Ctrl</span><span>,</span></span></span>
+				</button>
+				<div class="menu-sep"></div>
+				<button class="menu-item" data-action="disconnect">
+					<span class="mi-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg></span>
+					断开 pi 连接
+				</button>
+				<div class="menu-hint">
+					<span>切家族（对话区）：<b>Ctrl D</b> DeepSeek · <b>Ctrl K</b> Kimi · <b>Ctrl G</b> GLM</span>
+					<span><b>Alt ↑↓</b> 模型 · <b>Alt ←→</b> 推理</span>
+				</div>
+			</div>
+		</div>
+	</aside>
+
+	<!-- Main -->
+	<main class="main">
+		<div class="main-header">
+			<div>
+				<div class="title">新聊天</div>
+				<div class="sub">DeepSeek · deepseek-v4.1-flash · opencsg</div>
+			</div>
+			<div class="header-right">
+				<button class="icon-btn" id="shareBtn" title="分享对话">
+					<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 16V4M8 8l4-4 4 4M4 15v5h16v-5"/></svg>
+				</button>
+			</div>
+		</div>
+		<div class="hero" id="hero">
+			<div class="spark">✦</div>
+			<h1>今天想做点什么？</h1>
+			<p>一起写代码、理清思路，把想法变成现实。</p>
+			<div class="tag">📁 aiagent</div>
+		</div>
+
+		<div class="conversation" id="conversation">
+			<div class="bubble bot"><div class="meta" id="bubbleMeta">DeepSeek · deepseek-v4.1-flash</div>已连接本地工作区 /aiagent，可以开始工作。</div>
+			<div class="bubble user">帮我看一下这个仓库的测试结构。</div>
+			<div class="bubble bot">测试位于 <code>tests/</code>，使用 Node test runner；Rust 侧用 <code>cargo test --lib</code>。</div>
+		</div>
+
+		<!-- Composer: 家族 / 模型 / 推理强度 都在这里切换 -->
+		<div class="composer">
+			<div class="composer-box">
+				<textarea class="composer-input" id="composerInput" placeholder="给 Skiff 发送消息…"></textarea>
+				<div class="composer-foot">
+					<div class="pill" id="sendBtn">发送</div>
+				</div>
+			</div>
+
+			<!-- 模型信息放在输入框下方，可点，向上弹出菜单 -->
+			<div class="status-line">
+				<span class="st-wrap">
+					<button class="st-chip" id="familyChipBtn" title="切换模型家族（已开启会话需二次确认）">
+						<span class="st-logo" id="chipLogo"></span>
+						<span id="chipFamily">DeepSeek</span>
+						<span class="chev">▾</span>
+					</button>
+					<div class="pop" id="familyPop"></div>
+				</span>
+				<span class="st-wrap">
+					<button class="st-chip" id="modelChipBtn" title="同一家族内切换模型">
+						<span id="chipModel">deepseek-v4.1-flash</span>
+						<span class="chev">▾</span>
+					</button>
+					<div class="pop" id="modelPop"></div>
+				</span>
+				<span class="st-wrap align-right">
+					<button class="st-chip" id="reasonChipBtn" title="推理开关（模型不支持时不可用）">
+						推理 · <span id="chipReason">关闭</span>
+						<span class="chev">▾</span>
+					</button>
+					<div class="pop pop-gpt" id="reasonPop">
+						<button class="gpt-reset" id="reasonReset" title="恢复默认（关闭）">
+							<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 109-9M3 3v6h6"/></svg>
+						</button>
+						<div class="gpt-level" id="gptLevel">关闭</div>
+						<div class="gpt-model" id="gptModel">deepseek-v4.1-flash</div>
+						<div class="gpt-track" id="gptTrack">
+							<div class="gpt-fill" id="gptFill"></div>
+							<span class="gpt-dot" style="left:4%"></span>
+							<span class="gpt-dot" style="left:96%"></span>
+							<div class="gpt-knob" id="gptKnob"></div>
+						</div>
+					</div>
+				</span>
+				<span class="st-hint">
+					<b>Alt ↑↓</b> 换模型 · <b>Alt ←→</b> 推理 · <b>Ctrl D/K/G</b> 换家族
+				</span>
+			</div>
+		</div>
+	</main>
+</div>
+
+<!-- Settings modal -->
+<div class="overlay" id="overlay">
+	<div class="settings">
+		<nav class="settings-nav">
+			<div class="nav-item active" data-tab="general">⚙️ 通用</div>
+			<div class="nav-item" data-tab="appearance">🎨 外观</div>
+			<div class="nav-item" data-tab="providers">🔌 模型与提供商</div>
+			<div class="nav-item" data-tab="shortcuts">⌨️ 快捷键</div>
+			<div class="nav-item" data-tab="about">ℹ️ 关于</div>
+		</nav>
+		<div class="settings-body" id="settingsBody">
+			<h2>通用</h2>
+			<div class="setting-row">
+				<div>
+					<div class="label">启动时恢复上次会话</div>
+					<div class="desc">打开 Skiff 时自动加载最近使用的聊天</div>
+				</div>
+				<button class="toggle on" data-toggle></button>
+			</div>
+			<div class="setting-row">
+				<div>
+					<div class="label">pi CLI 路径</div>
+					<div class="desc">留空则使用默认安装位置</div>
+				</div>
+				<select><option>默认（SKIFF_PI_PATH）</option><option>自定义…</option></select>
+			</div>
+			<div class="setting-row">
+				<div>
+					<div class="label">流式输出</div>
+					<div class="desc">实时逐字渲染模型回复</div>
+				</div>
+				<button class="toggle on" data-toggle></button>
+			</div>
+		</div>
+	</div>
+</div>
+
+<!-- Two-step confirm for switching family on a started session -->
+<div class="overlay" id="confirmOverlay">
+	<div class="confirm">
+		<div class="steps"><div class="step-dot on" id="step1"></div><div class="step-dot" id="step2"></div></div>
+		<h3 id="confirmTitle">切换模型家族？</h3>
+		<p id="confirmBody"></p>
+		<div class="confirm-actions">
+			<button class="btn" id="confirmCancel">取消</button>
+			<button class="btn primary" id="confirmNext">继续</button>
+		</div>
+	</div>
+</div>
+
+<!-- Share dialog -->
+<div class="overlay" id="shareOverlay">
+	<div class="share-dialog">
+		<div class="dialog-heading">
+			<div>
+				<h2>分享对话</h2>
+				<p class="share-hint">分享当前会话的完整内容。内容只会复制到剪贴板或交给系统分享，不会上传。</p>
+			</div>
+			<button class="icon-btn" id="shareClose" aria-label="关闭分享对话">
+				<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg>
+			</button>
+		</div>
+		<textarea class="share-preview" id="sharePreview" readonly></textarea>
+		<p class="share-status" id="shareStatus" role="status"></p>
+		<div class="dialog-actions">
+			<button class="btn" id="shareCancel">关闭</button>
+			<button class="btn primary" id="shareCopy">复制全文</button>
+		</div>
+	</div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+	const entryBtn = document.getElementById("entryBtn");
+	const menu = document.getElementById("menu");
+	const toast = document.getElementById("toast");
+
+	function showToast(text) {
+		toast.textContent = text;
+		toast.classList.add("show");
+		clearTimeout(showToast._t);
+		showToast._t = setTimeout(() => toast.classList.remove("show"), 1600);
+	}
+
+	/* ---------- Model family logo in the footer entry ----------
+	   SVG paths taken from src/components/ProviderIcon.tsx (Magpie icon set, MIT). */
+	const FAMILIES = [
+		{
+			id: "deepseek", name: "DeepSeek", model: "deepseek-v4.1-flash", hotkey: "Ctrl D",
+			color: "#4D6BFE",
+			d: "M23.748 4.482c-.254-.124-.364.113-.512.234-.051.039-.094.09-.137.136-.372.397-.806.657-1.373.626-.829-.046-1.537.214-2.163.848-.133-.782-.575-1.248-1.247-1.548-.352-.156-.708-.311-.955-.65-.172-.241-.219-.51-.305-.774-.055-.16-.11-.323-.293-.35-.2-.031-.278.136-.356.276-.313.572-.434 1.202-.422 1.84.027 1.436.633 2.58 1.838 3.393.137.093.172.187.129.323-.082.28-.18.552-.266.833-.055.179-.137.217-.329.14a5.526 5.526 0 01-1.736-1.18c-.857-.828-1.631-1.742-2.597-2.458a11.365 11.365 0 00-.689-.471c-.985-.957.13-1.743.388-1.836.27-.098.093-.432-.779-.428-.872.004-1.67.295-2.687.684a3.055 3.055 0 01-.465.137 9.597 9.597 0 00-2.883-.102c-1.885.21-3.39 1.102-4.497 2.623C.082 8.606-.231 10.684.152 12.85c.403 2.284 1.569 4.175 3.36 5.653 1.858 1.533 3.997 2.284 6.438 2.14 1.482-.085 3.133-.284 4.994-1.86.47.234.962.327 1.78.397.63.059 1.236-.03 1.705-.128.735-.156.684-.837.419-.961-2.155-1.004-1.682-.595-2.113-.926 1.096-1.296 2.746-2.642 3.392-7.003.05-.347.007-.565 0-.845-.004-.17.035-.237.23-.256a4.173 4.173 0 001.545-.475c1.396-.763 1.96-2.015 2.093-3.517.02-.23-.004-.467-.247-.588zM11.581 18c-2.089-1.642-3.102-2.183-3.52-2.16-.392.024-.321.471-.235.763.09.288.207.486.371.739.114.167.192.416-.113.603-.673.416-1.842-.14-1.897-.167-1.361-.802-2.5-1.86-3.301-3.307-.774-1.393-1.224-2.887-1.298-4.482-.02-.386.093-.522.477-.592a4.696 4.696 0 011.529-.039c2.132.312 3.946 1.265 5.468 2.774.868.86 1.525 1.887 2.202 2.891.72 1.066 1.494 2.082 2.48 2.914.348.292.625.514.891.677-.802.09-2.14.11-3.054-.614zm1-6.44a.306.306 0 01.415-.287.302.302 0 01.2.288.306.306 0 01-.31.307.303.303 0 01-.304-.308zm3.11 1.596c-.2.081-.399.151-.59.16a1.245 1.245 0 01-.798-.254c-.274-.23-.47-.358-.552-.758a1.73 1.73 0 01.016-.588c.07-.327-.008-.537-.239-.727-.187-.156-.426-.199-.688-.199a.559.559 0 01-.254-.078c-.11-.054-.2-.19-.114-.358.028-.054.16-.186.192-.21.356-.202.767-.136 1.146.016.352.144.618.408 1.001.782.391.451.462.576.685.914.176.265.336.537.445.848.067.195-.019.354-.25.452z",
+		},
+		{
+			id: "kimi", name: "Kimi", model: "kimi-k2.5", hotkey: "Ctrl K",
+			color: "currentColor",
+			d: "M1.052 16.916l9.539 2.552a21.007 21.007 0 00.06 2.033l5.956 1.593a11.997 11.997 0 01-5.586.865l-.18-.016-.044-.004-.084-.009-.094-.01a11.605 11.605 0 01-.157-.02l-.107-.014-.11-.016a11.962 11.962 0 01-.32-.051l-.042-.008-.075-.013-.107-.02-.07-.015-.093-.019-.075-.016-.095-.02-.097-.023-.094-.022-.068-.017-.088-.022-.09-.024-.095-.025-.082-.023-.109-.03-.062-.02-.084-.025-.093-.028-.105-.034-.058-.019-.08-.026-.09-.031-.066-.024a6.293 6.293 0 01-.044-.015l-.068-.025-.101-.037-.057-.022-.08-.03-.087-.035-.088-.035-.079-.032-.095-.04-.063-.028-.063-.027a5.655 5.655 0 01-.041-.018l-.066-.03-.103-.047-.052-.024-.096-.046-.062-.03-.084-.04-.086-.044-.093-.047-.052-.027-.103-.055-.057-.03-.058-.032a6.49 6.49 0 01-.046-.026l-.094-.053-.06-.034-.051-.03-.072-.041-.082-.05-.093-.056-.052-.032-.084-.053-.061-.039-.079-.05-.07-.047-.053-.035a7.785 7.785 0 01-.054-.036l-.044-.03-.044-.03a6.066 6.066 0 01-.04-.028l-.057-.04-.076-.054-.069-.05-.074-.054-.056-.042-.076-.057-.076-.059-.086-.067-.045-.035-.064-.052-.074-.06-.089-.073-.046-.039-.046-.039a7.516 7.516 0 01-.043-.037l-.045-.04-.061-.053-.07-.062-.068-.06-.062-.058-.067-.062-.053-.05-.088-.084a13.28 13.28 0 01-.099-.097l-.029-.028-.041-.042-.069-.07-.05-.051-.05-.053a6.457 6.457 0 01-.168-.179l-.08-.088-.062-.07-.071-.08-.042-.049-.053-.062-.058-.068-.046-.056a7.175 7.175 0 01-.027-.033l-.045-.055-.066-.082-.041-.052-.05-.064-.02-.025a11.99 11.99 0 01-1.44-2.402zm-1.02-5.794l11.353 3.037a20.468 20.468 0 00-.469 2.011l10.817 2.894a12.076 12.076 0 01-1.845 2.005L.657 15.923l-.016-.046-.035-.104a11.965 11.965 0 01-.05-.153l-.007-.023a11.896 11.896 0 01-.207-.741l-.03-.126-.018-.08-.021-.097-.018-.081-.018-.09-.017-.084-.018-.094c-.026-.141-.05-.283-.071-.426l-.017-.118-.011-.083-.013-.102a12.01 12.01 0 01-.019-.161l-.005-.047a12.12 12.12 0 01-.034-2.145zm1.593-5.15l11.948 3.196c-.368.605-.705 1.231-1.01 1.875l11.295 3.022c-.142.82-.368 1.612-.668 2.365l-11.55-3.09L.124 10.26l.015-.1.008-.049.01-.067.015-.087.018-.098c.026-.148.056-.295.088-.442l.028-.124.02-.085.024-.097c.022-.09.045-.18.07-.268l.028-.102.023-.083.03-.1.025-.082.03-.096.026-.082.031-.095a11.896 11.896 0 011.01-2.232zm4.442-4.4L17.352 4.59a20.77 20.77 0 00-1.688 1.721l7.823 2.093c.267.852.442 1.744.513 2.665L2.106 5.213l.045-.065.027-.04.04-.055.046-.065.055-.076.054-.072.064-.086.05-.065.057-.073.055-.07.06-.074.055-.069.065-.077.054-.066.066-.077.053-.06.072-.082.053-.06.067-.074.054-.058.073-.078.058-.06.063-.067.168-.17.1-.098.059-.056.076-.071a12.084 12.084 0 012.272-1.677zM12.017 0h.097l.082.001.069.001.054.002.068.002.046.001.076.003.047.002.06.003.054.002.087.005.105.007.144.011.088.007.044.004.077.008.082.008.047.005.102.012.05.006.108.014.081.01.042.006.065.01.207.032.07.012.065.011.14.026.092.018.11.022.046.01.075.016.041.01L14.7.3l.042.01.065.015.049.012.071.017.096.024.112.03.113.03.113.032.05.015.07.02.078.024.073.023.05.016.05.016.076.025.099.033.102.036.048.017.064.023.093.034.11.041.116.045.1.04.047.02.06.024.041.018.063.026.04.018.057.025.11.048.1.046.074.035.075.036.06.028.092.046.091.045.102.052.053.028.049.026.046.024.06.033.041.022.052.029.088.05.106.06.087.051.057.034.053.032.096.059.088.055.098.062.036.024.064.041.084.056.04.027.062.042.062.043.023.017c.054.037.108.075.161.114l.083.06.065.048.056.043.086.065.082.064.04.03.05.041.086.069.079.065.085.071c.712.6 1.353 1.283 1.909 2.031L7.222.994l.062-.027.065-.028.081-.034.086-.035c.113-.045.227-.09.341-.131l.096-.035.093-.033.084-.03.096-.031c.087-.03.176-.058.264-.085l.091-.027.086-.025.102-.03.085-.023.1-.026L9.04.37l.09-.023.091-.022.095-.022.09-.02.098-.021.091-.02.095-.018.092-.018.1-.018.091-.016.098-.017.092-.014.097-.015.092-.013.102-.013.091-.012.105-.012.09-.01.105-.01c.093-.01.186-.018.28-.024l.106-.008.09-.005.11-.006.093-.004.1-.004.097-.002.099-.002.197-.002z",
+		},
+		{
+			id: "glm", name: "GLM", model: "glm-5", hotkey: "Ctrl G",
+			color: "#3859FF",
+			d: "M11.991 23.503a.24.24 0 00-.244.248.24.24 0 00.244.249.24.24 0 00.245-.249.24.24 0 00-.22-.247l-.025-.001zM9.671 5.365a1.697 1.697 0 011.099 2.132l-.071.172-.016.04-.018.054c-.07.16-.104.32-.104.498-.035.71.47 1.279 1.186 1.314h.366c1.309.053 2.338 1.173 2.286 2.523-.052 1.332-1.152 2.38-2.478 2.327h-.174c-.715.018-1.274.64-1.239 1.368 0 .124.018.23.053.337.209.373.54.658.96.8.75.23 1.517-.125 1.9-.782l.018-.035c.402-.64 1.17-.96 1.92-.711.854.284 1.378 1.226 1.099 2.167a1.661 1.661 0 01-2.077 1.102 1.711 1.711 0 01-.907-.711l-.017-.035c-.2-.323-.463-.58-.851-.711l-.056-.018a1.646 1.646 0 00-1.954.746 1.66 1.66 0 01-1.065.764 1.677 1.677 0 01-1.989-1.279c-.209-.906.332-1.83 1.257-2.043a1.51 1.51 0 01.296-.035h.018c.68-.071 1.151-.622 1.116-1.333a1.307 1.307 0 00-.227-.693 2.515 2.515 0 01-.366-1.403 2.39 2.39 0 01.366-1.208c.14-.195.21-.444.227-.693.018-.71-.506-1.261-1.186-1.332l-.07-.018a1.43 1.43 0 01-.299-.07l-.05-.019a1.7 1.7 0 01-1.047-2.114 1.68 1.68 0 012.094-1.101zm-5.575 10.11c.26-.264.639-.367.994-.27.355.096.633.379.728.74.095.362-.007.748-.267 1.013-.402.41-1.053.41-1.455 0a1.062 1.062 0 010-1.482zm14.845-.294c.359-.09.738.024.992.297.254.274.344.665.237 1.025-.107.36-.396.634-.756.718-.551.128-1.1-.22-1.23-.781a1.05 1.05 0 01.757-1.26zm-.064-4.39c.314.32.49.753.49 1.206 0 .452-.176.886-.49 1.206-.315.32-.74.5-1.185.5-.444 0-.87-.18-1.184-.5a1.727 1.727 0 010-2.412 1.654 1.654 0 012.369 0zm-11.243.163c.364.484.447 1.128.218 1.691a1.665 1.665 0 01-2.188.923c-.855-.36-1.26-1.358-.907-2.228a1.68 1.68 0 011.33-1.038c.593-.08 1.183.169 1.547.652zm11.545-4.221c.368 0 .708.2.892.524.184.324.184.724 0 1.048a1.026 1.026 0 01-.892.524c-.568 0-1.03-.47-1.03-1.048 0-.579.462-1.048 1.03-1.048zm-14.358 0c.368 0 .707.2.891.524.184.324.184.724 0 1.048a1.026 1.026 0 01-.891.524c-.569 0-1.03-.47-1.03-1.048 0-.579.461-1.048 1.03-1.048zm10.031-1.475c.925 0 1.675.764 1.675 1.706s-.75 1.705-1.675 1.705-1.674-.763-1.674-1.705c0-.942.75-1.706 1.674-1.706zm-2.626-.684c.362-.082.653-.356.761-.718a1.062 1.062 0 00-.238-1.028 1.017 1.017 0 00-.996-.294c-.547.14-.881.7-.752 1.257.13.558.675.907 1.225.783zm0 16.876c.359-.087.644-.36.75-.72a1.062 1.062 0 00-.237-1.019 1.018 1.018 0 00-.985-.301 1.037 1.037 0 00-.762.717c-.108.361-.017.754.239 1.028.245.263.606.377.953.305l.043-.01zM17.19 3.5a.631.631 0 00.628-.64c0-.355-.279-.64-.628-.64a.631.631 0 00-.628.64c0 .355.28.64.628.64zm-10.38 0a.631.631 0 00.628-.64c0-.355-.28-.64-.628-.64a.631.631 0 00-.628.64c0 .355.279.64.628.64zm-5.182 7.852a.631.631 0 00-.628.64c0 .354.28.639.628.639a.63.63 0 00.627-.606l.001-.034a.62.62 0 00-.628-.64zm5.182 9.13a.631.631 0 00-.628.64c0 .355.279.64.628.64a.631.631 0 00.628-.64c0-.355-.28-.64-.628-.64zm10.38.018a.631.631 0 00-.628.64c0 .355.28.64.628.64a.631.631 0 00.628-.64c0-.355-.279-.64-.628-.64zm5.182-9.148a.631.631 0 00-.628.64c0 .354.279.639.628.639a.631.631 0 00.628-.64c0-.355-.28-.64-.628-.64zm-.384-4.992a.24.24 0 00.244-.249.24.24 0 00-.244-.249.24.24 0 00-.244.249c0 .142.122.249.244.249zM11.991.497a.24.24 0 00.245-.248A.24.24 0 0011.99 0a.24.24 0 00-.244.249c0 .133.108.236.223.247l.021.001zM2.011 6.36a.24.24 0 00.245-.249.24.24 0 00-.244-.249.24.24 0 00-.244.249.24.24 0 00.244.249zm0 11.263a.24.24 0 00-.243.248.24.24 0 00.244.249.24.24 0 00.244-.249.252.252 0 00-.244-.248zm19.995-.018a.24.24 0 00-.245.248.24.24 0 00.245.25.24.24 0 00.244-.25.252.252 0 00-.244-.248z",
+		},
+	];
+	// 每个家族下的模型（Alt ↑ / ↓ 切换）；reasoning=true 的才允许开推理（对应 families.rs 的 reasoning: bool）
+	FAMILIES[0].models = [
+		{ id: "deepseek-v4.1-flash", reasoning: false },
+		{ id: "deepseek-v4.1", reasoning: true },
+		{ id: "deepseek-r3-reasoner", reasoning: true },
+	];
+	FAMILIES[1].models = [
+		{ id: "kimi-k2.5", reasoning: true },
+		{ id: "kimi-k2-turbo", reasoning: false },
+		{ id: "kimi-k1.5", reasoning: true },
+	];
+	FAMILIES[2].models = [
+		{ id: "glm-5", reasoning: true },
+		{ id: "glm-4.6", reasoning: true },
+		{ id: "glm-4-plus", reasoning: false },
+	];
+
+	let familyIdx = 0;
+	let modelIdx = 0;
+	let reasoningOn = false;      // 推理开关：代码里 reasoning 是布尔，不是多档
+	let sessionStarted = false;
+
+	const familyAvatar = document.getElementById("familyAvatar");
+	const familyName = document.getElementById("familyName");
+	const familyModel = document.getElementById("familyModel");
+	const headerSub = document.querySelector(".main-header .sub");
+	const chipLogo = document.getElementById("chipLogo");
+	const chipFamily = document.getElementById("chipFamily");
+	const chipModel = document.getElementById("chipModel");
+	const chipReason = document.getElementById("chipReason");
+	const familyPop = document.getElementById("familyPop");
+	const modelPop = document.getElementById("modelPop");
+	const reasonPop = document.getElementById("reasonPop");
+
+	// 家族下拉（内容固定，构建一次）
+	familyPop.innerHTML = FAMILIES.map((f, i) =>
+		`<div class="pop-item" data-fi="${i}"><span class="p-logo"><svg viewBox="0 0 24 24"><path d="${f.d}" fill="${f.color}"/></svg></span>${f.name} <span class="p-sub">${f.models[0].id}</span><span class="check">✓</span></div>`
+	).join("");
+	const bubbleMeta = document.getElementById("bubbleMeta");
+	const composerInput = document.getElementById("composerInput");
+
+	function currentModel() { return FAMILIES[familyIdx].models[modelIdx].id; }
+	function currentEntry() { return FAMILIES[familyIdx].models[modelIdx]; }
+	function canReason() { return currentEntry().reasoning === true; }
+	function reasonText() {
+		if (!canReason()) return "不可用";
+		return reasoningOn ? "开启" : "关闭";
+	}
+
+	function render() {
+		const f = FAMILIES[familyIdx];
+		const svg = `<svg viewBox="0 0 24 24"><path d="${f.d}" fill="${f.color}"/></svg>`;
+		familyAvatar.innerHTML = svg;
+		chipLogo.innerHTML = svg;
+		familyName.textContent = f.name;
+		chipFamily.textContent = f.name;
+		chipModel.textContent = currentModel();
+		familyModel.textContent = currentModel();
+		const r = reasonText();
+		chipReason.textContent = r;
+		chipReason.className = r === "不可用" ? "off" : "";
+		if (headerSub) headerSub.textContent = `${f.name} · ${currentModel()} · 推理 ${r} · opencsg`;
+		if (bubbleMeta) bubbleMeta.textContent = `${f.name} · ${currentModel()}`;
+		// 刷新下拉内容
+		familyPop.querySelectorAll(".pop-item").forEach((el, i) => el.classList.toggle("selected", i === familyIdx));
+		modelPop.innerHTML = f.models.map((m, i) =>
+			`<div class="pop-item ${i === modelIdx ? "selected" : ""}" data-mi="${i}">${m.id}${m.reasoning ? "" : ' <span class="p-sub">无推理</span>'}<span class="check">✓</span></div>`
+		).join("");
+		// GPT 风格推理滑杆
+		const level = document.getElementById("gptLevel");
+		level.textContent = r;
+		level.className = "gpt-level" + (r === "关闭" ? " mute" : r === "不可用" ? " na" : "");
+		document.getElementById("gptModel").textContent = `${currentModel()}${canReason() ? "" : "（未开启推理）"}`;
+		const pos = reasoningOn && canReason() ? "94%" : "6%";
+		document.getElementById("gptFill").style.width = pos;
+		document.getElementById("gptKnob").style.left = pos;
+		document.getElementById("gptTrack").classList.toggle("na", !canReason());
+	}
+
+	function setFamily(idx, notify = true) {
+		familyIdx = idx;
+		modelIdx = 0;                      // 换家族后回到该家族默认模型
+		render();
+		if (notify) showToast(`已切换到 ${FAMILIES[idx].name} · ${currentModel()}（${FAMILIES[idx].hotkey}）`);
+	}
+
+	/** 新对话可自由切；已开启会话走二次确认。 */
+	function requestFamily(idx) {
+		if (idx === familyIdx) return;
+		if (!sessionStarted) { setFamily(idx); return; }
+		openConfirm(idx);
+	}
+
+	function cycleModel(delta) {
+		const n = FAMILIES[familyIdx].models.length;
+		modelIdx = (modelIdx + delta + n) % n;
+		render();
+		showToast(`模型：${currentModel()}（${FAMILIES[familyIdx].name} · Alt ↑↓）`);
+	}
+
+	function toggleReasoning() {
+		if (!canReason()) {
+			showToast(`${currentModel()} 未开启推理（该路由 reasoning = false）`);
+			return;
+		}
+		reasoningOn = !reasoningOn;
+		render();
+		showToast(`推理：${reasoningOn ? "开启" : "关闭"}（Alt ←→）`);
+	}
+
+	/* ---------- Two-step confirm ---------- */
+	const confirmOverlay = document.getElementById("confirmOverlay");
+	const confirmTitle = document.getElementById("confirmTitle");
+	const confirmBody = document.getElementById("confirmBody");
+	const confirmNext = document.getElementById("confirmNext");
+	const confirmCancel = document.getElementById("confirmCancel");
+	const step1 = document.getElementById("step1");
+	const step2 = document.getElementById("step2");
+	let pendingFamily = null;
+	let confirmStep = 1;
+
+	function openConfirm(idx) {
+		pendingFamily = idx;
+		confirmStep = 1;
+		renderConfirm();
+		confirmOverlay.classList.add("show");
+	}
+	function renderConfirm() {
+		const from = FAMILIES[familyIdx].name, to = FAMILIES[pendingFamily].name;
+		step1.classList.toggle("on", confirmStep >= 1);
+		step2.classList.toggle("on", confirmStep >= 2);
+		if (confirmStep === 1) {
+			confirmTitle.textContent = `切换模型家族？`;
+			confirmBody.innerHTML = `当前会话已产生 <b>${sessionStarted ? 3 : 0}</b> 条消息，基于 <b>${from} · ${currentModel()}</b> 生成。<br/>切换为 <b>${to}</b> 后，历史上下文将保留，但会从下一条消息起改用新家族。<span class="warn">此操作会影响后续回复风格与能力。</span>`;
+			confirmNext.textContent = "继续";
+			confirmNext.className = "btn primary";
+			confirmCancel.textContent = "取消";
+		} else {
+			confirmTitle.textContent = `再次确认：切到 ${to}`;
+			confirmBody.innerHTML = `请确认把本会话的模型家族从 <b>${from}</b> 切换为 <b>${to}</b>，并回到该家族默认模型 <b>${FAMILIES[pendingFamily].models[0].id}</b>。<br/><span class="warn">切换立即生效且不可撤销；如需返回，请再次用 Ctrl D / K / G 切回。</span>`;
+			confirmNext.textContent = "确认切换";
+			confirmNext.className = "btn danger";
+			confirmCancel.textContent = "返回";
+		}
+	}
+	confirmNext.addEventListener("click", () => {
+		if (confirmStep === 1) { confirmStep = 2; renderConfirm(); return; }
+		const idx = pendingFamily;
+		confirmOverlay.classList.remove("show");
+		pendingFamily = null;
+		setFamily(idx);
+	});
+	confirmCancel.addEventListener("click", () => {
+		if (confirmStep === 1) { confirmOverlay.classList.remove("show"); pendingFamily = null; return; }
+		confirmStep = 1; renderConfirm();
+	});
+	confirmOverlay.addEventListener("click", (e) => {
+		if (e.target === confirmOverlay) { confirmOverlay.classList.remove("show"); pendingFamily = null; }
+	});
+
+	/* ---------- Session state ---------- */
+	// 右上角的演示开关已移除：发送消息即开启会话，侧边栏「新聊天」重置回新对话
+	const hero = document.getElementById("hero");
+	const conversation = document.getElementById("conversation");
+	function setSession(on) {
+		sessionStarted = on;
+		hero.style.display = on ? "none" : "flex";
+		conversation.classList.toggle("on", on);
+	}
+	const sendBtn = document.getElementById("sendBtn");
+	sendBtn.addEventListener("click", () => {
+		if (!sessionStarted) setSession(true);            // 发送后会话即视为已开启
+		const text = composerInput.value.trim();
+		if (text) { appendBubble("user", text); composerInput.value = ""; }
+	});
+	document.getElementById("newChatNav").addEventListener("click", () => {
+		setSession(false);
+		composerInput.value = "";
+		conversation.querySelectorAll(".bubble:not(:nth-child(-n+3))").forEach((b) => b.remove());
+		showToast("已回到新对话（可自由切换模型家族）");
+	});
+	function appendBubble(kind, text) {
+		const el = document.createElement("div");
+		el.className = "bubble " + kind;
+		el.textContent = text;
+		conversation.appendChild(el);
+		conversation.scrollTop = conversation.scrollHeight;
+	}
+
+	// 左下角入口只显示状态，不再切家族
+	familyAvatar.addEventListener("click", (e) => {
+		e.stopPropagation();
+		showToast("切换模型家族请在对话区进行（Ctrl D / K / G）");
+	});
+
+	/* ---------- Hotkeys ---------- */
+	const HOTKEYS = { d: 0, k: 1, g: 2 };   // Ctrl D → DeepSeek, Ctrl K → Kimi, Ctrl G → GLM
+	document.addEventListener("keydown", (e) => {
+		if (e.ctrlKey && !e.altKey && !e.shiftKey) {
+			const idx = HOTKEYS[e.key.toLowerCase()];
+			if (idx !== undefined) { e.preventDefault(); requestFamily(idx); return; }
+		}
+		// 方向键统一加 Alt，避免与输入框光标移动冲突
+		if (!e.altKey || e.ctrlKey) return;
+		if (e.key === "ArrowUp") { e.preventDefault(); cycleModel(-1); }
+		else if (e.key === "ArrowDown") { e.preventDefault(); cycleModel(1); }
+		else if (e.key === "ArrowLeft" || e.key === "ArrowRight") { e.preventDefault(); toggleReasoning(); }
+	});
+
+	/* ---------- 状态行下拉 ---------- */
+	function closePops() { [familyPop, modelPop, reasonPop].forEach((p) => p.classList.remove("show")); }
+	function togglePop(pop) {
+		const was = pop.classList.contains("show");
+		closePops();
+		if (!was) pop.classList.add("show");
+	}
+	document.getElementById("familyChipBtn").addEventListener("click", (e) => { e.stopPropagation(); togglePop(familyPop); });
+	document.getElementById("modelChipBtn").addEventListener("click", (e) => { e.stopPropagation(); togglePop(modelPop); });
+	document.getElementById("reasonChipBtn").addEventListener("click", (e) => { e.stopPropagation(); togglePop(reasonPop); });
+	document.addEventListener("click", (e) => { if (!e.target.closest(".st-wrap")) closePops(); });
+
+	familyPop.addEventListener("click", (e) => {
+		const item = e.target.closest("[data-fi]");
+		if (!item) return;
+		closePops();
+		requestFamily(Number(item.dataset.fi));
+	});
+	modelPop.addEventListener("click", (e) => {
+		const item = e.target.closest("[data-mi]");
+		if (!item) return;
+		modelIdx = Number(item.dataset.mi);
+		closePops();
+		render();
+		showToast(`模型：${currentModel()}（${FAMILIES[familyIdx].name}）`);
+	});
+	// GPT 风格滑杆：点左半关、右半开；不可用时点击提示
+	document.getElementById("gptTrack").addEventListener("click", (e) => {
+		if (!canReason()) { showToast(`${currentModel()} 未开启推理（该路由 reasoning = false）`); return; }
+		const rect = e.currentTarget.getBoundingClientRect();
+		const on = (e.clientX - rect.left) > rect.width / 2;
+		if (on === reasoningOn) return;
+		reasoningOn = on;
+		render();
+		showToast(`推理：${reasoningOn ? "开启" : "关闭"}`);
+	});
+	document.getElementById("reasonReset").addEventListener("click", (e) => {
+		e.stopPropagation();
+		if (!canReason()) { showToast(`${currentModel()} 未开启推理（该路由 reasoning = false）`); return; }
+		if (!reasoningOn) return;
+		reasoningOn = false;
+		render();
+		showToast("推理已恢复默认：关闭");
+	});
+
+	/* ---------- Share ---------- */
+	const shareOverlay = document.getElementById("shareOverlay");
+	const sharePreview = document.getElementById("sharePreview");
+	const shareStatus = document.getElementById("shareStatus");
+
+	function shareMarkdown() {
+		const lines = ["# 新聊天", "", `> 模型：${FAMILIES[familyIdx].name} · ${currentModel()} · 推理 ${reasonText()}`, ""];
+		if (!sessionStarted) lines.push("（当前会话还没有消息）");
+		else conversation.querySelectorAll(".bubble").forEach((b) => {
+			const clone = b.cloneNode(true);
+			const meta = clone.querySelector(".meta");
+			if (meta) meta.remove();
+			lines.push(`**${b.classList.contains("user") ? "我" : "Skiff"}**：${clone.textContent.trim()}`, "");
+		});
+		return lines.join("\n");
+	}
+	document.getElementById("shareBtn").addEventListener("click", () => {
+		sharePreview.value = shareMarkdown();
+		shareStatus.textContent = "";
+		shareOverlay.classList.add("show");
+	});
+	const closeShare = () => shareOverlay.classList.remove("show");
+	document.getElementById("shareClose").addEventListener("click", closeShare);
+	document.getElementById("shareCancel").addEventListener("click", closeShare);
+	shareOverlay.addEventListener("click", (e) => { if (e.target === shareOverlay) closeShare(); });
+	document.getElementById("shareCopy").addEventListener("click", async () => {
+		try {
+			await navigator.clipboard.writeText(sharePreview.value);
+			shareStatus.textContent = "已复制全文";
+		} catch {
+			shareStatus.textContent = "复制失败，请手动选择文本";
+		}
+	});
+
+	render();
+
+	// open / close popup menu
+	entryBtn.addEventListener("click", (e) => {
+		e.stopPropagation();
+		menu.classList.toggle("show");
+		entryBtn.classList.toggle("open");
+	});
+	document.addEventListener("click", (e) => {
+		if (!menu.contains(e.target)) {
+			menu.classList.remove("show");
+			entryBtn.classList.remove("open");
+		}
+	});
+	document.addEventListener("keydown", (e) => {
+		if (e.key === "Escape") {
+			menu.classList.remove("show");
+			entryBtn.classList.remove("open");
+			overlay.classList.remove("show");
+			confirmOverlay.classList.remove("show");
+			closePops();
+			closeShare();
+			pendingFamily = null;
+		}
+		if (e.ctrlKey && e.key === ",") { e.preventDefault(); openSettings(); }
+	});
+
+	// theme submenu
+	let themeChoice = "跟随系统";
+	document.querySelectorAll("[data-theme-choice]").forEach((item) => {
+		item.addEventListener("click", (e) => {
+			e.stopPropagation();
+			themeChoice = item.dataset.themeChoice;
+			document.getElementById("themeValue").textContent = themeChoice + " ";
+			document.querySelectorAll("[data-theme-choice]").forEach((i) => i.classList.remove("selected"));
+			item.classList.add("selected");
+			const root = document.documentElement;
+			if (themeChoice === "深色") root.dataset.theme = "dark";
+			else if (themeChoice === "浅色") root.dataset.theme = "light";
+			else root.dataset.theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+			showToast("外观已切换为：" + themeChoice);
+		});
+	});
+
+	// menu actions
+	const tabTitles = { general: "通用", appearance: "外观", providers: "模型与提供商", shortcuts: "快捷键", about: "关于" };
+	const tabBodies = {
+		general: document.getElementById("settingsBody").innerHTML,
+		appearance: `<h2>外观</h2>
+			<div class="setting-row"><div><div class="label">主题</div><div class="desc">深色 / 浅色 / 跟随系统</div></div>
+				<div class="seg" id="segTheme"><button data-v="light">浅色</button><button data-v="light2">跟随系统</button><button data-v="dark">深色</button></div></div>
+			<div class="setting-row"><div><div class="label">字体大小</div><div class="desc">聊天区域文字大小</div></div><select><option>小</option><option selected>标准</option><option>大</option></select></div>`,
+		providers: `<h2>模型与提供商</h2>
+			<div class="setting-row"><div><div class="label">OpenAI 兼容提供商</div><div class="desc">已配置 3 个 · 合并到 pi 配置</div></div><button class="pill">管理</button></div>
+			<div class="setting-row"><div><div class="label">默认模型</div><div class="desc">deepseek-v4.1-flash · opencsg</div></div><select><option>deepseek-v4.1-flash</option><option>gpt-4o</option></select></div>`,
+		shortcuts: `<h2>快捷键</h2>
+			<div class="setting-row"><div><div class="label">新聊天</div><div class="desc">打开一个空白会话</div></div><span class="kbd-group"><span>Ctrl</span><span>N</span></span></div>
+			<div class="setting-row"><div><div class="label">打开设置</div><div class="desc">统一设置面板</div></div><span class="kbd-group"><span>Ctrl</span><span>,</span></span></div>
+			<div class="setting-row"><div><div class="label">切换模型家族</div><div class="desc">已开启会话会二次确认</div></div><span class="kbd-group"><span>Ctrl D</span><span>K</span><span>G</span></span></div>
+			<div class="setting-row"><div><div class="label">同家族内切换模型</div><div class="desc">切家族后回到该家族默认模型</div></div><span class="kbd-group"><span>Alt</span><span>↑ ↓</span></span></div>
+			<div class="setting-row"><div><div class="label">推理开关</div><div class="desc">模型不支持时显示「不可用」</div></div><span class="kbd-group"><span>Alt</span><span>← →</span></span></div>`,
+		about: `<h2>关于</h2>
+			<div class="setting-row"><div class="label">版本</div><span class="desc">Skiff 0.x · 原型演示</span></div>
+			<div class="setting-row"><div class="label">pi 连接状态</div><span class="desc" style="color:var(--dot-on)">● 已连接 · 本地工作区</span></div>`
+	};
+	const overlay = document.getElementById("overlay");
+	const body = document.getElementById("settingsBody");
+
+	function openSettings(tab = "general") {
+		menu.classList.remove("show");
+		entryBtn.classList.remove("open");
+		selectTab(tab);
+		overlay.classList.add("show");
+	}
+	function selectTab(tab) {
+		document.querySelectorAll(".settings-nav .nav-item").forEach((n) => n.classList.toggle("active", n.dataset.tab === tab));
+		body.innerHTML = tabBodies[tab];
+		bindToggles();
+	}
+	function bindToggles() {
+		body.querySelectorAll("[data-toggle]").forEach((t) => t.addEventListener("click", () => t.classList.toggle("on")));
+		const seg = body.querySelector("#segTheme");
+		if (seg) seg.querySelectorAll("button").forEach((b) => b.addEventListener("click", () => {
+			seg.querySelectorAll("button").forEach((x) => x.classList.remove("on"));
+			b.classList.add("on");
+			document.documentElement.dataset.theme = b.dataset.v === "dark" ? "dark" : "light";
+		}));
+	}
+	document.querySelectorAll("[data-action]").forEach((el) => {
+		el.addEventListener("click", (e) => {
+			e.stopPropagation();
+			const action = el.dataset.action;
+			if (action === "settings") openSettings("general");
+			else if (action === "providers") openSettings("providers");
+			else if (action === "usage") showToast("用量统计（占位）：本期 0 / 128k tok");
+			else if (action === "disconnect") { menu.classList.remove("show"); entryBtn.classList.remove("open"); showToast("已断开 pi 连接（占位）"); }
+		});
+	});
+	document.querySelectorAll(".settings-nav .nav-item").forEach((n) => n.addEventListener("click", () => selectTab(n.dataset.tab)));
+	overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.classList.remove("show"); });
+</script>
+</body>
+</html>

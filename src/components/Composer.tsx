@@ -96,7 +96,7 @@ export function Composer({
 		return () => { cancelled = true; };
 	}, [connected, getCommands]);
 	useEffect(() => {
-		const focus = (event: globalThis.KeyboardEvent) => { if (event.ctrlKey && event.key.toLowerCase() === "k") { event.preventDefault(); inputRef.current?.focus(); } };
+		const focus = (event: globalThis.KeyboardEvent) => { if (!event.isComposing && event.keyCode !== 229 && !document.querySelector("dialog[open]") && event.ctrlKey && event.key.toLowerCase() === "k") { event.preventDefault(); inputRef.current?.focus(); } };
 		window.addEventListener("keydown", focus);
 		return () => window.removeEventListener("keydown", focus);
 	}, []);
@@ -135,7 +135,7 @@ export function Composer({
 	};
 
 	const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-		if (event.nativeEvent.isComposing || event.keyCode === 229) return;
+		if (event.nativeEvent.isComposing || event.keyCode === 229 || document.querySelector("dialog[open]")) return;
 		if (event.ctrlKey && event.shiftKey && event.key === "Backspace" && streaming) { event.preventDefault(); onAbort(); return; }
 		if (event.key === "Escape") {
 			event.preventDefault();

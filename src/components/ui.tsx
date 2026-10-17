@@ -54,9 +54,18 @@ export function Dialog({ onClose, onEscape, pending, initialFocus, returnFocusSe
 		// committed the replacement trigger and removed the dialog subtree.
 		return () => { dialog?.close(); queueMicrotask(() => restoreFocus(target, returnFocusSelector)); };
 	}, []);
-	return <dialog {...props} ref={ref} data-variant={variant} className={`ui-dialog ${className}`} onClick={(event) => { props.onClick?.(event); if (variant === "drawer" && event.target === event.currentTarget && !pending) onClose(); }} onCancel={(event) => { event.preventDefault(); if (!pending) (onEscape ?? onClose)(); }} onKeyDown={(event) => {
+	return <dialog {...props} ref={ref} data-variant={variant} className={`ui-dialog ${className}`} onClick={(event) => { props.onClick?.(event); if (variant === "drawer" && event.target === event.currentTarget && !pending) onClose(); }} onCancel={(event) => { event.preventDefault(); event.stopPropagation(); if (!pending) (onEscape ?? onClose)(); }} onKeyDown={(event) => {
 		props.onKeyDown?.(event);
-		if (event.key === "Escape") event.stopPropagation();
+		if (event.key === "Escape") {
+			event.stopPropagation();
+			if (!event.defaultPrevented) {
+				// Handle Escape before the browser's close watcher. In particular,
+				// a disabled submit button can leave focus outside the form while
+				// a save is pending; native cancellation must still stay blocked.
+				event.preventDefault();
+				if (!pending) (onEscape ?? onClose)();
+			}
+		}
 		if (event.key !== "Tab" || event.defaultPrevented) return;
 		const focusable = Array.from(event.currentTarget.querySelectorAll<HTMLElement>("button, input, textarea, select, a[href], summary, [tabindex]")).filter((item) => !item.matches(":disabled, [hidden], [tabindex='-1']") && item.getClientRects().length > 0);
 		const target = event.shiftKey ? focusable[focusable.length - 1] : focusable[0];
@@ -65,6 +74,8 @@ export function Dialog({ onClose, onEscape, pending, initialFocus, returnFocusSe
 }
 
 const popovers: symbol[] = [];
+const popoverClosers = new Map<symbol, () => void>();
+export const dismissPopovers = () => { for (const close of popoverClosers.values()) close(); };
 export function Popover({ anchor, onClose, className = "", children, ...props }: HTMLAttributes<HTMLDivElement> & { anchor: RefObject<HTMLElement>; onClose: () => void }) {
 	const ref = useRef<HTMLDivElement>(null);
 	const closeRef = useRef(onClose);
@@ -89,13 +100,14 @@ export function Popover({ anchor, onClose, className = "", children, ...props }:
 	}, [anchor]);
 	useEffect(() => {
 		const id = Symbol(); popovers.push(id);
+		popoverClosers.set(id, () => closeRef.current());
 		const key = (event: KeyboardEvent) => {
 			if (event.key !== "Escape" || popovers[popovers.length - 1] !== id) return;
 			event.preventDefault(); event.stopImmediatePropagation(); closeRef.current(); restoreFocus(anchor.current);
 		};
 		const outside = (event: PointerEvent) => { if (popovers[popovers.length - 1] === id && !ref.current?.contains(event.target as Node) && !anchor.current?.contains(event.target as Node)) closeRef.current(); };
 		document.addEventListener("keydown", key, true); document.addEventListener("pointerdown", outside);
-		return () => { popovers.splice(popovers.indexOf(id), 1); document.removeEventListener("keydown", key, true); document.removeEventListener("pointerdown", outside); };
+		return () => { popovers.splice(popovers.indexOf(id), 1); popoverClosers.delete(id); document.removeEventListener("keydown", key, true); document.removeEventListener("pointerdown", outside); };
 	}, [anchor]);
 	return <div {...props} ref={ref} role={props.role ?? "dialog"} className={`ui-popover ${className}`} style={{ ...props.style, ...position }}>{children}</div>;
 }

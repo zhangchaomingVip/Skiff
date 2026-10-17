@@ -30,6 +30,7 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 			route("kimi", "r3", [{ modelId: "kimi-k2", alias: "", inputCost: 0.6, outputCost: 2.4, cacheReadCost: 0.6, cacheWriteCost: 0.6, currency: "CNY", maxTokens: 8192, contextWindow: 128000 }], { reasoning: true }),
 		] },
 		{ id: "glm", displayName: "GLM", defaultRouteId: null, routes: [] },
+		{ id: "auto", displayName: "Auto", defaultRouteId: null, routes: [] },
 	];
 	if (fixture) {
 		families[0].routes[1].models.push({ ...families[0].routes[0].models[1], inputCost: .14, outputCost: .28 });
