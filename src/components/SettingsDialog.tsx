@@ -4,12 +4,14 @@ import { setThemePreference, useThemePreference } from "../theme";
 import { ArchivedSessions } from "./ArchivedSessions";
 import { FamiliesSettingsContent, type FamiliesSettingsHandle, type FamiliesSettingsProps } from "./FamiliesSettings";
 import { Icon } from "./Icon";
+import { PromptSettings } from "./PromptSettings";
 import { Button, Dialog, IconButton } from "./ui";
 import { isMacPlatform, settingsCategories, type SettingsCategory, type SettingsRestrictions } from "./settingsNavigation";
 
-export function SettingsDialog({ initialCategory, restrictions, models, archives, onRetryModels, onClose }: {
+export function SettingsDialog({ initialCategory, restrictions, prompt, models, archives, onRetryModels, onClose }: {
 	initialCategory: SettingsCategory;
 	restrictions: SettingsRestrictions;
+	prompt: ComponentProps<typeof PromptSettings>;
 	models: Omit<FamiliesSettingsProps, "onLockChange">;
 	archives: ComponentProps<typeof ArchivedSessions>;
 	onRetryModels: () => void;
@@ -33,6 +35,7 @@ export function SettingsDialog({ initialCategory, restrictions, models, archives
 				{category === "appearance" && <section aria-labelledby="appearance-title"><h2 id="appearance-title">外观</h2><p className="muted">选择应用主题，立即生效。</p><div className="settings-themes" role="group" aria-label="应用主题">{([
 					["system", "跟随系统", "monitor"], ["light", "浅色", "sun"], ["dark", "深色", "moon"],
 				] as const).map(([value, label, icon]) => <Button key={value} variant="setting" aria-pressed={theme === value} onClick={() => setThemePreference(value)}><Icon name={icon} />{label}{theme === value && <Icon name="check" size={14} />}</Button>)}</div></section>}
+				{category === "prompt" && <section aria-labelledby="prompt-title"><h2 id="prompt-title">系统提示词</h2><p className="muted">附加到 pi 系统提示词末尾（--append-system-prompt），随每次会话启动生效。保存后当前会话会重启。</p><fieldset className="settings-config" disabled={!!restrictions.prompt}><PromptSettings {...prompt} /></fieldset>{restrictions.prompt && <p className="settings-restriction">{restrictions.prompt}</p>}</section>}
 				{category === "models" && <><fieldset className="settings-config" disabled={!!restrictions.models}><FamiliesSettingsContent {...models} ref={editor} onLockChange={updateInteraction} /></fieldset>{models.configError && !locked && <Button disabled={!!restrictions.models} onClick={onRetryModels}>重新读取配置</Button>}</>}
 				{category === "archives" && <section aria-labelledby="archives-title"><h2 id="archives-title">归档会话</h2><p className="muted">查看、恢复或删除已归档的会话。</p><ArchivedSessions {...archives} busy={archives.busy || !!restrictions.archives} /></section>}
 				{category === "shortcuts" && <section aria-labelledby="shortcuts-title"><h2 id="shortcuts-title">快捷键</h2><p className="muted">设置及其他模态窗口打开期间，后台聊天快捷键暂停。</p><dl className="settings-shortcuts">{[

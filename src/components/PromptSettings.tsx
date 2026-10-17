@@ -1,8 +1,8 @@
-import { Dialog, IconButton, TextArea, Button } from "./ui";
 import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { DEFAULT_APPEND_PROMPT, loadAppendPrompt, saveAppendPrompt } from "../chat/prompt";
 import { Icon } from "./Icon";
+import { Button, TextArea } from "./ui";
 
 interface SystemPromptSection { name: string; text: string }
 
@@ -11,7 +11,7 @@ const SECTION_ORDER = ["preamble", "tools", "rules", "docs", "project_context", 
 const orderOf = (name: string) => { const index = SECTION_ORDER.indexOf(name); return index < 0 ? SECTION_ORDER.length : index; };
 
 /** Edits the extra system prompt Skiff passes to pi, and shows pi's current assembled prompt. */
-export function PromptDialog({ sessionPath, onSaved, onClose }: { sessionPath?: string; onSaved: () => void; onClose: () => void }) {
+export function PromptSettings({ sessionPath, onSaved }: { sessionPath?: string; onSaved: () => void }) {
 	const [text, setText] = useState(loadAppendPrompt);
 	const [sections, setSections] = useState<SystemPromptSection[]>();
 	const [viewerError, setViewerError] = useState<string>();
@@ -26,9 +26,7 @@ export function PromptDialog({ sessionPath, onSaved, onClose }: { sessionPath?: 
 		finally { setLoading(false); }
 	};
 	const save = () => { saveAppendPrompt(text); onSaved(); };
-	return <Dialog onClose={onClose}  className="project-dialog prompt-dialog" aria-labelledby="prompt-dialog-title" >
-		<div className="dialog-heading"><h2 id="prompt-dialog-title">系统提示词</h2><IconButton type="button"  onClick={onClose} aria-label="关闭提示词设置"><Icon name="close" /></IconButton></div>
-		<p className="muted">附加到 pi 系统提示词末尾（--append-system-prompt），随每次会话启动生效。保存后当前会话会重启。</p>
+	return <div className="prompt-settings">
 		<label htmlFor="append-prompt">附加指令</label>
 		<TextArea id="append-prompt" className="prompt-input" rows={8} value={text} onChange={(event) => setText(event.target.value)} placeholder="例如：每次调用工具前先用一句话说明你要做什么。" spellCheck={false} />
 		<div className="prompt-hint"><span>默认指令会让模型像 Codex 一样在工具前先说一句旁白。</span><Button type="button" variant="ghost" size="compact" onClick={() => setText(DEFAULT_APPEND_PROMPT)}>恢复默认</Button></div>
@@ -43,6 +41,6 @@ export function PromptDialog({ sessionPath, onSaved, onClose }: { sessionPath?: 
 			</details>)}
 		</details>
 
-		<div className="dialog-actions"><Button type="button" variant="ghost" onClick={onClose}>取消</Button><Button type="button" variant="primary" size="primary" onClick={save}>保存并重启</Button></div>
-	</Dialog>;
+		<div className="dialog-actions"><Button type="button" variant="primary" size="primary" onClick={save}>保存并重启</Button></div>
+	</div>;
 }

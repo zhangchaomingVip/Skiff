@@ -30,16 +30,13 @@ const checkLayout = async () => {
 try {
 	await page.goto(`${origin}/tests/preview.html?fixture=archive&theme=light`);
 	await ready();
-	await page.getByRole("button", { name: "诊断日志", exact: true }).click();
-	assert.equal(await page.getByRole("button", { name: "诊断日志", exact: true }).getAttribute("aria-pressed"), "true");
-	await page.getByRole("button", { name: "诊断日志", exact: true }).click();
+	assert.equal(await page.locator(".chat-header button[aria-label='诊断日志']").count(), 0, "Header must not expose the raw log drawer");
+	assert.equal(await page.locator(".chat-header button[aria-haspopup='dialog']").count(), 0, "Header must not expose background sessions");
 	await page.getByRole("button", { name: "分享对话", exact: true }).click();
 	assert.match(await page.getByRole("textbox", { name: "对话分享内容" }).inputValue(), /当前会话/);
 	await page.keyboard.press("Control+Comma"); assert.equal(await dialog().count(), 0);
 	await page.keyboard.press("Escape");
-	await page.getByRole("button", { name: "系统提示词", exact: true }).click();
-	await page.keyboard.press("Control+Comma"); assert.equal(await dialog().count(), 0);
-	await page.keyboard.press("Escape");
+	assert.equal(await page.locator(".chat-header button[aria-label='系统提示词']").count(), 0, "Prompt entry must live in settings only");
 	assert.equal(await page.locator(".chat-header .header-settings").count(), 0);
 	assert.equal(await page.locator(".chat-header button[aria-label^='主题']").count(), 0);
 	await page.getByRole("button", { name: "设置", exact: true }).click();
@@ -58,6 +55,12 @@ try {
 	await open();
 	await checkLayout();
 	await shot("light-default");
+	await button("系统提示词").click();
+	assert.equal(await dialog().getByRole("textbox", { name: "附加指令" }).count(), 1, "Settings must host the prompt editor");
+	assert.equal(await dialog().getByRole("button", { name: "保存并重启" }).count(), 1);
+	await checkLayout();
+	await shot("prompt");
+	await button("外观").click();
 	await button("深色").click();
 	assert.equal(await page.locator("html").getAttribute("data-theme"), "dark");
 	assert.equal(await page.evaluate(() => localStorage.getItem("skiff.theme")), "dark");
@@ -218,6 +221,7 @@ try {
 	await page.evaluate(() => { for (const process of window.skiffPreview.processes.values()) clearTimeout(process.timer); });
 	await open();
 	assert.equal(await button("模型与提供商").isDisabled(), true);
+	assert.equal(await button("系统提示词").isDisabled(), true);
 	await button("深色").click();
 	await button("快捷键").click();
 	await page.keyboard.press("Control+Shift+Backspace");

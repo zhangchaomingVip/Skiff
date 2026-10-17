@@ -245,13 +245,7 @@ details[open] > summary .disclosure { transform: rotate(90deg); }
 .composer-actions { display: flex; flex-shrink: 0; align-items: center; gap: var(--space-3); min-width: 0; }
 .composer-hint { max-width: var(--content-width); margin: var(--space-2) auto 0; padding: 0 var(--space-1); display: flex; justify-content: space-between; font-size: var(--font-size-sm); color: var(--muted); }
 
-/* Diagnostics and project dialog */
-.raw-panel { position: relative; flex: 0 0 350px; min-width: 0; border-left: 1px solid var(--border); }
-.raw-close { position: absolute; right: var(--space-2); top: var(--space-2); }
-.raw { display: flex; flex-direction: column; height: 100%; background: var(--panel-2); }
-.raw-head { padding: var(--space-4) var(--space-4); border-bottom: 1px solid var(--border); color: var(--muted); font-size: var(--font-size-sm); }
-.raw-body { flex: 1; overflow: auto; padding: var(--space-4); }
-.raw-body pre { margin: 0; white-space: pre-wrap; word-break: break-word; color: var(--secondary); font-size: var(--font-size-sm); }
+/* Project dialog */
 .project-dialog { width: min(460px, calc(100vw - 32px)); }
 .offer-dialog { width: min(560px, calc(100vw - 32px)); }
 .offer-dialog-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); }
@@ -274,7 +268,6 @@ details[open] > summary .disclosure { transform: rotate(90deg); }
 .project-dialog p { font-size: var(--font-size-sm); margin: var(--space-2) 0 var(--space-5); }
 .project-dialog label { display: block; font-size: var(--font-size-sm); margin-bottom: var(--space-2); }
 .project-dialog input { width: 100%; border: 1px solid var(--border); border-radius: var(--radius-md); padding: var(--space-2) var(--space-3); color: var(--text); background: var(--panel-2); }
-.prompt-dialog { width: min(560px, calc(100vw - 32px)); }
 .share-dialog { width: min(720px, calc(100vw - 32px)); }
 .share-dialog .dialog-heading { align-items: flex-start; }
 .share-dialog .dialog-heading p { margin: var(--space-1) 0 0; }
@@ -285,6 +278,9 @@ details[open] > summary .disclosure { transform: rotate(90deg); }
 .prompt-input { display: block; width: 100%; resize: vertical; min-height: 160px; border: 1px solid var(--border); border-radius: var(--radius-md); padding: var(--space-3); color: var(--text); background: var(--panel-2); font: inherit; font-size: var(--font-size-sm); line-height: 1.7; }
 .prompt-input:focus { outline: none; border-color: var(--accent); }
 .prompt-hint { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-top: var(--space-2); color: var(--muted); font-size: var(--font-size-sm); }
+.prompt-settings { display: flex; flex-direction: column; gap: var(--space-2); }
+.prompt-settings > label { font-size: var(--font-size-sm); color: var(--secondary); }
+.prompt-settings .dialog-actions { position: sticky; bottom: calc(-1 * var(--space-5)); z-index: 1; margin-top: var(--space-4); padding-block: var(--space-3); background: var(--surface); }
 .prompt-system { margin-top: var(--space-4); padding-top: var(--space-3); border-top: 1px solid var(--border); }
 .prompt-system > summary { display: flex; align-items: center; gap: 6px; cursor: pointer; color: var(--secondary); font-size: var(--font-size-sm); list-style: none; }
 .prompt-system > summary::-webkit-details-marker { display: none; }
@@ -294,7 +290,7 @@ details[open] > summary .disclosure { transform: rotate(90deg); }
 .prompt-section-size { color: var(--muted); font-variant-numeric: tabular-nums; }
 .prompt-section > pre { margin: 0; padding: 10px; border-top: 1px solid var(--border); max-height: 220px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--font-size-sm); }
 .dialog-actions { display: flex; justify-content: flex-end; gap: var(--space-2); margin-top: var(--space-6); }
-@media (max-width: 1100px) { .raw-panel { position: absolute; right: 0; top: 0; bottom: 0; width: min(380px, 85%); z-index: 3; box-shadow: -10px 0 30px var(--shadow-color-soft); } .header-project { display: none; } }
+@media (max-width: 1100px) { .header-project { display: none; } }
 @media (max-width: 760px) {
 	.sidebar { width: 210px; flex-basis: 210px; padding: 0 var(--space-2); }
 	.shortcut { display: none; }
@@ -651,7 +647,7 @@ details[open] > summary .disclosure { transform: rotate(90deg); }
 	.settings-nav .ui-button { width: auto; margin: 0; padding-inline: var(--space-2); }
 	.settings-nav p { flex-basis: 100%; margin: var(--space-1); }
 	.settings-content { flex: 1; padding: var(--space-3); }
-	.family-settings-content .dialog-actions { bottom: calc(-1 * var(--space-3)); }
+	.family-settings-content .dialog-actions, .prompt-settings .dialog-actions { bottom: calc(-1 * var(--space-3)); }
 	.family-settings-content .family-layout { flex-direction: column; gap: var(--space-2); }
 	.family-settings-content .family-nav { position: static; width: 100%; flex-direction: row; flex-wrap: wrap; }
 	.family-settings-content .family-panel { width: 100%; }
@@ -933,14 +929,10 @@ span.provider-mark.generic { display: inline-flex; align-items: center; justify-
 .search-source pre, .history-search-messages pre { white-space: pre-wrap; overflow-wrap: anywhere; font-family: inherit; font-size: var(--font-size-md); }
 .draft-notice { margin: 0 auto; padding: var(--space-1) var(--space-3); max-width: 860px; color: var(--secondary); font-size: var(--font-size-sm); }
 .history-search-messages article { padding: var(--space-3); margin: var(--space-2) 0; }
-.background-sessions > button { width: 100%; display: flex; justify-content: flex-start; flex-wrap: wrap; text-align: left; white-space: normal; }
-.background-sessions > button > span:last-child { margin-left: auto; }
-@media (max-width: 760px) { .header-actions > button[aria-haspopup="dialog"] { max-width: 150px; white-space: normal; font-size: var(--font-size-sm); } }
+
 }
 
 @layer components {
 .ui-dialog.history-search-dialog { width: min(800px, 94vw); max-height: 86dvh; overflow: auto; }
 .history-search-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
-.background-sessions .ui-button-content { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; width: 100%; white-space: normal; }
-.background-sessions .ui-button-content > span:last-child { color: var(--secondary); margin-left: auto; }
 }

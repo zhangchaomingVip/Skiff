@@ -2,7 +2,6 @@ import type { Delivery } from "./chat/interactions";
 import { drafts, hasDraft } from "./chat/drafts";
 import { useConversationSearch } from "./chat/useConversationSearch";
 import { conversationLabel } from "./chat/conversationDisplay";
-import { BackgroundSessions } from "./components/BackgroundSessions";
 import { HistorySearchDialog } from "./components/HistorySearchDialog";
 import { SidebarPresentation } from "./components/SidebarPresentation";
 import { dismissPopovers, IconButton, Button, Tooltip } from "./components/ui";
@@ -17,7 +16,6 @@ import { familyFromProvider } from "./chat/modelDisplay";
 import { reconcile, type RuntimeOffer } from "./chat/modelFamilies";
 import type { ModelInfo } from "./chat/types";
 import { VoyageWorkspace } from "./components/VoyageWorkspace";
-import { RawDrawer } from "./components/RawDrawer";
 import { Sidebar } from "./components/Sidebar";
 import { LauncherView } from "./components/LauncherView";
 import { TitleBar } from "./components/TitleBar";
@@ -26,7 +24,6 @@ import { Icon } from "./components/Icon";
 import type { ImageAttachment } from "./chat/types";
 import { SettingsDialog } from "./components/SettingsDialog";
 import { isMacPlatform, type SettingsCategory, type SettingsRestrictions } from "./components/settingsNavigation";
-import { PromptDialog } from "./components/PromptDialog";
 import { SearchDialog } from "./components/SearchDialog";
 import { ShareDialog } from "./components/ShareDialog";
 import { ResizeSeparator } from "./components/ResizeSeparator";
@@ -56,9 +53,8 @@ export default function App() {
 	const modelFamilies = useModelFamilies();
 	const pool = usePiSessions(activeChat?.id, allChats, library.workspace?.projects ?? [], modelFamilies.offers, { config: modelFamilies.config, ready: !modelFamilies.loading }, library.updateChat);
 	const { session } = pool;
-	const { state, connected, rawLines, actions } = session;
+	const { state, connected, actions } = session;
 	const { modelNotice, setModelNotice, failover, routeAuthorization: routeAuthorizationPrompt } = session;
-	const [rawOpen, setRawOpen] = useState(false);
 	const [sidebarOpen, setSidebarOpen] = useState(() => { if (window.innerWidth <= 760) return false; try { return localStorage.getItem("skiff.sidebar.open") !== "false"; } catch { return true; } });
 	useEffect(() => { try { localStorage.setItem("skiff.sidebar.open", String(sidebarOpen)); } catch { /* Layout can still be used without storage. */ } }, [sidebarOpen]);
 	const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth);
@@ -71,7 +67,6 @@ export default function App() {
 	}, []);
 	const [projectDialogOpen, setProjectDialogOpen] = useState(false);
 	const [settingsCategory, setSettingsCategory] = useState<SettingsCategory>();
-	const [promptDialogOpen, setPromptDialogOpen] = useState(false);
 	const [searchDialogOpen, setSearchDialogOpen] = useState(false);
 	const [shareDialogOpen, setShareDialogOpen] = useState(false);
 	const search = useWebSearch(actions, connected, session.reconnect, session.owner, session.isCurrent);
@@ -102,6 +97,7 @@ export default function App() {
 	const navigationDisabled = search.busy || !library.workspace;
 	const locked = navigationDisabled || session.loading;
 	const settingsRestrictions = useMemo<SettingsRestrictions>(() => ({
+		prompt: busy ? "当前会话运行中，请等待完成后修改系统提示词" : locked ? "正在加载会话，请稍后再试" : undefined,
 		models: busy ? "当前会话运行中，请等待完成后修改模型配置" : locked || modelFamilies.loading ? "正在加载会话或更新配置，请稍后再试" : undefined,
 		archives: locked ? "正在加载会话或切换工作区，请稍后再试" : undefined,
 	}), [busy, locked, modelFamilies.loading]);
@@ -117,10 +113,9 @@ export default function App() {
 	const narrowViewport = viewportWidth <= 760;
 	useEffect(() => { if (narrowViewport && settingsCategory) setSidebarOpen(false); }, [narrowViewport, settingsCategory]);
 	const desktopSidebarOpen = sidebarOpen && !narrowViewport;
-	const rawColumnWidth = rawOpen && currentView === "chat" && viewportWidth > 1100 ? 350 : 0;
-	const sidebarBounds = { min: 200, max: Math.max(200, Math.min(420, viewportWidth - rawColumnWidth - 416)) };
+	const sidebarBounds = { min: 200, max: Math.max(200, Math.min(420, viewportWidth - 416)) };
 	const shownSidebarWidth = Math.max(sidebarBounds.min, Math.min(sidebarWidth, sidebarBounds.max));
-	const workspaceWidth = viewportWidth - (desktopSidebarOpen ? shownSidebarWidth + 8 : 0) - rawColumnWidth;
+	const workspaceWidth = viewportWidth - (desktopSidebarOpen ? shownSidebarWidth + 8 : 0);
 	const voyageBounds = { min: 240, max: Math.max(240, Math.min(480, workspaceWidth - 368)) };
 	const shownVoyageWidth = Math.max(voyageBounds.min, Math.min(voyageWidth, voyageBounds.max));
 	const setSidebarWidthFromDrag = useCallback((value: number) => setSidebarWidth(value), []);
@@ -256,22 +251,20 @@ export default function App() {
 						<div className="header-title-row"><span>{currentView === "launcher" ? "主页" : activeChat ? conversationLabel(activeChat, visibleChats) : "新聊天"}</span>{currentView === "chat" && activeProject && <span className="header-project" title={activeProject.path}><Icon name="folder" size={14} />{activeProject.name}</span>}</div>
 						{currentView === "launcher" ? <span className="header-subtitle">模型优先的任务入口</span> : headerModel && <span className="header-model" title={`${headerFamily?.name ?? headerModel.familyName ?? headerModel.provider} · ${headerModel.providerName ?? headerModel.provider} · ${headerModel.id}`}><span>{headerFamily?.name ?? headerModel.familyName ?? headerModel.provider}</span><span className="header-model-sep">·</span><span>{headerModel.modelId ?? headerModel.id}</span><span className="header-model-sep">·</span><span>{headerModel.providerName ?? headerModel.provider}</span></span>}
 					</div>
-					<div className="header-actions"><BackgroundSessions statuses={pool.statuses} activeId={activeChat?.id} chats={visibleChats} onSelect={selectChat} disabled={navigationDisabled} />{busy && <span className="working"><span className="dot busy" />{state.isStreaming ? "运行中" : "等待响应"}</span>}{currentView === "chat" && state.messages.length > 0 && <Tooltip text="分享对话"><IconButton onClick={() => setShareDialogOpen(true)} disabled={busy} aria-label="分享对话"><Icon name="share" /></IconButton></Tooltip>}<Tooltip text="系统提示词"><IconButton onClick={() => setPromptDialogOpen(true)} disabled={busy} aria-label="系统提示词"><Icon name="message" /></IconButton></Tooltip>{!desktopSidebarOpen && <Tooltip text="设置"><IconButton className="header-settings" onClick={() => openSettings()} aria-label="设置"><Icon name="settings" /></IconButton></Tooltip>}<Tooltip text="诊断日志"><IconButton className={`${rawOpen ? "active" : ""}`} onClick={() => setRawOpen((open) => !open)} aria-label="诊断日志" aria-pressed={rawOpen}><Icon name="code" /></IconButton></Tooltip></div>
+					<div className="header-actions">{busy && <span className="working"><span className="dot busy" />{state.isStreaming ? "运行中" : "等待响应"}</span>}{currentView === "chat" && state.messages.length > 0 && <Tooltip text="分享对话"><IconButton onClick={() => setShareDialogOpen(true)} disabled={busy} aria-label="分享对话"><Icon name="share" /></IconButton></Tooltip>}{!desktopSidebarOpen && <Tooltip text="设置"><IconButton className="header-settings" onClick={() => openSettings()} aria-label="设置"><Icon name="settings" /></IconButton></Tooltip>}</div>
 				</header>
 				{retrieval.notice && <div className="workspace-alert" role="status">{retrieval.notice}<Button variant="ghost" onClick={retrieval.closeNotice}>关闭</Button></div>}
 				{library.error && <div className="workspace-alert" role="alert"><span>{library.error}</span><Button variant="ghost" onClick={library.workspace ? library.clearError : () => void library.initialize()} disabled={library.loading}>{library.workspace ? "关闭" : "重试"}</Button></div>}
 				{currentView === "launcher" && (session.loading || (!connected && state.lastError)) && <div className="workspace-alert" role={session.loading ? "status" : "alert"} aria-label={session.loading ? "正在加载会话" : undefined}><span>{session.loading ? "正在加载会话…" : state.lastError}</span>{!session.loading && <Button variant="ghost" onClick={() => session.reconnect()}>重新连接</Button>}</div>}
 				<div className="body">
 					{currentView === "launcher" ? <LauncherView activeChat={activeChat} activeProject={activeProject} projects={library.workspace?.projects ?? []} chats={visibleChats} offers={modelFamilies.offers} recentOfferIds={recentOfferIds} familyDefaults={modelFamilies.families} disabled={navigationDisabled || modelFamilies.loading} navigationDisabled={navigationDisabled} loading={modelFamilies.loading} error={modelFamilies.error} onResume={resumeChat} onSelectProject={selectProject} onAddProject={() => setProjectDialogOpen(true)} onManageProviders={() => openSettings("models")} onRetryModels={modelFamilies.refresh} onStartChat={startLauncherChat} onOpenChat={selectChat} /> : <VoyageWorkspace draftTarget={activeChat && activeProject ? { chatId: activeChat.id, cwd: activeProject.path, sessionFile: activeChat.hasMessages ? activeChat.sessionFile : undefined } : undefined} revealMessage={retrieval.reveal} modelNotice={modelNotice} key={`${session.owner.id ?? "loading"}:${session.owner.cwd ?? ""}`} state={displayState} loading={session.loading} connected={connected} pending={session.pending} actions={actions} onSend={send} onReconnect={session.reconnect} projectName={activeProject?.name} search={search} onConfigureSearch={() => setSearchDialogOpen(true)} failover={failover} routeAuthorization={routeAuthorizationPrompt} railWidth={shownVoyageWidth} availableWidth={workspaceWidth} onRailWidth={setVoyageWidthFromDrag} onRailWidthCommit={commitVoyageWidth} />}
-					{rawOpen && currentView === "chat" && <div className="raw-panel"><IconButton className="raw-close" onClick={() => setRawOpen(false)} aria-label="关闭诊断日志"><Icon name="close" /></IconButton><RawDrawer lines={rawLines} /></div>}
 				</div>
 				{shareDialogOpen && currentView === "chat" && <ShareDialog title={activeChat?.title} messages={state.messages} onClose={() => setShareDialogOpen(false)} />}
 			</main>
 			</div>
 			{retrieval.historyView && <HistorySearchDialog {...retrieval.historyView} onClose={retrieval.closeHistory} />}
 			{projectDialogOpen && <ProjectDialog onAdd={library.addProject} onClose={() => setProjectDialogOpen(false)} />}
-			{settingsCategory && <SettingsDialog onRetryModels={() => void modelFamilies.refresh()} initialCategory={settingsCategory} restrictions={settingsRestrictions} models={{ configError: modelFamilies.error, families: modelFamilies.families, relays: modelFamilies.relays, autoFailover: modelFamilies.config?.autoFailover ?? false, usdCnyRate: modelFamilies.usdCnyRate, onSaveRate: modelFamilies.setUsdCnyRate, onSaveRelay: modelFamilies.saveRelay, onDeleteRelay: modelFamilies.deleteRelay, onSetRelayEnabled: modelFamilies.setRelayEnabled, onSaveRoute: modelFamilies.saveRoute, onDeleteRoute: modelFamilies.deleteRoute, onReorderRoutes: modelFamilies.reorderRoutes, onSetDefaultRoute: modelFamilies.setDefaultRoute, onAutoFailover: modelFamilies.setAutoFailover, onTest: modelFamilies.test, onCancelTest: modelFamilies.cancelTest, onDiscover: modelFamilies.discover }} archives={{ chats: archivedChats, projects: library.workspace?.projects ?? [], busy: locked, canClose: pool.canClose, onRestore: restoreArchivedChat, onDelete: deleteArchivedChat }} onClose={() => setSettingsCategory(undefined)} />}
-			{promptDialogOpen && <PromptDialog sessionPath={session.sessionFile} onSaved={() => { setPromptDialogOpen(false); session.reconnect(); }} onClose={() => setPromptDialogOpen(false)} />}
+			{settingsCategory && <SettingsDialog onRetryModels={() => void modelFamilies.refresh()} initialCategory={settingsCategory} prompt={{ sessionPath: session.sessionFile, onSaved: () => { setSettingsCategory(undefined); session.reconnect(); } }} restrictions={settingsRestrictions} models={{ configError: modelFamilies.error, families: modelFamilies.families, relays: modelFamilies.relays, autoFailover: modelFamilies.config?.autoFailover ?? false, usdCnyRate: modelFamilies.usdCnyRate, onSaveRate: modelFamilies.setUsdCnyRate, onSaveRelay: modelFamilies.saveRelay, onDeleteRelay: modelFamilies.deleteRelay, onSetRelayEnabled: modelFamilies.setRelayEnabled, onSaveRoute: modelFamilies.saveRoute, onDeleteRoute: modelFamilies.deleteRoute, onReorderRoutes: modelFamilies.reorderRoutes, onSetDefaultRoute: modelFamilies.setDefaultRoute, onAutoFailover: modelFamilies.setAutoFailover, onTest: modelFamilies.test, onCancelTest: modelFamilies.cancelTest, onDiscover: modelFamilies.discover }} archives={{ chats: archivedChats, projects: library.workspace?.projects ?? [], busy: locked, canClose: pool.canClose, onRestore: restoreArchivedChat, onDelete: deleteArchivedChat }} onClose={() => setSettingsCategory(undefined)} />}
 			{searchDialogOpen && <SearchDialog search={search} onClose={() => setSearchDialogOpen(false)} />}
 		</div>
 		</ModelFamilyContext.Provider>
