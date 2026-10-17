@@ -187,6 +187,6 @@ export function Composer({
 					</IconButton>
 				)}
 			</div></div>
-		</div><p className="composer-hint">Enter 发送 · Shift + Enter 换行<span>Ctrl K 聚焦 · Esc 清空 · Ctrl Shift Backspace 停止</span></p></div>
+		</div><p className="composer-hint"><span><kbd>Enter</kbd> 发送 · <kbd>Shift</kbd>+<kbd>Enter</kbd> 换行</span><span><kbd>Ctrl K</kbd> 聚焦 · <kbd>Esc</kbd> 清空 · <kbd>Ctrl Shift Backspace</kbd> 停止</span></p></div>
 	);
 }

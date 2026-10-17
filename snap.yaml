@@ -1,0 +1,152 @@
+- generic [ref=e3]:
+  - generic [ref=e6]:
+    - button "最小化" [ref=e7] [cursor=pointer]
+    - button "最大化或还原" [ref=e9] [cursor=pointer]
+    - button "关闭" [ref=e12] [cursor=pointer]
+  - generic [ref=e15]:
+    - complementary "项目与聊天导航" [ref=e16]:
+      - generic [ref=e17]:
+        - generic [ref=e22]: Skiff
+        - button "搜索项目与聊天" [ref=e23] [cursor=pointer]
+        - button "收起侧栏" [ref=e27] [cursor=pointer]
+      - button "新聊天 Ctrl N" [ref=e31] [cursor=pointer]:
+        - generic [ref=e34]: 新聊天
+        - generic [ref=e35]: Ctrl N
+      - button "主页" [ref=e36] [cursor=pointer]
+      - generic [ref=e40]:
+        - generic [ref=e41]:
+          - button [expanded] [ref=e42] [cursor=pointer]
+          - button "添加项目" [ref=e46] [cursor=pointer]
+        - navigation "项目列表" [ref=e52]:
+          - generic [ref=e53]:
+            - generic [ref=e54]:
+              - button "收起Skiff 示例项目" [expanded] [ref=e55] [cursor=pointer]
+              - button "Skiff 示例项目 1" [ref=e59] [cursor=pointer]:
+                - generic [ref=e62]: Skiff 示例项目
+                - generic [ref=e63]: "1"
+              - generic:
+                - button "重命名项目 Skiff 示例项目"
+                - button "移除项目 Skiff 示例项目" [disabled]
+            - generic [ref=e66]:
+              - generic [ref=e67]: 星期五 10/9 · 1
+              - generic [ref=e68]:
+                - button "新聊天" [ref=e69] [cursor=pointer]
+                - generic:
+                  - button "固定聊天 新聊天"
+                  - button "重命名聊天 新聊天"
+                  - button "归档聊天 新聊天"
+                  - button "删除聊天 新聊天"
+      - button "设置" [ref=e72] [cursor=pointer]:
+        - generic [ref=e76]:
+          - strong [ref=e77]: 设置
+          - generic [ref=e78]: 当前会话：pi 已连接
+    - separator "调整左侧导航宽度" [ref=e81]
+    - main [ref=e82]:
+      - generic [ref=e84]:
+        - generic [ref=e85]: 主页
+        - generic [ref=e87]: 模型优先的任务入口
+      - region [ref=e89]:
+        - generic [ref=e90]:
+          - generic [ref=e92]:
+            - generic [ref=e93]:
+              - paragraph [ref=e94]: START A TASK
+              - heading "选择一个模型，开始工作" [level=1] [ref=e95]
+              - paragraph [ref=e96]: 模型负责执行，项目负责上下文，会话保留完整历史。
+            - button "当前工作区" [ref=e97] [cursor=pointer]:
+              - generic [ref=e100]: Skiff 示例项目
+              - generic "D:\\workspace\\demo" [ref=e101]
+          - generic [ref=e105]:
+            - generic [ref=e106]:
+              - generic [ref=e107]:
+                - heading "可用模型" [level=2] [ref=e108]
+                - paragraph [ref=e109]: 按提供商分组，线路与扣费账户保留在模型行。
+              - generic [ref=e110]:
+                - group "模型范围" [ref=e111]:
+                  - button "最近使用" [ref=e112] [cursor=pointer]
+                  - button "全部模型" [pressed] [ref=e114] [cursor=pointer]
+                - textbox "搜索模型" [ref=e119]:
+                  - /placeholder: 搜索模型或线路
+            - list [ref=e120]:
+              - listitem [ref=e121]:
+                - generic "DeepSeek 可用 · 4 个模型" [ref=e122] [cursor=pointer]:
+                  - generic [ref=e126]: DeepSeek
+                  - generic [ref=e127]: 可用 · 4 个模型
+                - generic [ref=e132]:
+                  - listitem [ref=e133]:
+                    - generic [ref=e134]:
+                      - generic [ref=e135]: deepseek-flash
+                      - generic [ref=e136]: 当前选择
+                    - generic [ref=e137]:
+                      - generic [ref=e138]: 工具
+                      - generic [ref=e139]: 推理
+                      - generic [ref=e140]: 流式
+                      - generic [ref=e141]: 32K 上下文
+                    - generic [ref=e142]:
+                      - text: 默认线路
+                      - strong [ref=e143]: 官方直连
+                      - text: · 1 条线路 · 扣费账户：wallet-a
+                    - generic [ref=e144]: 输入 ¥1 · 输出 ¥4
+                    - button "开始聊天" [ref=e145] [cursor=pointer]
+                  - listitem [ref=e147]:
+                    - generic [ref=e148]: deepseek-chat
+                    - generic [ref=e150]:
+                      - generic [ref=e151]: 工具
+                      - generic [ref=e152]: 推理
+                      - generic [ref=e153]: 流式
+                      - generic [ref=e154]: 128K 上下文
+                    - generic [ref=e155]:
+                      - text: 默认线路
+                      - strong [ref=e156]: 官方直连
+                      - text: · 2 条线路 · 扣费账户：wallet-a
+                    - generic [ref=e157]: 输入 ¥0.3 · 输出 ¥1.2
+                    - button "选择线路" [ref=e158] [cursor=pointer]
+                  - listitem [ref=e160]:
+                    - generic [ref=e161]: deepseek-reasoner
+                    - generic [ref=e163]:
+                      - generic [ref=e164]: 工具
+                      - generic [ref=e165]: 推理
+                      - generic [ref=e166]: 流式
+                      - generic [ref=e167]: 256K 上下文
+                    - generic [ref=e168]:
+                      - text: 默认线路
+                      - strong [ref=e169]: 官方直连
+                      - text: · 1 条线路 · 扣费账户：wallet-a
+                    - generic [ref=e170]: 输入 $5 · 输出 $20
+                    - button "开始聊天" [ref=e171] [cursor=pointer]
+                  - listitem [ref=e173]:
+                    - generic [ref=e174]: deepseek-ai/DeepSeek-V3
+                    - generic [ref=e176]:
+                      - generic [ref=e177]: 工具
+                      - generic [ref=e178]: 流式
+                      - generic [ref=e179]: 128K 上下文
+                    - generic [ref=e180]:
+                      - text: 默认线路
+                      - strong [ref=e181]: 硅基低价
+                      - text: · 1 条线路 · 扣费账户：wallet-b
+                    - generic [ref=e182]: 输入 ¥0.14 · 输出 ¥0.28
+                    - button "开始聊天" [ref=e183] [cursor=pointer]
+              - listitem [ref=e186]:
+                - generic [ref=e190]:
+                  - generic [ref=e191]: kimi-k2
+                  - generic [ref=e192]: Kimi
+                - generic [ref=e193]:
+                  - generic [ref=e194]: 工具
+                  - generic [ref=e195]: 推理
+                  - generic [ref=e196]: 流式
+                  - generic [ref=e197]: 128K 上下文
+                - generic [ref=e198]:
+                  - text: 默认线路
+                  - strong [ref=e199]: 官方
+                  - text: · 1 条线路 · 扣费账户：未标注
+                - generic [ref=e200]: 输入 ¥0.6 · 输出 ¥2.4
+                - button "开始聊天" [ref=e201] [cursor=pointer]
+          - generic [ref=e203]:
+            - generic [ref=e205]:
+              - heading "最近会话" [level=2] [ref=e206]
+              - paragraph [ref=e207]: 显示最后一次完成回复的实际线路。
+            - status [ref=e208]: 还没有可恢复的历史会话
+          - generic [ref=e209]:
+            - generic [ref=e210]:
+              - heading "当前会话" [level=2] [ref=e211]
+              - paragraph [ref=e212]: 新聊天
+            - button "返回聊天" [ref=e213] [cursor=pointer]

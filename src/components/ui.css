@@ -26,6 +26,15 @@
 	.ui-icon-button { width: var(--control-regular); padding: 0; }
 	.ui-icon-button[data-size=compact] { width: var(--control-compact); padding: 0; }
 	.ui-icon-button[data-size=primary] { width: var(--control-primary); }
+	/* Composer toolbar: unified quiet pills. */
+	.composer-context .ui-button { height: var(--control-compact); padding: 0 var(--space-2-5); border-color: var(--border); border-radius: var(--radius-full); background: transparent; color: var(--secondary); font-size: var(--font-size-sm); font-weight: var(--font-weight-regular); }
+	.composer-context .ui-button:hover:not(:disabled) { background: var(--hover); color: var(--foreground); border-color: var(--boundary); }
+	.composer-context .ui-icon-button { width: var(--control-compact); padding: 0; }
+	.composer-context .ui-button.active, .composer-context .ui-button[aria-pressed=true] { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); box-shadow: none; }
+	.composer-context .web-trigger.unavailable { color: var(--color-warning); border-color: color-mix(in srgb, var(--color-warning) 55%, var(--border)); }
+	.composer-actions .ui-button { border-radius: var(--radius-full); }
+	.composer-actions .ui-icon-button.send-btn { width: var(--control-regular); height: var(--control-regular); box-shadow: var(--shadow-xs); transition: background-color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast); }
+	.composer-actions .ui-icon-button.send-btn:hover:not(:disabled) { box-shadow: var(--shadow-sm); }
 	.ui-card { min-width: 0; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); transition: border-color var(--transition-fast); }
 	.ui-card[data-selected=true] { border-color: var(--accent); background: var(--selected); }
 	.ui-list-row { display: flex; align-items: center; width: 100%; min-height: var(--control-regular); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); color: var(--foreground); text-align: left; transition: background-color var(--transition-fast); }
