@@ -150,7 +150,8 @@ export function ChatView({
 				<div className="notices">
 					{alerts.slice(-3).map((notice) => (
 						<div key={notice.id} className={`notice ${notice.kind}`}>
-							{notice.text}
+							<Icon name={notice.kind === "info" ? "info" : "alert"} size={14} />
+							<span>{notice.text}</span>
 						</div>
 					))}
 				</div>

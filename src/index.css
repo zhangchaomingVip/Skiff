@@ -225,10 +225,15 @@ details[open] > summary .disclosure { transform: rotate(90deg); }
 .thinking-size { margin-left: auto; }
 .thinking pre, .tool-result pre { margin: var(--space-0-5) 0 var(--space-2) var(--space-6); padding: var(--space-1) 0 var(--space-1) var(--space-3); border-left: 2px solid var(--border); overflow-x: auto; white-space: pre-wrap; font-size: var(--font-size-sm); color: var(--muted); }
 .tool-result.err > summary { color: var(--danger); }
-.notices { padding: 0 var(--space-8) var(--space-2); }
-.notice { max-width: var(--content-width); margin: 0 auto var(--space-2); font-size: var(--font-size-sm); color: var(--muted); }
+/* Notices read as quiet inline chips instead of bare text floating over the composer. */
+.notices { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-1-5); width: 100%; max-width: calc(var(--content-width) + 2 * var(--chat-gutter)); margin: 0 auto; padding: 0 var(--chat-gutter) var(--space-2); }
+.notice { display: inline-flex; align-items: center; gap: var(--space-1-5); max-width: 100%; padding: var(--space-1) var(--space-2-5); border-radius: var(--radius-lg); background: color-mix(in srgb, var(--accent) 10%, transparent); color: var(--secondary); font-size: var(--font-size-sm); line-height: var(--line-height-base); overflow-wrap: anywhere; }
+.notice svg { flex-shrink: 0; color: var(--accent); }
 .notice.error, .form-error { color: var(--danger); }
-.notice.warning { color: var(--color-warning); }
+.notice.error { background: color-mix(in srgb, var(--danger) 12%, transparent); }
+.notice.error svg { color: var(--danger); }
+.notice.warning { color: var(--color-warning); background: color-mix(in srgb, var(--color-warning) 12%, transparent); }
+.notice.warning svg { color: var(--color-warning); }
 .model-notice { display: flex; align-items: center; gap: var(--space-3); padding: 0 var(--space-5); }
 .banner { display: flex; align-items: center; gap: var(--space-2); width: calc(100% - var(--space-15)); max-width: var(--content-width); margin: 0 auto var(--space-3); padding: var(--space-2) var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-md); color: var(--danger); background: var(--error-bg); font-size: var(--font-size-sm); }
 .banner > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
@@ -244,7 +249,7 @@ details[open] > summary .disclosure { transform: rotate(90deg); }
 .composer-context { display: flex; flex-wrap: wrap; min-width: 0; align-items: center; gap: var(--space-1-5); color: var(--muted); font-size: var(--font-size-sm); }
 .composer-actions { display: flex; flex-shrink: 0; align-items: center; gap: var(--space-3); min-width: 0; }
 .composer-hint { max-width: var(--content-width); margin: var(--space-1-5) auto 0; padding: 0 var(--space-2); display: flex; justify-content: space-between; gap: var(--space-3); font-size: var(--font-size-xs); color: var(--muted); }
-.composer-hint kbd { font-family: var(--font-family-mono); font-size: var(--font-size-xs); line-height: 1; padding: 2px 4px; border: 1px solid var(--border); border-radius: var(--radius-base); background: var(--surface); color: var(--secondary); }
+.composer-hint kbd { font-family: var(--font-family-mono); font-size: var(--font-size-xs); line-height: 1; padding: 2px 4px; border: 0; border-radius: var(--radius-base); background: var(--panel); color: var(--muted); }
 
 /* Project dialog */
 .project-dialog { width: min(460px, calc(100vw - 32px)); }
