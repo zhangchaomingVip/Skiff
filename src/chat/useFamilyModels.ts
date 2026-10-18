@@ -26,7 +26,7 @@ const persist = (config: FamilyModelsConfig) => {
  * refreshes untouched. Display-only: route wiring lives in the Rust config.
  */
 export function useFamilyModels() {
-	const { refresh: refreshCatalog } = useModelCatalog();
+	const { catalog, refresh: refreshCatalog } = useModelCatalog();
 	const [config, setConfig] = useState<FamilyModelsConfig>(() => seedFamilyModels(readStored()));
 	const [updating, setUpdating] = useState<ReadonlySet<string>>(new Set());
 	const [updateNotice, setUpdateNotice] = useState<{ familyId: string; ok: boolean; text: string }>();
@@ -83,11 +83,12 @@ export function useFamilyModels() {
 
 	return useMemo(() => ({
 		config,
+		catalog,
 		setFamilyModels,
 		removeFamily,
 		refreshFamily,
 		updating,
 		updateNotice,
 		clearUpdateNotice: () => setUpdateNotice(undefined),
-	}), [config, setFamilyModels, removeFamily, refreshFamily, updating, updateNotice]);
+	}), [catalog, config, setFamilyModels, removeFamily, refreshFamily, updating, updateNotice]);
 }

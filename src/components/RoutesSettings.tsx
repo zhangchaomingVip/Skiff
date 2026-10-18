@@ -2,6 +2,7 @@ import { forwardRef, useEffect, useMemo, useState, type FormEvent } from "react"
 import { blankModel, blankRoute, DEFAULT_THINKING_LEVELS, FAMILY_LABELS, maskBaseUrl, normalizeThinkingLevels, resolveThinkingLevels, THINKING_LEVELS, validateModels, type ModelFamily, type ModelSpec, type RelaySpec, type RouteSpec, type ThinkingLevel } from "../chat/useModelFamilies";
 import { catalogVision } from "../chat/modelVision";
 import { catalogEntryToPriced, type PricedModel } from "../chat/pricingPage";
+import { modelIdMatchesCatalog } from "../chat/latestModels";
 import { useModelCatalog } from "../chat/useModelCatalog";
 import { BrandIcon, type BrandName } from "./BrandIcon";
 import { ConfirmDialog } from "./ConfirmDialog";
@@ -81,14 +82,15 @@ export const RoutesSettingsContent = forwardRef<SettingsEditorHandle, RoutesSett
 	// Discovery only returns ids; matched catalog entries arrive with official
 	// prices already converted to CNY at the configured rate.
 	const fillFromCatalog = (modelId: string): ModelSpec => {
-		const entry = catalog.find((item) => item.modelId.toLowerCase() === modelId.toLowerCase());
+		const entry = catalog.find((item) => modelIdMatchesCatalog(modelId, item));
 		const blank = blankModel();
 		if (!entry) return { ...blank, modelId, vision: catalogVision(modelId, catalog) };
 		const priced = catalogEntryToPriced(entry, usdCnyRate);
 		const contextWindow = priced.contextWindow ?? blank.contextWindow;
 		return {
 			...blank,
-			modelId: entry.modelId,
+			// Keep the exact ID returned by this relay; the catalog only supplies metadata.
+			modelId,
 			vision: priced.vision,
 			inputCost: priced.inputCost,
 			outputCost: priced.outputCost,

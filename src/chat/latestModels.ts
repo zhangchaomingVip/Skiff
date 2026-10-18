@@ -11,6 +11,8 @@ export interface FamilyLatest {
 	latestVersion?: string;
 	/** Freshness per model ID, when a source reports it. */
 	updated: ReadonlyMap<string, string>;
+	/** Catalog-derived API aliases keyed by the canonical model ID. */
+	aliases?: ReadonlyMap<string, readonly string[]>;
 }
 
 export const LATEST_FAMILIES = ["deepseek", "kimi", "glm"] as const;
@@ -36,6 +38,58 @@ function isRetired(status: string | null | undefined, officialRetired = false): 
 	if (officialRetired) return true;
 	return /deprecated|retired|已下线|停售|弃用|退役/i.test(status ?? "");
 }
+
+type CatalogModelLike = { modelId: string; name?: string | null };
+
+/**
+ * Make a conservative comparison key for model names. Punctuation and vendor
+ * slashes vary between relays, while the alphanumeric sequence is stable.
+ */
+const modelKey = (value: string): string => {
+	const basename = value.trim().split("/").pop() ?? "";
+	return basename.toLowerCase().replace(/[^a-z0-9]+/g, "");
+};
+
+const catalogKeys = (entry: CatalogModelLike): Set<string> => {
+	const values = [entry.modelId, entry.name ?? ""];
+	const keys = new Set<string>();
+	for (const value of values) {
+		const key = modelKey(value);
+		if (!key) continue;
+		keys.add(key);
+		// models.dev names sometimes append a release date, e.g. "... Flash 1017".
+		if (value !== entry.modelId) keys.add(key.replace(/(?:v?\d{3,8})$/, ""));
+	}
+	return keys;
+};
+
+const modelKeyVariants = (value: string): Set<string> => {
+	const raw = value.trim().split("/").pop()?.toLowerCase() ?? "";
+	const keys = new Set<string>();
+	const key = modelKey(value);
+	if (key) keys.add(key);
+	// Relays often append a dated release suffix to an otherwise canonical ID.
+	const withoutRelease = raw.replace(/[-_.]\d{3,8}\s*$/, "");
+	if (withoutRelease !== raw) keys.add(modelKey(withoutRelease));
+	return keys;
+};
+
+/** Does a relay/API ID refer to the catalog entry, including its display name? */
+export function modelIdMatchesCatalog(modelId: string, entry: CatalogModelLike): boolean {
+	return [...modelKeyVariants(modelId)].some((key) => catalogKeys(entry).has(key));
+}
+
+/** Compare two IDs through the same catalog entry without broad fuzzy matching. */
+export function catalogModelIdsMatch(a: string, b: string, catalog: readonly CatalogModelLike[]): boolean {
+	if (!a.trim() || !b.trim()) return false;
+	if (modelKey(a) === modelKey(b)) return true;
+	return catalog.some((entry) => modelIdMatchesCatalog(a, entry) && modelIdMatchesCatalog(b, entry));
+}
+
+const matchesAlias = (modelId: string, aliases: readonly string[]): boolean => {
+	const key = modelKey(modelId);
+	return !!key && aliases.some((alias) => modelKey(alias) === key);
+};
 
 const NAME_KEYS = ["模型", "模型名称", "模型ID", "模型 ID", "model", "modelId", "model_id", "id", "name"];
 const STATUS_KEYS = ["状态", "status"];
@@ -115,6 +169,16 @@ export function familyLatest(pages: OfficialPage[], catalog: CatalogEntry[]): Ma
 		const entries = catalog.filter((entry) => entry.provider === familyId || (familyId === "kimi" && entry.provider === "moonshotai"));
 		const modelIds = new Set<string>([...official.keys(), ...entries.map((entry) => entry.modelId.toLowerCase())]);
 		const entryOf = (id: string) => entries.find((entry) => entry.modelId.toLowerCase() === id);
+		const aliases = new Map<string, readonly string[]>();
+		for (const id of modelIds) {
+			const entry = entryOf(id);
+			if (!entry) {
+				aliases.set(id, [id]);
+				continue;
+			}
+			const displayAlias = entry.name.replace(/\s+\d{3,8}\s*$/, "").trim();
+			aliases.set(id, displayAlias === entry.name ? [entry.modelId, entry.name] : [entry.modelId, entry.name, displayAlias]);
+		}
 		// Score every version group by its newest on-sale member.
 		const groups = new Map<string, { ids: string[]; updated: string }>();
 		const updated = new Map<string, string>();
@@ -139,6 +203,7 @@ export function familyLatest(pages: OfficialPage[], catalog: CatalogEntry[]): Ma
 			latestGroup: latest ? latest[1].ids : [],
 			latestVersion: latest?.[0],
 			updated,
+			aliases,
 		});
 	}
 	return result;
@@ -162,7 +227,10 @@ export function familyUpdates(latest: Map<string, FamilyLatest>, configuredIds: 
 		const info = latest.get(familyId);
 		if (!info?.latestGroup.length) continue;
 		const configured = configuredIds.get(familyId);
-		const covered = (id: string) => !!configured && [...configured].some((item) => baseVersion(item) === baseVersion(id));
+		const covered = (id: string) => !!configured && [...configured].some((item) => {
+			const aliases = info.aliases?.get(id) ?? [id];
+			return matchesAlias(item, aliases) || baseVersion(item) === baseVersion(id);
+		});
 		const newIds = info.latestGroup.filter((id) => !covered(id));
 		if (newIds.length === info.latestGroup.length) updates.push({ familyId, newIds, latestVersion: info.latestVersion });
 	}
@@ -175,17 +243,30 @@ export type RecommendationReason = "latest" | "fallback-available" | "offline";
 const VARIANT_RANK = (id: string) => baseVersion(id) === id ? 0 : /-flash$/i.test(id) ? 1 : 2;
 
 /**
- * The family models the settings page shows: at most two per family. When the
- * latest version group is known it wins (flagship then flash); otherwise the
- * two newest catalog entries take over, and with no data at all the family
- * stays hidden instead of dumping every legacy model on the page.
+ * The family models the settings page shows: at most two per family. The
+ * latest version group wins (flagship then flash); when that group contains
+ * only one rolling ID, the freshest distinct catalog model fills the second
+ * slot. With no data at all the family stays hidden instead of dumping every
+ * legacy model on the page.
  */
 export function pickVisibleIds(familyId: string, latest: ReadonlyMap<string, FamilyLatest> | undefined, catalog: readonly CatalogEntry[]): string[] {
 	const info = latest?.get(familyId);
-	if (info?.latestGroup.length) return info.latestGroup.slice(0, 2);
 	const providerIds = familyId === "kimi"
 		? ["kimi", "moonshotai"]
 		: [familyId];
+	if (info?.latestGroup.length) {
+		const primary = info.latestGroup.slice(0, 2);
+		if (primary.length >= 2) return primary;
+		// A family such as DeepSeek can publish a rolling ID (`deepseek-flash`)
+		// alongside a separately versioned flagship (`deepseek-v4-pro`). Keep two
+		// useful model identities visible instead of dropping the second one.
+		const additional = catalog
+			.filter((entry) => providerIds.includes(entry.provider) && !NON_CHAT_ID.test(entry.modelId) && !isRetired(entry.status))
+			.filter((entry) => !primary.some((id) => modelIdMatchesCatalog(entry.modelId, { modelId: id })))
+			.sort((a, b) => (b.updated ?? "").localeCompare(a.updated ?? ""))
+			.map((entry) => entry.modelId);
+		return [...new Set([...primary, ...additional])].slice(0, 2);
+	}
 	const dated = catalog
 		.filter((entry) => providerIds.includes(entry.provider) && !NON_CHAT_ID.test(entry.modelId))
 		.map((entry) => ({ id: entry.modelId, updated: entry.updated ?? "" }))
@@ -221,8 +302,16 @@ export type FamilyModelsConfig = Partial<Record<string, FamilyModelEntry[]>>;
 export function seedFamilyModels(existing: FamilyModelsConfig | undefined | null): FamilyModelsConfig {
 	const config: FamilyModelsConfig = { ...existing };
 	for (const [familyId, [flagship, fast]] of Object.entries(FALLBACK_LATEST)) {
-		if (config[familyId]?.length) continue;
-		config[familyId] = [{ modelId: flagship, origin: "auto" }, { modelId: fast, origin: "auto" }];
+		const current = config[familyId];
+		if (!current?.length) {
+			config[familyId] = [{ modelId: flagship, origin: "auto" }, { modelId: fast, origin: "auto" }];
+			continue;
+		}
+		// Migrate the old DeepSeek catalog result that contained only the
+		// rolling flash ID. Do not restore rows after a manual edit.
+		if (familyId === "deepseek" && current.length === 1 && current[0].origin === "auto" && current[0].modelId.trim().toLowerCase() === fast) {
+			config[familyId] = [...current, { modelId: flagship, origin: "auto" }];
+		}
 	}
 	return config;
 }
@@ -276,14 +365,19 @@ export function pickRecommendedIds(discovered: readonly string[], latest: Readon
 	if (!available.length) return { recommended: [], reason: "offline" };
 	const info = latest?.get(familyId);
 	if (info?.latestGroup.length) {
-		const lower = new Set(available.map((id) => id.toLowerCase()));
-		const served = info.latestGroup.filter((id) => lower.has(id));
+		const served = info.latestGroup
+			.map((id) => available.find((candidate) => matchesAlias(candidate, info.aliases?.get(id) ?? [id])))
+			.filter((id): id is string => !!id);
 		if (served.length) return { recommended: served.sort((a, b) => VARIANT_RANK(a) - VARIANT_RANK(b)).slice(0, 2), reason: "latest" };
 	}
 	// Catalog present but the relay serves nothing from the latest group: rank
 	// the relay's own models by catalog freshness.
 	const ranks = info ? new Map(info.updated) : undefined;
-	const dated = available.map((id) => ({ id, updated: ranks?.get(id.toLowerCase()) ?? "" }));
+	const canonicalFor = (id: string) => [...(info?.aliases ?? new Map())].find(([, aliases]) => matchesAlias(id, aliases))?.[0];
+	const dated = available.map((id) => {
+		const canonical = canonicalFor(id);
+		return { id, updated: ranks?.get(id.toLowerCase()) ?? (canonical ? ranks?.get(canonical) : undefined) ?? "" };
+	});
 	const anyDates = dated.some((item) => item.updated);
 	if (!anyDates) return { recommended: [], reason: "offline" };
 	return { recommended: dated.sort((a, b) => b.updated.localeCompare(a.updated)).slice(0, 2).map((item) => item.id), reason: "fallback-available" };

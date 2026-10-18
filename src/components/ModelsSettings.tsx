@@ -1,6 +1,6 @@
 import { forwardRef, useMemo, useState, type FormEvent } from "react";
 import { FAMILY_LABELS, type ModelFamily, type RelaySpec } from "../chat/useModelFamilies";
-import { sameModelId } from "../chat/latestModels";
+import { catalogModelIdsMatch, sameModelId } from "../chat/latestModels";
 import { useFamilyModels } from "../chat/useFamilyModels";
 import { BrandIcon, type BrandName } from "./BrandIcon";
 import { Icon } from "./Icon";
@@ -13,20 +13,71 @@ const brand = (familyId: string): BrandName | undefined => BRANDABLE.find((name)
 
 type Draft = { kind: "family-models" };
 
+type CatalogIdentity = { modelId: string; name?: string | null };
+
+type ModelRouteMapping = {
+	relayName: string;
+	modelIds: string[];
+	excludedModelIds: string[];
+	active: boolean;
+};
+
+type ModelMappingGroup = {
+	modelId: string;
+	mappings: ModelRouteMapping[];
+};
+
 /** Routes that can actually serve a model: enabled route on an enabled relay, not excluded. */
-const availableRoutes = (family: ModelFamily, relays: RelaySpec[], modelId: string) =>
+const availableRoutes = (family: ModelFamily, relays: RelaySpec[], modelId: string, catalog: readonly { modelId: string; name?: string | null }[]) =>
 	family.routes.filter((route) => {
 		const relay = relays.find((item) => item.id === route.relayId);
 		if (!route.enabled || !relay?.enabled) return false;
-		return route.models.some((model) => sameModelId(model.modelId, modelId) && !relay.excludedModelIds?.includes(model.modelId));
+		return route.models.some((model) => (sameModelId(model.modelId, modelId) || catalogModelIdsMatch(model.modelId, modelId, catalog)) && !relay.excludedModelIds?.includes(model.modelId));
 	}).length;
 
 /** Enabled routes of the family, regardless of which models they carry. */
 const familyRoutesAvailable = (family: ModelFamily, relays: RelaySpec[]) =>
 	family.routes.filter((route) => route.enabled && relays.find((item) => item.id === route.relayId)?.enabled).length;
 
-const aliasFor = (family: ModelFamily, modelId: string) =>
-	family.routes.flatMap((route) => route.models).find((model) => model.modelId.trim().toLowerCase() === modelId.toLowerCase() && model.alias.trim())?.alias;
+const matchesModel = (modelId: string, targetId: string, catalog: readonly CatalogIdentity[]) =>
+	sameModelId(modelId, targetId) || catalogModelIdsMatch(modelId, targetId, catalog);
+
+const aliasFor = (family: ModelFamily, modelId: string, catalog: readonly CatalogIdentity[]) =>
+	family.routes.flatMap((route) => route.models).find((model) => matchesModel(model.modelId, modelId, catalog) && model.alias.trim())?.alias;
+
+const routeMappingsFor = (family: ModelFamily, relays: RelaySpec[], modelId: string, catalog: readonly CatalogIdentity[]): ModelRouteMapping[] =>
+	family.routes.flatMap((route) => {
+		const relay = relays.find((item) => item.id === route.relayId);
+		const matched = route.models.filter((model) => matchesModel(model.modelId, modelId, catalog));
+		if (!matched.length) return [];
+		const modelIds = [...new Set(matched.map((model) => model.modelId.trim()).filter(Boolean))];
+		const excludedModelIds = modelIds.filter((id) => relay?.excludedModelIds?.includes(id));
+		return [{ relayName: relay?.name ?? route.relayId, modelIds, excludedModelIds, active: !!relay?.enabled && route.enabled }];
+	});
+
+const routeMappingsForAuto = (family: ModelFamily, relays: RelaySpec[]): ModelRouteMapping[] => family.routes.flatMap((route) => {
+	const relay = relays.find((item) => item.id === route.relayId);
+	const modelIds = [...new Set(route.models.map((model) => model.modelId.trim()).filter(Boolean))];
+	if (!modelIds.length) return [];
+	const excludedModelIds = modelIds.filter((id) => relay?.excludedModelIds?.includes(id));
+	return [{ relayName: relay?.name ?? route.relayId, modelIds, excludedModelIds, active: !!relay?.enabled && route.enabled }];
+});
+
+const modelMappingPanel = (groups: ModelMappingGroup[]) => {
+	const providerNames = [...new Set(groups.flatMap((group) => group.mappings.map((mapping) => mapping.relayName)))];
+	return <div className="model-mapping-panel" role="status" aria-label="实际线路映射">
+		{providerNames.length ? <>
+			<p className="model-mapping-legend"><span><i className="model-route-status is-active" aria-hidden="true" />绿灯：启用</span><span><i className="model-route-status is-disabled" aria-hidden="true" />红灯：停用</span></p>
+			<p className="model-mapping-help">同一单元格出现多个 ID，表示该提供商配置了多个实际调用 ID；开始聊天时使用你选中的具体模型和路线，不会在这些 ID 之间随机切换。未指定路线时按默认路线顺序选择。</p>
+			<div className="model-mapping-table-wrap"><table className="model-mapping-table"><thead><tr><th scope="col">提供商</th>{groups.map((group) => <th scope="col" key={group.modelId}>{group.modelId}</th>)}</tr></thead><tbody>{providerNames.map((providerName) => <tr key={providerName}><th scope="row">{providerName}{groups.some((group) => group.mappings.some((mapping) => mapping.relayName === providerName && !mapping.active)) && <em>（含停用）</em>}</th>{groups.map((group) => {
+			const mappings = group.mappings.filter((mapping) => mapping.relayName === providerName);
+			const modelIds = mappings.flatMap((mapping) => mapping.modelIds.map((id) => ({ id, active: mapping.active && !mapping.excludedModelIds.includes(id) })));
+			const uniqueIds = [...new Map(modelIds.map((item) => [`${item.id}:${item.active}`, item])).values()];
+			return <td key={`${providerName}:${group.modelId}`}>{uniqueIds.length ? <span className="model-mapping-ids">{uniqueIds.map(({ id, active }) => <span className="model-mapping-id" key={`${id}:${active}`}><i className={`model-route-status ${active ? "is-active" : "is-disabled"}`} title={active ? "路线启用" : "路线停用"} aria-label={active ? "路线启用" : "路线停用"} /><code className={!active ? "is-excluded" : undefined}>{id}</code></span>)}</span> : <span className="model-mapping-missing">未检出</span>}</td>;
+		})}</tr>)}</tbody></table></div>
+		</> : <span className="muted">暂无匹配的路线模型</span>}
+	</div>;
+};
 
 /**
  * Model families: the two newest models each family runs, from the
@@ -42,10 +93,12 @@ export type ModelsSettingsProps = {
 };
 
 export const ModelsSettingsContent = forwardRef<SettingsEditorHandle, ModelsSettingsProps>(function ModelsSettingsContent({ families, relays, configError, onOpenRoutes, onLockChange }, ref) {
-	const { config, setFamilyModels, refreshFamily, updating, updateNotice, clearUpdateNotice } = useFamilyModels();
+	const { config, catalog, setFamilyModels, refreshFamily, updating, updateNotice, clearUpdateNotice } = useFamilyModels();
 	const { draft, setDraft, pending, error, setError, contentRef, closeDraft } = useSettingsEditor<Draft>({ ref, onLockChange });
 	const [adding, setAdding] = useState<string>();
 	const [addingId, setAddingId] = useState("");
+	const [mappingOpen, setMappingOpen] = useState<string>();
+	const [selectedFamily, setSelectedFamily] = useState<string>(EDITABLE[0]);
 	const editing = draft?.kind === "family-models";
 
 	const rows = useMemo(() => families.filter((family) => EDITABLE.includes(family.id as (typeof EDITABLE)[number])).map((family) => ({
@@ -104,28 +157,33 @@ export const ModelsSettingsContent = forwardRef<SettingsEditorHandle, ModelsSett
 			<>
 				<div className="dialog-heading"><h2 id="models-title">模型</h2><Button type="button" variant="ghost" size="compact" onClick={startEdit}>编辑家族模型</Button></div>
 				<p className="muted">每个家族展示最新的两个模型；价格与供应商配置在「路线」中编辑。</p>
-				{rows.map(({ family, entries }) => <section className="family-card" key={family.id}>
+				<div className="family-model-tabs" role="tablist" aria-label="模型家族">
+					{rows.map(({ family }) => <button type="button" className={`family-model-tab${selectedFamily === family.id ? " is-active" : ""}`} role="tab" aria-selected={selectedFamily === family.id} key={family.id} onClick={() => setSelectedFamily(family.id)}>{brand(family.id) && <BrandIcon name={brand(family.id)!} size={15} />}<span>{FAMILY_LABELS[family.id] ?? family.displayName}</span></button>)}
+				</div>
+				{rows.filter(({ family }) => family.id === selectedFamily).map(({ family, entries }) => <section className="family-card" key={family.id}>
 					<div className="family-card-head">
-						<span className="family-card-title">{brand(family.id) && <BrandIcon name={brand(family.id)!} size={15} />}{FAMILY_LABELS[family.id] ?? family.displayName}</span>
+						<span className="family-card-title">{brand(family.id) && <BrandIcon name={brand(family.id)!} size={15} />}{FAMILY_LABELS[family.id] ?? family.displayName}<IconButton type="button" className="model-mapping-trigger" onClick={() => setMappingOpen((current) => current === family.id ? undefined : family.id)} aria-label={`${mappingOpen === family.id ? "收起" : "查看"} ${FAMILY_LABELS[family.id] ?? family.displayName} 的实际线路映射`} aria-expanded={mappingOpen === family.id} title="查看家族实际线路映射"><Icon name={mappingOpen === family.id ? "eye-off" : "eye"} size={14} /></IconButton></span>
 						<Button type="button" variant="ghost" size="compact" disabled={updating.has(family.id)} title="从官方页面与模型目录更新这两个模型" onClick={() => void refreshFamily(family.id)}>{updating.has(family.id) ? "更新中…" : "联网更新"}</Button>
 					</div>
+					{mappingOpen === family.id && modelMappingPanel(entries.map((entry) => ({ modelId: entry.modelId, mappings: routeMappingsFor(family, relays, entry.modelId, catalog) })))}
 					{entries.length === 0
 						? <p className="family-empty">未配置模型，<button type="button" className="link-button" onClick={() => onOpenRoutes(family.id)}>去路线页添加</button>。</p>
 						: entries.map((entry) => {
-							const count = availableRoutes(family, relays, entry.modelId);
-							const alias = aliasFor(family, entry.modelId);
-							return <div className="provider-row" key={entry.modelId}>
+							const count = availableRoutes(family, relays, entry.modelId, catalog);
+							const alias = aliasFor(family, entry.modelId, catalog);
+							return <div className="provider-row model-family-row" key={entry.modelId}>
 								<div className="provider-row-main">
 									<div className="provider-row-title"><strong>{alias || entry.modelId}</strong>{alias && <small>{entry.modelId}</small>}{entry.origin === "manual" && <span className="provider-tag">手动</span>}</div>
-									<small>{count > 0 ? `${count} 条路线可用` : <button type="button" className="link-button" onClick={() => onOpenRoutes(family.id)}>未接路线，去配置</button>}</small>
+									<small className="model-family-meta"><span>{count > 0 ? `${count} 条路线可用` : <button type="button" className="link-button" onClick={() => onOpenRoutes(family.id)}>未接路线，去配置</button>}</span></small>
 								</div>
 							</div>;
 						})}
 				</section>)}
 				{autoFamily && <section className="family-card">
 					<div className="family-card-head">
-						<span className="family-card-title">Auto</span>
+						<span className="family-card-title">Auto<IconButton type="button" className="model-mapping-trigger" onClick={() => setMappingOpen((current) => current === "auto" ? undefined : "auto")} aria-label={`${mappingOpen === "auto" ? "收起" : "查看"} Auto 的实际线路映射`} aria-expanded={mappingOpen === "auto"} title="查看 Auto 实际线路映射"><Icon name={mappingOpen === "auto" ? "eye-off" : "eye"} size={14} /></IconButton></span>
 					</div>
+					{mappingOpen === "auto" && modelMappingPanel([{ modelId: "Auto（自动选择）", mappings: routeMappingsForAuto(autoFamily, relays) }])}
 					<div className="provider-row">
 						<div className="provider-row-main">
 							<div className="provider-row-title"><strong>Auto</strong><small>自动选择</small></div>

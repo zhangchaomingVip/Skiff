@@ -59,6 +59,19 @@ test("recommendation narrows fresh routes to the newest flagship + flash", () =>
 	assert.deepEqual(routes[0].route.models.map((model) => model.modelId), ["glm-5.4", "glm-5.4-flash"]);
 });
 
+test("fresh DeepSeek routes keep the relay's versioned ID when catalog uses a short ID", () => {
+	const relay = blankRelay();
+	const latest = new Map([
+		["deepseek", {
+			familyId: "deepseek", modelIds: ["deepseek-flash"], latestGroup: ["deepseek-flash"], latestVersion: "deepseek",
+			updated: new Map([["deepseek-flash", "2026-10-17"]]),
+			aliases: new Map([["deepseek-flash", ["deepseek-flash", "DeepSeek V4.1 Flash 1017"]]]),
+		}],
+	]);
+	const routes = buildDiscoveredRoutes(asDiscovered(["deepseek-v4.1-flash"]), relay, [], fillModel, latest);
+	assert.deepEqual(routes[0].route.models.map((model) => model.modelId), ["deepseek-v4.1-flash"]);
+});
+
 test("recommendation falls back to the newest served IDs and keeps every model offline", () => {
 	const relay = blankRelay();
 	// Relay predates the latest group: catalog freshness ranks the served models.

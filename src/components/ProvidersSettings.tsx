@@ -6,6 +6,7 @@ import { catalogVision } from "../chat/modelVision";
 import { slowOrFailedModels, testModelsConcurrently } from "../chat/providerConnection";
 import { filterPresets, hostOf, matchPreset, PRESET_KINDS, type ProviderPreset } from "../chat/providerPresets";
 import { buildDiscoveredRoutes, discoveredFamily } from "../chat/providerRoutes";
+import { modelIdMatchesCatalog } from "../chat/latestModels";
 import { useModelCatalog } from "../chat/useModelCatalog";
 import { blankModel, blankRelay, FAMILY_LABELS, maskBaseUrl, maskKey, type ModelFamily, type ModelSpec, type RelayRouteSpec, type RelaySpec, type TestResult } from "../chat/useModelFamilies";
 import { ConfirmDialog } from "./ConfirmDialog";
@@ -129,14 +130,15 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 	// Discovery only returns ids; matched catalog entries arrive with official
 	// prices already converted to CNY at the configured rate.
 	const fillFromCatalog = (modelId: string): ModelSpec => {
-		const entry = catalog.find((item) => item.modelId.toLowerCase() === modelId.toLowerCase());
+		const entry = catalog.find((item) => modelIdMatchesCatalog(modelId, item));
 		const blank = blankModel();
 		if (!entry) return { ...blank, modelId, vision: catalogVision(modelId, catalog) };
 		const priced = catalogEntryToPriced(entry, usdCnyRate);
 		const contextWindow = priced.contextWindow ?? blank.contextWindow;
 		return {
 			...blank,
-			modelId: entry.modelId,
+			// Keep the exact ID returned by this relay; the catalog only supplies metadata.
+			modelId,
 			vision: priced.vision,
 			inputCost: priced.inputCost,
 			outputCost: priced.outputCost,
