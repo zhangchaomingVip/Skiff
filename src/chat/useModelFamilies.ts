@@ -44,12 +44,12 @@ export interface ModelSpec {
 export const blankModel = (): ModelSpec => ({ modelId: "", alias: "", inputCost: 0, outputCost: 0, cacheReadCost: 0, cacheWriteCost: 0, currency: "CNY", maxTokens: 8192, contextWindow: 128000 });
 
 export function validateModels(models: ModelSpec[]): string | undefined {
-	if (!models.length) return "请至少添加一个模型，补全线路配置";
+	if (!models.length) return "请至少添加一个模型，补全路线配置";
 	const ids = new Set<string>();
 	for (const model of models) {
 		const id = model.modelId.trim();
 		if (!id) return "模型 ID 不能为空";
-		if (ids.has(id)) return "同一线路内模型 ID 不能重复";
+		if (ids.has(id)) return "同一路线内模型 ID 不能重复";
 		ids.add(id);
 		if (!Number.isSafeInteger(model.contextWindow) || model.contextWindow <= 0 || !Number.isSafeInteger(model.maxTokens) || model.maxTokens <= 0) return "上下文窗口和默认最大输出必须为正整数";
 		if (model.maxTokens > model.contextWindow) return "默认最大输出不能超过上下文窗口";

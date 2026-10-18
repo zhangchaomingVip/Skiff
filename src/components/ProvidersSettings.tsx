@@ -215,9 +215,9 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 			const routes = buildDiscoveredRoutes(connectionPassed ? discoveredModels.filter((m) => !failedModels.includes(m.id)) : [], relay, families, fillFromCatalog, latest.size ? latest : undefined);
 			const saved = await onSaveRelay(relay, routes);
 			if (saved) {
-				if (routes.length) setNotice(`已为「${saved.name}」自动添加 ${routes.length} 条线路，包含 ${routes.reduce((sum, item) => sum + item.route.models.length, 0)} 个模型。`);
-				else if (draft.preset?.familyId) setNotice(`已保存「${saved.name}」，去「模型线路」为 ${FAMILY_LABELS[draft.preset.familyId]} 家族配置模型。`);
-				else if (testModels.length && !testModels.some((id) => discoveredFamily(id))) setNotice(`已保存「${saved.name}」，未发现支持的 DeepSeek、Kimi、GLM 或 Auto 模型，请手动配置线路。`);
+				if (routes.length) setNotice(`已为「${saved.name}」自动添加 ${routes.length} 条路线，包含 ${routes.reduce((sum, item) => sum + item.route.models.length, 0)} 个模型。`);
+				else if (draft.preset?.familyId) setNotice(`已保存「${saved.name}」，去「路线」为 ${FAMILY_LABELS[draft.preset.familyId]} 家族配置模型。`);
+				else if (testModels.length && !testModels.some((id) => discoveredFamily(id))) setNotice(`已保存「${saved.name}」，未发现支持的 DeepSeek、Kimi、GLM 或 Auto 模型，请手动配置路线。`);
 				else setNotice(`已保存「${saved.name}」。`);
 				setDraft(undefined);
 			} else {
@@ -288,7 +288,7 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 						{site && <button type="button" className="editor-site" onClick={() => openLink(site)} title={site}>{hostOf(site)} ↗</button>}
 						<IconButton type="button"  onClick={closeDraft} disabled={pending} aria-label="返回列表"><Icon name="close" /></IconButton>
 					</div>
-					<p className="muted">{draft.isNew && preset ? "地址已按预设填好，粘贴密钥并通过连接测试即可。" : "通过连接测试后保存可补齐缺失线路。"}保存时自动为发现的 DeepSeek、Kimi 和 GLM 模型添加线路，已有线路保留。</p>
+					<p className="muted">{draft.isNew && preset ? "地址已按预设填好，粘贴密钥并通过连接测试即可。" : "通过连接测试后保存可补齐缺失路线。"}保存时自动为发现的 DeepSeek、Kimi 和 GLM 模型添加路线，已有路线保留。</p>
 					<div className="editor-field">
 						<label htmlFor="relay-name">名称</label>
 						<div className="editor-control">
@@ -375,7 +375,7 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 					</section>}
 					{(configError || error) && <p className="form-error" role="alert">{configError || error}</p>}
 					<div className="dialog-actions editor-actions">
-						{!draft.isNew && <Button type="button" variant="danger" onClick={() => setRemoving({ title: "删除供应商", description: `将删除供应商「${relay.name}」，其全部线路与密钥会一并删除。`, action: async () => { const ok = await onDeleteRelay(relay.id); if (ok) setDraft(undefined); return ok; } })} disabled={pending}>删除</Button>}
+						{!draft.isNew && <Button type="button" variant="danger" onClick={() => setRemoving({ title: "删除供应商", description: `将删除供应商「${relay.name}」，其全部路线与密钥会一并删除。`, action: async () => { const ok = await onDeleteRelay(relay.id); if (ok) setDraft(undefined); return ok; } })} disabled={pending}>删除</Button>}
 						<span className="grow" />
 						<Button type="button" variant="secondary" onClick={closeDraft} disabled={pending}>取消</Button>
 						<Button type="submit" variant="primary" size="primary" disabled={pending || testing || (draft.isNew && !connectionPassed)}>{pending ? "保存中…" : draft.isNew ? "添加" : "保存"}</Button>
@@ -385,8 +385,8 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 		) : (
 			<>
 				<h2 id="providers-title">供应商</h2>
-				<p className="muted">一条供应商是一个访问通道：端点加密钥，可被多条模型线路复用。保存时自动为发现的模型生成线路；共 {relays.length} 个供应商。</p>
-				{notice && <p className="family-added-hint" role="status">{notice}<Button type="button" variant="ghost" size="compact" onClick={onOpenRoutes}>查看模型线路</Button></p>}
+				<p className="muted">一条供应商是一个访问通道：端点加密钥，可被多条路线复用。保存时自动为发现的模型生成路线；共 {relays.length} 个供应商。</p>
+				{notice && <p className="family-added-hint" role="status">{notice}<Button type="button" variant="ghost" size="compact" onClick={onOpenRoutes}>查看路线</Button></p>}
 				<section className="family-card" aria-label="供应商列表">
 					{relays.length === 0 && <p className="family-empty">还没添加供应商，从下面的目录挑一个，或用自定义地址。</p>}
 					{relays.map((relay) => {

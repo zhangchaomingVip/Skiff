@@ -1,6 +1,5 @@
 import type { CatalogEntry } from "../rpc/pricingPage";
 import type { OfficialPage } from "../rpc/officialPages";
-
 /** Structured latest-model info for one family, merged from both sources. */
 export interface FamilyLatest {
 	familyId: string;
@@ -172,13 +171,33 @@ export function familyUpdates(latest: Map<string, FamilyLatest>, configuredIds: 
 
 export type RecommendationReason = "latest" | "fallback-available" | "offline";
 
+/** Flagship (exact version) first, then flash; flashx and others come last. */
+const VARIANT_RANK = (id: string) => baseVersion(id) === id ? 0 : /-flash$/i.test(id) ? 1 : 2;
+
+/**
+ * The family models the settings page shows: at most two per family. When the
+ * latest version group is known it wins (flagship then flash); otherwise the
+ * two newest catalog entries take over, and with no data at all the family
+ * stays hidden instead of dumping every legacy model on the page.
+ */
+export function pickVisibleIds(familyId: string, latest: ReadonlyMap<string, FamilyLatest> | undefined, catalog: readonly CatalogEntry[]): string[] {
+	const info = latest?.get(familyId);
+	if (info?.latestGroup.length) return info.latestGroup.slice(0, 2);
+	const providerIds = familyId === "kimi"
+		? ["kimi", "moonshotai"]
+		: [familyId];
+	const dated = catalog
+		.filter((entry) => providerIds.includes(entry.provider) && !NON_CHAT_ID.test(entry.modelId))
+		.map((entry) => ({ id: entry.modelId, updated: entry.updated ?? "" }))		.filter((item) => item.id && item.updated)
+		.sort((a, b) => b.updated.localeCompare(a.updated));
+	if (!dated.length) return [];
+	return [...new Set(dated.map((item) => item.id))].slice(0, 2);
+}
+
 export interface Recommendation {
 	recommended: string[];
 	reason: RecommendationReason;
 }
-
-/** Flagship (exact version) first, then flash; flashx and others come last. */
-const VARIANT_RANK = (id: string) => baseVersion(id) === id ? 0 : /-flash$/i.test(id) ? 1 : 2;
 
 /**
  * Picks at most two models to preselect for a fresh route: the flagship and

@@ -98,6 +98,7 @@ export default function App() {
 		prompt: busy ? "当前会话运行中，请等待完成后修改系统提示词" : locked ? "正在加载会话，请稍后再试" : undefined,
 		providers: busy ? "当前会话运行中，请等待完成后修改供应商配置" : locked || modelFamilies.loading ? "正在加载会话或更新配置，请稍后再试" : undefined,
 		models: busy ? "当前会话运行中，请等待完成后修改模型配置" : locked || modelFamilies.loading ? "正在加载会话或更新配置，请稍后再试" : undefined,
+		routes: busy ? "当前会话运行中，请等待完成后修改路线配置" : locked || modelFamilies.loading ? "正在加载会话或更新配置，请稍后再试" : undefined,
 		archives: locked ? "正在加载会话或切换工作区，请稍后再试" : undefined,
 	}), [busy, locked, modelFamilies.loading]);
 	const openSettings = useCallback((category: SettingsCategory = "appearance") => {
@@ -204,7 +205,7 @@ export default function App() {
 
 	const send = async (text: string, images?: ImageAttachment[], delivery?: Delivery) => {
 		if (!activeChat) return false;
-		if (!modelFamilies.fallback && !displayModel) { setModelNotice("请先在中转上配置线路并启用后再发送消息"); return false; }
+		if (!modelFamilies.fallback && !displayModel) { setModelNotice("请先在中转上配置路线并启用后再发送消息"); return false; }
 		const accepted = await actions.prompt(text, images, delivery);
 		if (accepted && displayModel?.offerId) pendingRecentOffer.current = { id: displayModel.offerId, assistantCount: state.messages.filter((message) => message.role === "assistant").length };
 		if (accepted) library.updateChat(activeChat.id, { updatedAt: Date.now() });
@@ -263,7 +264,7 @@ export default function App() {
 			</div>
 			{retrieval.historyView && <HistorySearchDialog {...retrieval.historyView} onClose={retrieval.closeHistory} />}
 			{projectDialogOpen && <ProjectDialog onAdd={library.addProject} onClose={() => setProjectDialogOpen(false)} />}
-			{settingsCategory && <SettingsDialog onRetryModels={() => void modelFamilies.refresh()} initialCategory={settingsCategory} prompt={{ sessionPath: session.sessionFile, onSaved: () => { setSettingsCategory(undefined); session.reconnect(); } }} restrictions={settingsRestrictions} providers={{ configError: modelFamilies.error, relays: modelFamilies.relays, families: modelFamilies.families, usdCnyRate: modelFamilies.usdCnyRate, onSaveRelay: modelFamilies.saveRelay, onDeleteRelay: modelFamilies.deleteRelay, onSetRelayEnabled: modelFamilies.setRelayEnabled, onTest: modelFamilies.test, onCancelTest: modelFamilies.cancelTest, onDiscover: modelFamilies.discover }} models={{ configError: modelFamilies.error, families: modelFamilies.families, relays: modelFamilies.relays, autoFailover: modelFamilies.config?.autoFailover ?? false, usdCnyRate: modelFamilies.usdCnyRate, onSaveRate: modelFamilies.setUsdCnyRate, onSaveRoute: modelFamilies.saveRoute, onDeleteRoute: modelFamilies.deleteRoute, onReorderRoutes: modelFamilies.reorderRoutes, onSetDefaultRoute: modelFamilies.setDefaultRoute, onAutoFailover: modelFamilies.setAutoFailover }} archives={{ chats: archivedChats, projects: library.workspace?.projects ?? [], busy: locked, canClose: pool.canClose, onRestore: restoreArchivedChat, onDelete: deleteArchivedChat }} search={search} onClose={() => setSettingsCategory(undefined)} />}
+			{settingsCategory && <SettingsDialog onRetryModels={() => void modelFamilies.refresh()} initialCategory={settingsCategory} prompt={{ sessionPath: session.sessionFile, onSaved: () => { setSettingsCategory(undefined); session.reconnect(); } }} restrictions={settingsRestrictions} providers={{ configError: modelFamilies.error, relays: modelFamilies.relays, families: modelFamilies.families, usdCnyRate: modelFamilies.usdCnyRate, onSaveRelay: modelFamilies.saveRelay, onDeleteRelay: modelFamilies.deleteRelay, onSetRelayEnabled: modelFamilies.setRelayEnabled, onTest: modelFamilies.test, onCancelTest: modelFamilies.cancelTest, onDiscover: modelFamilies.discover }} models={{ configError: modelFamilies.error, families: modelFamilies.families }} routes={{ configError: modelFamilies.error, families: modelFamilies.families, relays: modelFamilies.relays, autoFailover: modelFamilies.config?.autoFailover ?? false, usdCnyRate: modelFamilies.usdCnyRate, onSaveRate: modelFamilies.setUsdCnyRate, onSaveRoute: modelFamilies.saveRoute, onDeleteRoute: modelFamilies.deleteRoute, onReorderRoutes: modelFamilies.reorderRoutes, onSetDefaultRoute: modelFamilies.setDefaultRoute, onAutoFailover: modelFamilies.setAutoFailover }} archives={{ chats: archivedChats, projects: library.workspace?.projects ?? [], busy: locked, canClose: pool.canClose, onRestore: restoreArchivedChat, onDelete: deleteArchivedChat }} search={search} onClose={() => setSettingsCategory(undefined)} />}
 		</div>
 		</ModelFamilyContext.Provider>
 	);

@@ -107,10 +107,14 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 			}
 			if (command === "list_model_runtime") return offers();
 			if (command === "fetch_public_catalog") return { models: [], stale: false, fetchedAt: 0 };
-			// Mock latest-model sources: a fake GLM-5.4 group so the launcher hint
-			// and the recommended preselect can be exercised offline.
+			// Mock latest-model sources: official pages aligned with the families
+			// fixture so the models family view can exercise offline trimming.
 			if (command === "fetch_official_pages") return {
-				pages: [{ familyId: "glm", url: "https://mock/glm", body: "<table><tr><th>模型</th></tr><tr><td>GLM-5.4</td></tr><tr><td>GLM-5.4-Flash</td></tr></table>", fetchedAt: 0 }],
+				pages: [
+					{ familyId: "glm", url: "https://mock/glm", body: "<table><tr><th>模型</th><th>状态</th></tr><tr><td>GLM-5.2</td><td></td></tr></table>", fetchedAt: 0 },
+					{ familyId: "deepseek", url: "https://mock/deepseek", body: "<table><tr><th>模型</th><th>deepseek-flash</th><th>deepseek-chat</th><th>deepseek-reasoner</th></tr><tr><td>BASE URL</td><td>https://api.deepseek.com</td><td></td><td></td></tr></table>", fetchedAt: 0 },
+					{ familyId: "kimi", url: "https://mock/kimi", body: "const t = _jsx(T, {cols:[],rows:[[`kimi-k2`],[`kimi-k2-air`]]})", fetchedAt: 0 },
+				],
 				stale: false,
 			};
 			if (command === "cancel_provider_test") return;

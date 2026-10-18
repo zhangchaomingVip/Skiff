@@ -84,7 +84,7 @@ try {
 
 	await button("供应商").click();
 	await button("编辑 官方直连").click();
-	assert.equal(await button("编辑 官方直连 的线路").count(), 0, "Providers page must not list routes");
+	assert.equal(await button("编辑 官方直连 的路线").count(), 0, "Providers page must not list routes");
 	assert.equal(await button("外观").isDisabled(), true);
 	await wait(() => document.activeElement?.id === "relay-name");
 	await shot("provider-editor");
@@ -92,9 +92,9 @@ try {
 	assert.equal(await dialog().count(), 1);
 	assert.equal(await button("外观").isEnabled(), true);
 	assert.equal(await button("编辑 官方直连").evaluate((el) => el === document.activeElement), true, "Return must focus the original provider row");
-	await button("模型线路").click();
+	await button("路线").click();
 	assert.equal(await button("编辑 官方直连").count(), 0, "Route page must not list providers");
-	await button("编辑 官方直连 的线路").click();
+	await button("编辑 官方直连 的路线").click();
 	await page.keyboard.press("Escape");
 	assert.equal(await dialog().count(), 1);
 	await button("供应商").click();
@@ -223,7 +223,7 @@ try {
 	await page.evaluate(() => { for (const process of window.skiffPreview.processes.values()) clearTimeout(process.timer); });
 	await open();
 	assert.equal(await button("供应商").isDisabled(), true);
-	assert.equal(await button("模型线路").isDisabled(), true);
+	assert.equal(await button("路线").isDisabled(), true);
 	assert.equal(await button("系统提示词").isDisabled(), true);
 	await button("深色").click();
 	await button("快捷键").click();
@@ -238,7 +238,7 @@ try {
 	await page.evaluate((id) => window.skiffPreview.emit(id, { type: "extension_ui_request", id: "settings-background", method: "confirm", title: "后台设置验证", message: "确认后台任务" }), backgroundId);
 	await page.getByRole("status", { name: "需要确认", exact: true }).first().waitFor();
 	assert.equal(await button("供应商").isEnabled(), true);
-	assert.equal(await button("模型线路").isEnabled(), true);
+	assert.equal(await button("路线").isEnabled(), true);
 	await close();
 	assert.equal(await page.evaluate((id) => window.skiffPreview.processes.get(id)?.isStreaming, backgroundId), true);
 	assert.equal(await page.evaluate(() => window.skiffPreview.commands.some((item) => item.command === "rpc_send" && JSON.parse(item.args.message).type === "extension_ui_response")), false);

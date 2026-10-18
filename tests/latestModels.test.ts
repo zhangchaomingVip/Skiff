@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { baseVersion, parseOfficialPage, familyLatest, familyUpdates, pickRecommendedIds, type FamilyLatest } from "../src/chat/latestModels.ts";
+import { baseVersion, parseOfficialPage, familyLatest, familyUpdates, pickRecommendedIds, pickVisibleIds, type FamilyLatest } from "../src/chat/latestModels.ts";
 import type { OfficialPage } from "../src/rpc/officialPages.ts";
 import type { CatalogEntry } from "../src/rpc/pricingPage.ts";
 
@@ -88,4 +88,25 @@ test("pickRecommendedIds falls back to newest served IDs, then offline", () => {
 	assert.deepEqual(fallback, { recommended: ["glm-5.3-flash", "glm-5.3"], reason: "fallback-available" });
 	// No catalog at all → empty, UI keeps current behaviour.
 	assert.deepEqual(pickRecommendedIds(["glm-5.3"], undefined, "glm"), { recommended: [], reason: "offline" });
+});
+
+test("pickVisibleIds caps the family view at the two newest models", () => {
+	const latest = new Map<string, FamilyLatest>([
+		["glm", { familyId: "glm", modelIds: ["glm-5.4", "glm-5.4-flash", "glm-5.4-flashx"], latestGroup: ["glm-5.4", "glm-5.4-flash", "glm-5.4-flashx"], latestVersion: "glm-5.4", updated: new Map() }],
+	]);
+	// Latest group wins and is trimmed to two.
+	assert.deepEqual(pickVisibleIds("glm", latest, []), ["glm-5.4", "glm-5.4-flash"]);
+	// Without latest data, the two freshest catalog entries stand in.
+	const catalog: CatalogEntry[] = [
+		{ provider: "glm", modelId: "glm-5.2", name: "", inputCost: 1, outputCost: 1, contextWindow: 0, maxTokens: 0, vision: false, tools: true, reasoning: true, status: null, updated: "2026-06-13" },
+		{ provider: "glm", modelId: "glm-5.3", name: "", inputCost: 1, outputCost: 1, contextWindow: 0, maxTokens: 0, vision: false, tools: true, reasoning: true, status: null, updated: "2026-08-14" },
+		{ provider: "glm", modelId: "glm-4.6", name: "", inputCost: 1, outputCost: 1, contextWindow: 0, maxTokens: 0, vision: false, tools: true, reasoning: true, status: null, updated: "2026-01-01" },
+		{ provider: "kimi", modelId: "kimi-k3", name: "", inputCost: 1, outputCost: 1, contextWindow: 0, maxTokens: 0, vision: false, tools: true, reasoning: true, status: null, updated: "2026-09-01" },
+	];
+	assert.deepEqual(pickVisibleIds("glm", undefined, catalog), ["glm-5.3", "glm-5.2"]);
+	// Kimi reads both its own and the moonshotai catalog scope.
+	const kimiCatalog = [{ ...catalog[3], provider: "moonshotai" }];
+	assert.deepEqual(pickVisibleIds("kimi", undefined, kimiCatalog), ["kimi-k3"]);
+	// No data at all → nothing to show for the family.
+	assert.deepEqual(pickVisibleIds("deepseek", undefined, []), []);
 });

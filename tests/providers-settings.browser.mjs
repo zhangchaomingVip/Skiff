@@ -37,7 +37,7 @@ try {
 	await button("供应商").click();
 	assert.equal(await pressed("供应商"), "true");
 	assert.equal(await button("编辑 官方直连").count(), 1, "Providers entry must list providers");
-	assert.equal(await button("编辑 官方直连 的线路").count(), 0, "Providers entry must not list routes");
+	assert.equal(await button("编辑 官方直连 的路线").count(), 0, "Providers entry must not list routes");
 	await shot("providers-light");
 
 	// 2. Directory → custom provider → live connection test → save.
@@ -53,15 +53,15 @@ try {
 	await button("添加").click();
 	await button("编辑 验证中转").waitFor();
 	const notice = await dialog().getByRole("status").first().textContent();
-	assert.match(notice, /已为「验证中转」自动添加 \d+ 条线路/, "Discovered models must create routes from the provider page");
+	assert.match(notice, /已为「验证中转」自动添加 \d+ 条路线/, "Discovered models must create routes from the provider page");
 	await shot("provider-saved");
 
 	// 3. The notice links across; the route entry lists routes, not providers.
-	await button("查看模型线路").click();
-	await button("编辑 验证中转 的线路").first().waitFor();
-	assert.equal(await pressed("模型线路"), "true");
+	await button("查看路线").click();
+	await button("编辑 验证中转 的路线").first().waitFor();
+	assert.equal(await pressed("路线"), "true");
 	assert.equal(await button("编辑 官方直连").count(), 0, "Route entry must not list providers");
-	assert.equal(await button("编辑 验证中转 的线路").count(), 3, "Discovered routes must be reachable from the route entry");
+	assert.equal(await button("编辑 验证中转 的路线").count(), 3, "Discovered routes must be reachable from the route entry");
 	await shot("routes-light");
 
 	// 4. Both entries render in the dark theme as well.
@@ -69,7 +69,7 @@ try {
 	await button("深色").click();
 	await button("供应商").click();
 	await shot("providers-dark");
-	await button("模型线路").click();
+	await button("路线").click();
 	await shot("routes-dark");
 
 	// 5. Without providers the route entry explains the dependency and links back.
@@ -77,9 +77,9 @@ try {
 	for (const name of ["验证中转", "官方直连", "硅基低价", "官方"]) await removeProvider(name);
 	await dialog().getByText("还没添加供应商").waitFor();
 	await shot("providers-empty");
-	await button("模型线路").click();
+	await button("路线").click();
 	await dialog().getByText("还没有供应商").waitFor();
-	assert.equal(await button("编辑 官方直连 的线路").count(), 0, "Empty route entry must not list routes");
+	assert.equal(await button("编辑 官方直连 的路线").count(), 0, "Empty route entry must not list routes");
 	await loose(/去添加供应商/).click();
 	await dialog().getByText("还没添加供应商").waitFor();
 	assert.equal(await pressed("供应商"), "true", "Cross-link must select the provider entry");
