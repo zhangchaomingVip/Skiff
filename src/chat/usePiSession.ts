@@ -80,6 +80,13 @@ export interface SessionOwner {
 	generation: number;
 }
 
+/** Managed selections are valid only while their projected route is live. */
+export function preferredModelIsConfigured(preferred: Pick<ModelInfo, "provider" | "id" | "modelId">, offers: readonly RuntimeOffer[]): boolean {
+	if (!preferred.provider.startsWith("skiff-")) return true;
+	const modelId = preferred.modelId ?? preferred.id;
+	return offers.some((offer) => offer.providerKey === preferred.provider && offer.modelId === modelId);
+}
+
 interface SessionSnapshot {
 	owner: SessionOwner;
 	phase: "loading" | "ready" | "error";
@@ -301,8 +308,15 @@ export function usePiSession(target?: SessionTarget, runtimeOffers: readonly Run
 				let unavailableModel: ModelInfo | undefined;
 				let selectionError: unknown;
 				if (preferred) {
-					try { await rpc.request({ type: "set_model", provider: preferred.provider, modelId: preferred.id }); }
-					catch (error) { unavailableModel = preferred; selectionError = error; } // The app resolves removed/disabled models after loading configuration.
+					// Managed provider keys are derived from the current route projection.
+					// Do not ask pi to select a stale key from the workspace index: pi
+					// reports that as a fatal "Model not found" error before the route
+					// reconciler gets a chance to switch to a live offer.
+					if (!preferredModelIsConfigured(preferred, runtimeOffersRef.current)) unavailableModel = preferred;
+					else {
+						try { await rpc.request({ type: "set_model", provider: preferred.provider, modelId: preferred.id }); }
+						catch (error) { unavailableModel = preferred; selectionError = error; } // The app resolves removed/disabled models after loading configuration.
+					}
 				}
 				if (!current()) return;
 				const [data, models, transcript, levels, stats] = await Promise.all([
@@ -314,9 +328,12 @@ export function usePiSession(target?: SessionTarget, runtimeOffers: readonly Run
 				]);
 				if (!current()) return;
 				const availableModels = parseModels(models.models);
-				if (unavailableModel && availableModels.some((model) => model.provider === unavailableModel.provider && model.id === unavailableModel.id)) throw selectionError;
 				const parsedModel = parseModels([data.model])[0];
-				const restoredModel = unavailableModel ?? (parsedModel && preferred ? { ...parsedModel, offerId: preferred.offerId, routeId: preferred.routeId, modelId: preferred.modelId, familyId: preferred.familyId, familyName: preferred.familyName, relayId: preferred.relayId } : parsedModel);
+				// A saved model can disappear between sessions, and pi can also reject
+				// a provider while still having a usable default model. Do not turn that
+				// recoverable selection failure into a dead session: keep pi's reported
+				// model so the route reconciler can continue with the live configuration.
+				const restoredModel = selectionError || unavailableModel ? parsedModel : (parsedModel && preferred ? { ...parsedModel, offerId: preferred.offerId, routeId: preferred.routeId, modelId: preferred.modelId, familyId: preferred.familyId, familyName: preferred.familyName, relayId: preferred.relayId } : parsedModel);
 				const messages = attachHistoricalSnapshots(parseMessages(transcript.messages), selected.routeSnapshots);
 				const user = [...messages].reverse().find((message) => message.role === "user");
 				const startedAt = Boolean(data.isStreaming) ? runStarted.current ?? user?.timestamp ?? Date.now() : undefined;

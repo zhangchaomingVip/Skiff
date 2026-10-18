@@ -1,5 +1,6 @@
 // Loaded explicitly by Skiff. Runtime configuration and decrypted keys are
 // inherited from the native parent process; this module never writes secrets.
+import { readFileSync } from "node:fs";
 import { createAssistantMessageEventStream, streamSimpleOpenAICompletions } from "@mariozechner/pi-ai";
 
 /** Present a non-streaming completion to pi's normal streaming parser. */
@@ -21,7 +22,12 @@ export async function adaptResponse(response) {
 }
 
 export default function modelFamilies(pi) {
-	const routes = JSON.parse(process.env.SKIFF_FAMILY_RUNTIME ?? "[]");
+	const runtimeFile = process.env.SKIFF_FAMILY_RUNTIME_FILE;
+	let runtime = process.env.SKIFF_FAMILY_RUNTIME ?? "[]";
+	if (runtimeFile) {
+		try { runtime = readFileSync(runtimeFile, "utf8"); } catch { /* fall back to the small environment form */ }
+	}
+	const routes = JSON.parse(runtime);
 	const lookup = new Map(routes.map((route) => [route.providerKey, route]));
 	const streamSimple = (model, context, options = {}) => {
 		const route = lookup.get(model.provider);

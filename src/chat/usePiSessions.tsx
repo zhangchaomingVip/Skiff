@@ -39,7 +39,10 @@ function SessionRuntime({ target, chat, offers, configuration, report, updateCha
 			...(!chat.customTitle ? { title } : {}),
 			elapsedMs: session.elapsedMs,
 		};
-		if (state.model) {
+		// A failed managed-model restore can leave pi on its global default. Do
+		// not persist that unrelated default over the chat's pinned route before
+		// the runtime-route reconciler has a chance to select a live offer.
+		if (state.model && (!chat.selectedModel?.provider.startsWith("skiff-") || state.model.provider.startsWith("skiff-"))) {
 			const model = state.model;
 			const offer = offers.find((item) => (model.routeId && item.routeId === model.routeId && item.modelId === model.id) || (item.providerKey === model.provider && item.modelId === model.id));
 			const selectedModel = { provider: model.provider, id: model.id, modelId: model.modelId ?? model.id, routeId: offer?.routeId ?? model.routeId, offerId: offer?.offerId ?? model.offerId };

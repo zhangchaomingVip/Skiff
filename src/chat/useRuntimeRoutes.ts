@@ -76,13 +76,25 @@ export function useRuntimeRoutes(session: ReturnType<typeof usePiSession>, chat:
 		const config = configuration.config;
 		if (!session.connected || session.pending || state.isStreaming || state.activeRun || !config || !configuration.ready || applied.current === config) return;
 		applied.current = config;
-		const family = familyFromProvider(state.model?.provider)?.id ?? modelBrand(state.model?.id, state.model?.provider);
-		const resolved = resolveSelection(state.model, [...offers], family, config.families);
+		// The pi process may start on its own global default (for example an
+		// Anthropic model) after a saved managed selection was rejected. Resolve
+		// the route from the chat metadata in that case, otherwise the fallback
+		// family would be inferred from the unrelated default and could issue a
+		// second, invalid set_model request.
+		const snapshot = [...(chat.routeSnapshots ?? [])].reverse().find((item) => item !== null);
+		const snapshotModel = snapshot ? { provider: snapshot.providerKey, id: snapshot.modelId, modelId: snapshot.modelId, routeId: snapshot.routeId, offerId: snapshot.offerId } : undefined;
+		const requested = snapshotModel ?? chat.selectedModel ?? state.model;
+		const family = familyFromProvider(requested?.provider)?.id ?? modelBrand(requested?.id, requested?.provider);
+		// Managed offers are supplied by Skiff's runtime projection and may not
+		// be included in pi's generic available-model response (extensions load
+		// after that response is assembled), so keep the projection as the source
+		// of truth for route reconciliation.
+		const resolved = resolveSelection(requested, [...offers], family, config.families);
 		if (resolved.invalidated) setNotice(resolved.offer ? `当前模型已失效，已切换到 ${resolved.offer.familyName} · ${resolved.offer.relayName} · ${resolved.offer.modelId}` : "当前模型已失效，请先在中转上配置线路");
 		const model = resolved.offer ? modelFor(resolved.offer) : state.model && !familyFromProvider(state.model.provider) ? state.model : undefined;
 		if (session.loadedConfig !== config) session.reconnect(model);
-		else if (resolved.offer && model && (state.model?.provider !== model.provider || state.model.id !== model.id)) void actions.setModel(model);
-	}, [configuration.config, configuration.ready, session.connected, session.pending, session.loadedConfig, state.isStreaming, state.activeRun, state.model, offers]);
+		else if (resolved.offer && model && (state.model?.provider !== model.provider || state.model.id !== model.id || state.model.routeId !== model.routeId || state.model.offerId !== model.offerId)) void actions.setModel(model);
+	}, [configuration.config, configuration.ready, session.connected, session.pending, session.loadedConfig, state.isStreaming, state.activeRun, state.model, state.availableModels, offers, chat.selectedModel]);
 	const selectModel = useCallback(async (model: ModelInfo) => {
 		if (!isCurrent()) return false;
 		setAuthorization((value) => ({ ...value, pending: undefined }));

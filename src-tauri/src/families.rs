@@ -693,7 +693,18 @@ pub fn prepare_runtime(dir: &Path, cmd: &mut std::process::Command) -> Result<()
 	if std::fs::read_to_string(&extension).ok().as_deref() != Some(source) {
 		std::fs::write(&extension, source).map_err(|_| "无法安装模型家族请求适配器")?;
 	}
-	cmd.env("SKIFF_FAMILY_RUNTIME", serde_json::to_string(&routes).map_err(|_| "无法编码线路配置")?);
+	let encoded = serde_json::to_string(&routes).map_err(|_| "无法编码线路配置")?;
+	// Windows limits the complete child environment to roughly 32 KiB. A
+	// workspace with many routes/models can exceed that when the whole runtime
+	// projection is placed in one environment variable, leaving pi with no
+	// registered managed providers and misleading "Model not found" errors.
+	// Keep the JSON environment path for small configurations and use a local,
+	// key-free file for larger projections.
+	let runtime_file = dir.join("skiff-family-runtime.json");
+	std::fs::write(&runtime_file, &encoded).map_err(|_| "无法写入模型家族运行时配置")?;
+	cmd.env("SKIFF_FAMILY_RUNTIME_FILE", &runtime_file);
+	if encoded.len() <= 24_000 { cmd.env("SKIFF_FAMILY_RUNTIME", encoded); }
+	else { cmd.env_remove("SKIFF_FAMILY_RUNTIME"); }
 	cmd.arg("--extension").arg(extension);
 	Ok(())
 }

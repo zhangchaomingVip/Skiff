@@ -171,9 +171,21 @@ export default function App() {
 	const newDraft = useCallback(() => {
 		if (navigationDisabled || !activeProject) return;
 		void drafts.flush();
-		library.createChat(activeProject.id, activeChat?.selectedModel, new Set(allChats.filter((chat) => !pool.canClose(chat.id) || hasDraft(drafts.get(chat.id))).map((chat) => chat.id)));
+		// A saved chat can refer to a route that was removed or renamed since it
+		// was last opened. New chats should inherit the model that is actually
+		// active in the current session, rather than replaying that stale ID and
+		// making pi reject the new session during startup.
+		const inherited = activeChat?.selectedModel;
+		const selectedModel = displayModel ? {
+			provider: displayModel.provider,
+			id: displayModel.id,
+			modelId: displayModel.modelId ?? displayModel.id,
+			...(displayModel.routeId ? { routeId: displayModel.routeId } : {}),
+			...(displayModel.offerId ? { offerId: displayModel.offerId } : {}),
+		} : inherited && (!inherited.provider.startsWith("skiff-") || modelFamilies.offers.some((offer) => offer.providerKey === inherited.provider && offer.modelId === (inherited.modelId ?? inherited.id))) ? inherited : undefined;
+		library.createChat(activeProject.id, selectedModel, new Set(allChats.filter((chat) => !pool.canClose(chat.id) || hasDraft(drafts.get(chat.id))).map((chat) => chat.id)));
 		setView("chat"); if (window.innerWidth <= 760) setSidebarOpen(false);
-	}, [library, navigationDisabled, activeProject, activeChat?.selectedModel, allChats, pool.canClose]);
+	}, [library, navigationDisabled, activeProject, activeChat?.selectedModel, displayModel, modelFamilies.offers, allChats, pool.canClose]);
 	const startLauncherChat = useCallback(async (offer: RuntimeOffer) => {
 		if (navigationDisabled || modelFamilies.loading) return;
 		if (!activeProject) { setModelNotice("请先选择一个项目后再开始聊天"); return; }

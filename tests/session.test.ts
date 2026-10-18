@@ -4,6 +4,8 @@ import { parseMessages, parseModels } from "../src/chat/parse.ts";
 import { reduce } from "../src/chat/reducer.ts";
 import { initialSessionState } from "../src/chat/types.ts";
 import { PiRpc } from "../src/rpc/RpcClient.ts";
+import { preferredModelIsConfigured } from "../src/chat/usePiSession.ts";
+import type { RuntimeOffer } from "../src/chat/modelFamilies.ts";
 import { installMockPi } from "./mockPi.mjs";
 
 test("history restores the active transcript and attaches tool results", () => {
@@ -35,6 +37,13 @@ test("streamed assistant text finalizes once and retains subsequent tool results
 test("models come from pi, including custom providers; invalid descriptors are excluded", () => {
 	assert.deepEqual(parseModels([{ provider: "custom", id: "local-model" }, { id: "missing-provider" }, null]).map((m) => m.id), ["local-model"]);
 	assert.equal(parseModels([{ provider: "custom", id: "local-model", contextWindow: 64000, maxTokens: 32768 }])[0].maxTokens, 32768);
+});
+
+test("stale managed selections are not sent back to pi during startup", () => {
+	const offers = [{ providerKey: "skiff-relay-r1-deepseek", modelId: "deepseek-v4-flash" } as RuntimeOffer];
+	assert.equal(preferredModelIsConfigured({ provider: "skiff-relay-r1-deepseek", id: "kimi/kimi-k3" }, offers), false);
+	assert.equal(preferredModelIsConfigured({ provider: "skiff-relay-r1-deepseek", id: "deepseek-v4-flash" }, offers), true);
+	assert.equal(preferredModelIsConfigured({ provider: "custom", id: "local-model" }, offers), true);
 });
 
 test("RPC listeners precede startup; sessions restore and transport failures reject promptly", async () => {

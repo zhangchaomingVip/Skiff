@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Skiff 设置 · 路线参考稿</title>
+<style>
+	:root {
+		--bg: #101318;
+		--surface: #1b222d;
+		--panel: #222c39;
+		--panel-2: #1b222d;
+		--border: #354154;
+		--border-soft: #2a3443;
+		--text: #edf2f9;
+		--secondary: #bdc9db;
+		--muted: #a5b4cb;
+		--accent: #91baff;
+		--accent-soft: #263e62;
+		--hover: #2b394b;
+		--success: #79dda3;
+		--warning: #f4cd76;
+		--danger: #ff9ca5;
+		--selected: #263e62;
+		--shadow: 0 24px 64px rgba(0, 0, 0, .55), 0 2px 8px rgba(0, 0, 0, .35);
+		--input-bg: #101318;
+		--page: #0b0d11;
+		--grid: #354154;
+	}
+	[data-theme="light"] {
+		--bg: #fafbfc;
+		--surface: #ffffff;
+		--panel: #edf1f6;
+		--panel-2: #f6f8fb;
+		--border: #d5dce6;
+		--border-soft: #e3e9f1;
+		--text: #192333;
+		--secondary: #48566b;
+		--muted: #55647a;
+		--accent: #2458be;
+		--accent-soft: #dce8ff;
+		--hover: #e1e8f2;
+		--success: #176a3d;
+		--warning: #805600;
+		--danger: #b52b37;
+		--selected: #dce8ff;
+		--shadow: 0 24px 64px rgba(16, 25, 40, .18), 0 2px 8px rgba(16, 25, 40, .1);
+		--input-bg: #ffffff;
+		--page: #eef1f5;
+		--grid: #d5dce6;
+	}
+
+	* { box-sizing: border-box; }
+	html, body { min-height: 100%; }
+	body {
+		margin: 0;
+		padding: 28px 20px 48px;
+		background:
+			radial-gradient(900px 500px at 20% -10%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 60%),
+			var(--page);
+		color: var(--text);
+		font-family: "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI", "PingFang SC", -apple-system, sans-serif;
+		font-size: 13px;
+		-webkit-font-smoothing: antialiased;
+	}
+	button, input, select, textarea { font: inherit; color: inherit; }
+	button { cursor: pointer; }
+	code, .mono { font-family: "Cascadia Code", Consolas, Menlo, monospace; }
+
+	/* ---------- stage controls ---------- */
+	.stage { width: min(980px, 100%); margin: 0 auto; }
+	.stage-bar { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; }
+	.stage-brand { display: flex; align-items: center; gap: 10px; color: var(--secondary); font-size: 12px; letter-spacing: .04em; text-transform: uppercase; }
+	.stage-brand b { color: var(--text); font-size: 14px; letter-spacing: 0; text-transform: none; }
+	.stage-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+	.segmented { display: inline-flex; padding: 3px; gap: 2px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+	.segmented button { padding: 5px 11px; border: 0; border-radius: 6px; background: transparent; color: var(--secondary); font-size: 12px; }
+	.segmented button:hover { background: var(--hover); color: var(--text); }
+	.segmented button.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+
+	/* ---------- settings shell ---------- */
+	.dialog { display: flex; flex-direction: column; height: min(740px, calc(100dvh - 130px)); min-height: 560px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg); box-shadow: var(--shadow); overflow: hidden; }
+	.dialog-head { display: flex; align-items: center; justify-content: space-between; flex: none; padding: 12px 20px; border-bottom: 1px solid var(--border); }
+	.dialog-head h1 { margin: 0; font-size: 18px; font-weight: 600; }
+	.layout { display: grid; grid-template-columns: 188px minmax(0, 1fr); flex: 1; min-height: 0; }
+	.nav { padding: 16px 12px; border-right: 1px solid var(--border); background: var(--panel-2); overflow: auto; }
+	.nav button { display: flex; align-items: center; gap: 8px; width: 100%; margin-bottom: 2px; padding: 8px 10px; border: 0; border-radius: 6px; background: transparent; color: var(--secondary); text-align: left; font-size: 13px; }
+	.nav button:hover { background: var(--hover); color: var(--text); }
+	.nav button.active { background: var(--selected); color: var(--accent); font-weight: 600; }
+	.nav svg { width: 16px; height: 16px; flex: none; }
+	.nav .nav-gap { height: 8px; }
+	.content { min-width: 0; overflow: auto; padding: 20px; scrollbar-gutter: stable; }
+	.content::-webkit-scrollbar { width: 10px; }
+	.content::-webkit-scrollbar-thumb { border: 3px solid transparent; border-radius: 999px; background-clip: content-box; background-color: var(--border); }
+
+	.icon-btn { display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--muted); }
+	.icon-btn:hover { border-color: var(--border); color: var(--text); background: var(--hover); }
+	.icon-btn svg { width: 15px; height: 15px; }
+	.ghost { padding: 5px 10px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--secondary); font-size: 12px; }
+	.ghost:hover { border-color: var(--border); color: var(--text); background: var(--hover); }
+	.primary { padding: 7px 16px; border: 1px solid transparent; border-radius: 6px; background: #2458be; color: #fff; font-size: 13px; font-weight: 600; }
+	[data-theme="dark"] .primary { background: #2f66d0; }
+	.primary:hover { background: #1d4ca8; }
+	.tag { padding: 0 7px; border: 1px solid var(--border); border-radius: 999px; color: var(--secondary); font-size: 11px; line-height: 18px; white-space: nowrap; }
+	.tag-default { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); background: color-mix(in srgb, var(--accent) 10%, transparent); color: var(--accent); }
+	.tag-off { color: var(--muted); }
+	.tag-success { border-color: color-mix(in srgb, var(--success) 45%, var(--border)); color: var(--success); }
+	.muted { color: var(--muted); }
+
+	/* ---------- page head ---------- */
+	.page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+	.page-head h2 { margin: 0 0 4px; font-size: 16px; font-weight: 600; }
+	.page-sub { margin: 0; max-width: 54ch; color: var(--muted); font-size: 12px; line-height: 1.6; }
+	.page-stats { display: flex; gap: 8px; flex-wrap: wrap; }
+	.stat { min-width: 74px; padding: 7px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2); }
+	.stat b { display: block; font-size: 16px; font-weight: 600; line-height: 1.2; }
+	.stat span { color: var(--muted); font-size: 11px; }
+	/* Narrow windows: the counts are secondary, drop them before the list reads cramped. */
+	@media (max-width: 720px) { .page-stats { display: none; } }
+
+	.toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 16px 0 10px; }
+	.pills { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+	.pill { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border: 1px solid transparent; border-radius: 999px; background: transparent; color: var(--secondary); font-size: 12px; }
+	.pill:hover { background: var(--hover); color: var(--text); }
+	.pill.active { border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); font-weight: 600; }
+	.pill em { color: var(--muted); font-style: normal; font-weight: 400; font-size: 11px; }
+	.pill.active em { color: var(--accent); }
+
+	/* ---------- family + route list ---------- */
+	.family { position: relative; margin-bottom: 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel-2); }
+	.family-head { display: flex; align-items: center; gap: 10px; padding: 10px 12px 10px 14px; border-radius: 10px 10px 0 0; background: var(--panel); }
+	.family-head.no-bg { background: transparent; }
+	.family-title { display: flex; align-items: center; gap: 8px; min-width: 0; font-weight: 600; }
+	.family-title em { color: var(--muted); font-style: normal; font-weight: 400; font-size: 12px; }
+	.family-hint { margin-left: auto; color: var(--muted); font-size: 12px; white-space: nowrap; }
+	.family-hint b { color: var(--secondary); font-weight: 500; }
+	.brand-mark { display: grid; place-items: center; width: 20px; height: 20px; flex: none; border-radius: 5px; font-size: 10px; font-weight: 700; letter-spacing: .02em; }
+	.brand-deepseek { background: color-mix(in srgb, #4d6bfe 18%, transparent); color: #8ea3ff; }
+	.brand-kimi { background: color-mix(in srgb, #7ad0c0 18%, transparent); color: #7ad0c0; }
+	.brand-glm { background: color-mix(in srgb, #c99bff 18%, transparent); color: #c99bff; }
+	.brand-auto { background: color-mix(in srgb, var(--muted) 18%, transparent); color: var(--secondary); }
+	[data-theme="light"] .brand-deepseek { color: #3350d9; }
+	[data-theme="light"] .brand-kimi { color: #157a68; }
+	[data-theme="light"] .brand-glm { color: #7a3fc4; }
+
+	.routes { position: relative; padding: 0 6px; }
+	.route { display: grid; grid-template-columns: 34px minmax(0, 1fr) 108px 94px 60px; align-items: center; gap: 10px; padding: 9px 6px; border-top: 1px solid var(--border-soft); }
+	.route:first-child { border-top: 0; }
+	.route:hover { background: var(--hover); border-radius: 6px; }
+	.route:hover + .route { border-top-color: transparent; }
+	.route.is-off .route-name, .route.is-off .route-models, .route.is-off .route-price { opacity: .55; }
+	.route-id { min-width: 0; }
+	.route-name { display: flex; align-items: center; gap: 6px; min-width: 0; font-weight: 500; }
+	.route-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+	.route-meta { display: flex; align-items: center; gap: 8px; min-width: 0; margin-top: 3px; color: var(--muted); font-size: 11px; }
+	.route-endpoint { min-width: 0; max-width: 42%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: none; }
+	.route-meta .dot { flex: none; width: 3px; height: 3px; border-radius: 999px; background: var(--border); }
+	.route-models { display: flex; align-items: center; gap: 4px; min-width: 0; overflow: hidden; }
+	.route-models code { flex: 0 1 auto; min-width: 64px; max-width: 158px; padding: 0 6px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--secondary); font-size: 11px; line-height: 17px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+	.route-models .more { flex: none; color: var(--muted); font-size: 11px; }
+	.route-price { text-align: right; font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+	.route-price .sep { margin: 0 2px; color: var(--border); }
+	.route-price small { display: block; color: var(--muted); font-size: 10px; }
+	.route-caps { display: flex; gap: 3px; flex-wrap: wrap; justify-content: flex-end; }
+	.cap { padding: 0 5px; border-radius: 3px; background: color-mix(in srgb, var(--accent) 9%, transparent); color: var(--secondary); font-size: 10px; line-height: 16px; white-space: nowrap; }
+	.route-actions { position: relative; display: flex; align-items: center; justify-content: flex-end; opacity: .45; transition: opacity 120ms ease; }
+	.route:hover .route-actions, .route:focus-within .route-actions { opacity: 1; }
+	.route-actions .icon-btn { width: 24px; height: 24px; }
+	/* Row overflow menu: 设为默认 / 上移 / 下移 / 删除, anchored to the row. */
+	.menu-panel { position: absolute; z-index: 3; min-width: 168px; padding: 4px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); box-shadow: var(--shadow); }
+	.menu-panel button { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px; border: 0; border-radius: 5px; background: transparent; color: var(--secondary); text-align: left; font-size: 12px; }
+	.menu-panel button:hover { background: var(--hover); color: var(--text); }
+	.menu-panel button:disabled { color: var(--muted); opacity: .55; }
+	.menu-panel button.danger { color: var(--danger); }
+	.menu-panel .sep { height: 1px; margin: 4px 2px; background: var(--border-soft); }
+	.empty-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 6px; padding: 10px 12px; border: 1px dashed var(--border); border-radius: 6px; color: var(--muted); font-size: 12px; }
+	.empty-row .link { border: 0; padding: 0; background: none; color: var(--accent); font-size: 12px; text-decoration: underline; text-underline-offset: 2px; }
+	.empty-row .link:hover { color: var(--text); }
+
+	/* iOS-ish switch */
+	.switch { position: relative; display: inline-block; width: 34px; height: 20px; }
+	.switch input { position: absolute; width: 1px; height: 1px; margin: 0; clip-path: inset(50%); overflow: hidden; }
+	.switch .slider { position: absolute; inset: 0; border-radius: 999px; background: var(--border); transition: background-color 150ms ease; pointer-events: none; }
+	.switch .slider::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 999px; background: var(--bg); box-shadow: 0 1px 2px rgba(0, 0, 0, .3); transition: transform 150ms ease; }
+	.switch input:checked + .slider { background: var(--success); }
+	.switch input:checked + .slider::after { transform: translateX(14px); }
+	.switch input:disabled + .slider { background: var(--muted); }
+	/* A locked default route is still on: keep it green, just desaturated, so it
+	   does not read as "停用". */
+	.switch input:checked:disabled + .slider { background: color-mix(in srgb, var(--success) 55%, var(--border)); }
+	.switch input:disabled { cursor: default; }
+
+	.footer-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2); }
+	.footer-bar label { display: inline-flex; align-items: center; gap: 8px; color: var(--secondary); font-size: 12px; }
+	.footer-bar input[type="checkbox"] { width: 14px; height: 14px; margin: 0; accent-color: var(--accent); }
+	.footer-bar .hint { color: var(--muted); font-size: 11px; }
+
+	/* ---------- editor ---------- */
+	.editor { display: flex; flex-direction: column; min-height: 100%; }
+	.editor-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+	.editor-head h2 { margin: 0; font-size: 16px; font-weight: 600; }
+	.editor-sub { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
+	.editor-top { display: grid; grid-template-columns: minmax(220px, 360px) auto; align-items: end; justify-content: start; gap: 16px; margin: 16px 0 4px; }
+	.field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+	.field > span { color: var(--secondary); font-size: 12px; }
+	.field select, .field input, .model-card input { width: 100%; padding: 6px 9px; border: 1px solid var(--border); border-radius: 6px; background: var(--input-bg); color: var(--text); font-size: 12px; }
+	.field select:focus, .field input:focus, .model-card input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 18%, transparent); }
+	.toggle-inline { display: inline-flex; align-items: center; gap: 8px; padding-bottom: 8px; color: var(--secondary); font-size: 12px; white-space: nowrap; }
+	.toggle-inline input { width: 15px; height: 15px; margin: 0; accent-color: var(--accent); }
+
+	.section-head { display: flex; align-items: baseline; gap: 8px; margin: 18px 0 8px; }
+	.section-head h3 { margin: 0; font-size: 13px; font-weight: 600; }
+	.section-head small { color: var(--muted); font-size: 11px; }
+	.section-head .spacer { flex: 1; }
+
+	.import-strip { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; padding: 7px 10px; border: 1px dashed var(--border); border-radius: 6px; color: var(--muted); font-size: 11px; }
+	.import-strip b { color: var(--secondary); font-weight: 500; }
+	.import-strip button { margin-left: auto; }
+
+	.model-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+	.model-card { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2); }
+	.model-card-head { display: flex; align-items: center; gap: 6px; min-width: 0; }
+	.model-card-head code { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); font-size: 12px; font-weight: 600; }
+	.model-card-head .icon-btn { margin-left: auto; width: 22px; height: 22px; }
+	.model-card-head .icon-btn svg { width: 13px; height: 13px; }
+	.model-fields { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+	.model-fields label { display: flex; flex-direction: column; gap: 3px; min-width: 0; color: var(--muted); font-size: 10px; }
+	.model-fields input { padding: 5px 6px; font-size: 11px; font-variant-numeric: tabular-nums; }
+	.model-advanced { margin-top: -2px; }
+	.model-advanced > summary { color: var(--muted); font-size: 11px; cursor: pointer; list-style: none; }
+	.model-advanced > summary::-webkit-details-marker { display: none; }
+	.model-advanced > summary::before { content: "+"; display: inline-block; width: 12px; color: var(--secondary); }
+	.model-advanced[open] > summary::before { content: "−"; }
+	.model-advanced-body { display: grid; gap: 6px; margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--border); }
+	.model-advanced-body .model-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+	.level-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; color: var(--muted); font-size: 11px; }
+	.level-row label { display: inline-flex; align-items: center; gap: 4px; }
+	.level-row input { width: 13px; height: 13px; margin: 0; accent-color: var(--accent); }
+	.vision-select { padding: 4px 6px; border: 1px solid var(--border); border-radius: 4px; background: var(--input-bg); font-size: 11px; }
+
+	.caps-card { margin-top: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2); }
+	.caps-title { margin-bottom: 8px; color: var(--secondary); font-size: 12px; font-weight: 500; }
+	.caps-row { display: flex; flex-wrap: wrap; gap: 6px; }
+	.cap-toggle { display: inline-flex; align-items: center; gap: 6px; padding: 5px 9px; border: 1px solid var(--border); border-radius: 999px; color: var(--muted); font-size: 11px; cursor: pointer; }
+	.cap-toggle input { width: 13px; height: 13px; margin: 0; accent-color: var(--accent); }
+	.cap-toggle:has(input:checked) { border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); background: color-mix(in srgb, var(--accent) 9%, transparent); color: var(--accent); }
+	.editor-actions { position: sticky; bottom: -20px; display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 16px; padding: 12px 0 4px; background: var(--bg); border-top: 1px solid var(--border); }
+
+	/* ---------- empty ---------- */
+	.empty-card { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 36px 20px; border: 1px dashed var(--border); border-radius: 10px; background: var(--panel-2); text-align: center; }
+	.empty-card strong { font-size: 14px; font-weight: 600; }
+	.empty-card p { margin: 0; max-width: 46ch; color: var(--muted); font-size: 12px; line-height: 1.7; }
+
+	.notes { width: min(980px, 100%); margin: 18px auto 0; padding: 0; list-style: none; display: grid; gap: 6px; color: var(--muted); font-size: 12px; }
+	.notes li { display: flex; gap: 8px; }
+	.notes b { flex: none; display: grid; place-items: center; width: 18px; height: 18px; border-radius: 4px; background: var(--surface); color: var(--secondary); font-size: 10px; font-weight: 600; }
+	.view[hidden] { display: none; }
+
+	@media (max-width: 900px) {
+		.route { grid-template-columns: 34px minmax(0, 1fr) max-content 60px; align-items: start; }
+		.route-caps, .route-meta .dot { display: none; }
+		.route-meta { flex-wrap: wrap; row-gap: 3px; }
+		.route-endpoint { max-width: 100%; }
+		.route-models code { max-width: none; }
+		.switch { margin-top: 2px; }
+		.model-grid { grid-template-columns: minmax(0, 1fr); }
+		.layout { grid-template-columns: 148px minmax(0, 1fr); }
+	}
+	@media (max-width: 640px) {
+		body { padding: 12px 10px 24px; }
+		.dialog { height: auto; min-height: 0; }
+		.layout { grid-template-columns: minmax(0, 1fr); }
+		.nav { display: flex; flex-wrap: wrap; gap: 4px; border-right: 0; border-bottom: 1px solid var(--border); }
+		.nav button { width: auto; }
+		.route { grid-template-columns: 34px minmax(0, 1fr) 60px; }
+		.route-price { display: none; }
+		.editor-top { grid-template-columns: minmax(0, 1fr); }
+	}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+	<symbol id="i-sun" viewBox="0 0 16 16"><circle cx="8" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M8 1.2v1.6M8 13.2v1.6M1.2 8h1.6M13.2 8h1.6M3.2 3.2l1.1 1.1M11.7 11.7l1.1 1.1M12.8 3.2l-1.1 1.1M4.3 11.7l-1.1 1.1" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></symbol>
+	<symbol id="i-anchor" viewBox="0 0 16 16"><circle cx="8" cy="3.6" r="1.6" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M8 5.2V13M4 8H2.6a5.4 5.4 0 0 0 10.8 0H12M5.2 11.2A3.5 3.5 0 0 0 8 13" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></symbol>
+	<symbol id="i-tokens" viewBox="0 0 16 16"><rect x="2.4" y="2.4" width="11.2" height="11.2" rx="2.4" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M5.4 6h5.2M5.4 8h5.2M5.4 10h3.2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></symbol>
+	<symbol id="i-flag" viewBox="0 0 16 16"><path d="M3.6 2.4v11.2M3.6 3.2h8.2l-1.4 2.4 1.4 2.4H3.6" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+	<symbol id="i-message" viewBox="0 0 16 16"><path d="M2.6 3.4h10.8v7.2H7.2L4.2 13v-2.4H2.6z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></symbol>
+	<symbol id="i-search" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M10.2 10.2l3 3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></symbol>
+	<symbol id="i-archive" viewBox="0 0 16 16"><rect x="2.4" y="3" width="11.2" height="3" rx=".8" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M3.4 6v6.4h9.2V6M6.4 8.4h3.2" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></symbol>
+	<symbol id="i-code" viewBox="0 0 16 16"><path d="M5.6 4.4L2.4 8l3.2 3.6M10.4 4.4L13.6 8l-3.2 3.6" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+	<symbol id="i-close" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></symbol>
+	<symbol id="i-chevron" viewBox="0 0 16 16"><path d="M4.4 6.2L8 9.8l3.6-3.6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+	<symbol id="i-edit" viewBox="0 0 16 16"><path d="M3 13l.8-3 6.6-6.6 2.2 2.2L6 12.2 3 13z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M9.2 4.4l2.2 2.2" stroke="currentColor" stroke-width="1.3"/></symbol>
+	<symbol id="i-dots" viewBox="0 0 16 16"><circle cx="3.6" cy="8" r="1.2" fill="currentColor"/><circle cx="8" cy="8" r="1.2" fill="currentColor"/><circle cx="12.4" cy="8" r="1.2" fill="currentColor"/></symbol>
+	<symbol id="i-plus" viewBox="0 0 16 16"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></symbol>
+	<symbol id="i-trash" viewBox="0 0 16 16"><path d="M3.4 4.4h9.2M6.6 4.4V3h2.8v1.4M4.6 4.4l.6 8.2h5.6l.6-8.2M6.8 6.8v3.6M9.2 6.8v3.6" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></symbol>
+	<symbol id="i-check" viewBox="0 0 16 16"><path d="M3.4 8.4l2.8 2.8 6.4-6.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+</svg>
+
+<div class="stage">
+	<div class="stage-bar">
+		<div class="stage-brand">Skiff <b>设置 · 路线</b> 参考稿</div>
+		<div class="stage-actions">
+			<div class="segmented" role="tablist" aria-label="视图">
+				<button type="button" data-view="list" class="active">列表</button>
+				<button type="button" data-view="editor">编辑线路</button>
+				<button type="button" data-view="empty">空状态</button>
+			</div>
+			<div class="segmented" aria-label="主题">
+				<button type="button" data-theme-btn="light">浅色</button>
+				<button type="button" data-theme-btn="dark" class="active">深色</button>
+			</div>
+		</div>
+	</div>
+
+	<div class="dialog">
+		<div class="dialog-head"><h1>设置</h1><button class="icon-btn" type="button" aria-label="关闭"><svg><use href="#i-close"/></svg></button></div>
+		<div class="layout">
+			<nav class="nav" aria-label="设置分类">
+				<button type="button"><svg><use href="#i-sun"/></svg>外观</button>
+				<button type="button"><svg><use href="#i-search"/></svg>联网搜索</button>
+				<button type="button"><svg><use href="#i-message"/></svg>系统提示词</button>
+				<div class="nav-gap"></div>
+				<button type="button"><svg><use href="#i-anchor"/></svg>供应商</button>
+				<button type="button"><svg><use href="#i-tokens"/></svg>模型</button>
+				<button type="button" class="active"><svg><use href="#i-flag"/></svg>路线</button>
+				<div class="nav-gap"></div>
+				<button type="button"><svg><use href="#i-archive"/></svg>归档会话</button>
+				<button type="button"><svg><use href="#i-code"/></svg>快捷键</button>
+			</nav>
+
+			<div class="content">
+				<!-- ============ list ============ -->
+				<div class="view" data-panel="list">
+					<header class="page-head">
+						<div>
+							<h2>路线</h2>
+							<p class="page-sub">一个供应商 × 一个模型家族 = 一条路线。模型、单价与能力按路线保存；默认路线决定新会话从哪里开始。</p>
+						</div>
+						<div class="page-stats">
+							<div class="stat"><b>3</b><span>个供应商</span></div>
+							<div class="stat"><b>6</b><span>条路线</span></div>
+							<div class="stat"><b>3</b><span>个默认</span></div>
+						</div>
+					</header>
+
+					<div class="toolbar">
+						<div class="pills" role="tablist" aria-label="按家族筛选">
+							<button class="pill active" type="button">全部 <em>6</em></button>
+							<button class="pill" type="button">DeepSeek <em>3</em></button>
+							<button class="pill" type="button">Kimi <em>2</em></button>
+							<button class="pill" type="button">GLM <em>0</em></button>
+							<button class="pill" type="button">Auto <em>1</em></button>
+						</div>
+						<button class="ghost" type="button">全部收起</button>
+					</div>
+
+					<section class="family">
+						<div class="family-head">
+							<span class="family-title"><span class="brand-mark brand-deepseek">DS</span>DeepSeek <em>3 条路线</em></span>
+							<span class="family-hint">按顺序尝试</span>
+							<button class="icon-btn" type="button" aria-label="收起 DeepSeek"><svg><use href="#i-chevron"/></svg></button>
+						</div>
+						<div class="routes">
+							<article class="route">
+								<label class="switch" title="默认路线不可停用"><input type="checkbox" checked disabled><span class="slider"></span></label>
+								<div class="route-id">
+									<div class="route-name"><span>OpenCSG</span><span class="tag tag-default">默认</span></div>
+									<div class="route-meta"><span class="route-endpoint">api.opencsg.com</span><span class="dot"></span><span class="route-models"><code>deepseek-v4.1</code><code>deepseek-v4-flash</code><span class="more">+1</span></span></div>
+								</div>
+								<div class="route-price">¥2.00<span class="sep">/</span>¥8.00<small>每百万 · 输入/输出</small></div>
+								<div class="route-caps"><span class="cap">图片</span><span class="cap">推理</span><span class="cap">工具</span></div>
+								<div class="route-actions">
+									<button class="icon-btn" type="button" title="编辑路线" aria-label="编辑 OpenCSG 路线"><svg><use href="#i-edit"/></svg></button>
+									<button class="icon-btn" type="button" data-more title="更多" aria-label="更多操作"><svg><use href="#i-dots"/></svg></button>
+								</div>
+							</article>
+
+							<article class="route">
+								<label class="switch" title="停用路线"><input type="checkbox" checked><span class="slider"></span></label>
+								<div class="route-id">
+									<div class="route-name"><span>硅基流动</span></div>
+									<div class="route-meta"><span class="route-endpoint">api.siliconflow.cn</span><span class="dot"></span><span class="route-models"><code>deepseek-v4.1</code><code>deepseek-v4-flash</code></span></div>
+								</div>
+								<div class="route-price">¥2.40<span class="sep">/</span>¥9.60<small>每百万 · 输入/输出</small></div>
+								<div class="route-caps"><span class="cap">推理</span><span class="cap">工具</span></div>
+								<div class="route-actions">
+									<button class="icon-btn" type="button" title="编辑路线" aria-label="编辑硅基流动路线"><svg><use href="#i-edit"/></svg></button>
+									<button class="icon-btn" type="button" title="更多" aria-label="更多操作" data-more><svg><use href="#i-dots"/></svg></button>
+								</div>
+							</article>
+
+							<article class="route is-off">
+								<label class="switch" title="启用路线"><input type="checkbox"><span class="slider"></span></label>
+								<div class="route-id">
+									<div class="route-name"><span>DeepSeek 官方</span><span class="tag tag-off">已停用</span></div>
+									<div class="route-meta"><span class="route-endpoint">api.deepseek.com</span><span class="dot"></span><span class="route-models"><code>deepseek-v4.1</code></span></div>
+								</div>
+								<div class="route-price">¥4.00<span class="sep">/</span>¥16.00<small>每百万 · 输入/输出</small></div>
+								<div class="route-caps"><span class="cap">工具</span></div>
+								<div class="route-actions">
+									<button class="icon-btn" type="button" title="编辑路线" aria-label="编辑 DeepSeek 官方路线"><svg><use href="#i-edit"/></svg></button>
+									<button class="icon-btn" type="button" title="更多" aria-label="更多操作" data-more><svg><use href="#i-dots"/></svg></button>
+								</div>
+							</article>
+						</div>
+					</section>
+
+					<section class="family">
+						<div class="family-head">
+							<span class="family-title"><span class="brand-mark brand-kimi">K</span>Kimi <em>2 条路线</em></span>
+							<span class="family-hint">按顺序尝试</span>
+							<button class="icon-btn" type="button" aria-label="收起 Kimi"><svg><use href="#i-chevron"/></svg></button>
+						</div>
+						<div class="routes">
+							<article class="route">
+								<label class="switch" title="默认路线不可停用"><input type="checkbox" checked disabled><span class="slider"></span></label>
+								<div class="route-id">
+									<div class="route-name"><span>硅基流动</span><span class="tag tag-default">默认</span></div>
+									<div class="route-meta"><span class="route-endpoint">api.siliconflow.cn</span><span class="dot"></span><span class="route-models"><code>kimi-k2</code><code>kimi-k2-air</code></span></div>
+								</div>
+								<div class="route-price">¥3.00<span class="sep">/</span>¥12.00<small>每百万 · 输入/输出</small></div>
+								<div class="route-caps"><span class="cap">图片</span><span class="cap">推理</span></div>
+								<div class="route-actions">
+									<button class="icon-btn" type="button" title="编辑路线" aria-label="编辑硅基流动路线"><svg><use href="#i-edit"/></svg></button>
+									<button class="icon-btn" type="button" title="更多" aria-label="更多操作" data-more><svg><use href="#i-dots"/></svg></button>
+								</div>
+							</article>
+
+							<article class="route">
+								<label class="switch" title="停用路线"><input type="checkbox" checked><span class="slider"></span></label>
+								<div class="route-id">
+									<div class="route-name"><span>OpenCSG</span></div>
+									<div class="route-meta"><span class="route-endpoint">api.opencsg.com</span><span class="dot"></span><span class="route-models"><code>kimi-k2</code></span></div>
+								</div>
+								<div class="route-price">¥3.50<span class="sep">/</span>¥14.00<small>每百万 · 输入/输出</small></div>
+								<div class="route-caps"><span class="cap">工具</span></div>
+								<div class="route-actions">
+									<button class="icon-btn" type="button" title="编辑路线" aria-label="编辑 OpenCSG 路线"><svg><use href="#i-edit"/></svg></button>
+									<button class="icon-btn" type="button" title="更多" aria-label="更多操作" data-more><svg><use href="#i-dots"/></svg></button>
+								</div>
+							</article>
+						</div>
+					</section>
+
+					<section class="family">
+						<div class="family-head no-bg">
+							<span class="family-title"><span class="brand-mark brand-glm">GL</span>GLM <em>0 条路线</em></span>
+							<button class="icon-btn" type="button" aria-label="展开 GLM"><svg><use href="#i-chevron"/></svg></button>
+						</div>
+						<div class="empty-row"><span>这个家族还没有路线。先从已有供应商添加一条，模型与价格随即可用。</span><button class="link" type="button">从供应商添加</button></div>
+					</section>
+
+					<section class="family">
+						<div class="family-head">
+							<span class="family-title"><span class="brand-mark brand-auto">A</span>Auto <em>1 条路线</em></span>
+							<span class="family-hint">自动选择</span>
+							<button class="icon-btn" type="button" aria-label="收起 Auto"><svg><use href="#i-chevron"/></svg></button>
+						</div>
+						<div class="routes">
+							<article class="route">
+								<label class="switch" title="默认路线不可停用"><input type="checkbox" checked disabled><span class="slider"></span></label>
+								<div class="route-id">
+									<div class="route-name"><span>OpenCSG</span><span class="tag tag-default">默认</span></div>
+									<div class="route-meta"><span class="route-endpoint">api.opencsg.com</span><span class="dot"></span><span class="route-models"><code>deepseek-v4.1</code><code>kimi-k2</code><span class="more">+2</span></span></div>
+								</div>
+								<div class="route-price">—<small>按所选模型计价</small></div>
+								<div class="route-caps"><span class="cap">图片</span><span class="cap">推理</span></div>
+								<div class="route-actions">
+									<button class="icon-btn" type="button" title="编辑路线" aria-label="编辑 OpenCSG 路线"><svg><use href="#i-edit"/></svg></button>
+									<button class="icon-btn" type="button" title="更多" aria-label="更多操作" data-more><svg><use href="#i-dots"/></svg></button>
+								</div>
+							</article>
+						</div>
+					</section>
+
+					<div class="footer-bar">
+						<label><input type="checkbox"> 失败时自动切到同家族下一条可用路线</label>
+						<span class="hint">仅切换一次，跨账户切换仍需确认</span>
+					</div>
+				</div>
+
+				<!-- ============ editor ============ -->
+				<div class="view" data-panel="editor" hidden>
+					<form class="editor" onsubmit="return false">
+						<div class="editor-head">
+							<div>
+								<h2>编辑路线 · DeepSeek</h2>
+								<p class="editor-sub">地址与密钥来自供应商，这里只配置模型、单价与能力。</p>
+							</div>
+							<button class="icon-btn" type="button" aria-label="返回列表"><svg><use href="#i-close"/></svg></button>
+						</div>
+
+						<div class="editor-top">
+							<label class="field"><span>所属供应商</span><select><option>OpenCSG（api.opencsg.com）</option></select></label>
+							<label class="toggle-inline"><input type="checkbox" checked> 启用此路线</label>
+						</div>
+
+						<div class="section-head">
+							<h3>模型</h3><small>单价按每百万令牌，输入 / 输出</small>
+							<span class="spacer"></span>
+							<button class="ghost" type="button">+ 添加模型</button>
+						</div>
+
+						<div class="import-strip"><b>价格导入</b> 官方定价页、粘贴表格或截图识别，可一次填写多个模型<button class="ghost" type="button">打开</button></div>
+
+						<div class="model-grid">
+							<div class="model-card">
+								<div class="model-card-head"><code>deepseek-v4.1</code><button class="icon-btn" type="button" title="删除模型" aria-label="删除模型"><svg><use href="#i-trash"/></svg></button></div>
+								<div class="model-fields">
+									<label>输入 ¥<input value="2.00" inputmode="decimal"></label>
+									<label>输出 ¥<input value="8.00" inputmode="decimal"></label>
+									<label>上下文<input value="128000"></label>
+									<label>最大输出<input value="64000"></label>
+								</div>
+								<details class="model-advanced">
+									<summary>缓存价、推理等级、图片</summary>
+									<div class="model-advanced-body">
+										<div class="model-fields">
+											<label>缓存读 ¥<input value="0.50"></label>
+											<label>缓存写 ¥<input value="2.00"></label>
+										</div>
+										<div class="level-row">推理等级
+											<label><input type="checkbox" checked>low</label>
+											<label><input type="checkbox" checked>medium</label>
+											<label><input type="checkbox" checked>high</label>
+										</div>
+										<div class="level-row">图片输入 <select class="vision-select"><option>跟随路线默认</option><option>支持图片</option><option>仅文本</option></select></div>
+									</div>
+								</details>
+							</div>
+
+							<div class="model-card">
+								<div class="model-card-head"><code>deepseek-v4-flash</code><button class="icon-btn" type="button" title="删除模型" aria-label="删除模型"><svg><use href="#i-trash"/></svg></button></div>
+								<div class="model-fields">
+									<label>输入 ¥<input value="0.80" inputmode="decimal"></label>
+									<label>输出 ¥<input value="3.20" inputmode="decimal"></label>
+									<label>上下文<input value="64000"></label>
+									<label>最大输出<input value="32000"></label>
+								</div>
+								<details class="model-advanced">
+									<summary>缓存价、推理等级、图片</summary>
+									<div class="model-advanced-body">
+										<div class="model-fields">
+											<label>缓存读 ¥<input value="0.20"></label>
+											<label>缓存写 ¥<input value="0.80"></label>
+										</div>
+										<div class="level-row">推理等级
+											<label><input type="checkbox" checked>low</label>
+											<label><input type="checkbox" checked>medium</label>
+											<label><input type="checkbox" checked>high</label>
+										</div>
+										<div class="level-row">图片输入 <select class="vision-select"><option>仅文本</option><option>跟随路线默认</option><option>支持图片</option></select></div>
+									</div>
+								</details>
+							</div>
+
+							<div class="model-card">
+								<div class="model-card-head"><code>deepseek-reasoner</code><button class="icon-btn" type="button" title="删除模型" aria-label="删除模型"><svg><use href="#i-trash"/></svg></button></div>
+								<div class="model-fields">
+									<label>输入 ¥<input value="4.00" inputmode="decimal"></label>
+									<label>输出 ¥<input value="16.00" inputmode="decimal"></label>
+									<label>上下文<input value="128000"></label>
+									<label>最大输出<input value="64000"></label>
+								</div>
+								<details class="model-advanced">
+									<summary>缓存价、推理等级、图片</summary>
+									<div class="model-advanced-body">
+										<div class="model-fields">
+											<label>缓存读 ¥<input value="0.00"></label>
+											<label>缓存写 ¥<input value="0.00"></label>
+										</div>
+										<div class="level-row">推理等级
+											<label><input type="checkbox">low</label>
+											<label><input type="checkbox" checked>medium</label>
+											<label><input type="checkbox" checked>high</label>
+										</div>
+										<div class="level-row">图片输入 <select class="vision-select"><option>仅文本</option></select></div>
+									</div>
+								</details>
+							</div>
+						</div>
+
+						<div class="caps-card">
+							<div class="caps-title">路线能力（对全部模型生效）</div>
+							<div class="caps-row">
+								<label class="cap-toggle"><input type="checkbox" checked> 流式输出</label>
+								<label class="cap-toggle"><input type="checkbox" checked> 工具调用</label>
+								<label class="cap-toggle"><input type="checkbox" checked> 默认支持图片</label>
+								<label class="cap-toggle"><input type="checkbox" checked> 推理输出</label>
+							</div>
+						</div>
+
+						<div class="editor-actions">
+							<button class="ghost" type="button">返回</button>
+							<button class="primary" type="submit">保存</button>
+						</div>
+					</form>
+				</div>
+
+				<!-- ============ empty ============ -->
+				<div class="view" data-panel="empty" hidden>
+					<header class="page-head">
+						<div>
+							<h2>路线</h2>
+							<p class="page-sub">路线依附于供应商：先添加地址与密钥，再为家族配置线路。</p>
+						</div>
+					</header>
+					<div class="empty-card" style="margin-top:16px">
+						<svg width="24" height="24" style="color:var(--muted)"><use href="#i-anchor"/></svg>
+						<strong>还没有供应商</strong>
+						<p>供应商提供端点和密钥，路线决定某个家族用哪个供应商、跑哪些模型、按什么价格计费。添加第一个供应商后，会自动为 DeepSeek、Kimi、GLM 生成可用路线。</p>
+						<button class="primary" type="button">去添加供应商</button>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<ol class="notes">
+		<li><b>1</b>家族筛选从左侧竖栏移到顶部胶囊，内容区多出约 112px，模型名和价格不必再挤在两行里。</li>
+		<li><b>2</b>每个路线一行：开关、供应商、端点、模型、单价、能力同屏可见，常见判断不需要进编辑页。</li>
+		<li><b>3</b>默认路线用徽章表达；「设为默认 / 上移 / 下移 / 删除」收进行尾「⋯」；「清空默认」只在有默认时出现在家族底部，避免五个按钮排一行。</li>
+		<li><b>4</b>编辑页把每个模型收成一张卡，缓存价与推理等级默认折叠；价格导入是一条可展开的窄条，不再占据模型列表顶部。</li>
+		<li><b>5</b>空家族用虚线一行提示，与「还没有供应商」的空状态区分开，两者各自指向正确的下一步。</li>
+	</ol>
+</div>
+
+<script>
+	const panels = document.querySelectorAll("[data-panel]");
+	const show = (view) => {
+		for (const button of document.querySelectorAll("[data-view]")) button.classList.toggle("active", button.dataset.view === view);
+		for (const panel of panels) panel.hidden = panel.dataset.panel !== view;
+		document.querySelector(".content").scrollTop = 0;
+	};
+	for (const button of document.querySelectorAll("[data-view]")) {
+		button.addEventListener("click", () => show(button.dataset.view));
+	}
+	// ?view=editor|empty opens that panel directly, handy for screenshots.
+	const requested = new URLSearchParams(location.search).get("view");
+	if (requested && [...panels].some((panel) => panel.dataset.panel === requested)) show(requested);
+	const requestedTheme = new URLSearchParams(location.search).get("theme");
+	if (requestedTheme === "light" || requestedTheme === "dark") {
+		document.documentElement.dataset.theme = requestedTheme;
+		for (const button of document.querySelectorAll("[data-theme-btn]")) button.classList.toggle("active", button.dataset.themeBtn === requestedTheme);
+	}
+	for (const button of document.querySelectorAll("[data-theme-btn]")) {
+		button.addEventListener("click", () => {
+			document.documentElement.dataset.theme = button.dataset.themeBtn;
+			for (const other of document.querySelectorAll("[data-theme-btn]")) other.classList.toggle("active", other === button);
+		});
+	}
+
+	// Row overflow menu: one panel at a time, anchored under its ⋯ button.
+	let openMenu = null;
+	const closeMenu = () => { openMenu?.remove(); openMenu = null; };
+	for (const button of document.querySelectorAll("[data-more]")) {
+		button.addEventListener("click", (event) => {
+			event.stopPropagation();
+			const wasOpen = openMenu?.dataset.owner === button.getAttribute("aria-label");
+			closeMenu();
+			if (wasOpen) return;
+			const row = button.closest(".route");
+			const isDefault = !!row.querySelector(".tag-default");
+			const panel = document.createElement("div");
+			panel.className = "menu-panel";
+			panel.dataset.owner = button.getAttribute("aria-label");
+			panel.innerHTML = `
+				<button type="button" ${isDefault ? "disabled" : ""}>设为默认路线</button>
+				<button type="button">上移</button>
+				<button type="button">下移</button>
+				<div class="sep"></div>
+				${isDefault ? "<button type=\"button\">清空默认路线</button>" : ""}
+				<button type="button" class="danger">删除路线</button>`;
+			const host = row.parentElement;
+			const hostBox = host.getBoundingClientRect();
+			const box = button.getBoundingClientRect();
+			// Menu hangs from the row's right edge; flip above when it would leave the dialog.
+			const contentBox = document.querySelector(".content").getBoundingClientRect();
+			const estimated = 152;
+			const below = contentBox.bottom - box.bottom;
+			if (below < estimated) {
+				panel.style.bottom = `${hostBox.bottom - box.top + 4}px`;
+			} else {
+				panel.style.top = `${box.bottom - hostBox.top + 4}px`;
+			}
+			panel.style.right = `${Math.max(4, hostBox.right - box.right)}px`;
+			host.appendChild(panel);
+			openMenu = panel;
+		});
+	}
+	document.addEventListener("click", closeMenu);
+	document.addEventListener("keydown", (event) => { if (event.key === "Escape") closeMenu(); });
+</script>
+</body>
+</html>
