@@ -252,7 +252,7 @@
       "src/index.css:486 .back-bottom box-shadow: 0 3px 16px var(--shadow-color)",
       "src/index.css:554 .composer-menu box-shadow: 0 8px 28px var(--shadow-color)",
       "src/index.css:598 .provider-toast box-shadow: 0 8px 28px var(--shadow-color)",
-      "src/index.css:899 .switch .slider::after box-shadow: 0 1px 2px var(--shadow-color)",
+      "src/index.css:901 .switch .slider::after box-shadow: 0 1px 2px var(--shadow-color)",
       "src/components/ui.css:25 .ui-button[data-variant=setting].active, .ui-button[data-variant=setting][aria-pressed=true] box-shadow: inset 2px 0 0 var(--accent)"
     ],
     "controlHeights": [
@@ -260,10 +260,10 @@
       "src/index.css:289 .prompt-input min-height: 160px",
       "src/index.css:624 .settings-trigger.ui-button height: auto",
       "src/index.css:624 .settings-trigger.ui-button min-height: var(--control-primary)",
-      "src/index.css:710 .model-discovery-trigger min-height: 34px",
-      "src/index.css:738 .connection-model input[type=\"checkbox\"] height: 14px",
-      "src/index.css:880 .provider-relay-btn min-height: 48px",
-      "src/index.css:897 .switch input height: 1px",
+      "src/index.css:712 .model-discovery-trigger min-height: 34px",
+      "src/index.css:740 .connection-model input[type=\"checkbox\"] height: 14px",
+      "src/index.css:882 .provider-relay-btn min-height: 48px",
+      "src/index.css:899 .switch input height: 1px",
       "src/components/ui.css:9 .ui-button height: var(--control-regular)",
       "src/components/ui.css:12 .ui-button[data-size=compact] height: var(--control-compact)",
       "src/components/ui.css:13 .ui-button[data-size=primary] height: var(--control-primary)",

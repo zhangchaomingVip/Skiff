@@ -341,13 +341,17 @@ fn now_unix() -> i64 {
 }
 
 /// Official prices for the configured families, pruned from models.dev.
-/// Fresh cache (24h) short-circuits the network; on failure an expired cache
-/// is served so the import flow degrades instead of breaking.
-pub(crate) async fn public_catalog(dir: &Path) -> Result<CatalogResponse, String> {
+/// Fresh cache (24h) short-circuits the network; `refresh` skips the cache
+/// and rewrites it on success so the next TTL window starts from now. On
+/// failure an expired cache is served so the import flow degrades instead of
+/// breaking.
+pub(crate) async fn public_catalog(dir: &Path, refresh: bool) -> Result<CatalogResponse, String> {
 	let cache_path = catalog_cache_path(dir);
-	if let Some(cache) = read_catalog_cache(&cache_path) {
-		if now_unix() - cache.fetched_at < CATALOG_TTL_SECS {
-			return Ok(CatalogResponse { stale: false, fetched_at: cache.fetched_at, models: cache.models });
+	if !refresh {
+		if let Some(cache) = read_catalog_cache(&cache_path) {
+			if now_unix() - cache.fetched_at < CATALOG_TTL_SECS {
+				return Ok(CatalogResponse { stale: false, fetched_at: cache.fetched_at, models: cache.models });
+			}
 		}
 	}
 	match fetch_catalog_json().await {
@@ -429,11 +433,11 @@ struct OfficialPagesCache {
 /// Fetches every official page independently; a family whose page fails keeps
 /// its expired cache entry (or drops out entirely), so one redesign never
 /// blanks the whole catalog.
-pub(crate) async fn official_pages(dir: &Path) -> Result<OfficialPagesResponse, String> {
-	official_pages_with_urls(dir, OFFICIAL_PAGES.iter().map(|(family, url)| (*family, url.to_string())).collect()).await
+pub(crate) async fn official_pages(dir: &Path, refresh: bool) -> Result<OfficialPagesResponse, String> {
+	official_pages_with_urls(dir, refresh, OFFICIAL_PAGES.iter().map(|(family, url)| (*family, url.to_string())).collect()).await
 }
 
-async fn official_pages_with_urls(dir: &Path, targets: Vec<(&str, String)>) -> Result<OfficialPagesResponse, String> {
+async fn official_pages_with_urls(dir: &Path, refresh: bool, targets: Vec<(&str, String)>) -> Result<OfficialPagesResponse, String> {
 	let cache_path = official_pages_cache_path(dir);
 	let cache = std::fs::read(&cache_path).ok()
 		.and_then(|bytes| serde_json::from_slice::<OfficialPagesCache>(&bytes).ok());
@@ -443,7 +447,7 @@ async fn official_pages_with_urls(dir: &Path, targets: Vec<(&str, String)>) -> R
 	for (family_id, url) in targets {
 		let cached = cache.as_ref().and_then(|cache| cache.pages.iter().find(|page| page.family_id == family_id));
 		if let Some(cached) = cached {
-			if now - cached.fetched_at < OFFICIAL_PAGE_TTL_SECS {
+			if !refresh && now - cached.fetched_at < OFFICIAL_PAGE_TTL_SECS {
 				pages.push(cached.clone());
 				continue;
 			}
@@ -620,7 +624,7 @@ mod tests {
 	// test drives the shared loop with loopback URLs instead.
 	async fn official_pages_with_hosts(dir: &Path, hosts: [&str; 3]) -> Result<OfficialPagesResponse, String> {
 		let targets = OFFICIAL_PAGES.iter().zip(hosts).map(|((family, _), host)| (*family, format!("http://{host}/page"))).collect();
-		official_pages_with_urls(dir, targets).await
+		official_pages_with_urls(dir, false, targets).await
 	}
 
 	#[test]
@@ -651,6 +655,20 @@ mod tests {
 		assert!(third.stale);
 		assert_eq!(third.pages.len(), 2);
 		assert_eq!(third.pages.iter().find(|page| page.family_id == "deepseek").unwrap().body, "cached");
+
+		// refresh skips even a fresh cache and rewrites it, restarting the TTL.
+		let refresh_good = page_server(200, "<html>glm-5.4</html>");
+		let refreshed = tauri::async_runtime::block_on(async {
+			let targets = OFFICIAL_PAGES.iter().map(|(family, _)| (*family, format!("http://{refresh_good}/page"))).collect();
+			official_pages_with_urls(&dir, true, targets).await
+		}).unwrap();
+		assert!(!refreshed.stale);
+		assert_eq!(refreshed.pages.len(), 3);
+		assert_eq!(refreshed.pages.iter().find(|page| page.family_id == "glm").unwrap().body, "<html>glm-5.4</html>");
+		// The rewritten cache serves the next TTL window without network.
+		let after = tauri::async_runtime::block_on(official_pages_with_hosts(&dir, host_refs)).unwrap();
+		assert_eq!(after.pages.iter().find(|page| page.family_id == "glm").unwrap().body, "<html>glm-5.4</html>");
+		assert!(!after.stale);
 		std::fs::remove_dir_all(dir).unwrap();
 	}
 }

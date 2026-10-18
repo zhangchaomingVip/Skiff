@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { baseVersion, parseOfficialPage, familyLatest, familyUpdates, pickRecommendedIds, pickVisibleIds, type FamilyLatest } from "../src/chat/latestModels.ts";
+import { baseVersion, parseOfficialPage, familyLatest, familyUpdates, mergeFamilyModels, pickRecommendedIds, pickVisibleIds, sameModelId, seedFamilyModels, FALLBACK_LATEST, type FamilyLatest } from "../src/chat/latestModels.ts";
 import type { OfficialPage } from "../src/rpc/officialPages.ts";
 import type { CatalogEntry } from "../src/rpc/pricingPage.ts";
 
@@ -109,4 +109,55 @@ test("pickVisibleIds caps the family view at the two newest models", () => {
 	assert.deepEqual(pickVisibleIds("kimi", undefined, kimiCatalog), ["kimi-k3"]);
 	// No data at all → nothing to show for the family.
 	assert.deepEqual(pickVisibleIds("deepseek", undefined, []), []);
+});
+
+test("seedFamilyModels fills missing families from the built-in defaults", () => {
+	const seeded = seedFamilyModels(undefined);
+	for (const familyId of Object.keys(FALLBACK_LATEST)) {
+		const entries = seeded[familyId]!;
+		assert.equal(entries.length, 2);
+		assert.deepEqual(entries.map((entry) => entry.modelId), [...FALLBACK_LATEST[familyId]!]);
+		assert.ok(entries.every((entry) => entry.origin === "auto"));
+	}
+	// Existing user data wins; families the user removed stay removed.
+	const custom = { deepseek: [{ modelId: "deepseek-x", origin: "manual" as const }] };
+	assert.deepEqual(seedFamilyModels(custom).deepseek, custom.deepseek);
+});
+
+test("mergeFamilyModels keeps manual entries and replaces auto ones", () => {
+	const current = [
+		{ modelId: "deepseek-mine", origin: "manual" as const },
+		{ modelId: "deepseek-v3", origin: "auto" as const },
+		{ modelId: "deepseek-flash", origin: "auto" as const },
+	];
+	// Manual stays first; old auto pair is replaced by the fresh one.
+	const merged = mergeFamilyModels(current, ["deepseek-v4-pro", "deepseek-flash"]);
+	assert.deepEqual(merged, [
+		{ modelId: "deepseek-mine", origin: "manual" },
+		{ modelId: "deepseek-v4-pro", origin: "auto" },
+		{ modelId: "deepseek-flash", origin: "auto" },
+	]);
+	// A manual entry duplicating a fresh auto ID suppresses the duplicate.
+	const deduped = mergeFamilyModels([
+		{ modelId: "DeepSeek-V4-Pro", origin: "manual" as const },
+		{ modelId: "deepseek-v3", origin: "auto" as const },
+	], ["deepseek-v4-pro", "deepseek-flash"]);
+	assert.deepEqual(deduped, [
+		{ modelId: "DeepSeek-V4-Pro", origin: "manual" },
+		{ modelId: "deepseek-flash", origin: "auto" },
+	]);
+	// Auto entries are capped at two even when the group is larger.
+	const capped = mergeFamilyModels(undefined, ["glm-5.4", "glm-5.4-flash", "glm-5.4-flashx"]);
+	assert.deepEqual(capped.map((entry) => entry.modelId), ["glm-5.4", "glm-5.4-flash"]);
+	// Whitespace-only or empty IDs are dropped.
+	assert.deepEqual(mergeFamilyModels(undefined, ["  ", "glm-5.4"]), [{ modelId: "glm-5.4", origin: "auto" }]);
+});
+
+test("sameModelId tolerates case and vendor prefixes but not variants", () => {
+	assert.ok(sameModelId("deepseek-v4.1-flash", "DeepSeek-V4.1-Flash"));
+	assert.ok(sameModelId("deepseek-ai/DeepSeek-V4.1-Flash", "deepseek-v4.1-flash"));
+	assert.ok(sameModelId("kimi/kimi-k3", "KIMI-K3"));
+	assert.ok(!sameModelId("deepseek-v4.1-flash", "deepseek-flash"), "Distinct variants must not merge");
+	assert.ok(!sameModelId("deepseek-v4.1-flash", ""));
+	assert.ok(!sameModelId("", "deepseek-v4.1-flash"));
 });

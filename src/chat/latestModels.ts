@@ -188,10 +188,74 @@ export function pickVisibleIds(familyId: string, latest: ReadonlyMap<string, Fam
 		: [familyId];
 	const dated = catalog
 		.filter((entry) => providerIds.includes(entry.provider) && !NON_CHAT_ID.test(entry.modelId))
-		.map((entry) => ({ id: entry.modelId, updated: entry.updated ?? "" }))		.filter((item) => item.id && item.updated)
+		.map((entry) => ({ id: entry.modelId, updated: entry.updated ?? "" }))
+		.filter((item) => item.id && item.updated)
 		.sort((a, b) => b.updated.localeCompare(a.updated));
 	if (!dated.length) return [];
 	return [...new Set(dated.map((item) => item.id))].slice(0, 2);
+}
+
+/**
+ * Last-resort defaults used when neither the official pages nor the catalog
+ * answer: the flagship and fast variant of every family at the time of
+ * writing. They seed the user-editable family-models config; refresh them by
+ * hand when a vendor ships a new generation.
+ */
+export const FALLBACK_LATEST: Readonly<Record<string, readonly [string, string]>> = {
+	deepseek: ["deepseek-v4-pro", "deepseek-flash"],
+	kimi: ["kimi-k3", "kimi-k2.7-code"],
+	glm: ["glm-5.3", "glm-5.3-flash"],
+};
+
+export type FamilyModelOrigin = "auto" | "manual";
+
+export interface FamilyModelEntry {
+	modelId: string;
+	/** Manual entries survive automatic refreshes; auto ones are replaced. */
+	origin: FamilyModelOrigin;
+}
+
+export type FamilyModelsConfig = Partial<Record<string, FamilyModelEntry[]>>;
+
+/** Seeds missing families from the built-in defaults; keeps what the user has. */
+export function seedFamilyModels(existing: FamilyModelsConfig | undefined | null): FamilyModelsConfig {
+	const config: FamilyModelsConfig = { ...existing };
+	for (const [familyId, [flagship, fast]] of Object.entries(FALLBACK_LATEST)) {
+		if (config[familyId]?.length) continue;
+		config[familyId] = [{ modelId: flagship, origin: "auto" }, { modelId: fast, origin: "auto" }];
+	}
+	return config;
+}
+
+const keyOf = (modelId: string) => modelId.trim().toLowerCase();
+
+/**
+ * Tolerant model-ID comparison for availability counting: equal after
+ * lower-casing, or equal once a vendor prefix is stripped (siliconflow and
+ * OpenRouter serve `deepseek-ai/DeepSeek-V4.1-Flash` where the official API
+ * uses `deepseek-flash`). Distinct variants (`-chat`, `-flash`) never merge.
+ */
+export function sameModelId(a: string, b: string): boolean {
+	const left = a.trim().toLowerCase();
+	const right = b.trim().toLowerCase();
+	if (!left || !right) return false;
+	if (left === right) return true;
+	return (left.split("/").pop() ?? "") === (right.split("/").pop() ?? "");
+}
+
+/**
+ * Merges a fresh automatic pair into the family config: manual entries stay
+ * (first, never overwritten) and auto entries are replaced wholesale, minus
+ * any that duplicate a manual one.
+ */
+export function mergeFamilyModels(current: readonly FamilyModelEntry[] | undefined, nextIds: readonly string[]): FamilyModelEntry[] {
+	const next = [...new Set(nextIds.map((id) => id.trim()).filter(Boolean))];
+	const manual = (current ?? []).filter((entry) => entry.origin === "manual" && entry.modelId.trim());
+	const auto = next
+		.filter((id) => !manual.some((entry) => keyOf(entry.modelId) === keyOf(id)))
+		.slice(0, 2)
+		.map((modelId) => ({ modelId, origin: "auto" as const }));
+	return [...manual, ...auto];
 }
 
 export interface Recommendation {

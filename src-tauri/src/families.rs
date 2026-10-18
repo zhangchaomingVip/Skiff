@@ -1268,10 +1268,10 @@ mod tests {
 	}
 }
 
-/// models.dev 公共模型目录（官方牌价），带 24h 磁盘缓存。
+/// models.dev 公共模型目录（官方牌价），带 24h 磁盘缓存；refresh 跳过缓存并在成功后重写。
 #[tauri::command]
-pub async fn fetch_public_catalog() -> Result<providers::CatalogResponse, String> {
-	providers::public_catalog(&agent_dir()?).await
+pub async fn fetch_public_catalog(refresh: Option<bool>) -> Result<providers::CatalogResponse, String> {
+	providers::public_catalog(&agent_dir()?, refresh.unwrap_or(false)).await
 }
 
 ///模型发现沿用 OpenAI 兼容 `/models`，供线路添加时拉取模型 ID 与能力。
@@ -1281,9 +1281,10 @@ pub async fn discover_relay_models(base_url: String, api_key: String) -> Result<
 }
 
 /// 各家族官方模型页（6h 缓存），由前端解析出最新在售模型；失败回退过期缓存。
+/// refresh 跳过缓存，成功后重写缓存使 TTL 重新计时。
 #[tauri::command]
-pub async fn fetch_official_pages() -> Result<providers::OfficialPagesResponse, String> {
-	providers::official_pages(&agent_dir()?).await
+pub async fn fetch_official_pages(refresh: Option<bool>) -> Result<providers::OfficialPagesResponse, String> {
+	providers::official_pages(&agent_dir()?, refresh.unwrap_or(false)).await
 }
 
 /// 抓取用户提供的公开模型定价页，由前端解析出模型与价格。

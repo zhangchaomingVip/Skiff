@@ -15,6 +15,6 @@ export interface OfficialPagesResponse {
 }
 
 /** Official per-family model pages (fresh source); models.dev remains the fallback. */
-export function fetchOfficialPages(): Promise<OfficialPagesResponse> {
-	return invoke<OfficialPagesResponse>("fetch_official_pages");
+export function fetchOfficialPages(refresh = false): Promise<OfficialPagesResponse> {
+	return invoke<OfficialPagesResponse>("fetch_official_pages", { refresh });
 }

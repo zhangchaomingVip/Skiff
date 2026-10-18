@@ -1,4 +1,4 @@
-import { forwardRef, useMemo, useState, type FormEvent } from "react";
+import { forwardRef, useEffect, useMemo, useState, type FormEvent } from "react";
 import { blankModel, blankRoute, DEFAULT_THINKING_LEVELS, FAMILY_LABELS, maskBaseUrl, normalizeThinkingLevels, resolveThinkingLevels, THINKING_LEVELS, validateModels, type ModelFamily, type ModelSpec, type RelaySpec, type RouteSpec, type ThinkingLevel } from "../chat/useModelFamilies";
 import { catalogVision } from "../chat/modelVision";
 import { catalogEntryToPriced, type PricedModel } from "../chat/pricingPage";
@@ -37,12 +37,14 @@ export type RoutesSettingsProps = {
 	onOpenProviders: () => void;
 	onOpenModels: () => void;
 	onLockChange: (locked: boolean, pending: boolean) => void;
+	focusFamily?: string;
 };
 
-export const RoutesSettingsContent = forwardRef<SettingsEditorHandle, RoutesSettingsProps>(function RoutesSettingsContent({ families, relays, autoFailover, usdCnyRate, onSaveRate, configError, onSaveRoute, onDeleteRoute, onReorderRoutes, onSetDefaultRoute, onAutoFailover, onOpenProviders, onLockChange }, ref) {
+export const RoutesSettingsContent = forwardRef<SettingsEditorHandle, RoutesSettingsProps>(function RoutesSettingsContent({ families, relays, autoFailover, usdCnyRate, onSaveRate, configError, onSaveRoute, onDeleteRoute, onReorderRoutes, onSetDefaultRoute, onAutoFailover, onOpenProviders, onLockChange, focusFamily }, ref) {
 	const { catalog, catalogStale, catalogFetchedAt, latest } = useModelCatalog();
 	// 家族筛选：undefined 表示「全部路线」。
 	const [selectedFamily, setSelectedFamily] = useState<string>();
+	useEffect(() => { if (focusFamily) setSelectedFamily(focusFamily); }, [focusFamily]);
 	const { draft, setDraft, pending, setPending, error, setError, removing, setRemoving, contentRef, closeDraft, mutate, rememberEditorTrigger } = useSettingsEditor<Draft>({ ref, onLockChange });
 
 	const openRoute = (familyId: string, route?: RouteSpec, preferredRelayId?: string) => {

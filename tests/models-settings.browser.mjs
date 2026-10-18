@@ -17,60 +17,93 @@ page.on("pageerror", (error) => errors.push(String(error)));
 const dialog = () => page.getByRole("dialog", { name: "设置", exact: true });
 const button = (name) => dialog().getByRole("button", { name, exact: true });
 const shot = (name) => page.screenshot({ animations: "disabled", path: new URL(`${name}.png`, output).pathname.replace(/^\/([A-Z]:)/, "$1") });
-const open = async () => { await page.keyboard.press("Control+Comma"); await dialog().waitFor(); };
+const open = async (theme = "light", { reset = false, persist = false } = {}) => {
+	await page.goto(`${origin}/tests/preview.html?fixture=archive&theme=${theme}${persist ? "&persist=1" : ""}`);
+	if (reset) await page.evaluate(() => localStorage.removeItem("skiff.family-models.v1"));
+	await page.reload();
+	await page.waitForFunction(() => document.querySelector(".settings-trigger")?.textContent.includes("pi 已连接"));
+	await page.keyboard.press("Control+Comma");
+	await dialog().waitFor();
+};
 const close = async () => { await button("关闭设置").click(); await dialog().waitFor({ state: "detached" }); };
 
 try {
-	await page.goto(`${origin}/tests/preview.html?fixture=archive&theme=light`);
-	await page.waitForFunction(() => document.querySelector(".settings-trigger")?.textContent.includes("pi 已连接"));
-	await open();
-
-	// 1. The models entry is a family view: family cards without route rows.
+	// 1. Seeded family view: each family shows the two default models plus an Auto card.
+	await open(undefined, { reset: true });
 	await button("模型").click();
 	await shot("models-light");
 	const titles = await dialog().locator(".family-card-title").allTextContents();
 	for (const family of ["DeepSeek", "Kimi", "GLM", "Auto"]) assert.ok(titles.some((title) => title.includes(family)), `Family card ${family} must be listed`);
 	assert.equal(await dialog().locator(".switch").count(), 0, "Models entry must not expose route toggles");
-	assert.equal(await dialog().locator(".provider-row-actions").count(), 0, "Models entry must not expose route row actions");
-
-	// 2. Only the two newest models per family are visible; older ones are trimmed.
 	const deepseekCard = dialog().locator(".family-card", { hasText: "DeepSeek" }).first();
-	const deepseekModels = await deepseekCard.locator(".provider-row-title strong").allTextContents();
-	assert.ok(deepseekModels.length > 0, "Configured latest models must be visible");
-	assert.equal(deepseekModels.length <= 2, true, `At most two models per family, saw ${deepseekModels.length}`);
-	// The same model wired through several routes is listed once.
-	const lower = deepseekModels.map((model) => model.toLowerCase());
-	assert.equal(new Set(lower).size, lower.length, `Models must be deduplicated across routes, saw ${JSON.stringify(deepseekModels)}`);
-	// Non-latest models stay out of the family view.
-	for (const model of deepseekModels) assert.ok(!/old|legacy/i.test(model), `Trimmed models must stay hidden, saw ${model}`);
+	assert.deepEqual(await deepseekCard.locator(".provider-row-title strong").allTextContents(), ["deepseek-v4-pro", "deepseek-flash"], "Seeded defaults must list the flagship and the flash variant");
 
-	// 3. Cross-link to the routes entry; with routes present it is hidden, so go via navigation.
-	await shot("models-list");
-	await button("路线").click();
-	assert.equal(await button("编辑 官方直连 的路线").count(), 1, "Routes entry keeps its editors");
-	await button("模型").click();
+	// 2. Route availability counters come from enabled routes on enabled relays.
+	const counts = await deepseekCard.locator(".provider-row-main small").allTextContents();
+	assert.ok(counts.every((text) => /路线可用|未接路线/.test(text)), `Every model row must report route availability, saw ${JSON.stringify(counts)}`);
+	assert.ok(counts.some((text) => text.includes("未接路线")), `Unwired models cross-link to the routes page, saw ${JSON.stringify(counts)}`);
+	assert.ok(counts.some((text) => text.includes("1 条路线可用")), `deepseek-flash is wired on one route, saw ${JSON.stringify(counts)}`);
+
+	// 3. Auto card: one fixed row, no models of its own.
+	const autoCard = dialog().locator(".family-card", { hasText: "Auto" }).first();
+	assert.equal(await autoCard.locator(".provider-row").count(), 1, "Auto shows a single row");
+	assert.ok((await autoCard.locator(".provider-row-title").textContent()).includes("自动选择"), "Auto row explains itself");
 
 	// 4. Dark theme rendering.
+	await shot("models-list");
 	await button("外观").click();
 	await button("深色").click();
 	await button("模型").click();
 	await shot("models-dark");
 
-	// 5. Without routes the models entry explains the dependency and cross-links.
+	// 5. Editing: rename an entry as manual, add a manual model, delete an auto one.
+	await button("编辑家族模型").click();
+	await dialog().getByText("每个家族最多保留两个自动更新的模型").waitFor();
+	const deepseekSection = dialog().locator(".family-card", { hasText: "DeepSeek" }).first();
+	await shot("models-edit");
+	// Add a manual model; it lands first with the manual tag.
+	await deepseekSection.getByRole("button", { name: "添加模型" }).click();
+	await deepseekSection.getByLabel("DeepSeek 新模型 ID").fill("deepseek-mine");
+	await deepseekSection.getByRole("button", { name: "添加", exact: true }).click();
+	let modelIds = await deepseekSection.locator(".provider-row-title strong").allTextContents();
+	assert.deepEqual(modelIds[0], "deepseek-mine", "Manual additions must be listed first");
+	assert.ok((await deepseekSection.locator(".provider-row", { hasText: "deepseek-mine" }).locator(".provider-tag").textContent()).includes("手动"), "Manual entries are tagged");
+	// Deleting an entry updates the draft list.
+	await deepseekSection.locator(".provider-row", { hasText: "deepseek-v4-pro" }).getByRole("button").click();
+	modelIds = await deepseekSection.locator(".provider-row-title strong").allTextContents();
+	assert.ok(!modelIds.includes("deepseek-v4-pro"), "Deleted entries leave the list");
+	await shot("models-edited");
+
+	// 6. Persistence: the edit survives a page reload (localStorage-backed config).
 	await close();
+	await open(undefined, { persist: true });
+	await button("模型").click();
+	const persisted = dialog().locator(".family-card", { hasText: "DeepSeek" }).first();
+	const persistedIds = await persisted.locator(".provider-row-title strong").allTextContents();
+	assert.deepEqual(persistedIds, ["deepseek-mine", "deepseek-flash"], `Manual edits must survive reload, saw ${JSON.stringify(persistedIds)}`);
+	assert.ok((await persisted.locator(".provider-row", { hasText: "deepseek-mine" }).locator(".provider-tag").textContent()).includes("手动"), "Manual tag persists");
+
+	// 7. Online refresh replaces auto entries but keeps the manual one (mock pages agree with the seed).
+	await persisted.getByRole("button", { name: "联网更新" }).click();
+	await dialog().getByText("目录显示没有更新的模型。").waitFor();
+	await shot("models-refreshed");
+
+	// 8. Empty fixture: no routes anywhere, every row cross-links to the routes page.
+	await close();
+	await page.evaluate(() => localStorage.removeItem("skiff.family-models.v1"));
 	await page.goto(`${origin}/tests/preview.html?fixture=empty&theme=light`);
 	await page.waitForFunction(() => document.querySelector(".settings-trigger")?.textContent.includes("pi 已连接"));
-	await open();
+	await page.keyboard.press("Control+Comma");
 	await button("模型").click();
-	const empties = await dialog().locator(".family-empty").allTextContents();
-	assert.ok(empties.every((text) => text.includes("暂无") || text.includes("依附")), `Empty families must explain themselves, saw ${JSON.stringify(empties)}`);
-	await shot("models-empty");
-	await button("路线").click();
+	const links = await dialog().getByRole("button", { name: "未接路线，去配置" }).count();
+	assert.ok(links >= 7, `Every seeded model and the Auto row must cross-link without routes, saw ${links} links`);
+	await dialog().getByRole("button", { name: "未接路线，去配置" }).first().click();
 	await dialog().getByText(/还没添加路线/).first().waitFor();
+	await shot("models-empty-routes");
 
 	await close();
 	assert.deepEqual(errors, []);
-	console.log("PASS models entry (family view, two newest models only, no route toggles/actions), routes cross-navigation, empty state cross-link, dark theme");
+	console.log("PASS seeded family view with route counters, Auto card, manual add/delete with persistence, refresh notice, empty-state cross-link, dark theme");
 } catch (error) {
 	await shot("failure");
 	console.error(errors);

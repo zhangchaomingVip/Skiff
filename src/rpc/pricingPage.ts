@@ -46,6 +46,6 @@ export interface CatalogResponse {
 }
 
 /** Official catalog (models.dev) pruned to the supported families, 24h disk cache. */
-export function fetchPublicCatalog(): Promise<CatalogResponse> {
-	return invoke<CatalogResponse>("fetch_public_catalog");
+export function fetchPublicCatalog(refresh = false): Promise<CatalogResponse> {
+	return invoke<CatalogResponse>("fetch_public_catalog", { refresh });
 }
