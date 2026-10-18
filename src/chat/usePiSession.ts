@@ -559,7 +559,13 @@ export function usePiSession(target?: SessionTarget, runtimeOffers: readonly Run
 				if (!ownsRpc(rpc)) return;
 				const data = await rpc.request<Record<string, unknown>>({ type: "get_state" });
 				if (!ownsRpc(rpc)) return;
-				setState((s) => ({ ...s, thinkingLevel: String(data.thinkingLevel ?? "off") }));
+				const applied = String(data.thinkingLevel ?? "off");
+				setState((s) => ({
+					...s, thinkingLevel: applied,
+					// pi clamps a level the model does not declare instead of
+					// failing; say so rather than showing a silently changed value.
+					notices: applied === level || level === "off" ? s.notices : [...s.notices, { id: crypto.randomUUID(), kind: "warning" as const, text: `该模型不支持 ${level}，已改用 ${applied === "off" ? "关闭推理" : applied}。` }],
+				}));
 			} catch (error) { if (ownsRpc(rpc)) fail(error); } finally { if (ownsRpc(rpc)) { busyRef.current = false; setPending(false); } }
 		},
 		setWebSearch: async (enabled) => {

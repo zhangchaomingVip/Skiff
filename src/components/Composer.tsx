@@ -7,10 +7,8 @@ import { appendTextFiles, readTextFiles, type TextAttachment } from "../chat/tex
 import { isWordFile } from "../chat/wordAttachments";
 import { ModelMenu } from "./ModelMenu";
 import { ReasoningChip } from "./ReasoningChip";
-import { WebSearchToggle } from "./WebSearchToggle";
 import { Icon } from "./Icon";
 import type { PiCommand } from "../chat/usePiSession";
-import type { WebSearchControls } from "../chat/webSearch";
 
 const IMAGE_CAPABILITY_ERROR = "当前模型未启用图片输入，请在模型配置中确认视觉能力或切换模型。";
 
@@ -37,8 +35,6 @@ export function Composer({
 	editing,
 	onCancelEdit,
 	getCommands,
-	search,
-	onConfigureSearch,
 	onAttachmentsChange,
 }: {
 	disabled: boolean;
@@ -62,8 +58,6 @@ export function Composer({
 	editing: boolean;
 	onCancelEdit: () => void;
 	getCommands: () => Promise<PiCommand[]>;
-	search: WebSearchControls;
-	onConfigureSearch: () => void;
 	onAttachmentsChange?: (images: ImageAttachment[], files: TextAttachment[]) => void;
 }) {
 	const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -188,7 +182,7 @@ export function Composer({
 				onKeyDown={onKeyDown}
 				onPaste={(event) => { const selected = Array.from(event.clipboardData.files); if (selected.length) { event.preventDefault(); void addAttachments(selected); } }}
 			/>
-			<div className="composer-bottom"><span className="composer-context"><IconButton  onClick={() => fileRef.current?.click()} disabled={disabled || reading || sendingRef.current} aria-label="添加图片、文本或 Word 文件" title="添加图片、UTF-8 文本或 Word（.docx）文件（支持拖放或粘贴）；Word 提取正文，单个最大 10 MiB"><Icon name="plus" size={20} /></IconButton><ModelMenu models={models} model={model} onModel={onSelectModel} disabled={!connected || modelDisabled} /><WebSearchToggle search={search} disabled={disabled} onConfigure={onConfigureSearch} /><ReasoningChip level={thinkingLevel} levels={thinkingLevels} disabled={!connected || modelDisabled} onLevel={onThinkingLevel} />{reading && <span>读取中…</span>}</span><input ref={fileRef} type="file" hidden multiple accept="image/png,image/jpeg,image/webp,image/gif,text/*,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx,.log,.json,.ts,.tsx,.js,.rs,.py,.yaml,.yml,.toml" onChange={(event) => { void addAttachments(Array.from(event.target.files ?? [])); event.target.value = ""; }} /><div className="composer-actions">
+			<div className="composer-bottom"><span className="composer-context"><IconButton  onClick={() => fileRef.current?.click()} disabled={disabled || reading || sendingRef.current} aria-label="添加图片、文本或 Word 文件" title="添加图片、UTF-8 文本或 Word（.docx）文件（支持拖放或粘贴）；Word 提取正文，单个最大 10 MiB"><Icon name="plus" size={20} /></IconButton><ModelMenu models={models} model={model} onModel={onSelectModel} disabled={!connected || modelDisabled} /><ReasoningChip level={thinkingLevel} levels={thinkingLevels} disabled={!connected || modelDisabled} onLevel={onThinkingLevel} />{reading && <span>读取中…</span>}</span><input ref={fileRef} type="file" hidden multiple accept="image/png,image/jpeg,image/webp,image/gif,text/*,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx,.log,.json,.ts,.tsx,.js,.rs,.py,.yaml,.yml,.toml" onChange={(event) => { void addAttachments(Array.from(event.target.files ?? [])); event.target.value = ""; }} /><div className="composer-actions">
 				{streaming && <><Button variant="primary" disabled={disabled || reading || (!text.trim() && !images.length && !files.length)} onClick={() => void submit()}>{delivery === "steer" ? "插话" : "排队发送"}</Button></>}
 				{streaming ? (
 					<IconButton className="send-btn" variant="primary" size="primary" onClick={onAbort} disabled={stopping || !connected} aria-label="停止生成" title="停止生成（Ctrl+Shift+Backspace）">

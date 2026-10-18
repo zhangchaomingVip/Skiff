@@ -4,7 +4,6 @@ import type { ImageAttachment, SessionState } from "../chat/types";
 import type { PiSessionActions } from "../chat/usePiSession";
 import { useVoyageMetrics } from "../chat/useVoyageMetrics";
 import { LiveTurnContext } from "../chat/liveTurnContext";
-import type { WebSearchControls } from "../chat/webSearch";
 import type { DraftTarget } from "../chat/useDraft";
 import type { MessageReveal } from "../chat/useConversationSearch";
 import { ChatView } from "./ChatView";
@@ -17,7 +16,7 @@ import { ResizeSeparator } from "./ResizeSeparator";
 
 const StableChatView = memo(ChatView);
 
-export function VoyageWorkspace({ draftTarget, revealMessage, state, loading = false, connected, pending, actions, onSend, onReconnect, projectName, search, onConfigureSearch, failover, modelNotice, routeAuthorization, railWidth = 260, availableWidth = window.innerWidth, onRailWidth, onRailWidthCommit }: {
+export function VoyageWorkspace({ draftTarget, revealMessage, state, loading = false, connected, pending, actions, onSend, onReconnect, projectName, failover, modelNotice, routeAuthorization, railWidth = 260, availableWidth = window.innerWidth, onRailWidth, onRailWidthCommit }: {
 	draftTarget?: DraftTarget;
 	revealMessage?: MessageReveal;
 	modelNotice?: string;
@@ -29,8 +28,6 @@ export function VoyageWorkspace({ draftTarget, revealMessage, state, loading = f
 	onSend: (text: string, images?: ImageAttachment[], delivery?: Delivery) => Promise<boolean>;
 	onReconnect: () => void;
 	projectName?: string;
-	search: WebSearchControls;
-	onConfigureSearch: () => void;
 	failover?: { label: string; switch: (automatic?: boolean) => void };
 	routeAuthorization?: { request: RouteAuthorizationRequest; onChoice: (choice: RouteAuthorizationChoice) => void };
 	railWidth?: number;
@@ -78,7 +75,7 @@ export function VoyageWorkspace({ draftTarget, revealMessage, state, loading = f
 	return <div ref={layout} className={`chat-and-rail ${visibleExpanded ? "rail-expanded" : "rail-collapsed"}`} style={{ "--voyage-width": `${shownRailWidth}px` } as CSSProperties}>
 		<div className="chat-column">
 			<LiveTurnContext.Provider value={metrics.liveTurn}>
-				<StableChatView draftTarget={draftTarget} revealMessage={revealMessage} state={state} loading={loading} connected={connected} pending={pending} actions={actions} onSend={onSend} onReconnect={onReconnect} projectName={projectName} search={search} onConfigureSearch={onConfigureSearch} failover={failover} routeAuthorization={routeAuthorization} />
+				<StableChatView draftTarget={draftTarget} revealMessage={revealMessage} state={state} loading={loading} connected={connected} pending={pending} actions={actions} onSend={onSend} onReconnect={onReconnect} projectName={projectName} failover={failover} routeAuthorization={routeAuthorization} />
 			</LiveTurnContext.Provider>
 			<ContextUsage notice={modelNotice} metrics={metrics} expanded={visibleExpanded} onToggle={toggle} />
 		</div>

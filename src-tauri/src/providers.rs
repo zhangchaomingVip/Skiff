@@ -388,6 +388,96 @@ async fn fetch_catalog_json() -> Result<Value, String> {
 	serde_json::from_slice(&bytes).map_err(|_| "公共目录不是有效 JSON".to_string())
 }
 
+/// Latest-model source pages: one official docs page per family, fetched with
+/// a 6h disk cache so the frontend can parse fresh model IDs without hammering
+/// the vendors. models.dev (`public_catalog`) remains the structured fallback.
+pub(crate) const OFFICIAL_PAGES: [(&str, &str); 3] = [
+	("glm", "https://docs.bigmodel.cn/cn/guide/start/model-overview"),
+	("deepseek", "https://api-docs.deepseek.com/zh-cn/quick_start/pricing"),
+	("kimi", "https://platform.moonshot.cn/docs/pricing/chat"),
+];
+
+const OFFICIAL_PAGE_TTL_SECS: i64 = 6 * 60 * 60;
+
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct OfficialPage {
+	pub family_id: String,
+	pub url: String,
+	pub body: String,
+	pub fetched_at: i64,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct OfficialPagesResponse {
+	pub pages: Vec<OfficialPage>,
+	/// True when at least one family fell back to an expired cache entry.
+	pub stale: bool,
+}
+
+fn official_pages_cache_path(dir: &Path) -> std::path::PathBuf {
+	dir.join("official-pages.json")
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct OfficialPagesCache {
+	fetched_at: i64,
+	pages: Vec<OfficialPage>,
+}
+
+/// Fetches every official page independently; a family whose page fails keeps
+/// its expired cache entry (or drops out entirely), so one redesign never
+/// blanks the whole catalog.
+pub(crate) async fn official_pages(dir: &Path) -> Result<OfficialPagesResponse, String> {
+	official_pages_with_urls(dir, OFFICIAL_PAGES.iter().map(|(family, url)| (*family, url.to_string())).collect()).await
+}
+
+async fn official_pages_with_urls(dir: &Path, targets: Vec<(&str, String)>) -> Result<OfficialPagesResponse, String> {
+	let cache_path = official_pages_cache_path(dir);
+	let cache = std::fs::read(&cache_path).ok()
+		.and_then(|bytes| serde_json::from_slice::<OfficialPagesCache>(&bytes).ok());
+	let now = now_unix();
+	let mut pages: Vec<OfficialPage> = Vec::new();
+	let mut stale = false;
+	for (family_id, url) in targets {
+		let cached = cache.as_ref().and_then(|cache| cache.pages.iter().find(|page| page.family_id == family_id));
+		if let Some(cached) = cached {
+			if now - cached.fetched_at < OFFICIAL_PAGE_TTL_SECS {
+				pages.push(cached.clone());
+				continue;
+			}
+		}
+		match fetch_page_body(&url).await {
+			Ok(body) => pages.push(OfficialPage { family_id: family_id.to_string(), url, body, fetched_at: now }),
+			Err(_) => {
+				if let Some(cached) = cached {
+					stale = true;
+					pages.push(cached.clone());
+				}
+			}
+		}
+	}
+	if pages.is_empty() { return Err("官方模型页获取失败，请检查网络".into()); }
+	let fetched_at = pages.iter().map(|page| page.fetched_at).min().unwrap_or(now);
+	if let Ok(bytes) = serde_json::to_vec(&OfficialPagesCache { fetched_at, pages: pages.clone() }) {
+		let _ = std::fs::write(&cache_path, bytes);
+	}
+	Ok(OfficialPagesResponse { pages, stale })
+}
+
+async fn fetch_page_body(url: &str) -> Result<String, String> {
+	let mut response = send_with_direct_retry(|client| client.get(url), Duration::from_secs(15), "官方模型页").await?;
+	let status = response.status();
+	if !status.is_success() { return Err(format!("HTTP {}", status.as_u16())); }
+	let mut bytes = Vec::new();
+	while let Some(chunk) = response.chunk().await.map_err(|_| "读取官方模型页失败")? {
+		if bytes.len() + chunk.len() > 2 * 1024 * 1024 { return Err("官方模型页响应过大".into()); }
+		bytes.extend_from_slice(&chunk);
+	}
+	Ok(String::from_utf8_lossy(&bytes).into_owned())
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -507,5 +597,60 @@ mod tests {
 		atomic_write(&path, &json!({ "a": 2 })).unwrap();
 		assert_eq!(read_config(&path).unwrap()["a"], 2);
 		std::fs::remove_file(&path).unwrap();
+	}
+
+	/// One-shot HTTP server answering every connection with `status`/`body`.
+	fn page_server(status: u16, body: &'static str) -> std::net::SocketAddr {
+		let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+		let address = listener.local_addr().unwrap();
+		std::thread::spawn(move || {
+			for _ in 0..3 {
+				let Ok((mut stream, _)) = listener.accept() else { break };
+				let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
+				let mut request = [0; 4096];
+				let _ = std::io::Read::read(&mut stream, &mut request);
+				let response = format!("HTTP/1.1 {status} T\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len());
+				let _ = std::io::Write::write_all(&mut stream, response.as_bytes());
+			}
+		});
+		address
+	}
+
+	// The real OFFICIAL_PAGES hosts cannot be reached from unit tests; the
+	// test drives the shared loop with loopback URLs instead.
+	async fn official_pages_with_hosts(dir: &Path, hosts: [&str; 3]) -> Result<OfficialPagesResponse, String> {
+		let targets = OFFICIAL_PAGES.iter().zip(hosts).map(|((family, _), host)| (*family, format!("http://{host}/page"))).collect();
+		official_pages_with_urls(dir, targets).await
+	}
+
+	#[test]
+	fn official_pages_cache_within_ttl_and_falls_back_to_stale() {
+		let dir = std::env::temp_dir().join(format!("skiff-official-{}-{}", std::process::id(), now_unix()));
+		std::fs::create_dir_all(&dir).unwrap();
+		let good = page_server(200, "<html>glm-5.4</html>");
+		let bad = page_server(500, "");
+		let hosts: [String; 3] = [good.to_string(), bad.to_string(), bad.to_string()];
+		let host_refs: [&str; 3] = [hosts[0].as_str(), hosts[1].as_str(), hosts[2].as_str()];
+		let first = tauri::async_runtime::block_on(official_pages_with_hosts(&dir, host_refs)).unwrap();
+		assert_eq!(first.pages.len(), 1);
+		assert!(!first.stale);
+		assert_eq!(first.pages[0].family_id, "glm");
+
+		// Within TTL no network happens; the cache answer covers every family.
+		let mut cached_pages = first.pages.clone();
+		cached_pages.push(OfficialPage { family_id: "deepseek".into(), url: "https://example/deepseek".into(), body: "cached".into(), fetched_at: first.pages[0].fetched_at });
+		serde_json::to_writer(std::fs::File::create(official_pages_cache_path(&dir)).unwrap(), &OfficialPagesCache { fetched_at: first.pages[0].fetched_at, pages: cached_pages.clone() }).unwrap();
+		let second = tauri::async_runtime::block_on(official_pages_with_hosts(&dir, host_refs)).unwrap();
+		assert_eq!(second.pages.len(), 2);
+		assert!(!second.stale);
+
+		// Past TTL the failing families keep their expired entries and flag stale.
+		let expired: Vec<OfficialPage> = cached_pages.iter().map(|page| OfficialPage { fetched_at: page.fetched_at - OFFICIAL_PAGE_TTL_SECS - 1, ..page.clone() }).collect();
+		serde_json::to_writer(std::fs::File::create(official_pages_cache_path(&dir)).unwrap(), &OfficialPagesCache { fetched_at: now_unix(), pages: expired }).unwrap();
+		let third = tauri::async_runtime::block_on(official_pages_with_hosts(&dir, host_refs)).unwrap();
+		assert!(third.stale);
+		assert_eq!(third.pages.len(), 2);
+		assert_eq!(third.pages.iter().find(|page| page.family_id == "deepseek").unwrap().body, "cached");
+		std::fs::remove_dir_all(dir).unwrap();
 	}
 }

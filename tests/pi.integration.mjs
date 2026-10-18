@@ -38,7 +38,11 @@ try {
 	const agentDir = join(directory, "agent"); await mkdir(agentDir);
 	await writeFile(join(agentDir, "models.json"), JSON.stringify({ providers: { "skiff-local-test": {
 		baseUrl: `http://127.0.0.1:${server.address().port}/v1`, api: "openai-completions",
-		models: [{ id: "skiff-vision-test", reasoning: true, input: ["text", "image"], contextWindow: 128000, maxTokens: 8192, thinkingLevelMap: { xhigh: "xhigh", max: "max" } }],
+		models: [{ id: "skiff-vision-test", reasoning: true, input: ["text", "image"], contextWindow: 128000, maxTokens: 8192, thinkingLevelMap: { xhigh: "xhigh", max: "max" } },
+			// What Skiff projects when a model declares every extended level.
+			{ id: "skiff-full-levels", reasoning: true, input: ["text"], contextWindow: 128000, maxTokens: 8192, thinkingLevelMap: { minimal: "minimal", low: "low", medium: "medium", high: "high", xhigh: "xhigh", max: "max" } },
+			// What it projects for a model that lacks `xhigh`/`max`: null hides them.
+			{ id: "skiff-narrow-levels", reasoning: true, input: ["text"], contextWindow: 128000, maxTokens: 8192, thinkingLevelMap: { minimal: null, low: "low", medium: "medium", high: "high", xhigh: null, max: null } }],
 	} } }));
 	await writeFile(join(agentDir, "auth.json"), JSON.stringify({ "skiff-local-test": { type: "api_key", key: "dummy-local-key" } }));
 	child = spawn(process.execPath, [cli, "--mode", "rpc", "--provider", "skiff-local-test", "--model", "skiff-vision-test", "--no-extensions", "--no-skills", "--no-approve", "--no-context-files", "--offline"], {
@@ -62,6 +66,15 @@ try {
 	});
 	const state = await rpc({ type: "get_state" }); assert.equal(state.model.id, "skiff-vision-test");
 	const levels = await rpc({ type: "get_available_thinking_levels" }); assert.ok(levels.levels.includes("max"));
+	// Skiff-projected maps decide the offered ladder in both directions.
+	await rpc({ type: "set_model", provider: "skiff-local-test", modelId: "skiff-full-levels" });
+	assert.deepEqual((await rpc({ type: "get_available_thinking_levels" })).levels, ["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
+	// `off` is always offered: pi only uses null maps to hide the ladder levels.
+	await rpc({ type: "set_model", provider: "skiff-local-test", modelId: "skiff-narrow-levels" });
+	assert.deepEqual((await rpc({ type: "get_available_thinking_levels" })).levels, ["off", "low", "medium", "high"]);
+	// pi clamps an undeclared level instead of failing, which the UI must report.
+	await rpc({ type: "set_thinking_level", level: "max" }); assert.equal((await rpc({ type: "get_state" })).thinkingLevel, "high");
+	await rpc({ type: "set_model", provider: "skiff-local-test", modelId: "skiff-vision-test" });
 	await rpc({ type: "set_thinking_level", level: "max" }); assert.equal((await rpc({ type: "get_state" })).thinkingLevel, "max");
 	const image = { type: "image", mimeType: "image/png", data: testImage().toString("base64") };
 	await rpc({ type: "prompt", message: "Describe the attached image", images: [image] });

@@ -82,8 +82,9 @@ try {
 	assert.deepEqual(await page.evaluate(() => [...window.skiffPreview.processes.keys()]), before.ids);
 	assert.equal(await page.evaluate(() => localStorage.getItem("skiff.workspace.v1")), before.workspace);
 
-	await button("模型与提供商").click();
+	await button("供应商").click();
 	await button("编辑 官方直连").click();
+	assert.equal(await button("编辑 官方直连 的线路").count(), 0, "Providers page must not list routes");
 	assert.equal(await button("外观").isDisabled(), true);
 	await wait(() => document.activeElement?.id === "relay-name");
 	await shot("provider-editor");
@@ -91,11 +92,12 @@ try {
 	assert.equal(await dialog().count(), 1);
 	assert.equal(await button("外观").isEnabled(), true);
 	assert.equal(await button("编辑 官方直连").evaluate((el) => el === document.activeElement), true, "Return must focus the original provider row");
-	await dialog().getByRole("button", { name: /模型线路/ }).click();
+	await button("模型线路").click();
+	assert.equal(await button("编辑 官方直连").count(), 0, "Route page must not list providers");
 	await button("编辑 官方直连 的线路").click();
 	await page.keyboard.press("Escape");
 	assert.equal(await dialog().count(), 1);
-	await dialog().getByRole("button", { name: /供应商.*3 个/ }).click();
+	await button("供应商").click();
 	await button("编辑 官方直连").click();
 
 	// Delayed save, failure and retry use the local mock bridge only.
@@ -122,7 +124,7 @@ try {
 	assert.equal(await button("关闭设置").isEnabled(), true);
 	await button("保存").click();
 	await page.locator("#relay-name").waitFor({ state: "detached" });
-	await dialog().getByRole("button", { name: /供应商.*3 个/ }).click();
+	await button("供应商").click();
 	await button("编辑 官方直连").waitFor();
 	await button("编辑 官方直连").click();
 	await button("删除").click();
@@ -201,7 +203,7 @@ try {
 		for (const theme of ["浅色", "深色"]) {
 			await button(theme).click(); await checkLayout(); await shot(`${theme === "浅色" ? "light" : "dark"}-${name}`);
 		}
-		await button("模型与提供商").click();
+		await button("供应商").click();
 		await button("编辑 官方直连").click();
 		await button("保存").scrollIntoViewIfNeeded();
 		const saveRect = await button("保存").boundingBox();
@@ -220,7 +222,8 @@ try {
 	await page.getByRole("button", { name: "停止生成", exact: true }).waitFor();
 	await page.evaluate(() => { for (const process of window.skiffPreview.processes.values()) clearTimeout(process.timer); });
 	await open();
-	assert.equal(await button("模型与提供商").isDisabled(), true);
+	assert.equal(await button("供应商").isDisabled(), true);
+	assert.equal(await button("模型线路").isDisabled(), true);
 	assert.equal(await button("系统提示词").isDisabled(), true);
 	await button("深色").click();
 	await button("快捷键").click();
@@ -234,7 +237,8 @@ try {
 	await open();
 	await page.evaluate((id) => window.skiffPreview.emit(id, { type: "extension_ui_request", id: "settings-background", method: "confirm", title: "后台设置验证", message: "确认后台任务" }), backgroundId);
 	await page.getByRole("status", { name: "需要确认", exact: true }).first().waitFor();
-	assert.equal(await button("模型与提供商").isEnabled(), true);
+	assert.equal(await button("供应商").isEnabled(), true);
+	assert.equal(await button("模型线路").isEnabled(), true);
 	await close();
 	assert.equal(await page.evaluate((id) => window.skiffPreview.processes.get(id)?.isStreaming, backgroundId), true);
 	assert.equal(await page.evaluate(() => window.skiffPreview.commands.some((item) => item.command === "rpc_send" && JSON.parse(item.args.message).type === "extension_ui_response")), false);

@@ -1,10 +1,11 @@
 import { Input, Button, IconButton } from "./ui";
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { sortDiscoveredModels } from "../chat/modelDiscovery";
+import { pickRecommendedIds, type FamilyLatest } from "../chat/latestModels";
 import { discoverModels } from "../rpc/modelDiscovery";
 import { Icon } from "./Icon";
 
-export function ModelIdField({ baseUrl, apiKey, familyId, value, onChange, addedIds = [], excludedIds = [], onAdd, disabled }: {
+export function ModelIdField({ baseUrl, apiKey, familyId, value, onChange, addedIds = [], excludedIds = [], onAdd, disabled, latest }: {
 	baseUrl: string;
 	apiKey: string;
 	familyId: string;
@@ -14,6 +15,8 @@ export function ModelIdField({ baseUrl, apiKey, familyId, value, onChange, added
 	excludedIds?: string[];
 	onAdd?: (ids: string[]) => void;
 	disabled: boolean;
+	/** Latest-model catalog; enables the recommended preselect for fresh routes. */
+	latest?: ReadonlyMap<string, FamilyLatest>;
 }) {
 	const fieldId = useId();
 	const [selected, setSelected] = useState<string[]>([]);
@@ -32,6 +35,8 @@ export function ModelIdField({ baseUrl, apiKey, familyId, value, onChange, added
 	const [activeId, setActiveId] = useState("");
 	const [error, setError] = useState<string>();
 	const filtered = useMemo(() => models.filter((id) => !excludedIds.includes(id) && id.toLowerCase().includes(query.trim().toLowerCase())), [models, query, excludedIds]);
+	// Preselected recommendations shown with a badge in the option list.
+	const recommended = useMemo(() => (open && onAdd && !addedIds.some(Boolean) ? pickRecommendedIds(models, latest, familyId).recommended : []), [open, onAdd, addedIds, models, latest, familyId]);
 	const active = filtered.includes(activeId) ? activeId : filtered[0];
 	const activeIndex = filtered.indexOf(active);
 	const optionId = activeIndex >= 0 ? `${fieldId}-option-${activeIndex}` : undefined;
@@ -71,7 +76,10 @@ export function ModelIdField({ baseUrl, apiKey, familyId, value, onChange, added
 			const ids = sortDiscoveredModels(await discoverModels(baseUrl, apiKey), familyId);
 			if (request !== requestRef.current) return;
 			if (!ids.length) throw new Error("接口未返回模型，请手动填写模型 ID");
-			setSelected([]); setModels(ids); setActiveId(ids.includes(valueRef.current.trim()) ? valueRef.current.trim() : ids[0]); setOpen(true);
+			// A fresh route (no models added yet) preselects the newest flagship +
+			// flash pair; existing drafts keep the current all-unchecked behaviour.
+			const recommendation = onAdd && !addedIds.some(Boolean) ? pickRecommendedIds(ids, latest, familyId) : { recommended: [] as string[], reason: "offline" as const };
+			setSelected(recommendation.recommended.filter((id) => !excludedIds.includes(id))); setModels(ids); setActiveId(ids.includes(valueRef.current.trim()) ? valueRef.current.trim() : ids[0]); setOpen(true);
 		} catch (e) {
 			if (request === requestRef.current) setError(String(e).replace(/^Error: /, "").replaceAll(apiKey.trim(), "[已隐藏]"));
 		} finally {
@@ -104,7 +112,7 @@ export function ModelIdField({ baseUrl, apiKey, familyId, value, onChange, added
 			<div className="model-discovery-heading"><span>{filtered.length} 个模型</span><IconButton type="button"  aria-label="关闭模型列表" onClick={() => { setOpen(false); inputRef.current?.focus(); }}><Icon name="close" size={14} /></IconButton></div>
 			{models.length > 10 && <Input ref={searchRef} className="model-discovery-search" type="search" placeholder="搜索模型 ID…" aria-label="搜索模型 ID" role="combobox" aria-autocomplete="list" aria-expanded={open} aria-controls={`${fieldId}-list`} aria-activedescendant={optionId} value={query} onChange={(event) => setQuery(event.target.value)} disabled={disabled} />}
 			<div id={`${fieldId}-list`} className="model-discovery-options" role="listbox" aria-multiselectable={!!onAdd} aria-label="可用模型" aria-busy={loading}>
-				{filtered.map((id, index) => <button ref={id === active ? activeRef : undefined} id={`${fieldId}-option-${index}`} type="button" role="option" aria-selected={onAdd ? selected.includes(id) : id === value.trim()} className={`model-discovery-option${id === active ? " active" : ""}`} key={id} tabIndex={-1} onMouseEnter={() => setActiveId(id)} onMouseDown={(event) => event.preventDefault()} onClick={() => choose(id)} disabled={disabled || addedIds.includes(id)}>{onAdd && <span aria-hidden="true">{selected.includes(id) ? "☑" : "☐"}</span>}<span>{id}{addedIds.includes(id) ? "（已添加）" : ""}</span>{!onAdd && id === value.trim() && <Icon name="check" size={14} />}</button>)}
+				{filtered.map((id, index) => <button ref={id === active ? activeRef : undefined} id={`${fieldId}-option-${index}`} type="button" role="option" aria-selected={onAdd ? selected.includes(id) : id === value.trim()} className={`model-discovery-option${id === active ? " active" : ""}`} key={id} tabIndex={-1} onMouseEnter={() => setActiveId(id)} onMouseDown={(event) => event.preventDefault()} onClick={() => choose(id)} disabled={disabled || addedIds.includes(id)}>{onAdd && <span aria-hidden="true">{selected.includes(id) ? "☑" : "☐"}</span>}<span>{id}{recommended.includes(id) ? <em className="model-discovery-recommended">推荐</em> : null}{addedIds.includes(id) ? "（已添加）" : ""}</span>{!onAdd && id === value.trim() && <Icon name="check" size={14} />}</button>)}
 				{!filtered.length && <p className="model-discovery-empty" role="status">没有匹配的模型</p>}
 			</div>
 				{onAdd && <Button type="button" variant="primary" size="compact" disabled={disabled || !selected.length} onClick={() => { onAdd(models.filter((id) => selected.includes(id) && !addedIds.includes(id) && !excludedIds.includes(id))); setOpen(false); setSelected([]); inputRef.current?.focus(); }}>添加选中的 {selected.length} 个模型</Button>}

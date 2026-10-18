@@ -1,10 +1,13 @@
 import { conversationLabel, conversationTooltip, conversationRoute } from "../chat/conversationDisplay";
 import { offerPriceCompact, offerAccount } from "../chat/offerDisplay";
 import { Input, Button, ListRow, Chip, SegmentedControl, Popover } from "./ui";
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, useEffect } from "react";
 import type { Conversation, Project } from "../chat/workspace";
 import type { RuntimeOffer } from "../chat/modelFamilies";
 import { groupLauncherOffers, groupLauncherFamilies, recentLauncherOfferIds, type LauncherFamilyDefault, type LauncherModel } from "../chat/launcherModels";
+import { familyLatest, familyUpdates, type FamilyUpdate } from "../chat/latestModels";
+import { fetchOfficialPages } from "../rpc/officialPages";
+import { fetchPublicCatalog } from "../rpc/pricingPage";
 import { OfferPickerDialog } from "./OfferPickerDialog";
 import { BrandIcon, type BrandName } from "./BrandIcon";
 import { Icon } from "./Icon";
@@ -23,6 +26,7 @@ const relativeTime = (timestamp: number) => {
 };
 
 const COLLAPSE_KEY = "skiff.launcher-collapsed-families.v1";
+const DISMISS_KEY = "skiff.launcher-latest-dismissed.v1";
 const loadCollapsedFamilies = (): Set<string> => {
 	try {
 		const value: unknown = JSON.parse(localStorage.getItem(COLLAPSE_KEY) ?? "[]");
@@ -31,6 +35,17 @@ const loadCollapsedFamilies = (): Set<string> => {
 };
 const saveCollapsedFamilies = (collapsed: ReadonlySet<string>) => {
 	try { localStorage.setItem(COLLAPSE_KEY, JSON.stringify([...collapsed])); } catch { /* Optional preference; grouping still works. */ }
+};
+
+/** Dismissed "new model" hints, keyed by family + model ID so a genuinely new model re-prompts. */
+const loadDismissed = (): Set<string> => {
+	try {
+		const value: unknown = JSON.parse(localStorage.getItem(DISMISS_KEY) ?? "[]");
+		return new Set(Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && item.length > 0) : []);
+	} catch { return new Set(); }
+};
+const saveDismissed = (dismissed: ReadonlySet<string>) => {
+	try { localStorage.setItem(DISMISS_KEY, JSON.stringify([...dismissed])); } catch { /* Optional preference; hints reappear next launch. */ }
 };
 
 export function LauncherView({ activeChat, activeProject, projects, chats, offers, recentOfferIds, familyDefaults, loading, disabled = false, navigationDisabled = disabled, error, onResume, onSelectProject, onAddProject, onManageProviders, onRetryModels, onStartChat, onOpenChat }: {
@@ -60,6 +75,41 @@ export function LauncherView({ activeChat, activeProject, projects, chats, offer
 	const [workspaceOpen, setWorkspaceOpen] = useState(false);
 	const workspaceAnchor = useRef<HTMLButtonElement>(null);
 	const [collapsed, setCollapsed] = useState<Set<string>>(loadCollapsedFamilies);
+	// New-model detection: both sources load silently; any failure leaves the
+	// launcher exactly as it was.
+	const [updates, setUpdates] = useState<FamilyUpdate[]>([]);
+	const [dismissed, setDismissed] = useState<Set<string>>(loadDismissed);
+	useEffect(() => {
+		let alive = true;
+		Promise.all([fetchOfficialPages().catch(() => undefined), fetchPublicCatalog().catch(() => undefined)]).then(([official, catalog]) => {
+			if (!alive) return;
+			const pages = official?.pages ?? [];
+			const entries = catalog?.models ?? [];
+			if (!pages.length && !entries.length) return;
+			const configured = new Map<string, Set<string>>();
+			for (const offer of offers) {
+				if (!offer.familyId || !offer.modelId) continue;
+				const bucket = configured.get(offer.familyId) ?? new Set<string>();
+				bucket.add(offer.modelId.trim().toLowerCase());
+				configured.set(offer.familyId, bucket);
+			}
+			setUpdates(familyUpdates(familyLatest(pages, entries), configured));
+		});
+		return () => { alive = false; };
+	}, [offers]);
+	const dismissUpdate = (familyId: string, update: FamilyUpdate) => {
+		setDismissed((previous) => {
+			const next = new Set(previous);
+			for (const id of update.newIds) next.add(`${familyId}/${id}`);
+			saveDismissed(next);
+			return next;
+		});
+	};
+	const updateFor = (familyId: string): FamilyUpdate | undefined => {
+		const update = updates.find((item) => item.familyId === familyId);
+		if (!update || update.newIds.every((id) => dismissed.has(`${familyId}/${id}`))) return undefined;
+		return update;
+	};
 	const recentChats = useMemo(() => chats.filter((chat) => chat.hasMessages).sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 8), [chats]);
 	const recentIds = useMemo(() => new Set([...recentOfferIds, ...recentLauncherOfferIds(recentChats, offers)]), [offers, recentChats, recentOfferIds]);
 	const searching = !!query.trim();
@@ -130,12 +180,17 @@ export function LauncherView({ activeChat, activeProject, projects, chats, offer
 					{visibleFamilies.map((family) => {
 						const mark = brand(family.familyId);
 						const status = blocked ? activeProject ? "暂不可用" : "先选项目" : `可用 · ${family.models.length} 个模型`;
+						const update = updateFor(family.familyId);
 						if (family.models.length === 1 && !searching) return <div className="launcher-group launcher-solo" key={family.familyId}>{renderRow(family.models[0], true)}</div>;
 						return <details className="launcher-group" key={`${family.familyId}${searching ? ":search" : ""}`} role="listitem" open={searching || !collapsed.has(family.familyId)} onToggle={(event) => { if (!searching) toggleFamily(family.familyId, event.currentTarget.open); }}>
 							<summary className="launcher-group-head">
 								{mark ? <span className="launcher-group-icon" aria-hidden="true"><BrandIcon name={mark} size={20} /></span> : <span className="launcher-group-icon" aria-hidden="true"><Icon name="spark" size={19} /></span>}
 								<span className="launcher-group-name">{family.familyName}</span>
-								<span className="launcher-group-badges">{family.recent && <Chip>最近使用</Chip>}<Chip tone={blocked ? "neutral" : "success"}>{status}</Chip></span>
+								<span className="launcher-group-badges">{family.recent && <Chip>最近使用</Chip>}<Chip tone={blocked ? "neutral" : "success"}>{status}</Chip>{update && <Chip tone="warning" className="launcher-update-chip" title={`官方已发布 ${update.newIds.join("、")}，重新拉取模型列表即可更换`}>有新模型 {update.newIds[0]}</Chip>}</span>
+								{update && <span className="launcher-update-actions">
+									<Button variant="ghost" size="compact" onClick={(event) => { event.preventDefault(); onManageProviders(); }} title="打开模型设置，重新拉取模型列表">去更新</Button>
+									<button type="button" className="launcher-update-dismiss" aria-label="忽略此提示" onClick={(event) => { event.preventDefault(); dismissUpdate(family.familyId, update); }}><Icon name="close" size={12} /></button>
+								</span>}
 								{family.priceRange && <span className="launcher-group-range">{family.priceRange}</span>}
 								<span className="launcher-group-chevron" aria-hidden="true"><Icon name="chevron" size={14} /></span>
 							</summary>

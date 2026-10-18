@@ -30,6 +30,39 @@ const KEY_PREFIX: &str = "skiff-relay-";
 /// Anything under this prefix is managed by Skiff and may be garbage-collected.
 const MANAGED_PREFIX: &str = "skiff-";
 
+/// pi's thinking levels in ascending order. `off` is implicit: it is always
+/// selectable, and the levels after it are the ones a model may support.
+const THINKING_LEVELS: [&str; 6] = ["minimal", "low", "medium", "high", "xhigh", "max"];
+
+/// pi only lists `xhigh` and `max` when `thinkingLevelMap` declares them, and
+/// otherwise offers every remaining level unconditionally. Projecting real
+/// capabilities therefore means writing the map explicitly.
+fn thinking_level_map(levels: &[String]) -> Value {
+	let mut map = serde_json::Map::new();
+	for level in THINKING_LEVELS.iter() {
+		// A level the model lacks is declared `null`, which is how pi hides it;
+		// omission would leave it enabled.
+		let available = levels.iter().any(|declared| declared == level);
+		map.insert((*level).to_string(), if available { Value::String((*level).to_string()) } else { Value::Null });
+	}
+	Value::Object(map)
+}
+
+/// Accepts every level a model is declared to support, dropping `off` (which
+/// is implicit) and returning the levels in pi's order.
+fn normalize_thinking_levels(levels: Option<&[String]>) -> Result<Vec<String>, String> {
+	let mut accepted = std::collections::HashSet::new();
+	for level in levels.unwrap_or_default() {
+		let level = level.trim().to_ascii_lowercase();
+		if level == "off" || level.is_empty() { continue; }
+		if !THINKING_LEVELS.contains(&level.as_str()) {
+			return Err(format!("不支持的推理等级：{level}"));
+		}
+		accepted.insert(level);
+	}
+	Ok(THINKING_LEVELS.iter().filter(|level| accepted.contains(**level)).map(|level| (*level).to_string()).collect())
+}
+
 pub fn family_display(id: &str) -> &'static str {
 	match id {
 		"deepseek" => "DeepSeek",
@@ -73,6 +106,9 @@ pub struct ModelSpec {
 	/// Per-model image capability; old configurations retain the route default.
 	#[serde(default, skip_serializing_if = "Option::is_none")]
 	pub vision: Option<bool>,
+	/// Thinking levels this model supports; absent inherits the route default.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub thinking_levels: Option<Vec<String>>,
 	#[serde(default)]
 	pub alias: String,
 	#[serde(default)]
@@ -128,6 +164,10 @@ pub struct RouteSpec {
 	pub vision: bool,
 	#[serde(default)]
 	pub reasoning: bool,
+	/// Thinking levels offered by every model of this route unless a model
+	/// overrides it. Empty keeps pi's historical five-level set.
+	#[serde(default, skip_serializing_if = "Vec::is_empty")]
+	pub thinking_levels: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -208,6 +248,8 @@ pub struct RuntimeOffer {
 	pub tools: bool,
 	pub vision: bool,
 	pub reasoning: bool,
+	/// Resolved thinking levels, `off` included: what the picker will offer.
+	pub thinking_levels: Vec<String>,
 	pub input_cost: f64,
 	pub output_cost: f64,
 	pub cache_read_cost: f64,
@@ -485,12 +527,14 @@ fn normalize_models(models: &[ModelSpec]) -> Result<Vec<ModelSpec>, String> {
 			return Err("上下文窗口和默认最大输出必须为正整数，且最大输出不能超过上下文窗口".into());
 		}
 		let alias = validate_alias(&model.alias)?;
+		let thinking_levels = model.thinking_levels.as_deref().map(|levels| normalize_thinking_levels(Some(levels))).transpose()?;
 		let input_cost = money(model.input_cost);
 		let cache_read_cost = if model.cache_read_cost == 0.0 && input_cost > 0.0 { input_cost } else { money(model.cache_read_cost) };
 		let cache_write_cost = if model.cache_write_cost == 0.0 && input_cost > 0.0 { input_cost } else { money(model.cache_write_cost) };
 		normalized.push(ModelSpec {
 			model_id,
 			vision: model.vision,
+			thinking_levels,
 			alias,
 			input_cost,
 			output_cost: money(model.output_cost),
@@ -545,7 +589,7 @@ fn normalize_route(route: &RouteSpec, config: &FamiliesConfig, family_id: &str, 
 			if existing.id == id { return Err("线路 ID 不能重复".into()); }
 		}
 	}
-	Ok(RouteSpec { id, relay_id: route.relay_id.clone(), enabled: route.enabled, models, streaming: route.streaming, tools: route.tools, vision: route.vision, reasoning: route.reasoning })
+	Ok(RouteSpec { id, relay_id: route.relay_id.clone(), enabled: route.enabled, models, streaming: route.streaming, tools: route.tools, vision: route.vision, reasoning: route.reasoning, thinking_levels: normalize_thinking_levels(Some(&route.thinking_levels))? })
 }
 
 fn family_mut<'a>(config: &'a mut FamiliesConfig, family_id: &str) -> Result<&'a mut ModelFamily, String> {
@@ -577,13 +621,27 @@ fn key_env(key: &str) -> String {
 	format!("SKIFF_KEY_{}", key.replace('-', "_"))
 }
 
+/// The levels a model advertises: its own declaration, else the route default.
+fn model_thinking_levels(route: &RouteSpec, item: &ModelSpec) -> Vec<String> {
+	if let Some(levels) = &item.thinking_levels {
+		return levels.clone();
+	}
+	route.thinking_levels.clone()
+}
+
 fn project_model(route: &RouteSpec, item: &ModelSpec, key: &str) -> Value {
 	let vision = if item.vision.unwrap_or(route.vision) { json!(["text", "image"]) } else { json!(["text"]) };
+	let reasoning = route.reasoning;
+	// A level list that is empty (or absent) is "not declared"; pi then keeps its
+	// own five-level default instead of losing `minimal`.
+	let declared = item.thinking_levels.as_ref().filter(|levels| !levels.is_empty()).cloned().unwrap_or_else(|| route.thinking_levels.clone());
 	json!({
 		"id": item.model_id, "name": if item.alias.is_empty() { item.model_id.clone() } else { item.alias.clone() }, "api": "openai-completions", "provider": key,
 		"cost": { "input": item.input_cost, "output": item.output_cost, "cacheRead": item.cache_read_cost, "cacheWrite": item.cache_write_cost },
 		"currency": item.currency, "contextWindow": item.context_window, "maxTokens": item.max_tokens,
-		"input": vision, "reasoning": route.reasoning,
+		"input": vision, "reasoning": reasoning,
+		// Only reasoning models get a map: pi lists `xhigh` and `max` from it.
+		"thinkingLevelMap": if reasoning && !declared.is_empty() { thinking_level_map(&declared) } else { Value::Null },
 		"compat": { "supportsDeveloperRole": false },
 	})
 }
@@ -730,6 +788,12 @@ pub fn runtime_offers(config: &FamiliesConfig) -> Vec<RuntimeOffer> {
 					tools: route.tools,
 					vision: model.vision.unwrap_or(route.vision),
 					reasoning: route.reasoning,
+					thinking_levels: if route.reasoning {
+						let declared = model_thinking_levels(route, model);
+						["off".to_string()].into_iter().chain(declared).collect()
+					} else {
+						vec!["off".to_string()]
+					},
 					input_cost: model.input_cost,
 					output_cost: model.output_cost,
 					cache_read_cost: model.cache_read_cost,
@@ -1112,9 +1176,9 @@ mod tests {
 	#[test]
 	fn runtime_offers_skip_disabled_routes_and_expose_offer_identity() {
 		let relay = RelaySpec { id: "r1".into(), name: "Relay".into(), base_url: "https://relay.example/v1".into(), api_key: String::new(), timeout_seconds: 60, enabled: true, billing_account_id: "wallet-a".into(), excluded_model_ids: Vec::new() };
-		let model = ModelSpec { model_id: "kimi-k3".into(), vision: None, alias: "k3-便宜".into(), input_cost: 1.0, output_cost: 4.0, cache_read_cost: 0.5, cache_write_cost: 0.7, currency: Currency::Cny, max_tokens: 8192, context_window: 128000 };
-		let route = RouteSpec { id: "route-kimi-r1".into(), relay_id: "r1".into(), enabled: true, models: vec![model], streaming: true, tools: true, vision: false, reasoning: true };
-		let disabled = RouteSpec { id: "route-kimi-r2".into(), relay_id: "r1".into(), enabled: false, models: vec![], streaming: true, tools: true, vision: false, reasoning: false };
+		let model = ModelSpec { model_id: "kimi-k3".into(), vision: None, thinking_levels: None, alias: "k3-便宜".into(), input_cost: 1.0, output_cost: 4.0, cache_read_cost: 0.5, cache_write_cost: 0.7, currency: Currency::Cny, max_tokens: 8192, context_window: 128000 };
+		let route = RouteSpec { id: "route-kimi-r1".into(), relay_id: "r1".into(), enabled: true, models: vec![model], streaming: true, tools: true, vision: false, reasoning: true, thinking_levels: Vec::new() };
+		let disabled = RouteSpec { id: "route-kimi-r2".into(), relay_id: "r1".into(), enabled: false, models: vec![], streaming: true, tools: true, vision: false, reasoning: false, thinking_levels: Vec::new() };
 		let family = ModelFamily { id: "kimi".into(), display_name: "Kimi".into(), routes: vec![route, disabled], default_route_id: Some("route-kimi-r1".into()) };
 		let config = FamiliesConfig { version: 4, relays: vec![relay], families: vec![family], auto_failover: false, auto_retry: false, usd_cny_rate: 7.2 };
 		let offers = runtime_offers(&config);
@@ -1139,11 +1203,11 @@ mod tests {
 			"custom": {"type": "oauth"},
 			"skiff-relay-stale-kimi": {"type": "api_key", "key": "old"}
 		}).to_string()).unwrap();
-		let model = ModelSpec { model_id: "kimi-k3".into(), vision: None, alias: "k3".into(), input_cost: 1.0, output_cost: 4.0, cache_read_cost: 1.0, cache_write_cost: 1.0, currency: Currency::Cny, max_tokens: 8192, context_window: 128000 };
-		let active = RouteSpec { id: "route-kimi-r1".into(), relay_id: "r1".into(), enabled: true, models: vec![model.clone()], streaming: true, tools: true, vision: false, reasoning: false };
-		let stopped_route = RouteSpec { id: "route-kimi-stopped".into(), relay_id: "r1".into(), enabled: false, models: vec![model.clone()], streaming: true, tools: true, vision: false, reasoning: false };
-		let stopped_relay_route = RouteSpec { id: "route-kimi-r2".into(), relay_id: "r2".into(), enabled: true, models: vec![model], streaming: true, tools: true, vision: false, reasoning: false };
-		let deepseek_model = ModelSpec { model_id: "deepseek-chat".into(), vision: None, alias: String::new(), input_cost: 0.3, output_cost: 1.2, cache_read_cost: 0.3, cache_write_cost: 0.3, currency: Currency::Cny, max_tokens: 8192, context_window: 128000 };
+		let model = ModelSpec { model_id: "kimi-k3".into(), vision: None, thinking_levels: None, alias: "k3".into(), input_cost: 1.0, output_cost: 4.0, cache_read_cost: 1.0, cache_write_cost: 1.0, currency: Currency::Cny, max_tokens: 8192, context_window: 128000 };
+		let active = RouteSpec { id: "route-kimi-r1".into(), relay_id: "r1".into(), enabled: true, models: vec![model.clone()], streaming: true, tools: true, vision: false, reasoning: false, thinking_levels: Vec::new() };
+		let stopped_route = RouteSpec { id: "route-kimi-stopped".into(), relay_id: "r1".into(), enabled: false, models: vec![model.clone()], streaming: true, tools: true, vision: false, reasoning: false, thinking_levels: Vec::new() };
+		let stopped_relay_route = RouteSpec { id: "route-kimi-r2".into(), relay_id: "r2".into(), enabled: true, models: vec![model], streaming: true, tools: true, vision: false, reasoning: false, thinking_levels: Vec::new() };
+		let deepseek_model = ModelSpec { model_id: "deepseek-chat".into(), vision: None, thinking_levels: None, alias: String::new(), input_cost: 0.3, output_cost: 1.2, cache_read_cost: 0.3, cache_write_cost: 0.3, currency: Currency::Cny, max_tokens: 8192, context_window: 128000 };
 		let config = FamiliesConfig {
 			version: 4,
 			relays: vec![
@@ -1152,7 +1216,7 @@ mod tests {
 			],
 			families: vec![
 				ModelFamily { id: "kimi".into(), display_name: "Kimi".into(), routes: vec![active, stopped_route, stopped_relay_route], default_route_id: Some("route-kimi-r1".into()) },
-				ModelFamily { id: "deepseek".into(), display_name: "DeepSeek".into(), routes: vec![RouteSpec { id: "route-deepseek-r1".into(), relay_id: "r1".into(), enabled: true, models: vec![deepseek_model], streaming: true, tools: true, vision: false, reasoning: false }], default_route_id: Some("route-deepseek-r1".into()) },
+				ModelFamily { id: "deepseek".into(), display_name: "DeepSeek".into(), routes: vec![RouteSpec { id: "route-deepseek-r1".into(), relay_id: "r1".into(), enabled: true, models: vec![deepseek_model], streaming: true, tools: true, vision: false, reasoning: false, thinking_levels: Vec::new() }], default_route_id: Some("route-deepseek-r1".into()) },
 			],
 			auto_failover: false,
 			auto_retry: false,
@@ -1182,7 +1246,7 @@ mod tests {
 		let dir = std::env::temp_dir().join(format!("skiff-default-test-{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(&dir).unwrap();
-		let model = ModelSpec { model_id: "kimi-k3".into(), vision: None, alias: String::new(), input_cost: 1.0, output_cost: 4.0, cache_read_cost: 1.0, cache_write_cost: 1.0, currency: Currency::Cny, max_tokens: 8192, context_window: 128000 };
+		let model = ModelSpec { model_id: "kimi-k3".into(), vision: None, thinking_levels: None, alias: String::new(), input_cost: 1.0, output_cost: 4.0, cache_read_cost: 1.0, cache_write_cost: 1.0, currency: Currency::Cny, max_tokens: 8192, context_window: 128000 };
 		let config = FamiliesConfig {
 			version: 4,
 			relays: vec![
@@ -1190,8 +1254,8 @@ mod tests {
 				RelaySpec { id: "r2".into(), name: "Backup".into(), base_url: "https://backup.example/v1".into(), api_key: "key-2".into(), timeout_seconds: 60, enabled: true, billing_account_id: String::new(), excluded_model_ids: Vec::new() },
 			],
 			families: vec![ModelFamily { id: "kimi".into(), display_name: "Kimi".into(), routes: vec![
-				RouteSpec { id: "route-kimi-r1".into(), relay_id: "r1".into(), enabled: true, models: vec![model.clone()], streaming: true, tools: true, vision: false, reasoning: false },
-				RouteSpec { id: "route-kimi-r2".into(), relay_id: "r2".into(), enabled: true, models: vec![model], streaming: true, tools: true, vision: false, reasoning: false },
+				RouteSpec { id: "route-kimi-r1".into(), relay_id: "r1".into(), enabled: true, models: vec![model.clone()], streaming: true, tools: true, vision: false, reasoning: false, thinking_levels: Vec::new() },
+				RouteSpec { id: "route-kimi-r2".into(), relay_id: "r2".into(), enabled: true, models: vec![model], streaming: true, tools: true, vision: false, reasoning: false, thinking_levels: Vec::new() },
 			], default_route_id: Some("route-kimi-r1".into()) }],
 			auto_failover: false,
 			auto_retry: false,
@@ -1214,6 +1278,12 @@ pub async fn fetch_public_catalog() -> Result<providers::CatalogResponse, String
 #[tauri::command]
 pub async fn discover_relay_models(base_url: String, api_key: String) -> Result<Vec<providers::DiscoveredModel>, String> {
 	providers::discover(&base_url, &api_key).await
+}
+
+/// 各家族官方模型页（6h 缓存），由前端解析出最新在售模型；失败回退过期缓存。
+#[tauri::command]
+pub async fn fetch_official_pages() -> Result<providers::OfficialPagesResponse, String> {
+	providers::official_pages(&agent_dir()?).await
 }
 
 /// 抓取用户提供的公开模型定价页，由前端解析出模型与价格。
@@ -1468,5 +1538,65 @@ mod connection_test_tests {
 		let loaded = load_plain(&dir).unwrap();
 		assert_eq!(loaded.families.iter().map(|family| family.id.as_str()).collect::<Vec<_>>(), ["deepseek", "kimi", "glm", "auto"]);
 		std::fs::remove_dir_all(dir).unwrap();
+	}
+
+	#[test]
+	fn thinking_levels_project_into_pi_map_and_offer_extended_levels() {
+		let dir = std::env::temp_dir().join(format!("skiff-thinking-levels-{}", next_id()));
+		std::fs::create_dir_all(&dir).unwrap();
+		let relay: RelaySpec = serde_json::from_value(json!({
+			"id": "", "name": "Router", "baseUrl": "http://127.0.0.1:8787/v1", "apiKey": "sk-local"
+		})).unwrap();
+		// Duplicates and `off` collapse; order follows pi's ladder, not the input.
+		let saved = save_relay_with_routes_in(&dir, relay, vec![serde_json::from_value(json!({
+			"familyId": "deepseek", "route": {
+				"relayId": "", "reasoning": true, "thinkingLevels": ["max", "low", "off", "low"],
+				"models": [
+					{ "modelId": "deepseek-v4.1-flash", "contextWindow": 128000, "maxTokens": 8192 },
+					{ "modelId": "deepseek-v4-flash", "contextWindow": 128000, "maxTokens": 8192, "thinkingLevels": ["minimal"] }
+				]
+			}
+		})).unwrap()]).unwrap();
+		let route = &saved.families.iter().find(|family| family.id == "deepseek").unwrap().routes[0];
+		assert_eq!(route.thinking_levels, ["low", "max"]);
+		assert_eq!(route.models[0].thinking_levels, None);
+		assert_eq!(route.models[1].thinking_levels.as_deref(), Some(&["minimal".to_string()][..]));
+
+		let key = provider_key("deepseek", &saved.relays[0].id);
+		let projected = providers::read_config(&dir.join("models.json")).unwrap();
+		let models = projected["providers"][&key]["models"].as_array().unwrap();
+		// Declared levels map to themselves; the rest are null so pi hides them.
+		assert_eq!(models[0]["thinkingLevelMap"], json!({
+			"minimal": null, "low": "low", "medium": null, "high": null, "xhigh": null, "max": "max"
+		}));
+		assert_eq!(models[1]["thinkingLevelMap"], json!({
+			"minimal": "minimal", "low": null, "medium": null, "high": null, "xhigh": null, "max": null
+		}));
+
+		let levels: Vec<_> = runtime_offers(&saved).iter().map(|offer| offer.thinking_levels.clone()).collect();
+		assert_eq!(levels, [vec!["off", "low", "max"], vec!["off", "minimal"]]);
+		std::fs::remove_dir_all(dir).unwrap();
+	}
+
+	#[test]
+	fn thinking_levels_default_to_pi_ladder_and_reject_unknown_levels() {
+		let model = ModelSpec { model_id: "m".into(), vision: None, thinking_levels: None, alias: String::new(), input_cost: 0.0, output_cost: 0.0, cache_read_cost: 0.0, cache_write_cost: 0.0, currency: Currency::Cny, max_tokens: 8192, context_window: 128000 };
+		// Undeclared routes stay map-free so pi keeps its five-level default.
+		let route = RouteSpec { id: "r".into(), relay_id: "r1".into(), enabled: true, models: vec![model.clone()], streaming: true, tools: true, vision: false, reasoning: true, thinking_levels: Vec::new() };
+		assert_eq!(project_model(&route, &model, "skiff-test")["thinkingLevelMap"], Value::Null);
+
+		let declared = RouteSpec { thinking_levels: vec!["low".into(), "high".into()], ..route.clone() };
+		let map = project_model(&declared, &model, "skiff-test")["thinkingLevelMap"].clone();
+		assert_eq!(map["low"], "low");
+		assert_eq!(map["high"], "high");
+		assert_eq!(map["minimal"], Value::Null);
+		assert_eq!(map["max"], Value::Null);
+
+		let mut silent = declared.clone();
+		silent.reasoning = false;
+		assert_eq!(project_model(&silent, &model, "skiff-test")["thinkingLevelMap"], Value::Null);
+
+		assert_eq!(normalize_thinking_levels(Some(&["HIGH".into(), "XHigh".into()])).unwrap(), ["high", "xhigh"]);
+		assert!(normalize_thinking_levels(Some(&["ultra".into()])).is_err());
 	}
 }

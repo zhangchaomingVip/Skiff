@@ -18,6 +18,8 @@ export interface RuntimeOffer {
 	tools?: boolean;
 	vision?: boolean;
 	reasoning?: boolean;
+	/** Thinking levels, `off` included: what the picker may offer for this model. */
+	thinkingLevels?: string[];
 	inputCost: number;
 	outputCost: number;
 	cacheReadCost?: number;
@@ -73,6 +75,7 @@ export function modelsFromOffers(offers: RuntimeOffer[], _defaults: FamilyDefaul
 			...(resolved.vision === undefined ? {} : { vision: resolved.vision }),
 			...(resolved.vision === undefined ? {} : { input: resolved.vision ? ["text", "image"] : ["text"] }),
 			...(resolved.reasoning === undefined ? {} : { reasoning: resolved.reasoning }),
+			...(resolved.thinkingLevels === undefined ? {} : { thinkingLevels: resolved.thinkingLevels }),
 			name: title,
 			providerName: resolved.relayName,
 			billingAccountId: resolved.billingAccountId,

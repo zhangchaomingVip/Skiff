@@ -48,3 +48,26 @@ test("classification uses basename boundaries and accepts legacy family aliases"
 		assert.equal(discoveredFamily(id), undefined, id);
 	}
 });
+
+test("recommendation narrows fresh routes to the newest flagship + flash", () => {
+	const relay = blankRelay();
+	const latest = new Map([
+		["glm", { familyId: "glm", modelIds: [], latestGroup: ["glm-5.4", "glm-5.4-flash", "glm-5.4-flashx"], latestVersion: "glm-5.4", updated: new Map() }],
+	]);
+	const routes = buildDiscoveredRoutes(asDiscovered(["glm-5.4-flashx", "glm-5.4-flash", "glm-5.4", "glm-5.2"]), relay, [], fillModel, latest);
+	assert.equal(routes.length, 1);
+	assert.deepEqual(routes[0].route.models.map((model) => model.modelId), ["glm-5.4", "glm-5.4-flash"]);
+});
+
+test("recommendation falls back to the newest served IDs and keeps every model offline", () => {
+	const relay = blankRelay();
+	// Relay predates the latest group: catalog freshness ranks the served models.
+	const dated = new Map([
+		["glm", { familyId: "glm", modelIds: ["glm-5.4"], latestGroup: ["glm-5.4"], latestVersion: "glm-5.4", updated: new Map([["glm-5.3-flash", "2026-08-26"], ["glm-5.2", "2026-06-13"], ["glm-5.3", "2026-08-14"]]) }],
+	]);
+	const fallback = buildDiscoveredRoutes(asDiscovered(["glm-5.2", "glm-5.3", "glm-5.3-flash"]), relay, [], fillModel, dated);
+	assert.deepEqual(fallback[0].route.models.map((model) => model.modelId), ["glm-5.3-flash", "glm-5.3"]);
+	// No catalog → current behaviour (every discovered model).
+	const offline = buildDiscoveredRoutes(asDiscovered(["glm-5.2", "glm-5.3", "glm-5.3-flash"]), relay, [], fillModel, new Map([["glm", { familyId: "glm", modelIds: [], latestGroup: [], latestVersion: undefined, updated: new Map() }]]));
+	assert.equal(offline[0].route.models.length, 3);
+});

@@ -20,6 +20,8 @@ export interface ModelInfo {
 	contextWindow?: number;
 	maxTokens?: number;
 	reasoning?: boolean;
+	/** Thinking levels this route's model supports, as declared in settings. */
+	thinkingLevels?: string[];
 	streaming?: boolean;
 	tools?: boolean;
 	vision?: boolean;

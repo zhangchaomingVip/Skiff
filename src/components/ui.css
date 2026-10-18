@@ -31,7 +31,6 @@
 	.composer-context .ui-button:hover:not(:disabled) { background: var(--hover); color: var(--foreground); border-color: var(--boundary); }
 	.composer-context .ui-icon-button { width: var(--control-compact); padding: 0; }
 	.composer-context .ui-button.active, .composer-context .ui-button[aria-pressed=true] { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); box-shadow: none; }
-	.composer-context .web-trigger.unavailable { color: var(--color-warning); border-color: color-mix(in srgb, var(--color-warning) 55%, var(--border)); }
 	.composer-actions .ui-button { border-radius: var(--radius-full); }
 	.composer-actions .ui-icon-button.send-btn { width: var(--control-regular); height: var(--control-regular); box-shadow: var(--shadow-xs); transition: background-color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast); }
 	.composer-actions .ui-icon-button.send-btn:hover:not(:disabled) { box-shadow: var(--shadow-sm); }

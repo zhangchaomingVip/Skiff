@@ -22,14 +22,16 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 			route("deepseek", "r1", [
 				{ modelId: "deepseek-flash", alias: "", inputCost: 1, outputCost: 4, cacheReadCost: 1, cacheWriteCost: 1, currency: "CNY", maxTokens: 4096, contextWindow: 32000 },
 				{ modelId: "deepseek-chat", alias: "", inputCost: 0.3, outputCost: 1.2, cacheReadCost: 0.3, cacheWriteCost: 0.3, currency: "CNY", maxTokens: 8192, contextWindow: 128000 },
-				{ modelId: "deepseek-reasoner", alias: "", inputCost: 5, outputCost: 20, cacheReadCost: 5, cacheWriteCost: 5, currency: "USD", maxTokens: 16384, contextWindow: 256000 },
+				{ modelId: "deepseek-reasoner", alias: "", inputCost: 5, outputCost: 20, cacheReadCost: 5, cacheWriteCost: 5, currency: "USD", maxTokens: 16384, contextWindow: 256000, thinkingLevels: ["minimal", "low", "medium", "high", "xhigh", "max"] },
 			], { reasoning: true }),
 			route("deepseek", "r2", [{ modelId: "deepseek-ai/DeepSeek-V3", alias: "", inputCost: 0.14, outputCost: 0.28, cacheReadCost: 0.14, cacheWriteCost: 0.14, currency: "CNY", maxTokens: 8192, contextWindow: 128000 }]),
 		] },
 		{ id: "kimi", displayName: "Kimi", defaultRouteId: "route-kimi-r3", routes: [
 			route("kimi", "r3", [{ modelId: "kimi-k2", alias: "", inputCost: 0.6, outputCost: 2.4, cacheReadCost: 0.6, cacheWriteCost: 0.6, currency: "CNY", maxTokens: 8192, contextWindow: 128000 }], { reasoning: true }),
 		] },
-		{ id: "glm", displayName: "GLM", defaultRouteId: null, routes: [] },
+		{ id: "glm", displayName: "GLM", defaultRouteId: "route-glm-r2", routes: [
+			route("glm", "r2", [{ modelId: "glm-5.2", alias: "", inputCost: 1, outputCost: 4, cacheReadCost: 1, cacheWriteCost: 1, currency: "CNY", maxTokens: 8192, contextWindow: 128000 }, { modelId: "glm-5.1", alias: "", inputCost: 0.8, outputCost: 3, cacheReadCost: 0.8, cacheWriteCost: 0.8, currency: "CNY", maxTokens: 8192, contextWindow: 128000 }]),
+		] },
 		{ id: "auto", displayName: "Auto", defaultRouteId: null, routes: [] },
 	];
 	if (fixture) {
@@ -46,6 +48,10 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 		if (fixture === "unknown") families.filter((family) => family.id !== "kimi").forEach((family) => { family.routes = []; });
 	}
 	const relayOf = (relayId) => relays.find((relay) => relay.id === relayId);
+	// Same ladder pi uses: a level exists only when thinkingLevelMap declares it.
+	const THINKING_LEVELS = ["minimal", "low", "medium", "high", "xhigh", "max"];
+	const thinkingMap = (levels) => Object.fromEntries(THINKING_LEVELS.map((level) => [level, levels?.includes(level) ? level : null]));
+	const thinkingLevelsOf = (route, model) => route.reasoning ? ["off", ...THINKING_LEVELS.filter((level) => (model.thinkingLevels ?? route.thinkingLevels ?? THINKING_LEVELS.slice(0, 4)).includes(level))] : ["off"];
 	const familyRoutes = () => families.flatMap((family) => family.routes.map((route) => ({ family, route })));
 	const familyModels = () => familyRoutes().flatMap(({ family, route }) => {
 		const relay = relayOf(route.relayId);
@@ -54,6 +60,8 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 			provider: providerKey(family.id, relay.id), id: model.modelId, name: model.modelId,
 			contextWindow: model.contextWindow, maxTokens: model.maxTokens, currency: model.currency, cost: { input: model.inputCost, output: model.outputCost },
 			reasoning: route.reasoning, input: (model.vision ?? route.vision) ? ["text", "image"] : ["text"],
+			thinkingLevels: thinkingLevelsOf(route, model),
+			thinkingLevelMap: route.reasoning ? thinkingMap(model.thinkingLevels ?? route.thinkingLevels ?? THINKING_LEVELS.slice(0, 4)) : null,
 		}));
 	});
 	const models = familyModels();
@@ -63,7 +71,7 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 	const offers = () => familyRoutes().flatMap(({ family, route }, routeOrder) => {
 		const relay = relayOf(route.relayId);
 		if (!relay?.enabled || !route.enabled) return [];
-		return route.models.filter((model) => !relay.excludedModelIds?.includes(model.modelId)).map((model) => ({ offerId: `${route.id}/${model.modelId}`, routeId: route.id, familyId: family.id, familyName: family.displayName, relayId: relay.id, relayName: relay.name, providerKey: providerKey(family.id, relay.id), modelId: model.modelId, alias: model.alias, billingAccountId: relay.billingAccountId, routeOrder, streaming: route.streaming, tools: route.tools, vision: model.vision ?? route.vision, reasoning: route.reasoning, inputCost: model.inputCost, outputCost: model.outputCost, cacheReadCost: model.cacheReadCost, cacheWriteCost: model.cacheWriteCost, currency: model.currency, maxTokens: model.maxTokens, contextWindow: model.contextWindow }));
+		return route.models.filter((model) => !relay.excludedModelIds?.includes(model.modelId)).map((model) => ({ offerId: `${route.id}/${model.modelId}`, routeId: route.id, familyId: family.id, familyName: family.displayName, relayId: relay.id, relayName: relay.name, providerKey: providerKey(family.id, relay.id), modelId: model.modelId, alias: model.alias, billingAccountId: relay.billingAccountId, routeOrder, streaming: route.streaming, tools: route.tools, vision: model.vision ?? route.vision, reasoning: route.reasoning, thinkingLevels: thinkingLevelsOf(route, model), inputCost: model.inputCost, outputCost: model.outputCost, cacheReadCost: model.cacheReadCost, cacheWriteCost: model.cacheWriteCost, currency: model.currency, maxTokens: model.maxTokens, contextWindow: model.contextWindow }));
 	});
 	const persist = () => storage?.setItem("skiff.test.sessions", JSON.stringify(saved));
 	const emit = (instanceId, event) => {
@@ -98,6 +106,13 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 				return familiesConfig();
 			}
 			if (command === "list_model_runtime") return offers();
+			if (command === "fetch_public_catalog") return { models: [], stale: false, fetchedAt: 0 };
+			// Mock latest-model sources: a fake GLM-5.4 group so the launcher hint
+			// and the recommended preselect can be exercised offline.
+			if (command === "fetch_official_pages") return {
+				pages: [{ familyId: "glm", url: "https://mock/glm", body: "<table><tr><th>模型</th></tr><tr><td>GLM-5.4</td></tr><tr><td>GLM-5.4-Flash</td></tr></table>", fetchedAt: 0 }],
+				stale: false,
+			};
 			if (command === "cancel_provider_test") return;
 			if (command === "test_provider_connection") {
 				if (String(args.baseUrl).includes("fail")) return { ok: false, latencyMs: 42, status: 401, error: "Invalid API key" };
@@ -187,7 +202,7 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 				await new Promise((resolve) => target.setTimeout(resolve, 350));
 				if (args.apiKey === "invalid") throw new Error("密钥无效或未授权");
 				if (String(args.baseUrl).includes("missing")) throw new Error("该地址不支持 /models 接口，请手动填写");
-				const ids = ["deepseek-chat", "deepseek-flash", "deepseek-reasoner", "Kimi-K2", "moonshot-v1", "glm-4.6", "chatglm-6b", ...Array.from({ length: 22 }, (_, i) => `a-model-${String(i).padStart(2, "0")}`)];
+				const ids = ["deepseek-chat", "deepseek-flash", "deepseek-reasoner", "Kimi-K2", "moonshot-v1", "glm-4.6", "chatglm-6b", "glm-5.4", "glm-5.4-flash", ...Array.from({ length: 22 }, (_, i) => `a-model-${String(i).padStart(2, "0")}`)];
 				return ids.map((id) => ({ id, reasoning: false, vision: false, tools: false }));
 			}
 			if (command === "validate_project_directory") {
@@ -200,6 +215,10 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 				return;
 			}
 			if (command === "rpc_stop") { target.clearTimeout(processes.get(args.instanceId)?.timer); processes.delete(args.instanceId); return; }
+			if (command === "get_web_search_status") return { agentDir: "D:\\mock\\pi", configured: false, extensionInstalled: false, enabled: false, validated: null };
+			if (command === "validate_web_search") return { agentDir: "D:\\mock\\pi", configured: false, extensionInstalled: false, enabled: false, validated: null };
+			if (command === "save_web_search_key" || command === "clear_web_search_key") return;
+			if (command === "install_web_search_extension") return false;
 			if (command !== "rpc_send") throw new Error(`Unknown mock command: ${command}`);
 			if (failSend) { failSend = false; throw new Error("Simulated transport failure"); }
 			const request = JSON.parse(args.message);
@@ -234,8 +253,9 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 					respond({ contextUsage: { tokens: usage ? usage.input + usage.cacheRead + usage.cacheWrite + usage.output : null, contextWindow: session.model.contextWindow ?? 128000, percent: usage ? (usage.input + usage.cacheRead + usage.cacheWrite + usage.output) / (session.model.contextWindow ?? 128000) * 100 : null } });
 					break;
 				}
-				case "get_available_thinking_levels": respond({ levels: session.model.reasoning ? ["off", "minimal", "low", "medium", "high", ...(session.model.maxThinking === "max" ? ["xhigh", "max"] : session.model.maxThinking === "xhigh" ? ["xhigh"] : [])] : ["off"] }); break;
-				case "set_thinking_level": session.thinkingLevel = session.model.reasoning ? request.level : "off"; respond({}); break;
+				case "get_available_thinking_levels": respond({ levels: session.model.thinkingLevels ?? (session.model.reasoning ? ["off", "minimal", "low", "medium", "high"] : ["off"]) }); break;
+				// Like pi, an unsupported level is clamped rather than rejected.
+				case "set_thinking_level": { const levels = session.model.thinkingLevels ?? (session.model.reasoning ? ["off", "minimal", "low", "medium", "high"] : ["off"]); session.thinkingLevel = levels.includes(request.level) ? request.level : levels.filter((level) => level !== "off").at(-1) ?? "off"; respond({}); break; }
 				case "get_available_models": respond({ models: familyModels() }); break;
 				case "get_messages": respond({ messages: session.messages }); break;
 				case "switch_session": {

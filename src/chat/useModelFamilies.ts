@@ -7,10 +7,30 @@ import type { DiscoveredModel } from "../rpc/modelDiscovery";
 const FAMILY_IDS = ["deepseek", "kimi", "glm", "auto"] as const;
 export type FamilyId = (typeof FAMILY_IDS)[number];
 
+/** pi's thinking levels, lowest first; `off` is always available and implicit. */
+export const THINKING_LEVELS = ["minimal", "low", "medium", "high", "xhigh", "max"] as const;
+export type ThinkingLevel = (typeof THINKING_LEVELS)[number];
+
+/** Levels pi offers when a model declares nothing, so the UI matches it. */
+export const DEFAULT_THINKING_LEVELS: ThinkingLevel[] = ["minimal", "low", "medium", "high"];
+
+/** Keeps pi's order and drops duplicates or unknown values from stored data. */
+export function normalizeThinkingLevels(levels: readonly string[] | undefined): ThinkingLevel[] {
+	const accepted = new Set(levels ?? []);
+	return THINKING_LEVELS.filter((level) => accepted.has(level));
+}
+
+/** What a model actually advertises: its own choice, else the route default. */
+export function resolveThinkingLevels(levels: readonly string[] | undefined, routeLevels: readonly string[] | undefined): ThinkingLevel[] {
+	return levels?.length ? normalizeThinkingLevels(levels) : normalizeThinkingLevels(routeLevels);
+}
+
 export interface ModelSpec {
 	modelId: string;
 	/** Undefined retains the legacy route default; a boolean overrides it. */
 	vision?: boolean;
+	/** Undefined inherits the route's levels; a list overrides them. */
+	thinkingLevels?: ThinkingLevel[];
 	alias: string;
 	inputCost: number;
 	outputCost: number;
@@ -62,6 +82,8 @@ export interface RouteSpec {
 	tools: boolean;
 	vision: boolean;
 	reasoning: boolean;
+	/** Default thinking levels for every model on this route. */
+	thinkingLevels?: ThinkingLevel[];
 }
 
 export interface ModelFamily {

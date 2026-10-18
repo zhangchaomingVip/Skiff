@@ -34,7 +34,6 @@ window.__TAURI_INTERNALS__.invoke = async (command, args) => {
 	}
 	return result;
 };
-const search = { available: false, configured: false, extensionInstalled: false, enabled: false, statusLoaded: true, validating: false, busy: false, toggle: async () => {}, clearKey: async () => {}, install: async () => {}, refresh: async () => {} };
 const noop = () => {};
 const send = (text, images) => latest.actions.prompt(text, images);
 const intervals = new Set();
@@ -46,7 +45,7 @@ window.clearInterval = (id) => { intervals.delete(id); originalClear(id); };
 
 function Harness() {
 	latest = usePiSession(target);
-	return React.createElement(VoyageWorkspace, { key: `${latest.owner.id ?? "loading"}:${latest.owner.cwd ?? ""}`, state: latest.state, connected: latest.connected, pending: latest.pending, actions: latest.actions, onSend: send, onReconnect: latest.reconnect, search, onConfigureSearch: noop });
+	return React.createElement(VoyageWorkspace, { key: `${latest.owner.id ?? "loading"}:${latest.owner.cwd ?? ""}`, state: latest.state, connected: latest.connected, pending: latest.pending, actions: latest.actions, onSend: send, onReconnect: latest.reconnect });
 }
 function render() { root.render(React.createElement(StrictMode, null, React.createElement(Harness))); }
 function assert(value, message) { if (!value) throw new Error(message); }

@@ -15,7 +15,6 @@ import { useDraft, type DraftTarget } from "../chat/useDraft";
 import type { MessageReveal } from "../chat/useConversationSearch";
 import { Composer } from "./Composer";
 import { MessageList } from "./MessageList";
-import type { WebSearchControls } from "../chat/webSearch";
 import { billingAccountLabel, type RouteAuthorizationChoice, type RouteAuthorizationRequest } from "../chat/routeAuthorization";
 
 /** Transcript + notices + composer. */
@@ -26,8 +25,6 @@ export function ChatView({
 	actions,
 	pending,
 	projectName,
-	search,
-	onConfigureSearch,
 	onSend,
 	onReconnect,
 	failover,
@@ -43,8 +40,6 @@ export function ChatView({
 	actions: PiSessionActions;
 	pending: boolean;
 	projectName?: string;
-	search: WebSearchControls;
-	onConfigureSearch: () => void;
 	onSend: (text: string, images?: ImageAttachment[], delivery?: Delivery) => Promise<boolean>;
 	onReconnect: () => void;
 	/** A same-family channel that can take over after a provider error. */
@@ -204,8 +199,6 @@ export function ChatView({
 				editing={!!editing || !!edit}
 				onCancelEdit={cancelEdit}
 				getCommands={actions.getCommands}
-				search={search}
-				onConfigureSearch={onConfigureSearch}
 			/>
 		</section>
 	);

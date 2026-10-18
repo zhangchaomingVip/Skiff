@@ -1,5 +1,6 @@
 import type { ModelFamily, ModelSpec, RelaySpec, RelayRouteSpec } from "./useModelFamilies";
 import type { DiscoveredModel } from "../rpc/modelDiscovery";
+import { pickRecommendedIds, type FamilyLatest } from "./latestModels";
 
 /** Classify the model basename, retaining the exact provider-prefixed API ID. */
 export function discoveredFamily(modelId: string): string | undefined {
@@ -15,8 +16,12 @@ export function discoveredFamily(modelId: string): string | undefined {
 }
 
 /** Only create missing routes; existing model settings and priority stay intact.
- *  Discovered routes enable reasoning by default so thinking models work out of the box. */
-export function buildDiscoveredRoutes(models: DiscoveredModel[], relay: RelaySpec, families: ModelFamily[], fillModel: (id: string) => ModelSpec): RelayRouteSpec[] {
+ *  Discovered routes enable reasoning by default so thinking models work out of the box.
+ *  When `latest` is provided, a fresh route's model list is narrowed to the two
+ *  recommended models (flagship + flash of the newest version group); the
+ *  remaining discovered IDs stay available for manual selection. An empty
+ *  recommendation (offline catalog, exotic endpoint) keeps every model. */
+export function buildDiscoveredRoutes(models: DiscoveredModel[], relay: RelaySpec, families: ModelFamily[], fillModel: (id: string) => ModelSpec, latest?: ReadonlyMap<string, FamilyLatest>): RelayRouteSpec[] {
 	const groups = new Map<string, ModelSpec[]>();
 	const seen = new Set<string>();
 	for (const discovered of models) {
@@ -32,6 +37,18 @@ export function buildDiscoveredRoutes(models: DiscoveredModel[], relay: RelaySpe
 	}
 	return ["deepseek", "kimi", "glm", "auto"].flatMap((familyId) => {
 		const models = groups.get(familyId);
-		return models ? [{ familyId, route: { id: "", relayId: relay.id, enabled: true, models, streaming: true, tools: true, vision: false, reasoning: true } }] : [];
+		if (!models) return [];
+		if (familyId !== "auto" && latest) {
+			const recommendation = pickRecommendedIds(models.map((model) => model.modelId), latest, familyId);
+			if (recommendation.recommended.length) {
+				const pickedSet = new Set(recommendation.recommended.map((id) => id.toLowerCase()));
+				// Keep the recommendation order (flagship first) in the fresh route.
+				const filtered = recommendation.recommended
+					.map((id) => models.find((model) => model.modelId.toLowerCase() === id))
+					.filter((model): model is ModelSpec => !!model && pickedSet.has(model.modelId.toLowerCase()));
+				if (filtered.length) return [{ familyId, route: { id: "", relayId: relay.id, enabled: true, models: filtered, streaming: true, tools: true, vision: false, reasoning: true } }];
+			}
+		}
+		return [{ familyId, route: { id: "", relayId: relay.id, enabled: true, models, streaming: true, tools: true, vision: false, reasoning: true } }];
 	});
 }

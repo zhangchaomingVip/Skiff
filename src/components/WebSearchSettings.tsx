@@ -1,14 +1,11 @@
 import { useState, type FormEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { WebSearchControls } from "../chat/webSearch";
-import { Dialog, IconButton, Input, Button } from "./ui";
+import { Button, Input } from "./ui";
 import { Icon } from "./Icon";
 
-/** Lets the user add, replace or remove their own search key (Tavily today). */
-export function SearchDialog({ onClose, search }: {
-	onClose: () => void;
-	search: WebSearchControls;
-}) {
+/** Inline settings block for pi's `web_search` tool: toggle, key and health. */
+export function WebSearchSettings({ search }: { search: WebSearchControls }) {
 	const [apiKey, setApiKey] = useState("");
 	const [error, setError] = useState<string>();
 	const [pending, setPending] = useState(false);
@@ -61,15 +58,22 @@ export function SearchDialog({ onClose, search }: {
 		: search.extensionInstalled
 			? "文件已安装，当前 pi 会话尚未加载"
 			: "尚未安装 Skiff 联网搜索扩展";
-	const ready = search.available && search.configured && search.validated === true;
+	const active = search.available && search.configured && search.validated !== false && search.enabled;
+	const togglePending = search.busy || search.validating;
 
-	return <Dialog onClose={onClose} pending={pending} className="project-dialog provider-dialog search-dialog" aria-labelledby="search-title">
-		<form onSubmit={(event) => void save(event)}>
-			<div className="dialog-heading"><h2 id="search-title">联网搜索</h2><IconButton type="button" onClick={onClose} disabled={pending} aria-label="关闭联网搜索设置"><Icon name="close" /></IconButton></div>
-			<p className="muted">密钥保存在本机 pi 配置目录，不写入聊天记录，也不会回传到界面。</p>
+	return <div className="web-search-settings">
+		<div className="web-search-toggle-row">
+			<label className="switch" title={active ? "关闭联网搜索" : "开启联网搜索"}>
+				<input type="checkbox" checked={active} disabled={!search.statusLoaded || togglePending} onChange={(event) => void search.toggle(event.target.checked)} aria-label="联网搜索开关" />
+				<span className="slider" />
+			</label>
+			<span>联网搜索</span>
+		</div>
+		<p className="muted">{active ? "开启后模型可以在回答中调用 web_search 工具检索网页。" : "开启后模型可以在回答中调用 web_search 工具检索网页；状态由配置与当前 pi 会话共同决定。"}</p>
+		<form onSubmit={(event) => void save(event)} className="web-search-key-form">
 			<div className="provider-field">
-				<label htmlFor="search-key">Tavily API Key</label>
-				<Input id="search-key" type="password" autoComplete="off" required placeholder={search.configured ? `已保存 ${search.keyHint ?? ""}，填写新的会替换` : "tvly-…"} value={apiKey} onChange={(event) => setApiKey(event.target.value)} disabled={pending} />
+				<label htmlFor="web-search-key">Tavily API Key</label>
+				<Input id="web-search-key" type="password" autoComplete="off" required placeholder={search.configured ? `已保存 ${search.keyHint ?? ""}，填写新的会替换` : "tvly-…"} value={apiKey} onChange={(event) => setApiKey(event.target.value)} disabled={pending} />
 				<small>在 tavily.com 免费注册即可获得。</small>
 			</div>
 			<div className="search-health" aria-live="polite">
@@ -82,7 +86,7 @@ export function SearchDialog({ onClose, search }: {
 					<span>{extensionState}</span>
 				</div>
 				{search.validated === false && search.validationMessage && <p className="search-health-message" role="status">{search.validationMessage}</p>}
-				{ready && <p className="search-ready"><Icon name="check" size={15} />联网搜索配置完成</p>}
+				{active && <p className="search-ready"><Icon name="check" size={15} />联网搜索配置完成</p>}
 			</div>
 			{search.agentDir && <p className="muted search-config-path">配置目录：{search.agentDir}</p>}
 			{(error || search.error) && <p className="form-error" role="alert">{error || search.error}</p>}
@@ -95,5 +99,5 @@ export function SearchDialog({ onClose, search }: {
 				<Button type="submit" variant="primary" size="primary" disabled={pending || !apiKey.trim()}>{pending ? "保存并验证中…" : "保存并验证"}</Button>
 			</div>
 		</form>
-	</Dialog>;
+	</div>;
 }

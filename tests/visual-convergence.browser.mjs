@@ -138,7 +138,7 @@ try {
 		assert.equal(layout.headerOverlap, false, JSON.stringify(layout));
 		evidence.layouts.push({ theme, width, ...layout });
 		assert.equal(await page.locator(".composer [data-variant=primary]").count(), 1);
-		for (const selector of [".reasoning-trigger", ".web-trigger"]) if (await page.locator(selector).count()) assert.equal(await page.locator(selector).evaluate((el) => getComputedStyle(el).backgroundColor), "rgba(0, 0, 0, 0)");
+		for (const selector of [".reasoning-trigger"]) if (await page.locator(selector).count()) assert.equal(await page.locator(selector).evaluate((el) => getComputedStyle(el).backgroundColor), "rgba(0, 0, 0, 0)");
 		const input = page.locator(".composer textarea");
 		await input.fill("视觉回归草稿");
 		const send = page.locator(".composer [data-variant=primary]");
@@ -194,13 +194,11 @@ try {
 		const { default: ReactDOM } = await import("/node_modules/.vite/deps/react-dom_client.js");
 		const { createRoot } = ReactDOM;
 		const { Button, Input, SegmentedControl } = await import("/src/components/ui.tsx");
-		const { WebSearchToggle } = await import("/src/components/WebSearchToggle.tsx");
 		const { ReasoningChip } = await import("/src/components/ReasoningChip.tsx");
 		window.visualControlClicks = 0;
 		function Controls() {
 			const [value, setValue] = useState("one");
 			return React.createElement("div", { id: "visual-controls" },
-				React.createElement(WebSearchToggle, { search: { statusLoaded: true, available: true, configured: true, enabled: true, validated: true, toggle: () => {} }, disabled: false, onConfigure: () => {} }),
 				React.createElement(ReasoningChip, { level: "high", levels: ["off", "high"], disabled: false, onLevel: () => {} }),
 				React.createElement(SegmentedControl, { value, onChange: setValue, label: "回归选项", options: [{ value: "one", label: "一" }, { value: "two", label: "二" }] }),
 				...["primary", "ghost", "setting"].map((variant) => React.createElement(Button, { key: variant, variant, disabled: true, onClick: () => window.visualControlClicks++ }, React.createElement("span", null, "禁用"))),
@@ -212,7 +210,7 @@ try {
 	await page.locator("#visual-controls").waitFor();
 	for (const theme of ["dark", "light"]) {
 		await page.evaluate((theme) => document.documentElement.dataset.theme = theme, theme);
-		for (const selector of [".web-trigger", ".reasoning-trigger"]) assert.equal(await page.locator(selector).evaluate((el) => getComputedStyle(el).backgroundColor), "rgba(0, 0, 0, 0)");
+		for (const selector of [".reasoning-trigger"]) assert.equal(await page.locator(selector).evaluate((el) => getComputedStyle(el).backgroundColor), "rgba(0, 0, 0, 0)");
 		const group = page.getByRole("group", { name: "回归选项" });
 		const selected = group.locator('[aria-pressed="true"]');
 		assert.equal(await selected.evaluate((el) => getComputedStyle(el).backgroundColor !== "rgba(0, 0, 0, 0)"), true);

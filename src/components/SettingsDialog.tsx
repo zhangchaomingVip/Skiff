@@ -2,25 +2,31 @@ import { useCallback, useRef, useState } from "react";
 import type { ComponentProps } from "react";
 import { setThemePreference, useThemePreference } from "../theme";
 import { ArchivedSessions } from "./ArchivedSessions";
-import { FamiliesSettingsContent, type FamiliesSettingsHandle, type FamiliesSettingsProps } from "./FamiliesSettings";
 import { Icon } from "./Icon";
 import { PromptSettings } from "./PromptSettings";
+import { ProvidersSettingsContent, type ProvidersSettingsProps } from "./ProvidersSettings";
+import { RoutesSettingsContent, type RoutesSettingsProps } from "./RoutesSettings";
 import { Button, Dialog, IconButton } from "./ui";
 import { isMacPlatform, settingsCategories, type SettingsCategory, type SettingsRestrictions } from "./settingsNavigation";
+import type { SettingsEditorHandle } from "./settingsEditor";
+import type { WebSearchControls } from "../chat/webSearch";
+import { WebSearchSettings } from "./WebSearchSettings";
 
-export function SettingsDialog({ initialCategory, restrictions, prompt, models, archives, onRetryModels, onClose }: {
+export function SettingsDialog({ initialCategory, restrictions, prompt, providers, models, archives, search, onRetryModels, onClose }: {
 	initialCategory: SettingsCategory;
 	restrictions: SettingsRestrictions;
 	prompt: ComponentProps<typeof PromptSettings>;
-	models: Omit<FamiliesSettingsProps, "onLockChange">;
+	providers: Omit<ProvidersSettingsProps, "onLockChange" | "onOpenRoutes">;
+	models: Omit<RoutesSettingsProps, "onLockChange" | "onOpenProviders">;
 	archives: ComponentProps<typeof ArchivedSessions>;
+	search: WebSearchControls;
 	onRetryModels: () => void;
 	onClose: () => void;
 }) {
 	const [category, setCategory] = useState(initialCategory);
 	const [{ locked, pending }, setInteraction] = useState({ locked: false, pending: false });
 	const updateInteraction = useCallback((locked: boolean, pending: boolean) => setInteraction({ locked, pending }), []);
-	const editor = useRef<FamiliesSettingsHandle>(null);
+	const editor = useRef<SettingsEditorHandle>(null);
 	const theme = useThemePreference();
 	const modifier = isMacPlatform() ? "Cmd" : "Ctrl";
 	const close = () => { if (!editor.current?.pending) onClose(); };
@@ -35,8 +41,10 @@ export function SettingsDialog({ initialCategory, restrictions, prompt, models, 
 				{category === "appearance" && <section aria-labelledby="appearance-title"><h2 id="appearance-title">外观</h2><p className="muted">选择应用主题，立即生效。</p><div className="settings-themes" role="group" aria-label="应用主题">{([
 					["system", "跟随系统", "monitor"], ["light", "浅色", "sun"], ["dark", "深色", "moon"],
 				] as const).map(([value, label, icon]) => <Button key={value} variant="setting" aria-pressed={theme === value} onClick={() => setThemePreference(value)}><Icon name={icon} />{label}{theme === value && <Icon name="check" size={14} />}</Button>)}</div></section>}
+				{category === "websearch" && <section aria-labelledby="websearch-title"><h2 id="websearch-title">联网搜索</h2><p className="muted">为 pi 配置 web_search 工具与 Tavily API Key；开关作用于当前 pi 会话。</p><WebSearchSettings search={search} /></section>}
 				{category === "prompt" && <section aria-labelledby="prompt-title"><h2 id="prompt-title">系统提示词</h2><p className="muted">附加到 pi 系统提示词末尾（--append-system-prompt），随每次会话启动生效。保存后当前会话会重启。</p><fieldset className="settings-config" disabled={!!restrictions.prompt}><PromptSettings {...prompt} /></fieldset>{restrictions.prompt && <p className="settings-restriction">{restrictions.prompt}</p>}</section>}
-				{category === "models" && <><fieldset className="settings-config" disabled={!!restrictions.models}><FamiliesSettingsContent {...models} ref={editor} onLockChange={updateInteraction} /></fieldset>{models.configError && !locked && <Button disabled={!!restrictions.models} onClick={onRetryModels}>重新读取配置</Button>}</>}
+				{category === "providers" && <><fieldset className="settings-config" disabled={!!restrictions.providers}><ProvidersSettingsContent {...providers} ref={editor} onOpenRoutes={() => setCategory("models")} onLockChange={updateInteraction} /></fieldset>{providers.configError && !locked && <Button disabled={!!restrictions.providers} onClick={onRetryModels}>重新读取配置</Button>}</>}
+				{category === "models" && <><fieldset className="settings-config" disabled={!!restrictions.models}><RoutesSettingsContent {...models} ref={editor} onOpenProviders={() => setCategory("providers")} onLockChange={updateInteraction} /></fieldset>{models.configError && !locked && <Button disabled={!!restrictions.models} onClick={onRetryModels}>重新读取配置</Button>}</>}
 				{category === "archives" && <section aria-labelledby="archives-title"><h2 id="archives-title">归档会话</h2><p className="muted">查看、恢复或删除已归档的会话。</p><ArchivedSessions {...archives} busy={archives.busy || !!restrictions.archives} /></section>}
 				{category === "shortcuts" && <section aria-labelledby="shortcuts-title"><h2 id="shortcuts-title">快捷键</h2><p className="muted">设置及其他模态窗口打开期间，后台聊天快捷键暂停。</p><dl className="settings-shortcuts">{[
 					[`${modifier} + ,`, "打开设置", "主页面；不打断其他模态窗口"],
