@@ -899,6 +899,8 @@ span.provider-mark.generic { display: inline-flex; align-items: center; justify-
 .preset-editor .test-row > small { flex-basis: 100%; color: var(--muted); font-size: var(--font-size-sm); }
 .preset-editor .dialog-actions { margin-top: var(--space-4); }
 .family-added-hint { margin: 0 0 var(--space-3); padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--panel-2); color: var(--secondary); font-size: var(--font-size-sm); }
+/* Provider list errors render inside the family card, right after the rows. */
+.provider-error { margin: var(--space-2) 0 0; padding: 8px 12px; border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent); border-radius: var(--radius-md); background: color-mix(in srgb, var(--danger) 10%, transparent); font-size: var(--font-size-sm); overflow-wrap: anywhere; }
 
 /* Provider rows: whole row opens the editor (Magpie-style list) */
 .provider-relay-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; }

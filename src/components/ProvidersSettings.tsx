@@ -110,6 +110,14 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 		setError(undefined); setReveal(false); setQuery("");
 		setDraft({ kind: "pick" });
 	};
+	// Toggling a row's switch is a list action: failures surface as `error`, and
+	// the alert below is scrolled into view so the reason is actually seen.
+	const toggleRelay = async (relayId: string, enabled: boolean) => {
+		setNotice(undefined);
+		setError(undefined);
+		const ok = await onSetRelayEnabled(relayId, enabled);
+		if (!ok) contentRef.current?.querySelector<HTMLElement>(".provider-error")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+	};
 	const openRelay = (relay?: RelaySpec, preset?: ProviderPreset) => {
 		rememberEditorTrigger();
 		resetConnectionTest();
@@ -404,19 +412,19 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 							<div className="provider-row-side">
 								<span className="provider-key" title={relay.apiKey ? "密钥已保存" : undefined}>{relay.apiKey && <><span className="dot ok" />{keyHint(relay.apiKey)}</>}</span>
 								<label className="switch" title={relay.enabled ? "停用" : "启用"}>
-									<input type="checkbox" checked={relay.enabled} disabled={pending} onChange={(event) => void mutate(() => onSetRelayEnabled(relay.id, event.target.checked))} aria-label={`${relay.enabled ? "停用" : "启用"} ${relay.name}`} />
+									<input type="checkbox" checked={relay.enabled} disabled={pending} onChange={(event) => void toggleRelay(relay.id, event.target.checked)} aria-label={`${relay.enabled ? "停用" : "启用"} ${relay.name}`} />
 									<span className="slider" />
 								</label>
 								<Icon name="chevron" size={14} />
 							</div>
 						</div>;
 					})}
+					{(configError || error) && <p className="form-error provider-error" role="alert">{configError || error}</p>}
 				</section>
 				<button type="button" className="preset-custom provider-add" onClick={openPick} disabled={pending}>
 					<Icon name="plus" size={14} />
 					<span>添加供应商</span>
 				</button>
-				{(configError || error) && <p className="form-error" role="alert">{configError || error}</p>}
 			</>
 		)}
 		{removing && <ConfirmDialog title={removing.title} description={removing.description} onConfirm={() => void mutate(removing.action)} onClose={() => setRemoving(undefined)} />}

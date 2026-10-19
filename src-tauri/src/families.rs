@@ -565,7 +565,7 @@ fn validate_config(config: &FamiliesConfig) -> Result<(), String> {
 		}
 		if let Some(default_id) = &family.default_route_id {
 			let valid = family.routes.iter().find(|route| &route.id == default_id).is_some_and(|route| {
-				route.enabled && !route.models.is_empty() && relay_enabled_with_models(config, &route.relay_id)
+				route.enabled && !route.models.is_empty() && config.relays.iter().any(|relay| relay.id == route.relay_id)
 			});
 			if !valid { return Err("默认线路必须是已启用且包含模型的线路".into()); }
 		}
@@ -890,11 +890,11 @@ pub fn delete_relay_in(dir: &Path, relay_id: &str) -> Result<FamiliesConfig, Str
 	})
 }
 
+/// Stopping a relay never rewrites anything else: a default route still
+/// pointing at it just stops offering models, like any disabled relay. `apply`
+/// revalidates, which allows default routes on disabled relays by design.
 pub fn set_relay_enabled_in(dir: &Path, relay_id: &str, enabled: bool) -> Result<FamiliesConfig, String> {
 	apply(dir, |config| {
-		if !enabled && config.families.iter().any(|family| family.routes.iter().any(|route| route.relay_id == relay_id && family.default_route_id.as_deref() == Some(route.id.as_str()))) {
-			return Err("该中转包含默认线路，请先选择替代线路或明确清空默认值".into());
-		}
 		let Some(relay) = config.relays.iter_mut().find(|relay| relay.id == relay_id) else {
 			return Err("找不到该中转".into());
 		};
@@ -1278,7 +1278,11 @@ mod tests {
 			usd_cny_rate: 7.2,
 		};
 		std::fs::write(config_path(&dir), serde_json::to_vec(&config).unwrap()).unwrap();
-		assert!(set_relay_enabled_in(&dir, "r1", false).is_err());
+		// Stopping a relay with a default route is allowed; the runtime simply
+		// offers no models from it until it is re-enabled.
+		assert!(set_relay_enabled_in(&dir, "r1", false).is_ok());
+		assert!(!load_plain(&dir).unwrap().relays[0].enabled);
+		assert!(set_relay_enabled_in(&dir, "r1", true).is_ok());
 		assert!(delete_route_in(&dir, "kimi", "route-kimi-r1").is_err());
 		let _ = std::fs::remove_dir_all(&dir);
 	}
