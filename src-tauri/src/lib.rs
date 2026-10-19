@@ -65,6 +65,15 @@ fn resolve_pi(explicit: Option<&str>) -> (String, Vec<String>) {
 
 	#[cfg(windows)]
 	{
+		// The npm `pi` shim is a `.cmd` that runs `node <cli.js> %*`. Spawning
+		// that node script directly keeps argv byte-exact; routing through
+		// `cmd /C` instead hands every argument to cmd's parser, which treats
+		// newlines (and several punctuation characters) as control characters
+		// and can truncate the command line. Unwrap the shim first, and only
+		// fall back to `cmd /C` when that is not possible.
+		if let Some(launch) = unwrap_node_shim(&path) {
+			return launch;
+		}
 		let ext = path
 			.extension()
 			.and_then(|e| e.to_str())
@@ -79,6 +88,60 @@ fn resolve_pi(explicit: Option<&str>) -> (String, Vec<String>) {
 	}
 
 	(path.to_string_lossy().to_string(), Vec::new())
+}
+
+/// Unwraps an npm-generated `.cmd`/`.bat` shim into `(node, [cli.js])`.
+///
+/// The generated shim ends with `"<dir>\node_modules\...\cli.js" %*`; the script
+/// argument is the last quoted path under `node_modules`. Returns `None` when the
+/// file is not an npm shim or the referenced script no longer exists, so callers
+/// keep their `cmd /C` fallback.
+#[cfg(windows)]
+fn unwrap_node_shim(shim: &std::path::Path) -> Option<(String, Vec<String>)> {
+	let text = std::fs::read_to_string(shim).ok()?;
+	let dir = shim.parent()?.to_string_lossy().to_string();
+	let dir_with_sep = format!("{}\\", dir.trim_end_matches('\\'));
+
+	let mut script: Option<String> = None;
+	let bytes = text.as_bytes();
+	let mut index = 0;
+	while index < bytes.len() {
+		if bytes[index] == b'"' {
+			index += 1;
+			let start = index;
+			while index < bytes.len() && bytes[index] != b'"' {
+				index += 1;
+			}
+			if index < bytes.len() && index > start {
+				let candidate = &text[start..index];
+				let lower = candidate.to_ascii_lowercase();
+				let is_node_script = candidate.contains("node_modules")
+					&& (lower.ends_with(".js") || lower.ends_with(".mjs") || lower.ends_with(".cjs"));
+				if is_node_script {
+					script = Some(candidate.replace("%dp0%", &dir_with_sep));
+				}
+			}
+			index += 1;
+		} else {
+			index += 1;
+		}
+	}
+
+	let script = script?;
+	let script_path = PathBuf::from(&script);
+	if !script_path.is_file() {
+		return None;
+	}
+
+	// npm may ship its own node.exe next to the shim; prefer it, else resolve
+	// `node` from PATH, which is how the shim itself would have launched it.
+	let bundled_node = std::path::Path::new(&dir).join("node.exe");
+	let program = if bundled_node.is_file() {
+		bundled_node.to_string_lossy().to_string()
+	} else {
+		"node".to_string()
+	};
+	Some((program, vec![script_path.to_string_lossy().to_string()]))
 }
 
 /// Search PATH (honouring `PATHEXT` on Windows) plus the npm global bin dir
@@ -141,6 +204,7 @@ fn start_session(app: AppHandle, sessions: &Mutex<HashMap<String, Proc>>, option
 	stop_session(sessions, &instance_id)?;
 
 	let (program, prefix_args) = resolve_pi(options.pi_path.as_deref());
+	eprintln!("[skiff] rpc_start instance={instance_id} program={program} script={:?} cwd={:?}", prefix_args, options.cwd);
 
 	let mut cmd = Command::new(&program);
 	#[cfg(windows)]
@@ -154,11 +218,12 @@ fn start_session(app: AppHandle, sessions: &Mutex<HashMap<String, Proc>>, option
 	cmd.arg("--mode").arg("rpc");
 	if let Some(prompt) = options.append_system_prompt.as_deref() {
 		if !prompt.trim().is_empty() {
-			// On Windows we spawn `pi` through `cmd /C`; a newline inside an
-			// argument terminates that command line, silently dropping every
-			// argument that follows (`--extension`, leaving pi with no managed
-			// providers and a placeholder "unknown" model). Flatten line breaks
-			// into spaces so the hint stays a single argument.
+			// Defense-in-depth for the `cmd /C` fallback path: a newline inside an
+			// argument terminates cmd's command line and drops every argument that
+			// follows (`--extension`, which would leave pi with no managed
+			// providers and a placeholder "unknown" model). The direct-node path
+			// in `resolve_pi` would survive a newline, but flattening keeps both
+			// paths safe and the hint stays a single argument.
 			cmd.arg("--append-system-prompt").arg(flatten_line_breaks(prompt));
 		}
 	}
@@ -535,5 +600,31 @@ mod tests {
 		assert!(PathBuf::from(&project.path).is_dir());
 		assert!(!project.name.is_empty());
 		assert!(!project.path.starts_with("\\\\?\\"));
+	}
+
+	#[test]
+	fn flatten_line_breaks_joins_crlf_lf_and_cr() {
+		assert_eq!(flatten_line_breaks("a\nb"), "a b");
+		assert_eq!(flatten_line_breaks("a\r\nb"), "a b");
+		assert_eq!(flatten_line_breaks("a\rb"), "a b");
+		assert_eq!(flatten_line_breaks("no-break"), "no-break");
+	}
+
+	#[cfg(windows)]
+	#[test]
+	fn unwrap_node_shim_resolves_node_and_script() {
+		let dir = std::env::temp_dir().join(format!("skiff-shim-{}", std::process::id()));
+		let _ = std::fs::remove_dir_all(&dir);
+		std::fs::create_dir_all(dir.join("node_modules/pkg")).unwrap();
+		let shim = dir.join("pi.cmd");
+		std::fs::write(&shim, "@ECHO off\r\n\"%_prog%\" \"%dp0%\\node_modules\\pkg\\cli.js\" %*\r\n").unwrap();
+		std::fs::write(dir.join("node_modules/pkg/cli.js"), "// fixture").unwrap();
+
+		let (program, args) = unwrap_node_shim(&shim).expect("npm shim should unwrap");
+		assert_eq!(program, "node");
+		assert_eq!(args.len(), 1);
+		assert!(PathBuf::from(&args[0]).is_file());
+
+		let _ = std::fs::remove_dir_all(&dir);
 	}
 }

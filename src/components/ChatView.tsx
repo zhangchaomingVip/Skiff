@@ -64,7 +64,20 @@ export function ChatView({
 	const edit = draftTarget ? storedDraft.record?.edit : fallbackEdit.current;
 	const latestEdit = useRef(edit); latestEdit.current = edit;
 	const mounted = useRef(true);
+	const loggedMissingModel = useRef(false);
 	useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+	// Log once when the session settles into "offers exist but no current model",
+	// which means the runtime projection did not reach pi. The matching banner above
+	// gives the user a reconnect action; the log keeps the diagnostic discoverable.
+	const missingModel = connected && !loading && !pending && !state.isStreaming && state.availableModels.length > 0 && !state.model;
+	useEffect(() => {
+		if (missingModel && !loggedMissingModel.current) {
+			loggedMissingModel.current = true;
+			console.error("[skiff] offers present but no current model; pi likely started without providers", { model: state.model, availableModels: state.availableModels.length });
+		} else if (!missingModel) {
+			loggedMissingModel.current = false;
+		}
+	}, [missingModel, state.model, state.availableModels.length]);
 	const canEdit = connected && !pending && !state.isStreaming && !state.activeRun && !state.stopping && !queueSize(state.queue) && !editPending;
 	const degradeEdit = () => {
 		setEditing(undefined); fallbackEdit.current = undefined;
@@ -169,6 +182,11 @@ export function ChatView({
 				<div className={`banner error ${connected && isProviderFailure(state.lastError) ? "provider-toast" : ""}`} role="alert"><span>{state.lastError}</span>{failover && <Button variant="ghost" disabled={disabled} onClick={() => failover.switch()}>切换到同家族下一个可用提供商（{failover.label}）</Button>}{!connected ? <Button variant="ghost" onClick={() => onReconnect()}>重新连接</Button> : <IconButton onClick={actions.clearError} aria-label="关闭错误提示"><Icon name="close" /></IconButton>}</div>
 			)}
 			{connected && !state.availableModels.length && <div className="notice model-notice">暂无已启用的提供商，请添加或启用提供商。<Button variant="ghost" onClick={manage}>管理提供商…</Button></div>}
+			{/* Models exist but none resolved for this session: pi almost certainly
+			    started without its runtime providers (for example a dropped
+			    --extension), so the picker can list them while the composer stays
+			    disabled. Fail loud instead of leaving a dead "选择模型" state. */}
+			{connected && !loading && !pending && !state.isStreaming && state.availableModels.length > 0 && !state.model && <div className="notice model-notice" role="alert"><span>当前会话未加载到有效模型，pi 可能未注册 provider。</span><Button variant="ghost" onClick={onReconnect}>重新连接</Button></div>}
 			{state.dialogs?.[0] && (deferredDialog === state.dialogs[0].id ? <div className="queue-panel" role="status">扩展等待确认 · {state.dialogs.length} 项<Button onClick={() => setDeferredDialog(undefined)}>处理</Button></div> : <ExtensionDialog key={state.dialogs[0].id} request={state.dialogs[0]} onReply={actions.replyDialog} onReconnect={onReconnect} onDefer={() => setDeferredDialog(state.dialogs?.[0]?.id)} />)}
 			{editNotice && <p className="draft-notice" role="status">{editNotice}</p>}
 			{queueSize(state.queue) > 0 && <div className="queue-panel" aria-label="待发送队列"><strong>待发送 {queueSize(state.queue)} 条</strong><p>插话模式：{state.steeringMode ?? "待读取"} · 追加模式：{state.followUpMode ?? "待读取"}</p><ul>{state.queue?.steering.map((text, index) => <li key={`s${index}`}>工具调用结束后插入：{text}</li>)}{state.queue?.followUp.map((text, index) => <li key={`f${index}`}>等本轮做完：{text}</li>)}</ul><Button disabled={state.stopping} onClick={() => void actions.clearQueue()}>撤回全部</Button></div>}

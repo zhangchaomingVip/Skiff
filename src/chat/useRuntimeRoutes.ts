@@ -71,6 +71,14 @@ export function useRuntimeRoutes(session: ReturnType<typeof usePiSession>, chat:
 		attempted.current!.attempted = true; authorize(failoverOffer, true);
 	}, [state.lastError, state.messages, state.isStreaming, state.activeRun, configuration.config?.autoFailover, failoverOffer, session.connected, session.pending]);
 	useEffect(() => { if (!notice) return; const timer = setTimeout(() => setNotice(undefined), 8000); return () => clearTimeout(timer); }, [notice]);
+	// The pi placeholder model means the runtime providers never registered (the
+	// --extension projection was not applied); surface it in the console even when
+	// reconciliation below fails to recover, so the failure is not silent.
+	useEffect(() => {
+		if (state.model?.provider === "unknown" || state.model?.id === "unknown") {
+			console.error("[skiff] pi 会话模型为占位 unknown，线路 provider 未注入", state.model);
+		}
+	}, [state.model?.provider, state.model?.id]);
 	const applied = useRef<FamiliesConfig>();
 	useEffect(() => {
 		const config = configuration.config;

@@ -687,7 +687,11 @@ pub fn prepare_runtime(dir: &Path, cmd: &mut std::process::Command) -> Result<()
 			}
 		}
 	}
-	if routes.is_empty() { return Ok(()); }
+	eprintln!("[skiff] prepare_runtime: {} enabled route(s) to project", routes.len());
+	if routes.is_empty() {
+		eprintln!("[skiff] prepare_runtime: no enabled routes; pi will start without managed providers");
+		return Ok(());
+	}
 	let extension = dir.join("skiff-family-runtime.js");
 	let source = include_str!("pi_extensions/model_families.js");
 	if std::fs::read_to_string(&extension).ok().as_deref() != Some(source) {
@@ -702,6 +706,7 @@ pub fn prepare_runtime(dir: &Path, cmd: &mut std::process::Command) -> Result<()
 	// key-free file for larger projections.
 	let runtime_file = dir.join("skiff-family-runtime.json");
 	std::fs::write(&runtime_file, &encoded).map_err(|_| "无法写入模型家族运行时配置")?;
+	eprintln!("[skiff] prepare_runtime: extension={} runtime_file={} encoded_bytes={}", extension.display(), runtime_file.display(), encoded.len());
 	cmd.env("SKIFF_FAMILY_RUNTIME_FILE", &runtime_file);
 	if encoded.len() <= 24_000 { cmd.env("SKIFF_FAMILY_RUNTIME", encoded); }
 	else { cmd.env_remove("SKIFF_FAMILY_RUNTIME"); }
