@@ -29,6 +29,10 @@ const removeProvider = async (name) => {
 };
 
 try {
+	await page.addInitScript(() => {
+		window.copiedValues = [];
+		Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async (value) => window.copiedValues.push(value) } });
+	});
 	await page.goto(`${origin}/tests/preview.html?fixture=archive&theme=light`);
 	await page.waitForFunction(() => document.querySelector(".settings-trigger")?.textContent.includes("pi 已连接"));
 	await open();
@@ -39,6 +43,36 @@ try {
 	assert.equal(await button("编辑 官方直连").count(), 1, "Providers entry must list providers");
 	assert.equal(await button("编辑 官方直连 的路线").count(), 0, "Providers entry must not list routes");
 	await shot("providers-light");
+	const providerRow = dialog().locator(".provider-relay-row").filter({ hasText: "官方直连" }).first();
+	assert.equal(await providerRow.locator(".settings-badge").count(), 0, "The accent bar and switch already identify enabled providers");
+	const spacing = await page.evaluate(() => {
+		const list = document.querySelector(".provider-list"); const heading = list.querySelector(".settings-source-heading"); const row = list.querySelector(".provider-relay-row");
+		const side = row.querySelector(".provider-row-side"); const key = side.querySelector(".settings-key-fingerprint"); const actions = side.querySelector(".provider-row-actions");
+		return { groupGap: getComputedStyle(list).gap, headingBottom: getComputedStyle(heading).paddingBottom, sideGap: getComputedStyle(side).gap, keyGap: getComputedStyle(key).marginRight, actionGap: getComputedStyle(actions).gap };
+	});
+	assert.deepEqual(spacing, { groupGap: "12px", headingBottom: "0px", sideGap: "8px", keyGap: "8px", actionGap: "6px" });
+	const iconColor = await providerRow.locator(".provider-edit-button").evaluate((button) => getComputedStyle(button).color);
+	const inactiveIconColor = await providerRow.evaluate((row) => { row.classList.add("disabled"); const color = getComputedStyle(row.querySelector(".provider-edit-button")).color; row.classList.remove("disabled"); return color; });
+	assert.equal(inactiveIconColor, iconColor, "Disabling a provider must not dim its action icons");
+	await providerRow.getByRole("button", { name: "复制 API 密钥 官方直连", exact: true }).click();
+	assert.deepEqual(await page.evaluate(() => window.copiedValues), ["sk-mock-0000abcd"]);
+	await providerRow.getByRole("button", { name: "测试连接 官方直连", exact: true }).click();
+	await page.waitForFunction(() => window.skiffPreview.metadata.tests.some((record) => record.relayId === "r1"));
+	assert.equal(await page.evaluate(() => window.skiffPreview.testRequests.at(-1).modelId), "deepseek-flash");
+	await providerRow.getByText(/最近测试 137 ms/).waitFor();
+	await page.evaluate(() => window.skiffPreview.deferTests(true));
+	await providerRow.getByRole("button", { name: "测试连接 官方直连", exact: true }).click();
+	await providerRow.locator(".provider-test-icon.is-spinning").waitFor();
+	await page.waitForFunction(() => window.skiffPreview.pendingTests.length > 0);
+	await page.evaluate(() => {
+		window.skiffPreview.pendingTests.splice(0).forEach((pending) => pending.resolve({ ok: false, latencyMs: 10000, status: null, error: "timeout" }));
+		window.skiffPreview.deferTests(false);
+	});
+	const failedStatus = providerRow.locator(".provider-row-test-status.is-error");
+	await failedStatus.waitFor();
+	assert.equal((await failedStatus.textContent()).trim(), "· 连接失败");
+	const dangerColor = await page.evaluate(() => { const node = document.createElement("span"); node.style.color = "var(--danger)"; document.body.append(node); const color = getComputedStyle(node).color; node.remove(); return color; });
+	assert.equal(await failedStatus.evaluate((node) => getComputedStyle(node).color), dangerColor);
 
 	// 2. Directory → custom provider → live connection test → save.
 	await button("添加供应商").click();
@@ -80,6 +114,16 @@ try {
 	await button("深色").click();
 	await button("供应商").click();
 	await shot("providers-dark");
+	await page.setViewportSize({ width: 390, height: 844 });
+	assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, "Provider settings must fit a mobile viewport");
+	assert.equal(await dialog().locator(".settings-content").evaluate((node) => node.scrollWidth > node.clientWidth), false, "Provider settings content must not overflow on mobile");
+	assert.equal(await dialog().locator(".provider-list").evaluate((node) => node.scrollWidth > node.clientWidth), false, "Provider cards must not overflow on mobile");
+	assert.equal(await dialog().locator(".provider-relay-row").first().evaluate((row) => {
+		const title = row.querySelector(".provider-row-title strong"); const main = row.querySelector(".provider-relay-main").getBoundingClientRect(); const side = row.querySelector(".provider-row-side").getBoundingClientRect();
+		return title.clientWidth >= title.scrollWidth && side.top >= main.bottom;
+	}), true, "Mobile cards must preserve the provider name and place actions below its details");
+	await shot("providers-mobile-dark");
+	await page.setViewportSize({ width: 1100, height: 750 });
 	await button("路线").click();
 	await shot("routes-dark");
 

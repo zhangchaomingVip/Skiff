@@ -28,18 +28,18 @@ const layout = async () => {
 };
 
 try {
+	await page.addInitScript(() => localStorage.setItem("skiff.settings.providers-view.v1", JSON.stringify({ sort: "name", grouped: false })));
 	await page.goto(`${origin}/tests/preview.html?fixture=settings-info&theme=light&persist=1`); await open(); await button("供应商").click();
 	const original = await config();
+	assert.equal(await settings().getByRole("combobox", { name: "供应商显示排序" }).count(), 0, "Provider sorting is fixed to config order");
+	assert.equal(await settings().getByRole("checkbox", { name: "按来源分组" }).count(), 0, "Source grouping has no toolbar toggle");
+	assert.ok(await settings().locator(".settings-source-heading").count() > 0, "Providers stay grouped by source despite an old saved preference");
 	await button("批量管理").focus(); await page.keyboard.press("Enter");
 	const search = settings().getByRole("textbox", { name: "搜索已配置供应商" });
 	await search.fill("官方"); await settings().getByRole("checkbox", { name: "全选当前结果" }).check();
 	assert.equal(await settings().getByRole("checkbox", { name: /^选择 / }).count(), 2);
-	await settings().getByRole("combobox", { name: "供应商显示排序" }).selectOption("name");
-	assert.equal(await settings().getByRole("checkbox", { name: /^选择 / }).evaluateAll((nodes) => nodes.filter((node) => node.checked).length), 2);
-	await settings().getByRole("checkbox", { name: "按来源分组" }).check();
-	assert.match(await settings().locator(".settings-batch-bar").textContent(), /已选 0 个/);
 	assert.equal(await settings().locator(".settings-source-heading").count(), 1, "No empty groups");
-	await settings().getByRole("checkbox", { name: "按来源分组" }).uncheck(); await search.fill("");
+	await search.fill("");
 	await settings().getByRole("checkbox", { name: "全选当前结果" }).check(); await button("停用 2").click();
 	assert.match(await settings().locator(".settings-batch-bar").textContent(), /已选 0 个/);
 	await button("全部 5").click(); await select("官方直连").check(); await select("自定义端点").check();
@@ -82,10 +82,10 @@ try {
 	await page.evaluate(() => { window.skiffPreview.pendingTests.splice(0).forEach((pending) => pending.resolve({ ok: false, latencyMs: 1, status: 500, error: "ignored" })); });
 	assert.deepEqual((await metadata()).tests, history.tests);
 	await page.reload(); await open(); await button("供应商").click();
-	const testedRow = settings().getByRole("button", { name: "编辑 硅基低价" });
+	const testedRow = settings().locator(".provider-relay-row").filter({ hasText: "硅基低价" });
 	await testedRow.getByText(/最近测试 \d+ ms/).waitFor();
 	assert.match(await testedRow.locator(".provider-row-meta").getAttribute("title") ?? "", /最近测试：成功.*first\/deepseek-v4.1-flash/);
-	const untestedRow = settings().getByRole("button", { name: "编辑 官方直连" });
+	const untestedRow = settings().locator(".provider-relay-row").filter({ hasText: "官方直连" }).first();
 	assert.doesNotMatch(await untestedRow.textContent(), /最近测试/, "Untested relays show no inline test hint");
 	assert.equal(await untestedRow.locator(".provider-row-meta").getAttribute("title"), "未测试");
 	await shot("history-reloaded-light");
@@ -104,7 +104,7 @@ try {
 	assert.ok((await metadata()).tests[0].completedAt >= history.tests[0].completedAt);
 	await button("编辑 硅基低价").click(); await settings().locator(".settings-advanced summary").click();
 	await page.locator("#relay-timeout").fill("124"); await button("保存").click(); await page.locator("#relay-name").waitFor({ state: "detached" });
-	assert.match(await settings().getByRole("button", { name: "编辑 硅基低价" }).locator(".provider-row-meta").getAttribute("title") ?? "", /配置已变化/);
+	assert.match(await settings().locator(".provider-relay-row").filter({ hasText: "硅基低价" }).locator(".provider-row-meta").getAttribute("title") ?? "", /配置已变化/);
 	assert.equal(await page.evaluate(() => (localStorage.getItem("skiff.test.metadata.v1") ?? "").includes("sk-mock")), false);
 
 	await button("路线").click(); const searchRoutes = settings().getByRole("textbox", { name: "搜索路线" });
@@ -145,7 +145,7 @@ try {
 	await button("退出批量管理").click();
 	assert.equal((await metadata()).tests.length, 0, "Removing the final route model cleans history");
 	// A completed chat response counts exactly once; opening settings and history do not.
-	await settings().getByRole("combobox", { name: "供应商显示排序" }).selectOption("recent");
+	const providerOrderBeforeUse = await settings().locator(".provider-relay-row").evaluateAll((nodes) => nodes.map((node) => node.querySelector(".provider-edit-button")?.getAttribute("aria-label")));
 	await page.evaluate(async () => {
 		const instanceId = [...window.skiffPreview.processes.keys()][0];
 		await window.__TAURI_INTERNALS__.invoke("rpc_send", { instanceId, message: JSON.stringify({ type: "set_model", provider: "skiff-relay-r3-kimi", modelId: "kimi-k2", id: "use-model" }) });
@@ -153,14 +153,20 @@ try {
 	});
 	await page.waitForFunction(() => window.skiffPreview.metadata.usage.length === 1);
 	assert.equal((await metadata()).usage[0].relayId, "r3");
-		await page.waitForFunction(() => document.querySelector(".provider-relay-btn")?.getAttribute("aria-label") === "编辑 官方");
+	assert.deepEqual(await settings().locator(".provider-relay-row").evaluateAll((nodes) => nodes.map((node) => node.querySelector(".provider-edit-button")?.getAttribute("aria-label"))), providerOrderBeforeUse, "Usage does not change the fixed config order");
+		await page.waitForFunction(() => document.querySelector(".provider-edit-button")?.getAttribute("aria-label") === "编辑 官方");
 	assert.equal((await metadata()).usage.length, 1);
-	await shot("recent-use-light");
+	await shot("fixed-order-light");
 	for (const theme of ["light", "dark"]) {
 		await button("外观").click(); await button(theme === "light" ? "浅色" : "深色").click(); await button("供应商").click();
-		await settings().getByRole("checkbox", { name: "按来源分组" }).check(); await button("批量管理").click();
+		await button("批量管理").click();
 		for (const [width, height] of [[1100, 750], [550, 375]]) {
 			await page.setViewportSize({ width, height }); await layout(); await shot(`batch-${theme}-${width}`);
+			if (width === 1100) {
+				const toolbarRects = await settings().locator(".providers-toolbar").evaluate((node) => [...node.children].map((child) => { const rect = child.getBoundingClientRect(); return { y: rect.y, width: rect.width }; }));
+				assert.equal(new Set(toolbarRects.map((rect) => rect.y)).size, 1, "Search, filters and actions share one toolbar row on desktop");
+				assert.ok(toolbarRects[0].width <= 320, "Search stays compact");
+			}
 			if (width === 550) {
 				await settings().getByRole("checkbox", { name: "选择 官方直连", exact: true }).check();
 				await button("批量删除").click(); const modal = confirm("批量删除供应商");
@@ -171,9 +177,9 @@ try {
 				await settings().locator(".settings-batch-bar").scrollIntoViewIfNeeded(); await shot(`batch-actions-${theme}-550`);
 			}
 		}
-		await button("退出批量管理").click(); await settings().getByRole("checkbox", { name: "按来源分组" }).uncheck(); await page.setViewportSize({ width: 1100, height: 750 });
+		await button("退出批量管理").click(); await page.setViewportSize({ width: 1100, height: 750 });
 	}
 	assert.deepEqual(errors, []);
-	console.log("PASS settings management: selection scope, stable view sorting/grouping, atomic failure/retry and stale preview, default protection, exact persisted history/drafts/invalidation, full route order keyboard/drag/save/cancel/conflict, themes/narrow layout");
+	console.log("PASS settings management: fixed provider order/grouping, selection scope, atomic failure/retry and stale preview, default protection, exact persisted history/drafts/invalidation, full route order keyboard/drag/save/cancel/conflict, themes/narrow layout");
 } catch (error) { await shot("failure"); throw error; }
 finally { await browser.close(); }

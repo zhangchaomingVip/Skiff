@@ -196,6 +196,13 @@ try {
 	await button("测试连接").click();
 	await dialog().getByText(/连接成功/).waitFor();
 	await page.keyboard.press("Escape");
+	const localProvider = dialog().locator(".provider-relay-row").filter({ hasText: "本机服务" });
+	const rowTest = localProvider.getByRole("button", { name: "测试连接 本机服务", exact: true });
+	assert.equal(await rowTest.isEnabled(), true, "An unconfigured key-optional provider can discover a model before testing");
+	await rowTest.click();
+	await page.waitForFunction(() => window.skiffPreview.metadata.tests.some((record) => record.relayId === "local"));
+	assert.equal(await page.evaluate(() => window.skiffPreview.testRequests.at(-1).modelId), "deepseek-chat");
+	await localProvider.getByText(/最近测试 137 ms/).waitFor();
 
 	for (const [width, height] of [[1100, 750], [600, 400], [550, 375]]) {
 		await page.setViewportSize({ width, height });
