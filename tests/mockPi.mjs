@@ -8,6 +8,30 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 	const testRequests = [];
 	const pendingTests = [];
 	let deferTests = false;
+	let metadata; try { metadata = JSON.parse(storage?.getItem("skiff.test.metadata.v1") ?? "null"); } catch { /* corrupt cache */ }
+	metadata ??= { version: 1, tests: [], usage: [], connections: {} };
+	let testOrder = Date.now() * 1000;
+	const tickets = new Map(); const latestTests = new Map(); const cancelledTests = new Set();
+	let failBatch = false; let failOrder = false;
+	const connection = (relay) => JSON.stringify([relay.baseUrl.replace(/\/+$/, ""), relay.apiKey, relay.protocol ?? "openai", relay.timeoutSeconds]);
+	const persistMetadata = () => storage?.setItem("skiff.test.metadata.v1", JSON.stringify({ ...metadata, connections: Object.fromEntries(Object.entries(metadata.connections).map(([id, entry]) => [id, { version: entry.version }])) }));
+	const syncMetadata = () => {
+		for (const relay of relays) {
+			// Test fixtures keep a non-secret connection signature only in memory.
+			const old = metadata.connections[relay.id];
+			if (!old || old.signature && old.signature !== connection(relay)) metadata.connections[relay.id] = { signature: connection(relay), version: crypto.randomUUID() };
+			metadata.connections[relay.id].signature = connection(relay);
+		}
+		metadata.tests = metadata.tests.filter((test) => families.some((family) => family.routes.some((route) => route.relayId === test.relayId && route.models.some((model) => model.modelId === test.modelId))));
+		for (const test of metadata.tests) test.configChanged = test.configVersion !== metadata.connections[test.relayId]?.version;
+	};
+	const recordTest = (ticket, relayId) => {
+		syncMetadata(); const entry = metadata.connections[relayId];
+		if (entry?.signature !== ticket.signature || latestTests.get(`${ticket.relay.id}\0${ticket.modelId}`) !== ticket.order || cancelledTests.has(ticket.requestId)) return;
+		if (!families.some((family) => family.routes.some((route) => route.relayId === relayId && route.models.some((model) => model.modelId === ticket.modelId)))) return;
+		metadata.tests = metadata.tests.filter((item) => item.relayId !== relayId || item.modelId !== ticket.modelId);
+		metadata.tests.push({ relayId, modelId: ticket.modelId, configVersion: entry.version, completedAt: ticket.completedAt, ok: ticket.result.ok, latencyMs: ticket.result.latencyMs, status: ticket.result.status, errorCategory: ticket.result.ok ? null : "HTTP 请求失败", configChanged: false }); persistMetadata();
+	};
 	let historyTargets = [];
 	const histories = new Map();
 	let sequence = 0;
@@ -102,7 +126,7 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 		transformCallback(callback) { const id = ++sequence; callbacks.set(id, callback); return id; },
 		async invoke(command, args) {
 			// Model discovery credentials must never enter the preview command log.
-			commands.push({ command, args: command === "discover_relay_models" ? { baseUrl: args.baseUrl } : args });
+			commands.push({ command, args: command === "discover_relay_models" ? { baseUrl: args.baseUrl } : command === "test_settings_connection" ? { ...args, relay: { ...args.relay, apiKey: "[redacted]" } } : command === "test_provider_connection" ? { ...args, apiKey: "[redacted]" } : args });
 			if (command === "plugin:event|listen") { const id = ++sequence; listeners.set(id, args); return id; }
 			if (command === "plugin:event|unlisten") return;
 			if (command === "set_history_workspace") { historyTargets = args.targets; return; }
@@ -132,7 +156,28 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 				],
 				stale: false,
 			};
-			if (command === "cancel_provider_test") return;
+			if (command === "list_settings_metadata") { syncMetadata(); return structuredClone({ version: 1, tests: metadata.tests, usage: metadata.usage }); }
+			if (command === "preview_relay_batch" || command === "batch_relays") {
+				if (!args.relayIds.length || new Set(args.relayIds).size !== args.relayIds.length || args.relayIds.some((id) => !relayOf(id))) throw new Error("所选供应商已不存在，请重新加载预览");
+				const config = familiesConfig(); const token = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(config))))).map((byte) => byte.toString(16).padStart(2, "0")).join("");
+				const impact = { token, names: args.relayIds.map((id) => relayOf(id).name), routeCount: families.flatMap((f) => f.routes).filter((r) => args.relayIds.includes(r.relayId)).length, defaultFamilies: families.filter((f) => f.routes.some((r) => args.relayIds.includes(r.relayId) && f.defaultRouteId === r.id)).map((f) => f.id) };
+				if (command === "preview_relay_batch") return impact;
+				if (failBatch) { failBatch = false; throw new Error("模拟保存失败，整批未提交"); }
+				if (token !== args.expectedToken) throw new Error("配置已变化，操作未提交，请重新确认影响预览");
+				if (args.operation === "delete" && impact.defaultFamilies.length) throw new Error("所选供应商包含默认路线，整批未删除");
+				if (args.operation === "delete") { for (let i = relays.length - 1; i >= 0; i--) if (args.relayIds.includes(relays[i].id)) relays.splice(i, 1); for (const family of families) family.routes = family.routes.filter((r) => !args.relayIds.includes(r.relayId)); }
+				else { for (const relay of relays) if (args.relayIds.includes(relay.id)) relay.enabled = args.operation === "enable"; }
+				return familiesConfig();
+			}
+			if (command === "cancel_provider_test") { cancelledTests.add(args.requestId); return; }
+			if (command === "test_settings_connection") {
+				syncMetadata(); const ticket = { ...args, order: ++testOrder, signature: connection(args.relay) };
+				latestTests.set(`${args.relay.id}\0${args.modelId}`, ticket.order);
+				const result = await target.__TAURI_INTERNALS__.invoke("test_provider_connection", { ...args.relay, modelId: args.modelId, requestId: args.requestId });
+				ticket.result = result; ticket.completedAt = Date.now();
+				if (!cancelledTests.has(args.requestId)) { if (args.draft) tickets.set(args.requestId, ticket); else recordTest(ticket, args.relay.id); }
+				return result;
+			}
 			if (command === "test_provider_connection") {
 				const { apiKey: _key, ...request } = args;
 				testRequests.push(request);
@@ -168,6 +213,7 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 					const models = item.route.models.filter((model) => !incoming.excludedModelIds?.includes(model.modelId));
 					if (models.length) family.routes.push({ ...item.route, id: `route-${item.familyId}-${incoming.id}`, relayId: incoming.id, models });
 				}
+				for (const id of args.testRequestIds ?? []) { const ticket = tickets.get(id); if (ticket) { recordTest(ticket, incoming.id); tickets.delete(id); } }
 				return familiesConfig();
 			}
 			if (command === "delete_relay") {
@@ -211,9 +257,11 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 				return familiesConfig();
 			}
 			if (command === "reorder_routes") {
+				if (failOrder) { failOrder = false; throw new Error("模拟顺序保存失败"); }
 				const family = families.find((item) => item.id === args.familyId);
 				if (!family || args.relayIds.length !== family.routes.length) throw new Error("排序请求与现有线路数量不一致");
-				family.routes = args.relayIds.map((id) => family.routes.find((route) => route.id === id || route.relayId === id));
+				if (new Set(args.relayIds).size !== family.routes.length || args.relayIds.some((id) => !family.routes.some((r) => r.id === id))) throw new Error("路线集合已变化，请重新加载");
+				family.routes = args.relayIds.map((id) => family.routes.find((route) => route.id === id));
 				return familiesConfig();
 			}
 			if (command === "set_default_route") {
@@ -338,7 +386,9 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 						emit(args.instanceId, { type: "message_update", assistantMessageEvent: { type: thinking ? "thinking_delta" : "text_delta", contentIndex: 0, delta: text.slice(offset, offset + 8) } });
 						offset += 8;
 						if (offset < text.length) { session.timer = target.setTimeout(stream, fixture?.startsWith("voyage-") ? 250 : 80); return; }
-						const assistant = { role: "assistant", provider: session.model.provider, model: session.model.id, content: [{ type: "text", text }], usage: { input: 77984, cacheRead: 715968, cacheWrite: 0, output: 12249, reasoning: 8035, totalTokens: 806201 } };
+						const assistant = { role: "assistant", timestamp: Date.now(), provider: session.model.provider, model: session.model.id, content: [{ type: "text", text }], usage: { input: 77984, cacheRead: 715968, cacheWrite: 0, output: 12249, reasoning: 8035, totalTokens: 806201 } };
+						const offer = offers().find((offer) => offer.providerKey === assistant.provider && offer.modelId === assistant.model);
+						if (offer) { metadata.usage = metadata.usage.filter((item) => item.routeId !== offer.routeId); metadata.usage.push({ relayId: offer.relayId, routeId: offer.routeId, usedAt: Date.now() }); persistMetadata(); for (const listener of listeners.values()) if (listener.event === "settings-metadata-changed") callbacks.get(listener.handler)?.({ payload: null }); }
 						emit(args.instanceId, { type: "message_end", message: assistant });
 						session.messages.push(assistant);
 						persist();
@@ -353,5 +403,5 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 			}
 		},
 	};
-	return { histories, saved, commands, processes, listeners, callbacks, emit, testRequests, pendingTests, deferTests: (value) => { deferTests = value; }, failNextSend: () => { failSend = true; } };
+	return { relays, families, metadata, failNextOrder: () => { failOrder = true; }, failNextBatch: () => { failBatch = true; }, histories, saved, commands, processes, listeners, callbacks, emit, testRequests, pendingTests, deferTests: (value) => { deferTests = value; }, failNextSend: () => { failSend = true; } };
 }

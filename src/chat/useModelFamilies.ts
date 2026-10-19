@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import type { BatchOperation, RelayBatchPreview } from "./settingsManagement";
+import { SETTINGS_METADATA_EVENT } from "./useSettingsMetadata";
 import type { RuntimeOffer } from "./modelFamilies";
 import type { Currency } from "./types";
 import type { DiscoveredModel } from "../rpc/modelDiscovery";
@@ -164,6 +166,7 @@ const hasFamily = (config: FamiliesConfig | undefined, id: string) => !!config?.
  * this state so both stay in sync without extra invokes.
  */
 export function useModelFamilies() {
+	const mutationPending = useRef(false);
 	const [config, setConfig] = useState<FamiliesConfig>();
 	const [offers, setOffers] = useState<RuntimeOffer[]>([]);
 	const [loading, setLoading] = useState(true);
@@ -184,6 +187,8 @@ export function useModelFamilies() {
 	useEffect(() => { void refresh(); }, [refresh]);
 
 	const run = useCallback(async (command: string, args: Record<string, unknown>) => {
+		if (mutationPending.current) return false;
+		mutationPending.current = true;
 		setError(undefined);
 		try {
 			const next = await invoke<FamiliesConfig>(command, args);
@@ -192,7 +197,10 @@ export function useModelFamilies() {
 			const runtime = await invoke<RuntimeOffer[]>("list_model_runtime");
 			setConfig(next); setOffers(runtime);
 			return true;
-		} catch (e) { setError(String(e)); return false; }
+		} catch (e) {
+			if (command === "batch_relays" || command === "reorder_routes") await refresh();
+			setError(String(e)); return false;
+		} finally { mutationPending.current = false; }
 	}, []);
 
 	// A missing or malformed payload falls back to pi's own model list rather
@@ -208,15 +216,17 @@ export function useModelFamilies() {
 		clearError: () => setError(undefined),
 		// Resolves to the saved relay (its id is minted server-side) so the
 		// settings page can point follow-up route editing at it.
-		saveRelay: async (relay: RelaySpec, routes: RelayRouteSpec[] = []) => {
+		saveRelay: async (relay: RelaySpec, routes: RelayRouteSpec[] = [], testRequestIds: string[] = []) => {
 			setError(undefined);
 			try {
-				const next = await invoke<FamiliesConfig>("save_relay", { relay, routes });
+				const next = await invoke<FamiliesConfig>("save_relay", { relay, routes, testRequestIds });
 				const runtime = await invoke<RuntimeOffer[]>("list_model_runtime");
 				setConfig(next); setOffers(runtime);
 				return next.relays.find((item) => item.name.trim().toLowerCase() === relay.name.trim().toLowerCase());
 			} catch (e) { setError(String(e)); return undefined; }
 		},
+		previewRelayBatch: (relayIds: string[]) => invoke<RelayBatchPreview>("preview_relay_batch", { relayIds }),
+		batchRelays: (relayIds: string[], operation: BatchOperation, expectedToken: string) => run("batch_relays", { relayIds, operation, expectedToken }),
 		deleteRelay: (relayId: string) => run("delete_relay", { relayId }),
 		setRelayEnabled: (relayId: string, enabled: boolean) => run("set_relay_enabled", { relayId, enabled }),
 		saveRoute: (familyId: string, route: RouteSpec) => run("save_route", { familyId, route }),
@@ -226,8 +236,13 @@ export function useModelFamilies() {
 		setAutoFailover: (autoFailover: boolean) => run("set_family_auto_failover", { autoFailover }),
 		setAutoRetry: (autoRetry: boolean) => run("set_family_auto_retry", { autoRetry }),
 		setUsdCnyRate: (rate: number) => run("set_usd_cny_rate", { rate }),
-		test: (baseUrl: string, apiKey: string, modelId: string, timeoutSeconds: number, requestId?: string, protocol?: RelayProtocol) =>
-			invoke<TestResult>("test_provider_connection", { baseUrl, apiKey, modelId, protocol, timeoutSeconds, requestId }),
+		test: async (baseUrl: string, apiKey: string, modelId: string, timeoutSeconds: number, requestId?: string, protocol?: RelayProtocol, relay?: RelaySpec, draft = false) => {
+			const result = relay
+				? await invoke<TestResult>("test_settings_connection", { relay: { ...relay, baseUrl, apiKey, timeoutSeconds, protocol }, modelId, requestId: requestId ?? crypto.randomUUID(), draft })
+				: await invoke<TestResult>("test_provider_connection", { baseUrl, apiKey, modelId, protocol, timeoutSeconds, requestId });
+			window.dispatchEvent(new Event(SETTINGS_METADATA_EVENT));
+			return result;
+		},
 		cancelTest: (requestId: string) => invoke("cancel_provider_test", { requestId }),
 		discover: (baseUrl: string, apiKey: string, protocol?: RelayProtocol) => invoke<DiscoveredModel[]>("discover_relay_models", { baseUrl, apiKey, protocol }),
 	};

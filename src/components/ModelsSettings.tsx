@@ -1,4 +1,6 @@
 import { forwardRef, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { latestSettingsTest, settingsTestSummary } from "../chat/settingsManagement";
+import { useSettingsMetadata } from "../chat/useSettingsMetadata";
 import { FAMILY_LABELS, type ModelFamily, type RelaySpec, type RelayProtocol, type TestResult } from "../chat/useModelFamilies";
 import { matchesSettingsModel as matchesModel, settingsModelCandidates, settingsTestTarget as routeForModelTest, type CatalogIdentity } from "../chat/settingsModels";
 import { useFamilyModels } from "../chat/useFamilyModels";
@@ -45,13 +47,14 @@ export type ModelsSettingsProps = {
 	families: ModelFamily[];
 	relays: RelaySpec[];
 	configError?: string;
-	onTest: (baseUrl: string, apiKey: string, modelId: string, timeoutSeconds: number, requestId?: string, protocol?: RelayProtocol) => Promise<TestResult>;
+	onTest: (baseUrl: string, apiKey: string, modelId: string, timeoutSeconds: number, requestId?: string, protocol?: RelayProtocol, relay?: RelaySpec, draft?: boolean) => Promise<TestResult>;
 	onCancelTest: (requestId: string) => Promise<unknown>;
 	onOpenRoutes: (familyId?: string) => void;
 	onLockChange: (locked: boolean, pending: boolean) => void;
 };
 
 export const ModelsSettingsContent = forwardRef<SettingsEditorHandle, ModelsSettingsProps>(function ModelsSettingsContent({ families, relays, configError, onTest, onCancelTest, onOpenRoutes, onLockChange }, ref) {
+	const metadata = useSettingsMetadata(relays);
 	const { config, catalog, setFamilyModels, refreshFamily, updating, updateNotice, clearUpdateNotice } = useFamilyModels();
 	const { draft, setDraft, pending, error, setError, contentRef, closeDraft, rememberEditorTrigger } = useSettingsEditor<Draft>({ ref, onLockChange });
 	const [adding, setAdding] = useState<string>();
@@ -110,7 +113,7 @@ export const ModelsSettingsContent = forwardRef<SettingsEditorHandle, ModelsSett
 		recordModelTest(key, requestId, { state: "running", relayName: target.relay.name, modelId: target.model.modelId });
 		const started = Date.now();
 		try {
-			const result = await onTest(target.relay.baseUrl, target.relay.apiKey, target.model.modelId, target.relay.timeoutSeconds, requestId, target.relay.protocol);
+			const result = await onTest(target.relay.baseUrl, target.relay.apiKey, target.model.modelId, target.relay.timeoutSeconds, requestId, target.relay.protocol, target.relay, false);
 			if (currentConfig.current === startedConfig) recordModelTest(key, requestId, { state: "done", relayName: target.relay.name, modelId: target.model.modelId, result });
 		} catch (cause) {
 			if (currentConfig.current === startedConfig) recordModelTest(key, requestId, { state: "done", relayName: target.relay.name, modelId: target.model.modelId, result: { ok: false, latencyMs: Date.now() - started, status: null, error: String(cause) } });
@@ -129,7 +132,9 @@ export const ModelsSettingsContent = forwardRef<SettingsEditorHandle, ModelsSett
 	const modelTestStatus = (family: ModelFamily, modelId: string) => {
 		const test = modelTests[testKeyOf(family.id, modelId)];
 		const running = test?.state === "running";
-		return <span className={`test-result model-test-result ${test && !running ? test.result?.ok ? "ok" : "bad" : "muted"}`} role={test ? "status" : undefined} title={test ? testTextOf(test) : undefined}>{test ? testTextOf(test) : ""}</span>;
+		const target = routeForModelTest(family, relays, modelId, catalog);
+		const history = target ? latestSettingsTest(metadata.tests, target.relay.id, [target.model.modelId]) : undefined;
+		return <span className={`test-result model-test-result ${test && !running ? test.result?.ok ? "ok" : "bad" : "muted"}`} role={test ? "status" : undefined} title={test ? testTextOf(test) : undefined}>{test ? testTextOf(test) : settingsTestSummary(history)}</span>;
 	};
 	/** The action cell is always present, so every row keeps the same column widths. */
 	const modelTestAction = (family: ModelFamily, modelId: string) => {

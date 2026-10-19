@@ -28,7 +28,7 @@ function RouteMenu({ name, actions, pending }: { name: string; actions: RouteAct
 	</>;
 }
 
-export function SettingsRouteRow({ family, route, relay, catalog, visibleIds, pending, actions, onToggle }: {
+export function SettingsRouteRow({ family, route, relay, catalog, visibleIds, pending, testHistory, actions, onToggle }: {
 	family: ModelFamily;
 	route: RouteSpec;
 	relay?: RelaySpec;
@@ -36,7 +36,7 @@ export function SettingsRouteRow({ family, route, relay, catalog, visibleIds, pe
 	visibleIds: readonly string[];
 	pending: boolean;
 	actions: RouteAction[];
-	onToggle: (enabled: boolean) => void;
+	testHistory?: string; onToggle: (enabled: boolean) => void;
 }) {
 	const [expanded, setExpanded] = useState(false);
 	const isDefault = family.defaultRouteId === route.id;
@@ -47,7 +47,7 @@ export function SettingsRouteRow({ family, route, relay, catalog, visibleIds, pe
 		<div className={`provider-row ${route.enabled ? "" : "disabled"}`}>
 			<div className="provider-row-main">
 				<div className="provider-row-title"><strong>{isDefault && <span aria-label="家族默认路线">★ </span>}{name}</strong>{isDefault && <span className="provider-tag">默认</span>}</div>
-				<small>{reason ?? "可用"} · 按模型计价</small>
+				<small>{reason ?? "可用"} · 按模型计价</small><small className="settings-test-history" title="连接测试请求耗时；历史结果不代表当前在线">{testHistory ?? "未测试"}</small>
 				<div className="route-model-summary">{summary.map((model) => <code key={model.modelId}>{model.modelId}</code>)}</div>
 				{route.models.length > 0 && <DisclosureButton expanded={expanded} onClick={() => setExpanded(!expanded)}>{expanded ? "收起模型" : `查看全部 ${route.models.length} 个模型`}</DisclosureButton>}
 			</div>

@@ -49,7 +49,7 @@ try {
 		{ id: "b", path: "json", model: "deepseek-v4.1", streaming: false, tools: false, vision: true, input: 2, timeout: 5 },
 		{ id: "c", path: "failure", model: "deepseek-chat", streaming: true, tools: false, input: 0, timeout: 5 },
 		{ id: "d", path: "timeout", model: "deepseek-chat", streaming: true, tools: false, input: 0, timeout: 1 },
-	].map((item) => ({ providerKey: `skiff-deepseek-${item.id}`, keyEnv: `SKIFF_TEST_KEY_${item.id}`,
+	].map((item) => ({ providerKey: `skiff-relay-${item.id}-deepseek`, keyEnv: `SKIFF_TEST_KEY_${item.id}`,
 		baseUrl: `http://127.0.0.1:${server.address().port}/${item.path}/v1`,
 		streaming: item.streaming, tools: item.tools, timeoutSeconds: item.timeout,
 		models: [{ id: item.model, name: item.id, api: "openai-completions", input: item.vision ? ["text", "image"] : ["text"], reasoning: item.id === "a",
@@ -58,6 +58,7 @@ try {
 		{ ...routes[0].models[0], id: "deepseek-flash", maxTokens: 300, contextWindow: 32000, cost: { input: 4, output: 6, cacheRead: 0, cacheWrite: 0 } },
 		{ ...routes[0].models[0], id: "deepseek-reasoner", maxTokens: 400, contextWindow: 256000, cost: { input: 8, output: 12, cacheRead: 0, cacheWrite: 0 } },
 	);
+	routes[1].models.push({ ...routes[1].models[0], id: "deepseek-chat" });
 	await writeFile(join(directory, "models.json"), JSON.stringify({ providers: Object.fromEntries(routes.map((route) => [route.providerKey, {
 		baseUrl: route.baseUrl, api: "openai-completions", models: route.models,
 	}])) }));
@@ -137,6 +138,7 @@ try {
 			else assert.ok(request.payload.tools?.length > 0);
 		}
 	}
+	if (process.env.SKIFF_SETTINGS_CAPTURE) await writeFile(process.env.SKIFF_SETTINGS_CAPTURE, JSON.stringify({ events, routes }));
 	console.log("PASS: real pi multi-model channel routing, image payloads and history, independent prices/limits, session model restoration, separate keys, streaming toggle, tool toggle, 401 and request timeout (local only).");
 } finally {
 	if (child && child.exitCode === null) { const exited = once(child, "exit"); child.kill(); await exited; }

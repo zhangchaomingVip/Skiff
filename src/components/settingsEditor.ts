@@ -52,6 +52,7 @@ export function useSettingsEditor<D extends { kind: string }>({ ref, onLockChang
 }): SettingsEditor<D> {
 	const [draft, setDraft] = useState<D>();
 	const [pending, setPending] = useState(false);
+	const mutationPending = useRef(false);
 	const [error, setError] = useState<string>();
 	const [removing, setRemoving] = useState<SettingsRemoval>();
 	const contentRef = useRef<HTMLDivElement>(null);
@@ -78,10 +79,11 @@ export function useSettingsEditor<D extends { kind: string }>({ ref, onLockChang
 		}
 	}, [draft?.kind]);
 	const mutate = async (action: () => Promise<boolean>) => {
-		if (pending) return;
+		if (pending || mutationPending.current) return;
+		mutationPending.current = true;
 		setPending(true); setError(undefined);
 		try { await action(); } catch (e) { setError(String(e)); }
-		finally { setPending(false); }
+		finally { mutationPending.current = false; setPending(false); }
 	};
 	return { draft, setDraft, pending, setPending, error, setError, removing, setRemoving, contentRef, closeDraft, mutate, rememberEditorTrigger };
 }

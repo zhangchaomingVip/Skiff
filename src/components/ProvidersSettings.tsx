@@ -1,5 +1,8 @@
-import { forwardRef, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { forwardRef, useEffect, useLayoutEffect, useMemo, useRef, useState, Fragment, type FormEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { latestSettingsTest, settingsTestSummary, sortSettingsProviders, providerBatchImpact, type ProviderSort, type BatchOperation, type RelayBatchPreview } from "../chat/settingsManagement";
+import { useSettingsMetadata } from "../chat/useSettingsMetadata";
+import { ProviderBatchDialog } from "./ProviderBatchDialog";
 import type { DiscoveredModel } from "../rpc/modelDiscovery";
 import { catalogEntryToPriced } from "../chat/pricingPage";
 import { catalogVision } from "../chat/modelVision";
@@ -41,25 +44,38 @@ export type ProvidersSettingsProps = {
 	families: ModelFamily[];
 	usdCnyRate: number;
 	configError?: string;
-	onSaveRelay: (relay: RelaySpec, routes?: RelayRouteSpec[]) => Promise<RelaySpec | undefined>;
+	onSaveRelay: (relay: RelaySpec, routes?: RelayRouteSpec[], testRequestIds?: string[]) => Promise<RelaySpec | undefined>;
+	onPreviewBatch: (ids: string[]) => Promise<RelayBatchPreview>;
+	onBatch: (ids: string[], operation: BatchOperation, token: string) => Promise<boolean>;
 	onDeleteRelay: (relayId: string) => Promise<boolean>;
 	onSetRelayEnabled: (relayId: string, enabled: boolean) => Promise<boolean>;
-	onTest: (baseUrl: string, apiKey: string, modelId: string, timeoutSeconds: number, requestId?: string, protocol?: RelayProtocol) => Promise<TestResult>;
+	onTest: (baseUrl: string, apiKey: string, modelId: string, timeoutSeconds: number, requestId?: string, protocol?: RelayProtocol, relay?: RelaySpec, draft?: boolean) => Promise<TestResult>;
 	onCancelTest: (requestId: string) => Promise<unknown>;
 	onDiscover: (baseUrl: string, apiKey: string, protocol?: RelayProtocol) => Promise<DiscoveredModel[]>;
 	onOpenRoutes: (location?: SettingsLocation) => void;
 	onLockChange: (locked: boolean, pending: boolean) => void;
 };
 
-export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, ProvidersSettingsProps>(function ProvidersSettingsContent({ relays, families, usdCnyRate, configError, onSaveRelay, onDeleteRelay, onSetRelayEnabled, onTest, onCancelTest, onDiscover, onOpenRoutes, onLockChange }, ref) {
+export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, ProvidersSettingsProps>(function ProvidersSettingsContent({ relays, families, usdCnyRate, configError, onPreviewBatch, onBatch, onSaveRelay, onDeleteRelay, onSetRelayEnabled, onTest, onCancelTest, onDiscover, onOpenRoutes, onLockChange }, ref) {
 	const { catalog } = useModelCatalog();
 	const [query, setQuery] = useState("");
 	const [listQuery, setListQuery] = useState("");
 	const [statusFilter, setStatusFilter] = useState<"all" | "enabled" | "disabled">("all");
 	const [advanced, setAdvanced] = useState(false);
 	const [savedLocation, setSavedLocation] = useState<{ relayId: string; familyIds: string[] }>();
+	const metadata = useSettingsMetadata(relays);
+	const [view, setView] = useState<{ sort: ProviderSort; grouped: boolean }>(() => {
+		try { const saved = JSON.parse(localStorage.getItem("skiff.settings.providers-view.v1") ?? "null"); if (saved && ["config", "name", "recent", "status"].includes(saved.sort)) return { sort: saved.sort, grouped: saved.grouped === true }; } catch { /* Optional preference. */ }
+		return { sort: "config", grouped: false };
+	});
+	useEffect(() => { try { localStorage.setItem("skiff.settings.providers-view.v1", JSON.stringify(view)); } catch { /* Optional preference. */ } }, [view]);
+	const [batch, setBatch] = useState(false);
+	const [selected, setSelected] = useState<string[]>([]);
+	const [batchAction, setBatchAction] = useState<BatchOperation>();
+	useLayoutEffect(() => { setSelected([]); setBatchAction(undefined); }, [listQuery, statusFilter, view.grouped]);
+	const completedTests = useRef(new Set<string>());
 	const matchedRelays = filterSettingsProviders(relays, listQuery);
-	const shownRelays = matchedRelays.filter((relay) => statusFilter === "all" || relay.enabled === (statusFilter === "enabled"));
+	const shownRelays = sortSettingsProviders(matchedRelays.filter((relay) => statusFilter === "all" || relay.enabled === (statusFilter === "enabled")), view.sort, metadata.usage, view.grouped);
 	const [notice, setNotice] = useState<string>();
 	const [reveal, setReveal] = useState(false);
 	const [providerModels, setProviderModels] = useState<ProviderModelDraft[]>([]);
@@ -93,6 +109,7 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 		testRequest.current += 1;
 		modelDiscoveryRequest.current += 1;
 		cancelActiveTest();
+		completedTests.current.clear();
 		setTesting(false); setTestResults([]); setDiscoveredModels([]); setTestModel(undefined);
 		setDiscoveringModels(false);
 		setShowTestModels(false); setSelectedTestModels([]); setTestModelQuery(""); setTestBatch([]);
@@ -104,7 +121,7 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 
 	const excludedTestModels = draft?.kind === "relay" ? draft.relay.excludedModelIds ?? [] : [];
 	const result = testResults.find((item) => item.modelId === testModel);
-	const connectionPassed = testResults.some((item) => item.ok && !excludedTestModels.includes(item.modelId));
+	const connectionPassed = testResults.some((item) => item.ok && !excludedTestModels.includes(item.modelId) && providerModels.some((entry) => entry.model.modelId.trim() === item.modelId));
 	const selectableTestModels = testModels.filter((model) => !excludedTestModels.includes(model) && !testResults.some((item) => item.modelId === model && !item.ok));
 	const allTestModelsSelected = selectableTestModels.length > 0 && selectableTestModels.length === selectedTestModels.length && selectableTestModels.every((model) => selectedTestModels.includes(model));
 	const filteredTestModels = testModels.filter((model) => model.toLowerCase().includes(testModelQuery.trim().toLowerCase())).sort((a, b) => {
@@ -169,7 +186,7 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 		setModelListNotice(undefined);
 	};
 	const patchRelay = (value: Partial<RelaySpec>) => {
-		resetConnectionTest();
+		if (value.baseUrl !== undefined || value.apiKey !== undefined || value.protocol !== undefined || value.timeoutSeconds !== undefined) resetConnectionTest();
 		setDraft((current) => current && current.kind === "relay" ? { ...current, relay: { ...current.relay, ...value } } : current);
 	};
 	// Discovery only returns ids; matched catalog entries arrive with official
@@ -300,7 +317,7 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 					setRunningTestModels((previous) => [...previous, model]);
 				},
 				test: async (model, requestId) => {
-					try { return await onTest(relay.baseUrl, relay.apiKey, model, relay.timeoutSeconds, requestId, relay.protocol); }
+					try { const result = await onTest(relay.baseUrl, relay.apiKey, model, relay.timeoutSeconds, requestId, relay.protocol, relay, true); if (request === testRequest.current) completedTests.current.add(requestId); return result; }
 					finally {
 						activeTests.current.delete(requestId);
 						if (request === testRequest.current) setRunningTestModels((previous) => previous.filter((item) => item !== model));
@@ -331,8 +348,8 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 		setTestModel(modelId);
 		const started = Date.now();
 		try {
-			const result = await onTest(relay.baseUrl, relay.apiKey, modelId, relay.timeoutSeconds, requestId, relay.protocol);
-			if (activeTests.current.has(requestId)) setTestResults((previous) => [...previous.filter((item) => item.modelId !== modelId), { ...result, modelId }]);
+			const result = await onTest(relay.baseUrl, relay.apiKey, modelId, relay.timeoutSeconds, requestId, relay.protocol, relay, true);
+			if (activeTests.current.has(requestId)) { completedTests.current.add(requestId); setTestResults((previous) => [...previous.filter((item) => item.modelId !== modelId), { ...result, modelId }]); }
 		} catch (cause) {
 			if (activeTests.current.has(requestId)) setTestResults((previous) => [...previous.filter((item) => item.modelId !== modelId), { ok: false, latencyMs: Date.now() - started, status: null, error: String(cause), modelId }]);
 		} finally {
@@ -382,7 +399,7 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 		try {
 			const activeModels = providerModels.map((entry) => ({ familyId: entry.familyId!, model: entry.model }));
 			const routes = routesFromProviderModels(relay, families, activeModels);
-			const saved = await onSaveRelay(relay, routes);
+			const saved = await onSaveRelay(relay, routes, [...completedTests.current]);
 			if (saved) {
 				setNotice(`已保存「${saved.name}」，同步 ${providerModels.length} 个模型到 ${routes.length} 条路线。`);
 				setSavedLocation({ relayId: saved.id, familyIds: routes.map((item) => item.familyId) });
@@ -407,6 +424,7 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 		return (relayId: string) => counts.get(relayId)?.size ?? 0;
 	}, [families, relays]);
 
+	const batchImpact = providerBatchImpact(relays, families, selected);
 	return <div ref={contentRef} className={`settings-editor ${draft ? "is-editing" : ""}`}>
 		{draft?.kind === "pick" ? (
 			<div className="provider-sheet">
@@ -600,35 +618,50 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 				<div className="settings-toolbar" role="group" aria-label="供应商筛选">
 					<Input aria-label="搜索已配置供应商" placeholder="搜索名称或端点…" value={listQuery} onChange={(event) => setListQuery(event.target.value)} />
 					<div className="settings-filter-group">{([ ["all", "全部"], ["enabled", "启用"], ["disabled", "停用"] ] as const).map(([value, label]) => <Button key={value} size="compact" variant="ghost" aria-pressed={statusFilter === value} onClick={() => setStatusFilter(value)}>{label} {matchedRelays.filter((relay) => value === "all" || relay.enabled === (value === "enabled")).length}</Button>)}</div>
-					<Button onClick={openPick} disabled={pending}><Icon name="plus" size={14} />添加供应商</Button>
+					<Select aria-label="供应商显示排序" value={view.sort} disabled={pending} onChange={(event) => setView({ ...view, sort: event.target.value as ProviderSort })}><option value="config">配置原顺序</option><option value="name">按名称</option><option value="recent">最近使用</option><option value="status">按状态</option></Select>
+					<label className="provider-toggle inline"><input type="checkbox" checked={view.grouped} disabled={pending} onChange={(event) => setView({ ...view, grouped: event.target.checked })} />按来源分组</label>
+					<Button disabled={pending} aria-pressed={batch} onClick={() => { setBatch(!batch); setSelected([]); }}>{batch ? "退出批量管理" : "批量管理"}</Button>
+					<Button onClick={openPick} disabled={pending || batch}><Icon name="plus" size={14} />添加供应商</Button>
 				</div>
+				{batch && <div className="settings-toolbar settings-batch-bar" role="group" aria-label="供应商批量操作">
+					<label className="provider-toggle inline"><input type="checkbox" aria-label="全选当前结果" checked={!!shownRelays.length && shownRelays.every((relay) => selected.includes(relay.id))} disabled={pending || !shownRelays.length} onChange={(event) => setSelected(event.target.checked ? shownRelays.map((relay) => relay.id) : [])} />全选当前结果</label><span role="status">已选 {selected.length} 个</span>
+					{([ ["enable", "批量启用"], ["disable", "批量停用"], ["delete", "批量删除"] ] as const).map(([action, label]) => <Button key={action} variant={action === "delete" ? "danger" : "secondary"} disabled={pending || !selected.length} onClick={() => setBatchAction(action)}>{label}</Button>)}
+				</div>}
 				<section className="family-card" aria-label="供应商列表">
 					{relays.length === 0 && <p className="family-empty">还没添加供应商，点击「添加供应商」选择预设或填写自定义地址。</p>}
 					{!shownRelays.length && relays.length > 0 && <p className="family-empty">没有匹配的供应商，请调整搜索或状态筛选。</p>}
-					{shownRelays.map((relay) => {
+					{shownRelays.map((relay, index) => {
 						const preset = matchPreset(relay.baseUrl);
 						const protocol = RELAY_PROTOCOLS.find((item) => item.id === (relay.protocol ?? "openai"));
-						return <div className={`provider-row provider-relay-row ${relay.enabled ? "" : "disabled"}`} key={relay.id}>
-							<button type="button" className="provider-relay-btn" onClick={() => openRelay(relay, preset)} disabled={pending} aria-label={`编辑 ${relay.name}`}>
+						return <Fragment key={relay.id}>{view.grouped && (index === 0 || providerSourceLabel(shownRelays[index - 1].baseUrl) !== providerSourceLabel(relay.baseUrl)) && <h3 className="settings-source-heading">{providerSourceLabel(relay.baseUrl)}</h3>}<div className={`provider-row provider-relay-row ${batch ? "is-selecting" : ""} ${relay.enabled ? "" : "disabled"}`}>
+							{batch && <input type="checkbox" aria-label={`选择 ${relay.name}`} checked={selected.includes(relay.id)} disabled={pending} onChange={(event) => setSelected((ids) => event.target.checked ? [...ids, relay.id] : ids.filter((id) => id !== relay.id))} />}
+							<button type="button" className="provider-relay-btn" onClick={() => openRelay(relay, preset)} disabled={pending || batch} aria-label={`编辑 ${relay.name}`}>
 								<ProviderIcon id={preset?.id ?? ""} name={relay.name} size={22} />
 								<span className="provider-row-text">
 									<span className="provider-row-title"><strong title={relay.name}>{relay.name}</strong><span className="provider-tag">{providerSourceLabel(relay.baseUrl)}</span></span>
 									<small className="provider-row-meta"><span className="provider-row-endpoint" title={maskBaseUrl(relay.baseUrl)}>{maskBaseUrl(relay.baseUrl)}</span><span className="provider-row-count">· {protocol?.label ?? "OpenAI"} · {relayModelCount(relay.id) ? `${relayModelCount(relay.id)} 个模型` : "未配置模型"}</span></small>
+									<small className="settings-test-history" title="连接测试请求耗时；历史结果不代表当前在线">{settingsTestSummary(latestSettingsTest(metadata.tests, relay.id))}</small>
 								</span>
 							</button>
 							<div className="provider-row-side">
 								<label className="switch" title={relay.enabled ? "停用" : "启用"}>
-									<input type="checkbox" checked={relay.enabled} disabled={pending} onChange={(event) => { const enabled = event.target.checked; void mutate(() => toggleRelay(relay.id, enabled)); }} aria-label={`${relay.enabled ? "停用" : "启用"} ${relay.name}`} />
+									<input type="checkbox" checked={relay.enabled} disabled={pending || batch} onChange={(event) => { const enabled = event.target.checked; void mutate(() => toggleRelay(relay.id, enabled)); }} aria-label={`${relay.enabled ? "停用" : "启用"} ${relay.name}`} />
 									<span className="slider" />
 								</label>
 								<Icon name="chevron" size={14} />
 							</div>
-						</div>;
+						</div></Fragment>;
 					})}
 					{(configError || error) && <p className="form-error provider-error" role="alert">{configError || error}</p>}
 				</section>
 			</>
 		)}
+		{batchAction && <ProviderBatchDialog operation={batchAction} ids={selected} initialImpact={batchImpact} onPreview={onPreviewBatch} onCommit={async (ids, operation, token) => {
+			let success = false;
+			await mutate(async () => { success = await onBatch(ids, operation, token); return success; });
+			if (success) { setSelected([]); setBatchAction(undefined); setNotice("批量操作已完成"); }
+			return success;
+		}} pending={pending} error={configError || error} onClose={() => setBatchAction(undefined)} onOpenFamily={(familyId) => { setSelected([]); setBatchAction(undefined); onOpenRoutes({ familyId }); }} />}
 		{removing && <ConfirmDialog title={removing.title} description={removing.description} onConfirm={() => void mutate(removing.action)} onClose={() => setRemoving(undefined)} />}
 	</div>;
 });

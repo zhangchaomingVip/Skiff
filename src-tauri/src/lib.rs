@@ -12,6 +12,7 @@ mod families;
 mod providers;
 mod search;
 mod history;
+mod settings_metadata;
 
 /// One spawned `pi --mode rpc` session. `child` is kept only so we can kill it
 /// on stop; `stdin` is shared with the reader threads so we can write lines.
@@ -254,9 +255,20 @@ fn start_session(app: AppHandle, sessions: &Mutex<HashMap<String, Proc>>, option
 	// stdout -> `rpc://<id>` events
 	let app_out = app.clone();
 	let id_out = instance_id.clone();
+	let metadata_dir = get_pi_agent_dir();
 	std::thread::spawn(move || {
 		let reader = std::io::BufReader::new(stdout);
+		let mut seen_responses = std::collections::HashSet::new();
 		for line in reader.lines().flatten() {
+			if let (Some(dir), Ok(event)) = (&metadata_dir, serde_json::from_str::<serde_json::Value>(&line)) {
+				if event["type"] == "message_end" && event["message"]["role"] == "assistant" {
+					if let Ok(_guard) = providers::CONFIG_LOCK.lock() {
+						if let Ok(config) = families::load_plain(dir) {
+							if settings_metadata::record_response(dir, &config, &event, &mut seen_responses) { let _ = app_out.emit("settings-metadata-changed", ()); }
+						}
+					}
+				}
+			}
 			let _ = app_out.emit(&format!("rpc://{id_out}"), line);
 		}
 		let _ = app_out.emit(&format!("rpc://{id_out}"), serde_json::json!({
@@ -515,6 +527,8 @@ pub fn run() {
 			history::set_history_workspace, history::read_session_history,
 			families::list_model_families, families::list_model_runtime,
 			families::save_relay, families::delete_relay, families::set_relay_enabled,
+			families::preview_relay_batch, families::batch_relays, families::test_settings_connection,
+			settings_metadata::list_settings_metadata,
 			families::save_route, families::delete_route, families::reorder_routes,
 			families::set_default_route, families::set_family_auto_failover, families::set_family_auto_retry,
 			families::test_provider_connection, families::cancel_provider_test, families::discover_relay_models,

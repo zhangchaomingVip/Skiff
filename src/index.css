@@ -949,6 +949,18 @@ span.provider-mark.generic { display: inline-flex; align-items: center; justify-
 
 /* Provider rows: whole row opens the editor (Magpie-style list) */
 .provider-relay-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
+.provider-relay-row.is-selecting { grid-template-columns: auto minmax(0, 1fr) auto; }
+.provider-relay-row.is-selecting > input { grid-column: 1; grid-row: 1; }
+.provider-relay-row.is-selecting .provider-relay-btn { grid-column: 2; grid-row: 1; }
+.provider-relay-row.is-selecting .provider-row-side { display: flex; grid-column: 3; grid-row: 1; }
+.settings-test-history { color: var(--muted); font-size: var(--font-size-xs); overflow-wrap: anywhere; }
+.settings-batch-bar { padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
+.settings-source-heading { padding: var(--space-3); margin: 0; font-size: var(--font-size-sm); color: var(--secondary); }
+.settings-order-list { padding: 0; list-style: none; }
+.settings-order-list li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); border-bottom: 1px solid var(--border); padding: var(--space-3); }
+.settings-order-list .provider-row-main { flex: 1 1 180px; min-width: 0; overflow-wrap: anywhere; }
+.settings-order-list li[draggable="true"] { cursor: grab; }
+.settings-order-list li:active { cursor: grabbing; }
 .provider-relay-btn { min-width: 0; display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 4px 0; border: 0; border-radius: var(--radius-sm); background: transparent; color: inherit; text-align: left; }
 .provider-relay-btn:hover:not(:disabled) { background: var(--hover); }
 .provider-relay-btn:disabled { cursor: default; }

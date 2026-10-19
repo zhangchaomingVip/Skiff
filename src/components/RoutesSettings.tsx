@@ -1,4 +1,6 @@
-import { forwardRef, useEffect, useMemo, useState, type FormEvent } from "react";
+import { forwardRef, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { latestSettingsTest, settingsTestSummary } from "../chat/settingsManagement";
+import { useSettingsMetadata } from "../chat/useSettingsMetadata";
 import { blankModel, blankRoute, DEFAULT_THINKING_LEVELS, FAMILY_LABELS, maskBaseUrl, normalizeThinkingLevels, resolveThinkingLevels, THINKING_LEVELS, validateModels, type ModelFamily, type ModelSpec, type RelaySpec, type RouteSpec, type ThinkingLevel } from "../chat/useModelFamilies";
 import { catalogVision } from "../chat/modelVision";
 import { catalogEntryToPriced, type PricedModel } from "../chat/pricingPage";
@@ -19,7 +21,7 @@ import { Button, IconButton, Input, Select } from "./ui";
 const BRANDABLE = ["deepseek", "kimi", "glm"] as const;
 const brand = (familyId: string): BrandName | undefined => BRANDABLE.find((name) => name === familyId);
 
-type Draft = { kind: "route"; familyId: string; route: RouteSpec; isNew: boolean };
+type Draft = { kind: "route"; familyId: string; route: RouteSpec; isNew: boolean } | { kind: "order"; familyId: string; ids: string[] };
 
 /**
  * Routes: how each family reaches its providers. One row is a relay bound to
@@ -47,6 +49,9 @@ export type RoutesSettingsProps = {
 };
 
 export const RoutesSettingsContent = forwardRef<SettingsEditorHandle, RoutesSettingsProps>(function RoutesSettingsContent({ families, relays, autoFailover, usdCnyRate, onSaveRate, configError, onSaveRoute, onDeleteRoute, onReorderRoutes, onSetDefaultRoute, onAutoFailover, onOpenProviders, onLockChange, focusFamily, focusLocation }, ref) {
+	const metadata = useSettingsMetadata(relays);
+	const dragId = useRef<string>();
+	const [orderNotice, setOrderNotice] = useState("");
 	const { catalog, catalogStale, catalogFetchedAt, latest } = useModelCatalog();
 	const { config: visibleModels } = useFamilyModels();
 	const [query, setQuery] = useState("");
@@ -199,8 +204,43 @@ export const RoutesSettingsContent = forwardRef<SettingsEditorHandle, RoutesSett
 		return ids;
 	};
 
+	const startOrder = (family: ModelFamily, index?: number, offset = 0) => {
+		rememberEditorTrigger(); setError(undefined); setOrderNotice("");
+		setDraft({ kind: "order", familyId: family.id, ids: index === undefined ? family.routes.map((route) => route.id) : reorder(family.routes, index, offset) });
+	};
+	const moveOrder = (id: string, target: number) => {
+		if (draft?.kind !== "order" || pending || target < 0 || target >= draft.ids.length) return;
+		const ids = [...draft.ids]; const index = ids.indexOf(id); if (index < 0) return;
+		ids.splice(index, 1); ids.splice(target, 0, id);
+		setDraft({ ...draft, ids }); setOrderNotice(`已移到第 ${target + 1} 位，尚未保存`);
+		requestAnimationFrame(() => {
+			const row = Array.from(contentRef.current?.querySelectorAll<HTMLElement>("[data-order-id]") ?? []).find((row) => row.dataset.orderId === id);
+			if (row && (!row.contains(document.activeElement) || document.activeElement?.matches(":disabled"))) row.querySelector<HTMLElement>("button:not(:disabled)")?.focus();
+		});
+	};
+	const orderingFamily = draft?.kind === "order" ? families.find((family) => family.id === draft.familyId) : undefined;
+	const orderConflict = draft?.kind === "order" && (!orderingFamily || orderingFamily.routes.length !== draft.ids.length || orderingFamily.routes.some((route) => !draft.ids.includes(route.id)));
 	return <div ref={contentRef} className={`settings-editor ${draft ? "is-editing" : ""}`}>
-		{draft?.kind === "route" ? (
+		{draft?.kind === "order" ? (
+			<section aria-label="调整切换顺序">
+				<h2 id="routes-title">调整切换顺序 · {FAMILY_LABELS[draft.familyId] ?? draft.familyId}</h2>
+				<p className="muted">显示家族全部路线，暂不应用搜索或可用筛选。保存后影响相同实际模型 ID 的向后故障切换；仍遵守能力要求及扣费账户授权。</p>
+				<p className="muted">拖动或使用上移、下移按钮调整；默认路线、模型顺序及已有会话的固定路线保持原值。</p>
+				<ol className="settings-order-list">{draft.ids.map((id, index) => {
+					const route = orderingFamily?.routes.find((route) => route.id === id);
+					const relay = relays.find((relay) => relay.id === route?.relayId);
+					const name = relay?.name ?? id;
+					return <li key={id} data-order-id={id} draggable={!pending && !orderConflict} onDragStart={(event) => { dragId.current = id; event.dataTransfer.setData("text/plain", id); event.dataTransfer.effectAllowed = "move"; }} onDragEnd={() => { dragId.current = undefined; }} onDragOver={(event) => { if (!pending && !orderConflict) { event.preventDefault(); event.dataTransfer.dropEffect = "move"; } }} onDrop={(event) => { event.preventDefault(); if (dragId.current && !orderConflict) moveOrder(dragId.current, index); dragId.current = undefined; }}>
+						<span className="provider-row-main"><strong>{index + 1}. {name}</strong><small>{route ? routeBlockedReason(route, relay) ?? "可用" : "路线已移除"}{orderingFamily?.defaultRouteId === id ? " · 家族默认" : ""}</small><small>{route?.models.map((model) => model.modelId).join("、") || "未配置模型"}</small></span>
+						<div className="provider-row-actions"><Button size="compact" variant="ghost" disabled={pending || orderConflict || index === 0} aria-label={`上移 ${name}`} onClick={() => moveOrder(id, index - 1)}>上移</Button><Button size="compact" variant="ghost" disabled={pending || orderConflict || index === draft.ids.length - 1} aria-label={`下移 ${name}`} onClick={() => moveOrder(id, index + 1)}>下移</Button></div>
+					</li>;
+				})}</ol>
+				<p role="status" className="muted">{orderNotice}</p>
+				{orderConflict && <p className="form-error" role="alert">路线集合已变化，旧顺序不能保存，请重新加载后调整。</p>}
+				{(error || configError) && <p className="form-error" role="alert">{error || configError}</p>}
+				<div className="dialog-actions"><Button disabled={pending} onClick={closeDraft}>取消排序</Button>{orderConflict && orderingFamily && <Button disabled={pending} onClick={() => startOrder(orderingFamily)}>重新加载顺序</Button>}<Button variant="primary" disabled={pending || orderConflict} onClick={() => void mutate(async () => { const ok = await onReorderRoutes(draft.familyId, draft.ids); if (ok) closeDraft(); return ok; })}>{pending ? "保存中…" : "保存顺序"}</Button></div>
+			</section>
+		) : draft?.kind === "route" ? (
 			<form onSubmit={(event) => void submitRoute(event)}>
 				<div className="dialog-heading"><h2 id="routes-title">{draft.isNew ? "添加路线" : "编辑路线"} · {FAMILY_LABELS[draft.familyId] ?? draft.familyId}</h2><IconButton type="button"  onClick={closeDraft} disabled={pending} aria-label="返回列表"><Icon name="close" /></IconButton></div>
 				<p className="muted">图片输入按模型单独设置，目录导入会填入已知能力；流式、工具与推理开关按路线生效。</p>
@@ -282,6 +322,7 @@ export const RoutesSettingsContent = forwardRef<SettingsEditorHandle, RoutesSett
 					{(selectedFamily ? families.filter((family) => family.id === selectedFamily) : families).map((family) => <section className="family-card" key={family.id}>
 						<div className="family-card-head">
 							<span className="family-card-title">{brand(family.id) && <BrandIcon name={brand(family.id)!} size={15} />}{FAMILY_LABELS[family.id] ?? family.displayName}<small>显示 {shownRoutes(family).length} / 共 {family.routes.length} 条</small></span>
+							<Button type="button" variant="ghost" size="compact" disabled={pending || family.routes.length < 2} onClick={() => startOrder(family)}>调整切换顺序</Button>
 							<Button type="button" variant="ghost" size="compact" onClick={() => openRoute(family.id)} disabled={pending || !relays.length} title={relays.length ? undefined : "请先添加供应商"}>添加路线</Button>
 						</div>
 						{family.routes.length === 0 && <p className="family-empty">还没添加路线，去添加</p>}
@@ -291,13 +332,13 @@ export const RoutesSettingsContent = forwardRef<SettingsEditorHandle, RoutesSett
 							const relay = relays.find((item) => item.id === route.relayId);
 							const name = relayName(route.relayId);
 							const isDefault = family.defaultRouteId === route.id;
-							return <SettingsRouteRow key={route.id} family={family} route={route} relay={relay} catalog={catalog} visibleIds={(visibleModels[family.id] ?? []).map((entry) => entry.modelId)} pending={pending}
+							return <SettingsRouteRow key={route.id} family={family} route={route} relay={relay} catalog={catalog} visibleIds={(visibleModels[family.id] ?? []).map((entry) => entry.modelId)} pending={pending} testHistory={settingsTestSummary(latestSettingsTest(metadata.tests, route.relayId, route.models.map((model) => model.modelId)))}
 								onToggle={(enabled) => void mutate(async () => { const ok = await onSaveRoute(family.id, { ...route, enabled }); if (ok && onlyAvailable) requestAnimationFrame(() => contentRef.current?.querySelector<HTMLElement>(".settings-toolbar input")?.focus()); return ok; })}
 								actions={[
 									{ label: "编辑", accessible: `编辑 ${name} 的路线`, run: () => openRoute(family.id, route) },
 									{ label: "设为默认", accessible: `将 ${name} 的路线设为默认`, reason: isDefault ? "已是家族默认路线" : routeBlockedReason(route, relay), run: () => void mutate(() => onSetDefaultRoute(family.id, route.id)) },
-									{ label: "上移", accessible: `上移 ${name} 的路线`, reason: filtered ? "请清除搜索并关闭仅看可用后排序" : index === 0 ? "已经是第一条路线" : undefined, run: () => void mutate(() => onReorderRoutes(family.id, reorder(family.routes, index, -1))) },
-									{ label: "下移", accessible: `下移 ${name} 的路线`, reason: filtered ? "请清除搜索并关闭仅看可用后排序" : index === family.routes.length - 1 ? "已经是最后一条路线" : undefined, run: () => void mutate(() => onReorderRoutes(family.id, reorder(family.routes, index, 1))) },
+									{ label: "上移", accessible: `上移 ${name} 的路线`, reason: filtered ? "请清除搜索并关闭仅看可用后排序" : index === 0 ? "已经是第一条路线" : undefined, run: () => startOrder(family, index, -1) },
+									{ label: "下移", accessible: `下移 ${name} 的路线`, reason: filtered ? "请清除搜索并关闭仅看可用后排序" : index === family.routes.length - 1 ? "已经是最后一条路线" : undefined, run: () => startOrder(family, index, 1) },
 									{ label: "删除", accessible: `删除 ${name} 的路线`, reason: isDefault ? "默认路线不可删除，请先选择替代路线或显式清空默认值" : undefined, run: () => setRemoving({ title: "删除路线", description: `将从「${FAMILY_LABELS[family.id] ?? family.displayName}」移除 ${name} 的路线。`, action: async () => { const ok = await onDeleteRoute(family.id, route.id); if (ok) requestAnimationFrame(() => contentRef.current?.querySelector<HTMLElement>(".settings-toolbar input")?.focus()); return ok; } }) },
 								]} />;
 						})}

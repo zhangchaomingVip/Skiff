@@ -45,7 +45,7 @@ const PROTOCOLS: [(&str, &str); 6] = [
 ];
 
 /// Unknown, absent or mixed-case values fall back to the legacy default.
-fn normalize_protocol(raw: Option<&str>) -> String {
+pub(crate) fn normalize_protocol(raw: Option<&str>) -> String {
 	let candidate = raw.unwrap_or("").trim().to_ascii_lowercase();
 	PROTOCOLS.iter().find(|(id, _)| *id == candidate).map(|(id, _)| (*id).to_string()).unwrap_or_else(|| "openai".into())
 }
@@ -306,7 +306,7 @@ pub struct RuntimeOffer {
 	pub context_window: u64,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TestResult {
 	pub ok: bool,
@@ -883,7 +883,57 @@ fn apply(dir: &Path, mutate: impl FnOnce(&mut FamiliesConfig) -> Result<(), Stri
 	mutate(&mut config)?;
 	validate_config(&config)?;
 	save(dir, &config)?;
+	crate::settings_metadata::reconcile(dir, &config);
 	Ok(config)
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RelayBatchPreview {
+	pub token: String,
+	pub names: Vec<String>,
+	pub route_count: usize,
+	pub default_families: Vec<String>,
+}
+
+pub fn relay_batch_preview(config: &FamiliesConfig, relay_ids: &[String]) -> Result<RelayBatchPreview, String> {
+	use sha2::{Digest, Sha256};
+	if relay_ids.is_empty() || relay_ids.iter().collect::<std::collections::HashSet<_>>().len() != relay_ids.len() { return Err("请选择供应商，且不能重复选择".into()); }
+	let mut names = Vec::new();
+	for id in relay_ids { names.push(config.relays.iter().find(|relay| &relay.id == id).ok_or("所选供应商已不存在，请重新加载预览")?.name.clone()); }
+	let route_count = config.families.iter().flat_map(|family| &family.routes).filter(|route| relay_ids.contains(&route.relay_id)).count();
+	let default_families = config.families.iter().filter(|family| family.routes.iter().any(|route| relay_ids.contains(&route.relay_id) && family.default_route_id.as_deref() == Some(&route.id))).map(|family| family.id.clone()).collect();
+	let token = format!("{:x}", Sha256::digest(serde_json::to_vec(config).map_err(|_| "无法生成确认预览")?));
+	Ok(RelayBatchPreview { token, names, route_count, default_families })
+}
+
+pub fn batch_relays_in(dir: &Path, relay_ids: &[String], operation: &str, expected_token: &str) -> Result<FamiliesConfig, String> {
+	apply(dir, |config| {
+		let preview = relay_batch_preview(config, relay_ids)?;
+		if preview.token != expected_token { return Err("配置已变化，操作未提交，请重新确认影响预览".into()); }
+		match operation {
+			"enable" | "disable" => { for relay in &mut config.relays { if relay_ids.contains(&relay.id) { relay.enabled = operation == "enable"; } } }
+			"delete" => {
+				if !preview.default_families.is_empty() { return Err("所选供应商包含默认路线，整批未删除；请先调整或明确清空对应家族默认值".into()); }
+				config.relays.retain(|relay| !relay_ids.contains(&relay.id));
+				for family in &mut config.families { family.routes.retain(|route| !relay_ids.contains(&route.relay_id)); }
+			}
+			_ => return Err("未知批量操作".into()),
+		}
+		Ok(())
+	})
+}
+
+#[tauri::command]
+pub fn preview_relay_batch(relay_ids: Vec<String>) -> Result<RelayBatchPreview, String> {
+	let _guard = providers::CONFIG_LOCK.lock().map_err(|_| "配置锁异常")?;
+	relay_batch_preview(&load_plain(&agent_dir()?)?, &relay_ids)
+}
+
+#[tauri::command]
+pub fn batch_relays(relay_ids: Vec<String>, operation: String, expected_token: String) -> Result<FamiliesConfig, String> {
+	let _guard = providers::CONFIG_LOCK.lock().map_err(|_| "配置锁异常")?;
+	batch_relays_in(&agent_dir()?, &relay_ids, &operation, &expected_token)
 }
 
 fn upsert_relay(config: &mut FamiliesConfig, relay: RelaySpec) {
@@ -1009,7 +1059,7 @@ pub fn reorder_routes_in(dir: &Path, family_id: &str, relay_ids: &[String]) -> R
 		}
 		let mut reordered = Vec::with_capacity(family.routes.len());
 		for id in relay_ids {
-			let Some(route) = family.routes.iter().find(|route| &route.id == id || &route.relay_id == id) else {
+			let Some(route) = family.routes.iter().find(|route| &route.id == id) else {
 				return Err("排序请求包含未知线路".into());
 			};
 			reordered.push(route.clone());
@@ -1079,9 +1129,13 @@ pub fn list_model_runtime() -> Result<Vec<RuntimeOffer>, String> {
 }
 
 #[tauri::command]
-pub fn save_relay(relay: RelaySpec, routes: Option<Vec<RelayRouteSpec>>) -> Result<FamiliesConfig, String> {
+pub fn save_relay(relay: RelaySpec, routes: Option<Vec<RelayRouteSpec>>, test_request_ids: Option<Vec<String>>) -> Result<FamiliesConfig, String> {
 	let _guard = providers::CONFIG_LOCK.lock().map_err(|_| "配置锁异常")?;
-	save_relay_with_routes_in(&agent_dir()?, relay, routes.unwrap_or_default())
+	let dir = agent_dir()?;
+	let name = relay.name.trim().to_lowercase();
+	let config = save_relay_with_routes_in(&dir, relay, routes.unwrap_or_default())?;
+	if let Some(saved) = config.relays.iter().find(|relay| relay.name.to_lowercase() == name) { crate::settings_metadata::promote(&dir, &config, &saved.id, &test_request_ids.unwrap_or_default()); }
+	Ok(config)
 }
 
 #[tauri::command]
@@ -1470,6 +1524,23 @@ pub fn cancel_provider_test(request_id: String) -> Result<(), String> {
 }
 
 /// One `max_tokens=1` completion proves the relay endpoint, key and model work.
+#[tauri::command]
+pub async fn test_settings_connection(relay: RelaySpec, model_id: String, request_id: String, draft: bool) -> Result<TestResult, String> {
+	let dir = agent_dir()?;
+	test_settings_connection_in(&dir, relay, model_id, request_id, draft).await
+}
+
+async fn test_settings_connection_in(dir: &Path, relay: RelaySpec, model_id: String, request_id: String, draft: bool) -> Result<TestResult, String> {
+	let ticket = {
+		let _guard = providers::CONFIG_LOCK.lock().map_err(|_| "配置锁异常")?;
+		crate::settings_metadata::begin(&dir, &load_plain(&dir)?, &relay, &model_id)
+	};
+	let result = test_provider_connection(relay.base_url, relay.api_key, model_id, relay.protocol, Some(relay.timeout_seconds), Some(request_id.clone())).await?;
+	if let Ok(_guard) = providers::CONFIG_LOCK.lock() { if let Ok(config) = load_plain(&dir) { crate::settings_metadata::finish(&dir, &config, &request_id, ticket, &result, draft); } }
+	Ok(result)
+}
+
+/// One `max_tokens=1` completion proves the relay endpoint, key and model work.
 /// `protocol` selects the request shape; absent means OpenAI Chat Completions.
 #[tauri::command]
 pub async fn test_provider_connection(base_url: String, api_key: String, model_id: String, protocol: Option<String>, timeout_seconds: Option<u64>, request_id: Option<String>) -> Result<TestResult, String> {
@@ -1533,7 +1604,8 @@ async fn run_provider_test(base_url: String, api_key: String, model_id: String, 
 	let (url, body, auth) = connection_test_request(&protocol, &base, &key, &model);
 	let mut request = client.post(url).json(&body);
 	request = match auth {
-		"header" => request.header("x-api-key", &key).header("anthropic-version", "2023-06-01"),
+		"anthropic" => request.header("x-api-key", &key).header("anthropic-version", "2023-06-01"),
+		"query" => request,
 		_ => request.bearer_auth(&key),
 	};
 	let response = request.send().await;
@@ -1643,6 +1715,46 @@ mod connection_test_tests {
 		cancel_provider_test(request_id.clone()).unwrap();
 		let result = tauri::async_runtime::block_on(test_provider_connection("http://127.0.0.1:1/v1".into(), "test-key".into(), "test-model".into(), None, Some(60), Some(request_id)));
 		assert_eq!(result.err().unwrap(), "测试已停止");
+	}
+
+	#[test]
+	fn settings_tests_persist_protocol_specific_results_and_cancellation_keeps_history() {
+		let dir = std::env::temp_dir().join(format!("skiff-settings-http-{}", next_id()));
+		for (index, protocol) in ["openai", "kimi", "openai-responses", "anthropic", "google-genai", "vertex"].iter().enumerate() {
+			let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+			let address = listener.local_addr().unwrap();
+			let server = std::thread::spawn(move || {
+				let (mut socket, _) = listener.accept().unwrap();
+				socket.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+				let mut bytes = Vec::new(); let mut buffer = [0u8; 4096];
+				loop {
+					let n = socket.read(&mut buffer).unwrap(); if n == 0 { break; } bytes.extend_from_slice(&buffer[..n]);
+					if let Some(offset) = bytes.windows(4).position(|part| part == b"\r\n\r\n") {
+						let headers = String::from_utf8_lossy(&bytes[..offset]).to_lowercase();
+						let length = headers.lines().find_map(|line| line.strip_prefix("content-length:").and_then(|s| s.trim().parse::<usize>().ok())).unwrap();
+						if bytes.len() >= offset + 4 + length { break; }
+					}
+				}
+				socket.write_all(if index == 5 { b"HTTP/1.1 401 Unauthorized\r\nContent-Length: 2\r\n\r\n{}" } else { b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\n{}" }).unwrap();
+				String::from_utf8(bytes).unwrap()
+			});
+			let mut config = FamiliesConfig::default();
+			config.relays.push(serde_json::from_value(json!({"id":"test", "name":"Test", "baseUrl":format!("http://{address}/v1"), "apiKey":"dummy-only", "protocol":protocol, "timeoutSeconds":5})).unwrap());
+			config.families[0].routes.push(serde_json::from_value(json!({"id":"route-test", "relayId":"test", "models":[{"modelId":"actual/model", "contextWindow":32000, "maxTokens":4096}]})).unwrap());
+			save(&dir, &config).unwrap();
+			let result = tauri::async_runtime::block_on(test_settings_connection_in(&dir, config.relays[0].clone(), "actual/model".into(), format!("settings-{protocol}"), false)).unwrap();
+			assert_eq!(result.ok, index != 5);
+			let request = server.join().unwrap().to_lowercase();
+			if *protocol == "anthropic" { assert!(request.contains("x-api-key: dummy-only")); assert!(request.contains("/v1/messages")); }
+			else if ["google-genai", "vertex"].contains(protocol) { assert!(request.contains("generatecontent?key=dummy-only")); assert!(!request.contains("authorization:")); }
+			else { assert!(request.contains("authorization: bearer dummy-only")); }
+			let records = crate::settings_metadata::query(&dir, &config).tests;
+			assert_eq!(records.len(), 1); assert_eq!(records[0].ok, result.ok); assert!(!records[0].config_changed);
+			let cancelled = format!("settings-cancel-{protocol}"); cancel_provider_test(cancelled.clone()).unwrap();
+			assert!(tauri::async_runtime::block_on(test_settings_connection_in(&dir, config.relays[0].clone(), "actual/model".into(), cancelled, false)).is_err());
+			assert_eq!(crate::settings_metadata::query(&dir, &config).tests[0].completed_at, records[0].completed_at);
+		}
+		let _ = std::fs::remove_dir_all(dir);
 	}
 
 	#[test]
