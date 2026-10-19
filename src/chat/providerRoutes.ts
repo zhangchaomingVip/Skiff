@@ -21,9 +21,13 @@ export function routesFromProviderModels(relay: RelaySpec, families: ModelFamily
 		const existing = family.routes.find((route) => route.relayId === relay.id);
 		if (!existing && !configured.length) return [];
 		if (existing) {
-			const activeIds = new Set(configured.map((model) => model.modelId));
-			const preservedExcluded = existing.models.filter((model) => excluded.has(model.modelId) && !activeIds.has(model.modelId));
-			return [{ familyId: family.id, route: { ...existing, models: [...configured, ...preservedExcluded] } }];
+			const remaining = new Map(configured.map((model) => [model.modelId, model]));
+			const models = existing.models.flatMap((model) => {
+				const edited = remaining.get(model.modelId);
+				remaining.delete(model.modelId);
+				return edited ? [edited] : excluded.has(model.modelId) ? [model] : [];
+			});
+			return [{ familyId: family.id, route: { ...existing, models: [...models, ...remaining.values()] } }];
 		}
 		return [{ familyId: family.id, route: { id: "", relayId: relay.id, enabled: true, models: configured, streaming: true, tools: true, vision: false, reasoning: true } }];
 	});

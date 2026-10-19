@@ -7,7 +7,7 @@ import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const { chromium } = process.env.SKIFF_PLAYWRIGHT_DIR ? require(process.env.SKIFF_PLAYWRIGHT_DIR) : await import("playwright");
 const origin = process.argv[2] ?? "http://127.0.0.1:1423";
-const output = new URL("../features/025-provider-settings-split/screenshots/", import.meta.url);
+const output = new URL("../features/028-settings-information-redesign/screenshots/", import.meta.url);
 await fs.mkdir(output, { recursive: true });
 const browser = await chromium.launch({ headless: true, channel: "msedge" });
 const page = await browser.newPage({ viewport: { width: 1100, height: 750 } });
@@ -17,7 +17,7 @@ page.on("pageerror", (error) => errors.push(String(error)));
 const dialog = () => page.getByRole("dialog", { name: "设置", exact: true });
 const button = (name) => dialog().getByRole("button", { name, exact: true });
 const loose = (pattern) => dialog().getByRole("button", { name: pattern });
-const shot = (name) => page.screenshot({ animations: "disabled", path: new URL(`${name}.png`, output).pathname.replace(/^\/([A-Z]:)/, "$1") });
+const shot = (name) => page.screenshot({ animations: "disabled", path: new URL(`providers-settings-${name}.png`, output).pathname.replace(/^\/([A-Z]:)/, "$1") });
 const pressed = (name) => button(name).getAttribute("aria-pressed");
 const open = async () => { await page.keyboard.press("Control+Comma"); await dialog().waitFor(); };
 const close = async () => { await button("关闭设置").click(); await dialog().waitFor({ state: "detached" }); };
@@ -53,15 +53,17 @@ try {
 	await button("添加").click();
 	await button("编辑 验证中转").waitFor();
 	const notice = await dialog().getByRole("status").first().textContent();
-	assert.match(notice, /已为「验证中转」自动添加 \d+ 条路线/, "Discovered models must create routes from the provider page");
+	assert.match(notice, /已保存「验证中转」，同步 \d+ 个模型到 \d+ 条路线/, "Discovered models must create routes from the provider page");
 	await shot("provider-saved");
 
 	// 3. The notice links across; the route entry lists routes, not providers.
-	await button("查看路线").click();
-	await button("编辑 验证中转 的路线").first().waitFor();
+	await button("查看DeepSeek路线").click();
+	await page.locator("#route-relay").waitFor();
+	assert.equal(await page.locator("#route-relay").inputValue(), await page.evaluate(() => window.skiffPreview.commands.filter((item) => item.command === "save_relay").at(-1).args.relay.id));
+	await page.keyboard.press("Escape");
 	assert.equal(await pressed("路线"), "true");
 	assert.equal(await button("编辑 官方直连").count(), 0, "Route entry must not list providers");
-	assert.equal(await button("编辑 验证中转 的路线").count(), 3, "Discovered routes must be reachable from the route entry");
+	assert.equal(await button("更多 验证中转 的路线操作").count(), 1, "Saved destination selects its family");
 	await shot("routes-light");
 
 	// 4. Both entries render in the dark theme as well.

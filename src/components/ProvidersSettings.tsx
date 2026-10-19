@@ -9,15 +9,18 @@ import { discoveredFamily, routesFromProviderModels } from "../chat/providerRout
 import { modelIdMatchesCatalog } from "../chat/latestModels";
 import { useModelCatalog } from "../chat/useModelCatalog";
 import { blankModel, blankRelay, FAMILY_LABELS, maskBaseUrl, maskKey, RELAY_PROTOCOLS, validateModels, type ModelFamily, type ModelSpec, type RelayProtocol, type RelayRouteSpec, type RelaySpec, type TestResult } from "../chat/useModelFamilies";
+import { filterSettingsProviders, providerSourceLabel } from "../chat/settingsModels";
+import type { SettingsLocation } from "./settingsNavigation";
+import { DisclosureLabel } from "./Disclosure";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { Icon } from "./Icon";
 import { ProviderIcon } from "./ProviderIcon";
-import { useSettingsEditor, type SettingsEditorHandle } from "./settingsEditor";
+import { useSettingsListFocus, useSettingsEditor, type SettingsEditorHandle } from "./settingsEditor";
 import { Button, IconButton, Input, Select, Tooltip } from "./ui";
 
 const openLink = (url: string) => void invoke("open_url", { url }).catch((error) => console.error(String(error)));
 
-/** Key fingerprint: first 4 + last 4 (sk-1…8961), shown on the right of a row. */
+/** Saved-key fingerprint, shown only inside the advanced editor options. */
 const keyHint = (key: string) => (key.length > 8 ? `${key.slice(0, 4)}…${key.slice(-4)}` : maskKey(key));
 
 type Draft =
@@ -44,13 +47,19 @@ export type ProvidersSettingsProps = {
 	onTest: (baseUrl: string, apiKey: string, modelId: string, timeoutSeconds: number, requestId?: string, protocol?: RelayProtocol) => Promise<TestResult>;
 	onCancelTest: (requestId: string) => Promise<unknown>;
 	onDiscover: (baseUrl: string, apiKey: string, protocol?: RelayProtocol) => Promise<DiscoveredModel[]>;
-	onOpenRoutes: () => void;
+	onOpenRoutes: (location?: SettingsLocation) => void;
 	onLockChange: (locked: boolean, pending: boolean) => void;
 };
 
 export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, ProvidersSettingsProps>(function ProvidersSettingsContent({ relays, families, usdCnyRate, configError, onSaveRelay, onDeleteRelay, onSetRelayEnabled, onTest, onCancelTest, onDiscover, onOpenRoutes, onLockChange }, ref) {
 	const { catalog } = useModelCatalog();
 	const [query, setQuery] = useState("");
+	const [listQuery, setListQuery] = useState("");
+	const [statusFilter, setStatusFilter] = useState<"all" | "enabled" | "disabled">("all");
+	const [advanced, setAdvanced] = useState(false);
+	const [savedLocation, setSavedLocation] = useState<{ relayId: string; familyIds: string[] }>();
+	const matchedRelays = filterSettingsProviders(relays, listQuery);
+	const shownRelays = matchedRelays.filter((relay) => statusFilter === "all" || relay.enabled === (statusFilter === "enabled"));
 	const [notice, setNotice] = useState<string>();
 	const [reveal, setReveal] = useState(false);
 	const [providerModels, setProviderModels] = useState<ProviderModelDraft[]>([]);
@@ -91,6 +100,7 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 		setRunningTestModels([]); setStoppedTestModels([]);
 	};
 	const { draft, setDraft, pending, setPending, error, setError, removing, setRemoving, contentRef, closeDraft, mutate, rememberEditorTrigger } = useSettingsEditor<Draft>({ ref, onLockChange, onClose: resetConnectionTest });
+	useSettingsListFocus(contentRef, !!draft);
 
 	const excludedTestModels = draft?.kind === "relay" ? draft.relay.excludedModelIds ?? [] : [];
 	const result = testResults.find((item) => item.modelId === testModel);
@@ -134,13 +144,15 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 		setNotice(undefined);
 		setError(undefined);
 		const ok = await onSetRelayEnabled(relayId, enabled);
+		if (ok && statusFilter !== "all") requestAnimationFrame(() => contentRef.current?.querySelector<HTMLElement>(".settings-toolbar input")?.focus());
 		if (!ok) contentRef.current?.querySelector<HTMLElement>(".provider-error")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+		return ok;
 	};
 	const openRelay = (relay?: RelaySpec, preset?: ProviderPreset) => {
 		rememberEditorTrigger();
 		resetConnectionTest();
 		setNotice(undefined);
-		setError(undefined); setReveal(false);
+		setError(undefined); setReveal(false); setAdvanced(false);
 		if (relay) {
 			const configured = families.flatMap((family) => family.routes.filter((route) => route.relayId === relay.id).flatMap((route) => route.models.map((model) => ({ familyId: family.id, model: { ...model } }))));
 			const excluded = new Set(relay.excludedModelIds ?? []);
@@ -373,6 +385,7 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 			const saved = await onSaveRelay(relay, routes);
 			if (saved) {
 				setNotice(`已保存「${saved.name}」，同步 ${providerModels.length} 个模型到 ${routes.length} 条路线。`);
+				setSavedLocation({ relayId: saved.id, familyIds: routes.map((item) => item.familyId) });
 				setDraft(undefined);
 			} else {
 				setError("保存失败，请检查填写内容");
@@ -380,7 +393,7 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 		} finally { setPending(false); }
 	};
 
-	// A provider row counts the models its routes serve, deduplicated per family.
+	// Count configured, included API IDs once per provider across all families.
 	const relayModelCount = useMemo(() => {
 		const counts = new Map<string, Set<string>>();
 		for (const family of families) {
@@ -433,7 +446,13 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 				const relay = draft.relay;
 				const preset = draft.preset;
 				const site = preset?.website;
-				return <form className="preset-editor" onSubmit={(event) => void submitRelay(event)}>
+				return <form className="preset-editor" onInvalidCapture={(event) => {
+					if ((event.target as HTMLElement).closest(".settings-advanced")) {
+						setAdvanced(true);
+						const field = event.target as HTMLElement;
+						requestAnimationFrame(() => field.focus());
+					}
+				}} onSubmit={(event) => void submitRelay(event)}>
 					<div className="editor-head">
 						<ProviderIcon id={preset?.id ?? ""} name={relay.name} size={20} />
 						<h2 id="providers-title">{draft.isNew ? (preset ? preset.name : "自定义供应商") : relay.name}</h2>
@@ -467,7 +486,7 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 									<IconButton type="button" variant="ghost" size="compact" aria-label={reveal ? "隐藏密钥" : "显示密钥"} aria-controls="relay-key" aria-pressed={reveal} onClick={() => setReveal((value) => !value)} disabled={pending}><Icon name={reveal ? "eye-off" : "eye"} /></IconButton>
 								</Tooltip>
 							</span>
-							<small>密钥在本机加密保存，列表仅显示后 4 位。</small>
+							<small>密钥在本机加密保存；已保存密钥指纹可在高级选项中查看。</small>
 							{preset?.keysUrl && <Button type="button" variant="ghost" size="compact" className="editor-key-link" onClick={() => openLink(preset.keysUrl)}>获取密钥 ↗</Button>}
 						</div>
 					</div>
@@ -498,20 +517,25 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 						{modelListNotice && <small className="provider-model-list-notice" role="status">{modelListNotice}</small>}
 						<Button type="button" variant="ghost" size="compact" className="provider-model-add" disabled={pending || testing} onClick={() => setProviderModels((previous) => [...previous, { familyId: preset?.familyId, model: blankModel() }])}><Icon name="plus" size={14} />添加模型</Button>
 					</section>
-					<div className="editor-field">
-						<label htmlFor="relay-account">扣费账户</label>
-						<div className="editor-control">
-							<Input id="relay-account" maxLength={128} placeholder="wallet-a（同一账户使用同一标识）" value={relay.billingAccountId} onChange={(event) => patchRelay({ billingAccountId: event.target.value })} disabled={pending} />
-							<small>留空按未知账户处理；自动切换到不同或未知账户时需确认。</small>
+					<details className="settings-advanced" open={advanced} onToggle={(event) => setAdvanced(event.currentTarget.open)}>
+						<summary className="process-disclosure"><DisclosureLabel status={[relay.billingAccountId ? "已设置账户" : "", relay.timeoutSeconds !== 60 ? `超时 ${relay.timeoutSeconds} 秒` : ""].filter(Boolean).join(" · ")}>高级选项</DisclosureLabel></summary>
+						<div className="editor-field">
+							<label htmlFor="relay-account">扣费账户</label>
+							<div className="editor-control">
+								<Input id="relay-account" maxLength={128} placeholder="wallet-a（同一账户使用同一标识）" value={relay.billingAccountId} onChange={(event) => patchRelay({ billingAccountId: event.target.value })} disabled={pending} />
+								<small>留空按未知账户处理；自动切换到不同或未知账户时需确认。</small>
+							</div>
 						</div>
-					</div>
-					<div className="editor-field">
-						<label htmlFor="relay-timeout">超时</label>
-						<div className="editor-control">
-							<Input id="relay-timeout" type="number" min={5} max={600} value={relay.timeoutSeconds} onChange={(event) => patchRelay({ timeoutSeconds: Number(event.target.value) })} disabled={pending} />
-							<small>超过此时间会终止请求并提示超时。</small>
+						<div className="editor-field">
+							<label htmlFor="relay-timeout">超时</label>
+							<div className="editor-control">
+								<Input id="relay-timeout" type="number" min={5} max={600} value={relay.timeoutSeconds} onChange={(event) => patchRelay({ timeoutSeconds: Number(event.target.value) })} disabled={pending} />
+								<small>超过此时间会终止请求并提示超时。</small>
+							</div>
 						</div>
-					</div>
+						{!draft.isNew && <p className="muted">已保存密钥指纹：{relays.find((item) => item.id === relay.id)?.apiKey ? keyHint(relays.find((item) => item.id === relay.id)!.apiKey) : "未设置密钥"}</p>}
+					</details>
+					<p className="muted">保存后可编辑路线</p>
 					<div className="test-row">
 						<Button type="button" variant="ghost" onClick={() => void testRelay()} disabled={pending || testing || !relay.baseUrl || (!relay.apiKey && !preset?.keyOptional)}>{testing ? "正在测试…" : "测试连接"}</Button>
 						<Button type="button" variant="ghost" onClick={() => void testRelay(undefined, true)} disabled={pending || testing || !relay.baseUrl || (!relay.apiKey && !preset?.keyOptional)}>测试所有模型（5 并发）</Button>
@@ -569,24 +593,32 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 			<>
 				<h2 id="providers-title">供应商</h2>
 				<p className="muted">供应商提供模型访问端点与密钥；模型列表在编辑供应商时配置。共 {relays.length} 个供应商。</p>
-				{notice && <p className="family-added-hint" role="status">{notice}<Button type="button" variant="ghost" size="compact" onClick={onOpenRoutes}>查看路线</Button></p>}
+				{notice && <div className="family-added-hint" role="status">{notice}{savedLocation?.familyIds.map((familyId) => {
+					const route = families.find((item) => item.id === familyId)?.routes.find((item) => item.relayId === savedLocation.relayId);
+					return <Button key={familyId} type="button" variant="ghost" size="compact" onClick={() => onOpenRoutes({ familyId, relayId: savedLocation.relayId, routeId: route?.id })}>查看{FAMILY_LABELS[familyId] ?? familyId}路线</Button>;
+				})}</div>}
+				<div className="settings-toolbar" role="group" aria-label="供应商筛选">
+					<Input aria-label="搜索已配置供应商" placeholder="搜索名称或端点…" value={listQuery} onChange={(event) => setListQuery(event.target.value)} />
+					<div className="settings-filter-group">{([ ["all", "全部"], ["enabled", "启用"], ["disabled", "停用"] ] as const).map(([value, label]) => <Button key={value} size="compact" variant="ghost" aria-pressed={statusFilter === value} onClick={() => setStatusFilter(value)}>{label} {matchedRelays.filter((relay) => value === "all" || relay.enabled === (value === "enabled")).length}</Button>)}</div>
+					<Button onClick={openPick} disabled={pending}><Icon name="plus" size={14} />添加供应商</Button>
+				</div>
 				<section className="family-card" aria-label="供应商列表">
-					{relays.length === 0 && <p className="family-empty">还没添加供应商，从下面的目录挑一个，或用自定义地址。</p>}
-					{relays.map((relay) => {
+					{relays.length === 0 && <p className="family-empty">还没添加供应商，点击「添加供应商」选择预设或填写自定义地址。</p>}
+					{!shownRelays.length && relays.length > 0 && <p className="family-empty">没有匹配的供应商，请调整搜索或状态筛选。</p>}
+					{shownRelays.map((relay) => {
 						const preset = matchPreset(relay.baseUrl);
 						const protocol = RELAY_PROTOCOLS.find((item) => item.id === (relay.protocol ?? "openai"));
 						return <div className={`provider-row provider-relay-row ${relay.enabled ? "" : "disabled"}`} key={relay.id}>
 							<button type="button" className="provider-relay-btn" onClick={() => openRelay(relay, preset)} disabled={pending} aria-label={`编辑 ${relay.name}`}>
 								<ProviderIcon id={preset?.id ?? ""} name={relay.name} size={22} />
 								<span className="provider-row-text">
-									<span className="provider-row-title"><strong title={relay.name}>{relay.name}</strong>{!relay.enabled && <span className="provider-tag muted-tag">已停用</span>}</span>
+									<span className="provider-row-title"><strong title={relay.name}>{relay.name}</strong><span className="provider-tag">{providerSourceLabel(relay.baseUrl)}</span></span>
 									<small className="provider-row-meta"><span className="provider-row-endpoint" title={maskBaseUrl(relay.baseUrl)}>{maskBaseUrl(relay.baseUrl)}</span><span className="provider-row-count">· {protocol?.label ?? "OpenAI"} · {relayModelCount(relay.id) ? `${relayModelCount(relay.id)} 个模型` : "未配置模型"}</span></small>
 								</span>
 							</button>
 							<div className="provider-row-side">
-								<span className="provider-key" title={relay.apiKey ? "密钥已保存" : undefined}>{relay.apiKey && <><span className="dot ok" />{keyHint(relay.apiKey)}</>}</span>
 								<label className="switch" title={relay.enabled ? "停用" : "启用"}>
-									<input type="checkbox" checked={relay.enabled} disabled={pending} onChange={(event) => void toggleRelay(relay.id, event.target.checked)} aria-label={`${relay.enabled ? "停用" : "启用"} ${relay.name}`} />
+									<input type="checkbox" checked={relay.enabled} disabled={pending} onChange={(event) => { const enabled = event.target.checked; void mutate(() => toggleRelay(relay.id, enabled)); }} aria-label={`${relay.enabled ? "停用" : "启用"} ${relay.name}`} />
 									<span className="slider" />
 								</label>
 								<Icon name="chevron" size={14} />
@@ -595,10 +627,6 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 					})}
 					{(configError || error) && <p className="form-error provider-error" role="alert">{configError || error}</p>}
 				</section>
-				<button type="button" className="preset-custom provider-add" onClick={openPick} disabled={pending}>
-					<Icon name="plus" size={14} />
-					<span>添加供应商</span>
-				</button>
 			</>
 		)}
 		{removing && <ConfirmDialog title={removing.title} description={removing.description} onConfirm={() => void mutate(removing.action)} onClose={() => setRemoving(undefined)} />}

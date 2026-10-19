@@ -7,7 +7,7 @@ import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const { chromium } = process.env.SKIFF_PLAYWRIGHT_DIR ? require(process.env.SKIFF_PLAYWRIGHT_DIR) : await import("playwright");
 const origin = process.argv[2] ?? "http://localhost:1423";
-const output = new URL("../features/027-model-family-settings/screenshots/", import.meta.url);
+const output = new URL("../features/028-settings-information-redesign/screenshots/", import.meta.url);
 await fs.mkdir(output, { recursive: true });
 const browser = await chromium.launch({ headless: true, channel: "msedge" });
 const page = await browser.newPage({ viewport: { width: 1100, height: 750 } });
@@ -16,7 +16,7 @@ const errors = [];
 page.on("pageerror", (error) => errors.push(String(error)));
 const dialog = () => page.getByRole("dialog", { name: "设置", exact: true });
 const button = (name) => dialog().getByRole("button", { name, exact: true });
-const shot = (name) => page.screenshot({ animations: "disabled", path: new URL(`${name}.png`, output).pathname.replace(/^\/([A-Z]:)/, "$1") });
+const shot = (name) => page.screenshot({ animations: "disabled", path: new URL(`models-settings-${name}.png`, output).pathname.replace(/^\/([A-Z]:)/, "$1") });
 const open = async (theme = "light", { reset = false, persist = false } = {}) => {
 	await page.goto(`${origin}/tests/preview.html?fixture=archive&theme=${theme}${persist ? "&persist=1" : ""}`);
 	if (reset) await page.evaluate(() => localStorage.removeItem("skiff.family-models.v1"));

@@ -5,6 +5,9 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 	const processes = new Map();
 	const saved = sessionOverrides ?? JSON.parse(storage?.getItem("skiff.test.sessions") ?? "{}");
 	const commands = [];
+	const testRequests = [];
+	const pendingTests = [];
+	let deferTests = false;
 	let historyTargets = [];
 	const histories = new Map();
 	let sequence = 0;
@@ -46,6 +49,18 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 			families.slice(1).forEach((family) => { family.routes = []; });
 		}
 		if (fixture === "unknown") families.filter((family) => family.id !== "kimi").forEach((family) => { family.routes = []; });
+	}
+	if (fixture === "settings-info") {
+		relays[1].protocol = "anthropic";
+		relays[1].timeoutSeconds = 123;
+		relays[1].excludedModelIds = ["excluded/deepseek-flash"];
+		families[0].routes[0].models = [families[0].routes[0].models[1]];
+		families[0].routes[1].models = ["excluded/deepseek-flash", "first/deepseek-v4.1-flash", "second/deepseek-v4.1-flash", "manual-history"].map((modelId, index) => ({ ...families[0].routes[0].models[0], modelId, alias: index === 3 ? "历史手动模型" : "", inputCost: index, outputCost: index * 2, currency: index % 2 ? "USD" : "CNY" }));
+		relays.push({ ...relays[0], id: "local", name: "本机服务", baseUrl: "http://localhost:11434/v1", apiKey: "", enabled: false });
+		relays.push({ ...relays[0], id: "custom", name: "自定义端点", baseUrl: "https://unknown.example.com/v1", enabled: false });
+		families[0].routes.push(route("deepseek", "custom", [{ ...families[0].routes[0].models[0], modelId: "deepseek-flash" }]));
+		families[1].routes.push(route("kimi", "local", []));
+		families[3].routes = [route("auto", "r2", [{ ...families[0].routes[0].models[0], modelId: "excluded/deepseek-flash" }])];
 	}
 	const relayOf = (relayId) => relays.find((relay) => relay.id === relayId);
 	// Same ladder pi uses: a level exists only when thinkingLevelMap declares it.
@@ -106,7 +121,7 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 				return familiesConfig();
 			}
 			if (command === "list_model_runtime") return offers();
-			if (command === "fetch_public_catalog") return { models: [], stale: false, fetchedAt: 0 };
+			if (command === "fetch_public_catalog") return { models: fixture === "settings-info" ? [{ modelId: "deepseek-flash", name: "DeepSeek V4.1 Flash 1017", provider: "deepseek" }] : [], stale: false, fetchedAt: 0 };
 			// Mock latest-model sources: official pages aligned with the families
 			// fixture so the models family view can exercise offline trimming.
 			if (command === "fetch_official_pages") return {
@@ -119,6 +134,9 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 			};
 			if (command === "cancel_provider_test") return;
 			if (command === "test_provider_connection") {
+				const { apiKey: _key, ...request } = args;
+				testRequests.push(request);
+				if (deferTests) return new Promise((resolve, reject) => pendingTests.push({ requestId: args.requestId, resolve, reject }));
 				if (String(args.baseUrl).includes("fail")) return { ok: false, latencyMs: 42, status: 401, error: "Invalid API key" };
 				return { ok: true, latencyMs: 137, status: 200, error: null };
 			}
@@ -335,5 +353,5 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 			}
 		},
 	};
-	return { histories, saved, commands, processes, listeners, callbacks, emit, failNextSend: () => { failSend = true; } };
+	return { histories, saved, commands, processes, listeners, callbacks, emit, testRequests, pendingTests, deferTests: (value) => { deferTests = value; }, failNextSend: () => { failSend = true; } };
 }

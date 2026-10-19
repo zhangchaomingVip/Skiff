@@ -5,7 +5,7 @@ import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const { chromium } = process.env.SKIFF_PLAYWRIGHT_DIR ? require(process.env.SKIFF_PLAYWRIGHT_DIR) : await import("playwright");
 const origin = process.argv[2] ?? "http://127.0.0.1:1423";
-const output = new URL("../features/023-unified-settings-entry/screenshots/", import.meta.url);
+const output = new URL("../features/028-settings-information-redesign/screenshots/", import.meta.url);
 await fs.mkdir(output, { recursive: true });
 const browser = await chromium.launch({ headless: true, channel: "msedge" });
 const page = await browser.newPage({ viewport: { width: 1100, height: 750 } });
@@ -22,7 +22,7 @@ const assertNoDisabledFrame = async (element) => {
 	assert.deepEqual(colors, ["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"]);
 };
 const wait = (fn, arg) => page.waitForFunction(fn, arg);
-const shot = (name) => page.screenshot({ animations: "disabled", path: new URL(`${name}.png`, output).pathname.replace(/^\/([A-Z]:)/, "$1") });
+const shot = (name) => page.screenshot({ animations: "disabled", path: new URL(`settings-${name}.png`, output).pathname.replace(/^\/([A-Z]:)/, "$1") });
 const ready = () => wait(() => document.querySelector(".settings-trigger")?.textContent.includes("pi 已连接"));
 const open = async () => { await page.keyboard.press("Control+Comma"); await dialog().waitFor(); };
 const close = async () => { await button("关闭设置").click(); await dialog().waitFor({ state: "detached" }); };
@@ -131,7 +131,8 @@ try {
 	assert.equal(savedModel.excluded.includes("deepseek-chat"), false, "Restoring a model ID must clear its exclusion");
 	await button("路线").click();
 	assert.equal(await button("编辑 官方直连").count(), 0, "Route page must not list providers");
-	await button("编辑 官方直连 的路线").click();
+	await button("更多 官方直连 的路线操作").first().click();
+	await dialog().getByRole("menuitem", { name: "编辑 官方直连 的路线", exact: true }).click();
 	await page.keyboard.press("Escape");
 	assert.equal(await dialog().count(), 1);
 	await button("供应商").click();

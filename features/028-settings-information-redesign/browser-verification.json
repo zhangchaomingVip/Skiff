@@ -1,0 +1,25 @@
+{
+  "browser": "151.0.4129.101",
+  "environment": {
+    "platform": "Win32",
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36 Edg/151.0.0.0",
+    "devicePixelRatio": 1
+  },
+  "mode": "Vite development; headless Edge; simulated pi/Tauri only",
+  "viewports": [
+    "1100x750",
+    "600x400",
+    "550x375 (layout equivalent of 200% at 1100x750; not native WebView zoom)"
+  ],
+  "checks": [
+    "all entries share one settings dialog",
+    "system/light/dark, reload persistence, live system changes, preserved draft and process IDs",
+    "keyboard isolation, IME, Tab cycle, popup handoff",
+    "editor return focus, pending Escape, failure/retry",
+    "nested confirmations and late test cancellation",
+    "archive preview, drawer handoff, resize fallback",
+    "running session and background authorization isolation",
+    "configuration error and recovery access"
+  ],
+  "errors": []
+}

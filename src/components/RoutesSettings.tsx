@@ -4,12 +4,16 @@ import { catalogVision } from "../chat/modelVision";
 import { catalogEntryToPriced, type PricedModel } from "../chat/pricingPage";
 import { modelIdMatchesCatalog } from "../chat/latestModels";
 import { useModelCatalog } from "../chat/useModelCatalog";
+import { useFamilyModels } from "../chat/useFamilyModels";
+import { routeBlockedReason, routeMatchesQuery } from "../chat/settingsModels";
+import type { SettingsLocation } from "./settingsNavigation";
+import { SettingsRouteRow } from "./SettingsRouteRow";
 import { BrandIcon, type BrandName } from "./BrandIcon";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { Icon } from "./Icon";
 import { ModelIdField } from "./ModelIdField";
 import { PriceImport, type ExtractorPick } from "./PriceImport";
-import { useSettingsEditor, type SettingsEditorHandle } from "./settingsEditor";
+import { useSettingsListFocus, useSettingsEditor, type SettingsEditorHandle } from "./settingsEditor";
 import { Button, IconButton, Input, Select } from "./ui";
 
 const BRANDABLE = ["deepseek", "kimi", "glm"] as const;
@@ -39,14 +43,21 @@ export type RoutesSettingsProps = {
 	onOpenModels: () => void;
 	onLockChange: (locked: boolean, pending: boolean) => void;
 	focusFamily?: string;
+	focusLocation?: SettingsLocation;
 };
 
-export const RoutesSettingsContent = forwardRef<SettingsEditorHandle, RoutesSettingsProps>(function RoutesSettingsContent({ families, relays, autoFailover, usdCnyRate, onSaveRate, configError, onSaveRoute, onDeleteRoute, onReorderRoutes, onSetDefaultRoute, onAutoFailover, onOpenProviders, onLockChange, focusFamily }, ref) {
+export const RoutesSettingsContent = forwardRef<SettingsEditorHandle, RoutesSettingsProps>(function RoutesSettingsContent({ families, relays, autoFailover, usdCnyRate, onSaveRate, configError, onSaveRoute, onDeleteRoute, onReorderRoutes, onSetDefaultRoute, onAutoFailover, onOpenProviders, onLockChange, focusFamily, focusLocation }, ref) {
 	const { catalog, catalogStale, catalogFetchedAt, latest } = useModelCatalog();
+	const { config: visibleModels } = useFamilyModels();
+	const [query, setQuery] = useState("");
+	const [onlyAvailable, setOnlyAvailable] = useState(false);
+	const filtered = !!query.trim() || onlyAvailable;
+	const shownRoutes = (family: ModelFamily) => family.routes.filter((route) => routeMatchesQuery(route, relays.find((relay) => relay.id === route.relayId), query) && (!onlyAvailable || !routeBlockedReason(route, relays.find((relay) => relay.id === route.relayId))));
 	// 家族筛选：undefined 表示「全部路线」。
 	const [selectedFamily, setSelectedFamily] = useState<string>();
 	useEffect(() => { if (focusFamily) setSelectedFamily(focusFamily); }, [focusFamily]);
 	const { draft, setDraft, pending, setPending, error, setError, removing, setRemoving, contentRef, closeDraft, mutate, rememberEditorTrigger } = useSettingsEditor<Draft>({ ref, onLockChange });
+	useSettingsListFocus(contentRef, !!draft);
 
 	const openRoute = (familyId: string, route?: RouteSpec, preferredRelayId?: string) => {
 		rememberEditorTrigger();
@@ -54,6 +65,16 @@ export const RoutesSettingsContent = forwardRef<SettingsEditorHandle, RoutesSett
 		const fallbackRelay = preferredRelayId ?? relays[0]?.id ?? "";
 		setDraft({ kind: "route", familyId, route: route ? { ...route, models: route.models.length ? route.models.map((model) => ({ ...model, vision: model.vision ?? catalogVision(model.modelId, catalog) })) : [blankModel()] } : blankRoute(fallbackRelay), isNew: !route });
 	};
+	useEffect(() => {
+		if (!focusLocation?.familyId) return;
+		const family = families.find((item) => item.id === focusLocation.familyId);
+		const route = family?.routes.find((item) => (!focusLocation.routeId || item.id === focusLocation.routeId) && (!focusLocation.relayId || item.relayId === focusLocation.relayId));
+		setSelectedFamily(focusLocation.familyId);
+		if (family && route && (focusLocation.routeId || focusLocation.relayId)) {
+			Array.from(contentRef.current?.querySelectorAll<HTMLElement>("[data-route-id]") ?? []).find((element) => element.dataset.routeId === route.id)?.querySelector<HTMLButtonElement>(".provider-row-actions button")?.focus();
+			openRoute(family.id, route);
+		}
+	}, [focusLocation]);
 	const patchRoute = (value: Partial<RouteSpec>) => {
 		setDraft((current) => current && current.kind === "route" ? { ...current, route: { ...current.route, ...value } } : current);
 	};
@@ -231,7 +252,11 @@ export const RoutesSettingsContent = forwardRef<SettingsEditorHandle, RoutesSett
 		) : (
 			<>
 				<h2 id="routes-title">路线</h2>
-				<p className="muted">路线把一个供应商接到一个模型家族上，模型、单价与能力按路线保存；共 {`${total}`} 条路线。</p>
+				<p className="muted">路线把供应商接到模型家族，价格与能力按模型配置；共 {total} 条路线。</p>
+				<div className="settings-toolbar" role="group" aria-label="路线筛选">
+					<Input aria-label="搜索路线" placeholder="搜索供应商、模型 ID 或显示名…" value={query} onChange={(event) => setQuery(event.target.value)} />
+					<label className="provider-toggle inline"><input type="checkbox" checked={onlyAvailable} onChange={(event) => setOnlyAvailable(event.target.checked)} />仅看可用</label>
+				</div>
 				{relays.length === 0 ? (
 					<section className="family-card">
 						<div className="family-card-head">
@@ -245,38 +270,37 @@ export const RoutesSettingsContent = forwardRef<SettingsEditorHandle, RoutesSett
 					<nav className="family-nav" aria-label="按家族筛选路线">
 						<button type="button" className={`family-nav-item ${selectedFamily ? "" : "active"}`} aria-pressed={!selectedFamily} onClick={() => setSelectedFamily(undefined)}>
 							<span className="family-nav-label">全部路线</span>
-							<small>{total}</small>
+							<small>{families.reduce((sum, family) => sum + shownRoutes(family).length, 0)} / {total}</small>
 						</button>
 						{families.map((family) => <button type="button" key={family.id} className={`family-nav-item ${selectedFamily === family.id ? "active" : ""}`} aria-pressed={selectedFamily === family.id} onClick={() => setSelectedFamily(family.id)}>
 							{brand(family.id) && <BrandIcon name={brand(family.id)!} size={14} />}
 							<span className="family-nav-label">{FAMILY_LABELS[family.id] ?? family.displayName}</span>
-							<small>{family.routes.length}</small>
+							<small>{shownRoutes(family).length} / {family.routes.length}</small>
 						</button>)}
 					</nav>
 					<div className="family-panel">
 					{(selectedFamily ? families.filter((family) => family.id === selectedFamily) : families).map((family) => <section className="family-card" key={family.id}>
 						<div className="family-card-head">
-							<span className="family-card-title">{brand(family.id) && <BrandIcon name={brand(family.id)!} size={15} />}{FAMILY_LABELS[family.id] ?? family.displayName}<small>{family.routes.length} 条路线</small></span>
+							<span className="family-card-title">{brand(family.id) && <BrandIcon name={brand(family.id)!} size={15} />}{FAMILY_LABELS[family.id] ?? family.displayName}<small>显示 {shownRoutes(family).length} / 共 {family.routes.length} 条</small></span>
 							<Button type="button" variant="ghost" size="compact" onClick={() => openRoute(family.id)} disabled={pending || !relays.length} title={relays.length ? undefined : "请先添加供应商"}>添加路线</Button>
 						</div>
 						{family.routes.length === 0 && <p className="family-empty">还没添加路线，去添加</p>}
-					{family.routes.map((route, index) => <div className={`provider-row ${route.enabled ? "" : "disabled"}`} key={route.id || route.relayId}>
-							<label className="switch" title={route.enabled && family.defaultRouteId === route.id ? "默认路线不可停用，请先选择替代路线或清空默认值" : route.enabled ? "停用路线" : "启用路线"}>
-								<input type="checkbox" checked={route.enabled} disabled={pending || (route.enabled && family.defaultRouteId === route.id)} onChange={(event) => void mutate(() => onSaveRoute(family.id, { ...route, enabled: event.target.checked }))} aria-label={`${route.enabled ? "停用" : "启用"} ${relayName(route.relayId)} 的路线`} />
-								<span className="slider" />
-							</label>
-							<div className="provider-row-main">
-							<div className="provider-row-title"><strong>{relayName(route.relayId)}</strong>{family.defaultRouteId === route.id && <span className="provider-tag">默认</span>}{!route.enabled && <span className="provider-tag muted-tag">路线已停用</span>}</div>
-								<small>{route.models.length ? `${route.models.length} 个模型：${route.models.map((model) => model.modelId).join("、")}` : "未配置完整，请添加模型"}</small>
-							</div>
-							<div className="provider-row-actions">
-								<IconButton type="button"  disabled={pending || index === 0} onClick={() => void mutate(() => onReorderRoutes(family.id, reorder(family.routes, index, -1)))} aria-label={`上移 ${relayName(route.relayId)} 的路线`}><Icon name="arrow" size={14} /></IconButton>
-								<IconButton type="button" className="flip" disabled={pending || index === family.routes.length - 1} onClick={() => void mutate(() => onReorderRoutes(family.id, reorder(family.routes, index, 1)))} aria-label={`下移 ${relayName(route.relayId)} 的路线`}><Icon name="arrow" size={14} /></IconButton>
-								<IconButton type="button"  disabled={pending || family.defaultRouteId === route.id || !route.models.length || !route.enabled || !relays.find((relay) => relay.id === route.relayId)?.enabled} onClick={() => void mutate(() => onSetDefaultRoute(family.id, route.id))} title="设为默认路线" aria-label={`将 ${relayName(route.relayId)} 的路线设为默认`}><Icon name="check" size={14} /></IconButton>
-								<IconButton type="button"  onClick={() => openRoute(family.id, route)} disabled={pending} aria-label={`编辑 ${relayName(route.relayId)} 的路线`}><Icon name="edit" size={14} /></IconButton>
-								<IconButton type="button"  onClick={() => setRemoving({ title: "删除路线", description: `将从「${FAMILY_LABELS[family.id] ?? family.displayName}」移除 ${relayName(route.relayId)} 的路线。`, action: () => onDeleteRoute(family.id, route.id) })} disabled={pending} title="删除" aria-label={`删除 ${relayName(route.relayId)} 的路线`}><Icon name="trash" size={14} /></IconButton>
-							</div>
-						</div>)}
+						{family.routes.length > 0 && shownRoutes(family).length === 0 && <p className="family-empty">没有匹配的路线，请清除筛选。</p>}
+						{shownRoutes(family).map((route) => {
+							const index = family.routes.indexOf(route);
+							const relay = relays.find((item) => item.id === route.relayId);
+							const name = relayName(route.relayId);
+							const isDefault = family.defaultRouteId === route.id;
+							return <SettingsRouteRow key={route.id} family={family} route={route} relay={relay} catalog={catalog} visibleIds={(visibleModels[family.id] ?? []).map((entry) => entry.modelId)} pending={pending}
+								onToggle={(enabled) => void mutate(async () => { const ok = await onSaveRoute(family.id, { ...route, enabled }); if (ok && onlyAvailable) requestAnimationFrame(() => contentRef.current?.querySelector<HTMLElement>(".settings-toolbar input")?.focus()); return ok; })}
+								actions={[
+									{ label: "编辑", accessible: `编辑 ${name} 的路线`, run: () => openRoute(family.id, route) },
+									{ label: "设为默认", accessible: `将 ${name} 的路线设为默认`, reason: isDefault ? "已是家族默认路线" : routeBlockedReason(route, relay), run: () => void mutate(() => onSetDefaultRoute(family.id, route.id)) },
+									{ label: "上移", accessible: `上移 ${name} 的路线`, reason: filtered ? "请清除搜索并关闭仅看可用后排序" : index === 0 ? "已经是第一条路线" : undefined, run: () => void mutate(() => onReorderRoutes(family.id, reorder(family.routes, index, -1))) },
+									{ label: "下移", accessible: `下移 ${name} 的路线`, reason: filtered ? "请清除搜索并关闭仅看可用后排序" : index === family.routes.length - 1 ? "已经是最后一条路线" : undefined, run: () => void mutate(() => onReorderRoutes(family.id, reorder(family.routes, index, 1))) },
+									{ label: "删除", accessible: `删除 ${name} 的路线`, reason: isDefault ? "默认路线不可删除，请先选择替代路线或显式清空默认值" : undefined, run: () => setRemoving({ title: "删除路线", description: `将从「${FAMILY_LABELS[family.id] ?? family.displayName}」移除 ${name} 的路线。`, action: async () => { const ok = await onDeleteRoute(family.id, route.id); if (ok) requestAnimationFrame(() => contentRef.current?.querySelector<HTMLElement>(".settings-toolbar input")?.focus()); return ok; } }) },
+								]} />;
+						})}
 						{family.defaultRouteId && <Button type="button" variant="ghost" size="compact" disabled={pending} onClick={() => setRemoving({ title: "清空默认路线", description: `明确清空 ${FAMILY_LABELS[family.id] ?? family.displayName} 的默认路线后，可停用或删除原默认路线。已有会话仍使用钉住的路线。`, action: () => onSetDefaultRoute(family.id, null) })}>清空 {FAMILY_LABELS[family.id] ?? family.displayName} 默认路线</Button>}
 					</section>)}
 					<div className="family-footer"><label className="provider-toggle inline"><input type="checkbox" checked={autoFailover} disabled={pending} onChange={(event) => void mutate(() => onAutoFailover(event.target.checked))} />失败时自动切换到同家族下一条提供相同模型的启用路线（默认关闭）</label></div>

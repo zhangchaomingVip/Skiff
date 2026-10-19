@@ -1,4 +1,4 @@
-import { useImperativeHandle, useLayoutEffect, useRef, useState, type Dispatch, type Ref, type RefObject, type SetStateAction } from "react";
+import { useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type Dispatch, type Ref, type RefObject, type SetStateAction } from "react";
 
 /** Handle the settings shell uses to coordinate Escape, pending saves and back. */
 export type SettingsEditorHandle = { pending: boolean; editing: boolean; back: () => void };
@@ -20,6 +20,24 @@ type SettingsEditor<D> = {
 	mutate: (action: () => Promise<boolean>) => Promise<void>;
 	rememberEditorTrigger: () => void;
 };
+
+/** Keep keyboard focus in the toolbar if filtering or a mutation removes its row. */
+export function useSettingsListFocus(content: RefObject<HTMLDivElement>, editing: boolean) {
+	const previous = useRef<HTMLElement>();
+	useEffect(() => {
+		const remember = (event: FocusEvent) => { if (content.current?.contains(event.target as Node)) previous.current = event.target as HTMLElement; };
+		document.addEventListener("focusin", remember);
+		return () => document.removeEventListener("focusin", remember);
+	}, [content]);
+	useLayoutEffect(() => {
+		if (!editing && previous.current && (!document.activeElement || document.activeElement === document.body)) {
+			const target = previous.current.isConnected ? previous.current : content.current?.querySelector<HTMLElement>(".settings-toolbar input, .settings-toolbar button");
+			// Configuration updates can briefly disable the containing fieldset
+			// while the session reconnects. Restore once that lock is released.
+			if (target && !target.matches(":disabled")) target.focus();
+		}
+	});
+}
 
 /**
  * Plumbing shared by the settings pages that swap a list for a form: draft
@@ -56,7 +74,7 @@ export function useSettingsEditor<D extends { kind: string }>({ ref, onLockChang
 			const replacement = Array.from(contentRef.current?.querySelectorAll<HTMLElement>("button[aria-label]") ?? []).find((element) => element.getAttribute("aria-label") === editorTriggerLabel.current);
 			editorTrigger.current = null;
 			editorTriggerLabel.current = null;
-			(target.isConnected ? target : replacement ?? contentRef.current?.querySelector<HTMLElement>("button:not(:disabled)"))?.focus();
+			(target.isConnected ? target : replacement ?? contentRef.current?.querySelector<HTMLElement>(".settings-toolbar input, .settings-toolbar button") ?? contentRef.current?.querySelector<HTMLElement>("button:not(:disabled)"))?.focus();
 		}
 	}, [draft?.kind]);
 	const mutate = async (action: () => Promise<boolean>) => {

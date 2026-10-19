@@ -13,3 +13,6 @@ export const settingsCategories = [
 
 export type SettingsRestrictions = Partial<Record<SettingsCategory, string>>;
 export const isMacPlatform = () => /Mac|iPhone|iPad/.test(navigator.platform);
+
+/** Precise, in-dialog destination; never persisted as a routing preference. */
+export type SettingsLocation = { familyId?: string; relayId?: string; routeId?: string };

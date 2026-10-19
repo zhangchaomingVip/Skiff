@@ -93,6 +93,7 @@ export function matchPreset(baseUrl: string): ProviderPreset | undefined {
 	}
 	return PROVIDER_PRESETS.find((preset) => {
 		const expected = normalize(preset.baseUrl);
+		if (canonicalHost(new URL(baseUrl.trim())) !== canonicalHost(new URL(preset.baseUrl))) return false;
 		// Mutual prefix: a relay typed without /v1 still matches, and a plan
 		// endpoint under the vendor's host does too.
 		return !!expected && (actual.startsWith(expected) || expected.startsWith(actual));

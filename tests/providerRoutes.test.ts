@@ -50,7 +50,7 @@ test("provider model editor updates existing family routes and preserves exclude
 	assert.deepEqual(routes.map((item) => item.familyId), ["deepseek", "kimi"]);
 	assert.equal(routes[0].route.id, "route-deepseek");
 	assert.equal(routes[0].route.reasoning, true);
-	assert.deepEqual(routes[0].route.models.map((model) => model.modelId), ["deepseek-chat", "deepseek-v4", "deepseek-retired"]);
+	assert.deepEqual(routes[0].route.models.map((model) => model.modelId), ["deepseek-chat", "deepseek-retired", "deepseek-v4"]);
 	assert.equal(routes[0].route.models[0].alias, "对话模型");
 	assert.equal(routes[0].route.models[0].contextWindow, 196000);
 	assert.equal(routes[1].route.id, "");
