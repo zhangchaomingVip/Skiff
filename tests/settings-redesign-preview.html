@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>设置页改版演示 · 供应商 / 模型 / 路线</title>
+<style>
+/* ===== 对齐 src/tokens.css（light） ===== */
+:root {
+	--bg: #fafbfc;
+	--panel: #ffffff;
+	--subtle: #edf1f6;
+	--hover: #e1e8f2;
+	--border: #d8dfe8;
+	--boundary: #c4cfdd;
+	--text: #192333;
+	--secondary: #48566b;
+	--muted: #6d7d94;
+	--accent: #2458be;
+	--accent-soft: rgba(36, 88, 190, .09);
+	--ok: #1a7f4b;
+	--ok-soft: rgba(26, 127, 75, .10);
+	--warn: #9a6a00;
+	--warn-soft: rgba(180, 130, 0, .12);
+	--danger: #c43d4b;
+	--danger-soft: rgba(196, 61, 75, .08);
+	--mono: "Cascadia Code", Consolas, Menlo, monospace;
+	--radius: 8px;
+	--radius-sm: 6px;
+	--shadow: 0 1px 2px rgba(16, 24, 40, .05), 0 4px 16px rgba(16, 24, 40, .06);
+}
+* { box-sizing: border-box; margin: 0; }
+body {
+	font: 13px/1.5 "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI", "PingFang SC", sans-serif;
+	background: var(--bg); color: var(--text); padding: 28px 20px 80px;
+}
+.wrap { max-width: 880px; margin: 0 auto; }
+h1 { font-size: 20px; font-weight: 650; margin-bottom: 4px; }
+.lead { color: var(--muted); margin-bottom: 24px; }
+h2.section { font-size: 15px; font-weight: 650; margin: 40px 0 4px; padding-top: 20px; border-top: 1px solid var(--border); }
+p.note { color: var(--muted); font-size: 12.5px; margin-bottom: 16px; }
+.note b { color: var(--secondary); }
+
+/* ===== 通用元件 ===== */
+.card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+.card + .card { margin-top: 12px; }
+.row { display: flex; align-items: center; gap: 12px; padding: 12px 16px; }
+.row + .row { border-top: 1px solid var(--subtle); }
+.row:hover { background: color-mix(in srgb, var(--subtle) 45%, transparent); }
+.grow { flex: 1; min-width: 0; }
+.muted { color: var(--muted); }
+.small { font-size: 12px; }
+.mono { font-family: var(--mono); font-size: 12px; }
+.tag { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; background: var(--subtle); color: var(--secondary); }
+.tag.ok { background: var(--ok-soft); color: var(--ok); }
+.tag.warn { background: var(--warn-soft); color: var(--warn); }
+.tag.off { background: var(--subtle); color: var(--muted); }
+.dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+.dot.ok { background: var(--ok); }
+.dot.off { background: var(--boundary); }
+.dot.bad { background: var(--danger); }
+.logo { width: 28px; height: 28px; border-radius: 7px; display: grid; place-items: center; font-weight: 700; font-size: 13px; color: #fff; flex: none; }
+.btn { border: 1px solid var(--boundary); background: var(--panel); color: var(--text); border-radius: var(--radius-sm); padding: 4px 12px; font-size: 12.5px; cursor: pointer; }
+.btn:hover { background: var(--subtle); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.ghost { border-color: transparent; color: var(--accent); }
+.btn.danger-ghost { border-color: transparent; color: var(--danger); }
+.icon-btn { border: none; background: none; color: var(--muted); cursor: pointer; padding: 4px; border-radius: 5px; font-size: 14px; line-height: 1; }
+.icon-btn:hover { background: var(--subtle); color: var(--text); }
+/* 开关 */
+.switch { position: relative; width: 34px; height: 20px; flex: none; }
+.switch input { opacity: 0; width: 100%; height: 100%; position: absolute; margin: 0; cursor: pointer; }
+.switch .slider { position: absolute; inset: 0; border-radius: 999px; background: var(--boundary); transition: .15s; pointer-events: none; }
+.switch .slider::after { content: ""; position: absolute; width: 14px; height: 14px; border-radius: 50%; background: #fff; top: 3px; left: 3px; transition: .15s; box-shadow: 0 1px 2px rgba(0,0,0,.25); }
+.switch input:checked + .slider { background: var(--accent); }
+.switch input:checked + .slider::after { transform: translateX(14px); }
+/* 分段控件 */
+.seg { display: inline-flex; background: var(--subtle); border-radius: 7px; padding: 2px; gap: 2px; }
+.seg button { border: none; background: none; padding: 3px 12px; border-radius: 5px; font-size: 12px; color: var(--secondary); cursor: pointer; }
+.seg button.on { background: var(--panel); color: var(--text); font-weight: 600; box-shadow: 0 1px 2px rgba(16,24,40,.12); }
+/* 页头工具条 */
+.toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+.search { display: flex; align-items: center; gap: 6px; border: 1px solid var(--boundary); border-radius: var(--radius-sm); padding: 4px 10px; background: var(--panel); color: var(--muted); min-width: 180px; }
+.search input { border: none; outline: none; font-size: 12.5px; background: none; color: var(--text); width: 100%; }
+/* 折叠区 */
+details.adv { border-top: 1px dashed var(--border); margin-top: 4px; }
+details.adv summary { cursor: pointer; color: var(--muted); font-size: 12px; padding: 10px 16px; list-style: none; }
+details.adv summary::before { content: "▸ "; }
+details.adv[open] summary::before { content: "▾ "; }
+.adv-body { padding: 4px 16px 14px; }
+.field { display: flex; gap: 12px; align-items: baseline; padding: 6px 0; }
+.field label { width: 88px; flex: none; color: var(--secondary); font-size: 12.5px; }
+.field input[type=text], .field input[type=number] { border: 1px solid var(--boundary); border-radius: var(--radius-sm); padding: 4px 8px; font-size: 12.5px; width: 240px; background: var(--panel); color: var(--text); }
+.field .hint { color: var(--muted); font-size: 11.5px; }
+/* 家族侧栏（路线页） */
+.family-layout { display: grid; grid-template-columns: 168px 1fr; gap: 14px; align-items: start; }
+.family-nav { position: sticky; top: 20px; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px; }
+.family-nav button { display: flex; align-items: center; gap: 8px; width: 100%; border: none; background: none; padding: 7px 10px; border-radius: var(--radius-sm); cursor: pointer; font-size: 12.5px; color: var(--secondary); }
+.family-nav button.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.family-nav button .n { margin-left: auto; font-size: 11px; color: var(--muted); }
+.card-head { display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-bottom: 1px solid var(--subtle); }
+.card-head .title { font-weight: 650; font-size: 13.5px; }
+/* 模型行内的星级/推荐 */
+.star { color: #d4a017; }
+/* 映射表格 */
+table.map { width: 100%; border-collapse: collapse; font-size: 12px; }
+table.map th, table.map td { border: 1px solid var(--subtle); padding: 6px 10px; text-align: left; }
+table.map thead th { background: var(--subtle); font-weight: 600; }
+.badge-rec { color: var(--accent); font-weight: 700; margin-right: 4px; }
+.kbd-hint { color: var(--muted); font-size: 11.5px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>设置页改版演示</h1>
+<p class="lead">供应商 / 模型 / 路线 三块的信息架构与视觉调整提案 · 仅演示，非实现</p>
+
+<!-- ================= 供应商 ================= -->
+<h2 class="section">① 供应商</h2>
+<p class="note">改动点：<b>工具条</b>（搜索 + 状态筛选 + 主按钮右置）；行内默认<b>只露出来源标签和开关</b>，「已停用」标签不再每行重复；密钥指纹、账户等低频信息<b>收进折叠区</b>。</p>
+
+<div class="toolbar">
+	<span class="search">🔍 <input placeholder="搜索供应商或端点…" /></span>
+	<span class="seg">
+		<button>全部 14</button><button class="on">启用 3</button><button>停用 11</button>
+	</span>
+	<span class="grow"></span>
+	<button class="btn primary">＋ 添加供应商</button>
+</div>
+
+<div class="card">
+	<div class="row">
+		<span class="logo" style="background:#5b6ee1">K</span>
+		<div class="grow">
+			<div><b>Kimi（月之暗面）</b> <span class="tag ok">● 启用</span> <span class="tag">官方</span></div>
+			<div class="small muted">api.moonshot.cn/v1 · OpenAI · 4 个模型</div>
+		</div>
+		<span class="small muted mono" title="密钥已保存">sk-Y•••eSU9</span>
+		<label class="switch"><input type="checkbox" checked /><span class="slider"></span></label>
+		<button class="icon-btn" title="编辑">›</button>
+	</div>
+	<div class="row">
+		<span class="logo" style="background:#0f8a5f">基</span>
+		<div class="grow">
+			<div><b>基元律动</b> <span class="tag ok">● 启用</span> <span class="tag">中转站</span></div>
+			<div class="small muted">tokenrhythm.studio/v1 · OpenAI · 5 个模型 · 最近测试 480 ms</div>
+		</div>
+		<span class="small muted mono">sk_t•••GgQE</span>
+		<label class="switch"><input type="checkbox" checked /><span class="slider"></span></label>
+		<button class="icon-btn">›</button>
+	</div>
+	<div class="row">
+		<span class="logo" style="background:#7c5cd6">t</span>
+		<div class="grow">
+			<div><b>tuftech</b> <span class="tag ok">● 启用</span> <span class="tag">中转站</span></div>
+			<div class="small muted">api.tuftech.org/v1 · OpenAI · 5 个模型</div>
+		</div>
+		<span class="small muted mono">sk-2•••t7vZ</span>
+		<label class="switch"><input type="checkbox" checked /><span class="slider"></span></label>
+		<button class="icon-btn">›</button>
+	</div>
+</div>
+
+<p class="note" style="margin-top:14px">停用行（被筛选隐藏时不会出现）：整行降透明度，不再叠加「已停用」标签——开关位置本身已表达状态。</p>
+<div class="card" style="opacity:.62">
+	<div class="row">
+		<span class="logo" style="background:#9aa7b8">阿</span>
+		<div class="grow">
+			<div><b>阿里云白嫖</b></div>
+			<div class="small muted">…maas.aliyuncs.com/… · OpenAI · 15 个模型</div>
+		</div>
+		<span class="small muted mono">sk-w•••fcgw</span>
+		<label class="switch"><input type="checkbox" /><span class="slider"></span></label>
+		<button class="icon-btn">›</button>
+	</div>
+</div>
+
+<h2 class="section" style="font-size:13px">供应商编辑表单：低频字段折叠</h2>
+<p class="note">「扣费账户」「超时」收进<b>高级选项</b>；表单主线上只留 名称 / 协议 / 密钥 / 端点 / 模型 / 测试。</p>
+<div class="card">
+	<div class="row" style="border-bottom:1px solid var(--subtle)"><b style="font-size:14px">Kimi（月之暗面）</b><span class="tag">Kimi 家族</span><span class="grow"></span><span class="small muted">moonshot.cn ↗</span><button class="icon-btn">✕</button></div>
+	<div class="adv-body">
+		<div class="field"><label>名称</label><input type="text" value="Kimi（月之暗面）" /></div>
+		<div class="field"><label>API 协议</label><input type="text" value="OpenAI 兼容" readonly style="width:140px" /><span class="hint">须与端点实现一致</span></div>
+		<div class="field"><label>API 密钥</label><input type="text" value="••••••••••••••••" /><button class="btn ghost">获取密钥 ↗</button></div>
+		<div class="field"><label>端点</label><input type="text" value="https://api.moonshot.cn/v1" style="width:300px" /></div>
+		<div class="field"><label>模型</label><span class="hint">4 个模型 · 获取模型列表 · 添加模型（略，保持现状）</span></div>
+	</div>
+	<details class="adv">
+		<summary>高级选项（扣费账户 · 超时）</summary>
+		<div class="adv-body">
+			<div class="field"><label>扣费账户</label><input type="text" placeholder="wallet-a（同一账户使用同一标识）" /><span class="hint">留空按未知账户处理；自动切换到不同账户时需确认</span></div>
+			<div class="field"><label>超时</label><input type="number" value="60" style="width:90px" /><span class="hint">秒，超时终止请求</span></div>
+		</div>
+	</details>
+</div>
+
+<!-- ================= 模型 ================= -->
+<h2 class="section">② 模型</h2>
+<p class="note">改动点：家族标签页与「编辑家族模型」不变（这两处已较清晰）；每行补充<b>推荐/旗舰区分</b>与路线可用性，映射表格加上「推荐路线」列，让「用哪条线」一眼可读。</p>
+
+<div class="toolbar">
+	<span class="seg">
+		<button class="on">DeepSeek</button><button>Kimi</button><button>GLM</button>
+	</span>
+	<span class="grow"></span>
+	<button class="btn">联网更新</button>
+	<button class="btn ghost">编辑家族模型</button>
+</div>
+
+<div class="card">
+	<div class="card-head"><span class="title">DeepSeek</span><span class="grow"></span><span class="kbd-hint">每家族展示最新两个模型 · 价格与供应商在「路线」中编辑</span></div>
+	<div class="row">
+		<span class="logo" style="background:#2458be">D</span>
+		<div class="grow">
+			<div><b>deepseek-v4-pro</b> <span class="badge-rec">★</span><span class="tag">旗舰</span> <span class="tag">自动</span></div>
+			<div class="small muted">2 条路线可用 · 默认走 基元律动</div>
+		</div>
+		<span class="small" style="color:var(--ok)">成功 · 612 ms</span>
+		<button class="btn">测试</button>
+	</div>
+	<div class="row">
+		<span class="logo" style="background:#5b9bd5">D</span>
+		<div class="grow">
+			<div><b>deepseek-v4-flash</b> <span class="tag">快速</span> <span class="tag">自动</span></div>
+			<div class="small muted">1 条路线可用 · 默认走 基元律动</div>
+		</div>
+		<span class="small muted">未测试</span>
+		<button class="btn">测试</button>
+	</div>
+	<details class="adv">
+		<summary>实际线路映射（3 家提供商 × 2 个模型）</summary>
+		<div class="adv-body">
+			<table class="map">
+				<thead><tr><th>提供商</th><th>deepseek-v4-pro</th><th>deepseek-v4-flash</th></tr></thead>
+				<tbody>
+					<tr><th><span class="badge-rec">★</span>基元律动</th><td><span class="dot ok"></span> <code>deepseek-v4-0417</code></td><td><span class="dot ok"></span> <code>deepseek-v4-flash-0417</code></td></tr>
+					<tr><th>二龙</th><td><span class="dot ok"></span> <code>deepseek-v4</code></td><td><span class="muted">未检出</span></td></tr>
+					<tr><th>apiko <span class="muted">（停用）</span></th><td><span class="dot off"></span> <code class="muted">deepseek-v4-pro</code></td><td><span class="dot off"></span> <code class="muted">deepseek-v4-flash</code></td></tr>
+				</tbody>
+			</table>
+			<p class="small muted" style="margin-top:8px">★ = 该家族的默认（推荐）路线；绿灯启用 / 灰灯停用。同单元格多个 ID 表示该提供商配置了多个实际调用 ID，不会随机切换。</p>
+		</div>
+	</details>
+</div>
+
+<div class="card">
+	<div class="card-head"><span class="title">Auto</span><span class="grow"></span><span class="kbd-hint">自动选择</span></div>
+	<div class="row">
+		<div class="grow"><b>Auto</b> <span class="small muted">自动选择</span><div class="small muted">5 条路线可用</div></div>
+	</div>
+</div>
+
+<!-- ================= 路线 ================= -->
+<h2 class="section">③ 路线</h2>
+<p class="note">改动点：行内模型列表<b>默认只显示该家族最新的 pro/flash 两个</b>（与模型页的 pickVisibleIds 一致），历史模型收进「查看全部」；右侧操作合并为一个「⋯」菜单；家族导航加「仅看启用」筛选；默认路线用 ★ 前置而不是靠后的小标签。</p>
+
+<div class="family-layout">
+	<nav class="family-nav">
+		<button class="on">全部路线 <span class="n">19</span></button>
+		<button>DeepSeek <span class="n">6</span></button>
+		<button>Kimi <span class="n">4</span></button>
+		<button>GLM <span class="n">5</span></button>
+		<button>Auto <span class="n">4</span></button>
+		<div style="border-top:1px solid var(--subtle); margin:6px 4px 2px; padding:8px 10px 2px">
+			<label class="small muted" style="display:flex; gap:6px; align-items:center; cursor:pointer"><input type="checkbox" checked /> 仅看启用</label>
+		</div>
+	</nav>
+	<div>
+		<div class="card">
+			<div class="card-head"><span class="title">DeepSeek</span> <span class="tag">6 条路线</span><span class="grow"></span><button class="btn">＋ 添加路线</button></div>
+
+			<div class="row">
+				<label class="switch"><input type="checkbox" checked /><span class="slider"></span></label>
+				<div class="grow">
+					<div><span class="star">★</span> <b>基元律动</b></div>
+					<div class="small muted">deepseek-v4-pro · deepseek-v4-flash <button class="btn ghost" style="padding:0 4px; font-size:11.5px">查看全部 5 个模型 ▾</button></div>
+				</div>
+				<span class="small muted">输入 ¥2 / 输出 ¥8 每百万</span>
+				<button class="icon-btn" title="更多操作：设为默认 / 编辑 / 删除">⋯</button>
+			</div>
+
+			<div class="row">
+				<label class="switch"><input type="checkbox" checked /><span class="slider"></span></label>
+				<div class="grow">
+					<div><b>二龙</b></div>
+					<div class="small muted">deepseek-v4-pro <button class="btn ghost" style="padding:0 4px; font-size:11.5px">查看全部 12 个模型 ▾</button></div>
+				</div>
+				<span class="small muted">输入 ¥1.5 / 输出 ¥6</span>
+				<button class="icon-btn">⋯</button>
+			</div>
+
+			<div class="row" style="opacity:.6">
+				<label class="switch"><input type="checkbox" /><span class="slider"></span></label>
+				<div class="grow">
+					<div><b>apiko</b> <span class="tag off">已停用</span></div>
+					<div class="small muted">deepseek-v4-pro · deepseek-v4-flash</div>
+				</div>
+				<span class="small muted">输入 ¥2.4 / 输出 ¥9</span>
+				<button class="icon-btn">⋯</button>
+			</div>
+
+			<details class="adv">
+				<summary>路线排序与更多（拖动排序 · 清空默认路线）</summary>
+				<div class="adv-body small muted">排序柄 ⠿ 在展开此区域后显示，避免列表常态下每行三四个图标按钮。</div>
+			</details>
+		</div>
+
+		<div class="card">
+			<div class="card-head"><span class="title">Kimi</span> <span class="tag">4 条路线</span><span class="grow"></span><button class="btn">＋ 添加路线</button></div>
+			<div class="row">
+				<label class="switch"><input type="checkbox" checked /><span class="slider"></span></label>
+				<div class="grow">
+					<div><span class="star">★</span> <b>Kimi（月之暗面）</b></div>
+					<div class="small muted">kimi-k2.5-pro · kimi-k2.5-flash</div>
+				</div>
+				<span class="small muted">输入 ¥4 / 输出 ¥16</span>
+				<button class="icon-btn">⋯</button>
+			</div>
+		</div>
+
+		<div class="card" style="padding:12px 16px">
+			<label style="display:flex; gap:8px; align-items:center; cursor:pointer"><input type="checkbox" /> <span><b>失败时自动切换</b> <span class="small muted">到同家族下一条提供相同模型的启用路线（默认关闭）</span></span></label>
+		</div>
+	</div>
+</div>
+
+<!-- ================= 附：候选问题的解决方案 ================= -->
+<h2 class="section">附：候选问题逐一解决</h2>
+
+<!-- 问题 1：统一筛选约定 -->
+<h2 class="section" style="font-size:13px">问题 1 → 三页共用同一个「工具条」模式</h2>
+<p class="note">约定：所有列表页顶部都是 <b>搜索 + 状态/分组筛选 + 主操作右置</b>；路线页保留家族左栏但把「仅看启用」挪进工具条，模型页的标签页本身就是分组筛选。下面以供应商页为例：</p>
+<div class="toolbar" style="border:1px dashed var(--boundary); border-radius:var(--radius); padding:10px 12px">
+	<span class="search">🔍 <input placeholder="搜索…（全页通用）" /></span>
+	<span class="seg"><button class="on">全部</button><button>启用</button><button>停用</button></span>
+	<span class="seg"><button class="on">按名称</button><button>按最近使用</button></span>
+	<span class="grow"></span>
+	<button class="btn primary">＋ 主操作</button>
+</div>
+
+<!-- 问题 2：两处真相 -->
+<h2 class="section" style="font-size:13px">问题 2 → 模型编辑只留一处真相：供应商管「接不接」，路线管「怎么算钱」</h2>
+<p class="note">供应商编辑里的模型表去掉价格/能力列，只剩 <b>模型 ID · 上下文 · 显示名 · 测试</b>；价格、缓存单价、推理等级只在路线编辑器出现。供应商行内给出跳转提示：</p>
+<div class="card">
+	<div class="adv-body" style="padding-top:12px">
+		<div class="row" style="border:1px solid var(--subtle); border-radius:var(--radius-sm); padding:8px 12px">
+			<span class="mono grow">deepseek-v4-pro</span>
+			<span class="small muted">200K</span>
+			<span class="small" style="color:var(--ok)">成功 · 480 ms</span>
+			<button class="btn">测试</button>
+			<button class="icon-btn" title="移除">🗑</button>
+		</div>
+		<p class="small muted" style="margin-top:8px">💡 价格、缓存与推理等级在「路线」页按路线配置，<a href="#" style="color:var(--accent)">去 DeepSeek 路线编辑 ↗</a></p>
+	</div>
+</div>
+
+<!-- 问题 3：批量操作 -->
+<h2 class="section" style="font-size:13px">问题 3 → 批量操作：勾选后浮出操作条</h2>
+<p class="note">行首加复选框（hover 显现，减少常态噪音）；选中后顶部浮出批量条：</p>
+<div class="card">
+	<div class="row" style="background:var(--accent-soft)">
+		<b>已选 3 个供应商</b>
+		<span class="grow"></span>
+		<button class="btn">启用</button>
+		<button class="btn">停用</button>
+		<button class="btn danger-ghost">删除</button>
+		<button class="btn ghost">取消选择</button>
+	</div>
+	<div class="row">
+		<input type="checkbox" checked />
+		<span class="logo" style="background:#9aa7b8">阿</span>
+		<div class="grow"><b>阿里云白嫖</b><div class="small muted">…maas.aliyuncs.com/… · 15 个模型</div></div>
+		<label class="switch"><input type="checkbox" /><span class="slider"></span></label>
+	</div>
+	<div class="row">
+		<input type="checkbox" checked />
+		<span class="logo" style="background:#9aa7b8">a</span>
+		<div class="grow"><b>apiko</b><div class="small muted">a-piko.top/v1 · 2 个模型</div></div>
+		<label class="switch"><input type="checkbox" /><span class="slider"></span></label>
+	</div>
+</div>
+
+<!-- 问题 4：测速持久化 -->
+<h2 class="section" style="font-size:13px">问题 4 → 测速结果持久化：行内常驻「上次延迟」</h2>
+<p class="note">每个供应商/路线记录最近一次成功测试的时间与延迟，超过 7 天变灰提示复测：</p>
+<div class="card">
+	<div class="row">
+		<span class="logo" style="background:#0f8a5f">基</span>
+		<div class="grow"><b>基元律动</b><div class="small muted">tokenrhythm.studio/v1 · 5 个模型</div></div>
+		<span class="small"><span class="dot ok"></span> 480 ms <span class="muted">· 2 小时前</span></span>
+		<label class="switch"><input type="checkbox" checked /><span class="slider"></span></label>
+	</div>
+	<div class="row">
+		<span class="logo" style="background:#7c5cd6">t</span>
+		<div class="grow"><b>tuftech</b><div class="small muted">api.tuftech.org/v1 · 5 个模型</div></div>
+		<span class="small muted"><span class="dot bad"></span> 上次失败 · 9 天前，建议复测</span>
+		<label class="switch"><input type="checkbox" checked /><span class="slider"></span></label>
+	</div>
+</div>
+
+<!-- 问题 5：排序/分组 -->
+<h2 class="section" style="font-size:13px">问题 5 → 排序与分组控制并入工具条</h2>
+<p class="note">排序菜单直接画在工具条右侧（与问题 1 的工具条合并），分组按「来源类型」：</p>
+<div class="toolbar" style="border:1px dashed var(--boundary); border-radius:var(--radius); padding:10px 12px">
+	<span class="search">🔍 <input placeholder="搜索供应商…" /></span>
+	<span class="seg"><button class="on">全部 14</button><button>启用 3</button><button>停用 11</button></span>
+	<span class="grow"></span>
+	<span class="small muted">排序</span>
+	<span class="seg"><button>按名称</button><button class="on">按最近使用</button><button>按状态</button></span>
+	<button class="btn primary">＋ 添加供应商</button>
+</div>
+<div class="card">
+	<div class="card-head"><span class="title">官方直连</span> <span class="tag">4</span></div>
+	<div class="row"><span class="logo" style="background:#5b6ee1">K</span><div class="grow"><b>Kimi（月之暗面）</b><div class="small muted">api.moonshot.cn/v1 · 4 个模型</div></div><label class="switch"><input type="checkbox" checked /><span class="slider"></span></label></div>
+	<div class="card-head"><span class="title">中转站</span> <span class="tag">10</span></div>
+	<div class="row"><span class="logo" style="background:#0f8a5f">基</span><div class="grow"><b>基元律动</b><div class="small muted">tokenrhythm.studio/v1 · 5 个模型</div></div><label class="switch"><input type="checkbox" checked /><span class="slider"></span></label></div>
+	<div class="row" style="opacity:.6"><span class="logo" style="background:#9aa7b8">二</span><div class="grow"><b>二龙</b><div class="small muted">newapi.dragon3api.com/v1 · 12 个模型</div></div><label class="switch"><input type="checkbox" /><span class="slider"></span></label></div>
+</div>
+
+</div>
+</body>
+</html>
