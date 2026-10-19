@@ -4,6 +4,8 @@
  * only asks for the API key — the endpoint, console links and the default
  * family come along. Custom relays stay fully hand-typed.
  */
+import type { RelayProtocol } from "./useModelFamilies";
+
 export type PresetKind = "vendor" | "relay" | "local";
 
 export interface ProviderPreset {
@@ -18,6 +20,8 @@ export interface ProviderPreset {
 	keysUrl: string;
 	/** The family this vendor's models belong to, when known upfront. */
 	familyId?: string;
+	/** Wire protocol the endpoint speaks; the OpenAI-compatible default otherwise. */
+	protocol?: RelayProtocol;
 	/** Local servers accept an empty key. */
 	keyOptional?: boolean;
 }
@@ -31,8 +35,8 @@ export const PRESET_KINDS: { kind: PresetKind; title: string; hint: string }[] =
 export const PROVIDER_PRESETS: ProviderPreset[] = [
 	// --- vendors: the model makers Skiff has families for -------------------
 	{ id: "deepseek", name: "DeepSeek", kind: "vendor", baseUrl: "https://api.deepseek.com/v1", website: "https://platform.deepseek.com", keysUrl: "https://platform.deepseek.com/api_keys", familyId: "deepseek" },
-	{ id: "kimi", name: "Kimi（月之暗面）", kind: "vendor", baseUrl: "https://api.moonshot.cn/v1", website: "https://platform.moonshot.cn", keysUrl: "https://platform.moonshot.cn/console/api-keys", familyId: "kimi" },
-	{ id: "kimi-global", name: "Kimi（国际）", kind: "vendor", baseUrl: "https://api.moonshot.ai/v1", website: "https://platform.moonshot.ai", keysUrl: "https://platform.moonshot.ai/console/api-keys", familyId: "kimi" },
+	{ id: "kimi", name: "Kimi（月之暗面）", kind: "vendor", baseUrl: "https://api.moonshot.cn/v1", website: "https://platform.moonshot.cn", keysUrl: "https://platform.moonshot.cn/console/api-keys", familyId: "kimi", protocol: "kimi" },
+	{ id: "kimi-global", name: "Kimi（国际）", kind: "vendor", baseUrl: "https://api.moonshot.ai/v1", website: "https://platform.moonshot.ai", keysUrl: "https://platform.moonshot.ai/console/api-keys", familyId: "kimi", protocol: "kimi" },
 	{ id: "glm", name: "智谱 GLM", kind: "vendor", baseUrl: "https://open.bigmodel.cn/api/paas/v4", website: "https://open.bigmodel.cn", keysUrl: "https://open.bigmodel.cn/usercenter/proj-mgmt/apikeys", familyId: "glm" },
 	{ id: "zai", name: "Z.ai", kind: "vendor", baseUrl: "https://api.z.ai/api/paas/v4", website: "https://z.ai", keysUrl: "https://z.ai/manage-apikey/apikey-list", familyId: "glm" },
 

@@ -1,5 +1,5 @@
-import { forwardRef, useMemo, useState, type FormEvent } from "react";
-import { FAMILY_LABELS, type ModelFamily, type RelaySpec } from "../chat/useModelFamilies";
+import { forwardRef, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { FAMILY_LABELS, type ModelFamily, type RelaySpec, type TestResult } from "../chat/useModelFamilies";
 import { catalogModelIdsMatch, sameModelId } from "../chat/latestModels";
 import { useFamilyModels } from "../chat/useFamilyModels";
 import { BrandIcon, type BrandName } from "./BrandIcon";
@@ -27,6 +27,17 @@ type ModelMappingGroup = {
 	mappings: ModelRouteMapping[];
 };
 
+/** One model's live test, keyed by family plus model ID. */
+type ModelTest = { state: "running" | "done"; relayName: string; result?: TestResult };
+
+const testKeyOf = (familyId: string, modelId: string) => `${familyId}\u0000${modelId}`;
+
+const testTextOf = (test: ModelTest) => test.state === "running"
+	? `正在通过 ${test.relayName} 测试…`
+	: test.result?.ok
+		? `${test.relayName} · 成功 · ${test.result.latencyMs} ms`
+		: `${test.relayName} · 失败${test.result?.status ? ` · HTTP ${test.result.status}` : ""}${test.result?.error ? ` · ${test.result.error}` : ""}`;
+
 /** Routes that can actually serve a model: enabled route on an enabled relay, not excluded. */
 const availableRoutes = (family: ModelFamily, relays: RelaySpec[], modelId: string, catalog: readonly { modelId: string; name?: string | null }[]) =>
 	family.routes.filter((route) => {
@@ -44,6 +55,21 @@ const matchesModel = (modelId: string, targetId: string, catalog: readonly Catal
 
 const aliasFor = (family: ModelFamily, modelId: string, catalog: readonly CatalogIdentity[]) =>
 	family.routes.flatMap((route) => route.models).find((model) => matchesModel(model.modelId, modelId, catalog) && model.alias.trim())?.alias;
+
+/**
+ * The route a single-model test runs on: the family default when it serves
+ * this model, otherwise the first enabled route on an enabled relay that does.
+ * Mirrors how a chat picks its line, so the result describes real usage.
+ */
+const routeForModelTest = (family: ModelFamily, relays: RelaySpec[], modelId: string, catalog: readonly CatalogIdentity[]) => {
+	const serving = family.routes.filter((route) => {
+		const relay = relays.find((item) => item.id === route.relayId);
+		return route.enabled && relay?.enabled && relay.baseUrl.trim() && route.models.some((model) => matchesModel(model.modelId, modelId, catalog) && !relay.excludedModelIds?.includes(model.modelId));
+	});
+	const route = serving.find((item) => item.id === family.defaultRouteId) ?? serving[0];
+	const relay = route ? relays.find((item) => item.id === route.relayId) : undefined;
+	return route && relay ? { route, relay } : undefined;
+};
 
 const routeMappingsFor = (family: ModelFamily, relays: RelaySpec[], modelId: string, catalog: readonly CatalogIdentity[]): ModelRouteMapping[] =>
 	family.routes.flatMap((route) => {
@@ -88,11 +114,13 @@ export type ModelsSettingsProps = {
 	families: ModelFamily[];
 	relays: RelaySpec[];
 	configError?: string;
+	onTest: (baseUrl: string, apiKey: string, modelId: string, timeoutSeconds: number, requestId?: string) => Promise<TestResult>;
+	onCancelTest: (requestId: string) => Promise<unknown>;
 	onOpenRoutes: (familyId?: string) => void;
 	onLockChange: (locked: boolean, pending: boolean) => void;
 };
 
-export const ModelsSettingsContent = forwardRef<SettingsEditorHandle, ModelsSettingsProps>(function ModelsSettingsContent({ families, relays, configError, onOpenRoutes, onLockChange }, ref) {
+export const ModelsSettingsContent = forwardRef<SettingsEditorHandle, ModelsSettingsProps>(function ModelsSettingsContent({ families, relays, configError, onTest, onCancelTest, onOpenRoutes, onLockChange }, ref) {
 	const { config, catalog, setFamilyModels, refreshFamily, updating, updateNotice, clearUpdateNotice } = useFamilyModels();
 	const { draft, setDraft, pending, error, setError, contentRef, closeDraft } = useSettingsEditor<Draft>({ ref, onLockChange });
 	const [adding, setAdding] = useState<string>();
@@ -121,6 +149,56 @@ export const ModelsSettingsContent = forwardRef<SettingsEditorHandle, ModelsSett
 		setError(undefined);
 	};
 
+	// Per-model connectivity check: one in-flight request per model, cancelled
+	// when the row asks to stop or the page unmounts.
+	const [modelTests, setModelTests] = useState<Record<string, ModelTest>>({});
+	const modelTestRequests = useRef(new Map<string, string>());
+	useEffect(() => () => {
+		for (const requestId of modelTestRequests.current.values()) void onCancelTest(requestId).catch(() => {});
+		modelTestRequests.current.clear();
+	}, []);
+	// The guard runs while recording, not inside the state updater: React may
+	// defer the updater until after the request key is already cleaned up.
+	const recordModelTest = (key: string, requestId: string, next: ModelTest) => {
+		if (modelTestRequests.current.get(key) !== requestId) return;
+		setModelTests((previous) => ({ ...previous, [key]: next }));
+	};
+	const runModelTest = async (family: ModelFamily, modelId: string) => {
+		const target = routeForModelTest(family, relays, modelId, catalog);
+		if (!target) return;
+		const key = testKeyOf(family.id, modelId);
+		const requestId = crypto.randomUUID();
+		modelTestRequests.current.set(key, requestId);
+		recordModelTest(key, requestId, { state: "running", relayName: target.relay.name });
+		const started = Date.now();
+		try {
+			recordModelTest(key, requestId, { state: "done", relayName: target.relay.name, result: await onTest(target.relay.baseUrl, target.relay.apiKey, modelId, target.relay.timeoutSeconds, requestId) });
+		} catch (cause) {
+			recordModelTest(key, requestId, { state: "done", relayName: target.relay.name, result: { ok: false, latencyMs: Date.now() - started, status: null, error: String(cause) } });
+		} finally {
+			if (modelTestRequests.current.get(key) === requestId) modelTestRequests.current.delete(key);
+		}
+	};
+	const stopModelTest = (familyId: string, modelId: string) => {
+		const key = testKeyOf(familyId, modelId);
+		const requestId = modelTestRequests.current.get(key);
+		if (!requestId) return;
+		modelTestRequests.current.delete(key);
+		setModelTests((previous) => { const next = { ...previous }; delete next[key]; return next; });
+		void onCancelTest(requestId).catch(() => {});
+	};
+	const modelTestStatus = (family: ModelFamily, modelId: string) => {
+		const test = modelTests[testKeyOf(family.id, modelId)];
+		const running = test?.state === "running";
+		return <span className={`test-result model-test-result ${test && !running ? test.result?.ok ? "ok" : "bad" : "muted"}`} role={test ? "status" : undefined} title={test ? testTextOf(test) : undefined}>{test ? testTextOf(test) : ""}</span>;
+	};
+	/** The action cell is always present, so every row keeps the same column widths. */
+	const modelTestAction = (family: ModelFamily, modelId: string) => {
+		if (modelTests[testKeyOf(family.id, modelId)]?.state === "running") return <Button type="button" variant="ghost" size="compact" onClick={() => stopModelTest(family.id, modelId)}>停止</Button>;
+		const target = routeForModelTest(family, relays, modelId, catalog);
+		return <Button type="button" variant="ghost" size="compact" disabled={pending || !target} title={target ? `通过 ${target.relay.name} 测试 ${modelId}` : "该模型还没有可用路线，请先在路线页接上供应商"} onClick={() => void runModelTest(family, modelId)}>测试</Button>;
+	};
+
 	return <div ref={contentRef} className="settings-editor">
 		{editing ? (
 			<div>
@@ -132,11 +210,13 @@ export const ModelsSettingsContent = forwardRef<SettingsEditorHandle, ModelsSett
 						<Button type="button" variant="ghost" size="compact" disabled={updating.has(family.id)} onClick={() => void refreshFamily(family.id)}>{updating.has(family.id) ? "更新中…" : "联网更新"}</Button>
 					</div>
 					{entries.length === 0 && <p className="family-empty">暂无模型，点「联网更新」获取，或手动添加。</p>}
-					{entries.map((entry, index) => <div className="provider-row" key={`${entry.modelId}:${index}`}>
+					{entries.map((entry, index) => <div className="provider-row model-family-row" key={`${entry.modelId}:${index}`}>
 						<div className="provider-row-main">
 							<div className="provider-row-title"><strong>{entry.modelId}</strong><span className="provider-tag">{entry.origin === "manual" ? "手动" : "自动"}</span></div>
 						</div>
+						{modelTestStatus(family, entry.modelId)}
 						<div className="provider-row-actions">
+							{modelTestAction(family, entry.modelId)}
 							<IconButton type="button" disabled={pending} onClick={() => setFamilyModels(family.id, entries.filter((_, row) => row !== index))} aria-label={`删除 ${entry.modelId}`} title="删除"><Icon name="trash" size={14} /></IconButton>
 						</div>
 					</div>)}
@@ -176,6 +256,8 @@ export const ModelsSettingsContent = forwardRef<SettingsEditorHandle, ModelsSett
 									<div className="provider-row-title"><strong>{alias || entry.modelId}</strong>{alias && <small>{entry.modelId}</small>}{entry.origin === "manual" && <span className="provider-tag">手动</span>}</div>
 									<small className="model-family-meta"><span>{count > 0 ? `${count} 条路线可用` : <button type="button" className="link-button" onClick={() => onOpenRoutes(family.id)}>未接路线，去配置</button>}</span></small>
 								</div>
+								{modelTestStatus(family, entry.modelId)}
+								<div className="provider-row-actions">{modelTestAction(family, entry.modelId)}</div>
 							</div>;
 						})}
 				</section>)}

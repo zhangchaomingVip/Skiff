@@ -6,6 +6,7 @@ Skiff is an AI desktop shell built with React, TypeScript, Vite, and Tauri 2 (Ru
 
 - `src/components/`: UI; `src/chat/`: session state, message parsing, and event reducer.
 - `src/rpc/RpcClient.ts`: frontend RPC bridge; `src-tauri/src/`: native logic, pi lifecycle, and provider configuration.
+- `src-tauri/src/families.rs`: relay/route config and pi projection; `src-tauri/src/pi_extensions/model_families.js`: the runtime adapter that dispatches each relay to the pi API matching its protocol.
 - `src/tokens.css`: design tokens; reuse existing tokens and UI components.
 - `tests/`: automated tests and mock bridge previews; `features/` and `docs/`: designs and research.
 
@@ -37,5 +38,6 @@ Run checks relevant to the change. For UI changes, verify interactions and both 
 
 - Install and configure pi separately. Select its launcher with `SKIFF_PI_PATH` or `PI_CLI_PATH`; respect `PI_CODING_AGENT_DIR`.
 - Preserve existing provider configuration and credentials. Keep API keys out of source, logs, screenshots, and frontend `VITE_` variables.
+- A relay's `protocol` is one of `openai` (default), `kimi`, `openai-responses`, `anthropic`, `google-genai`, `vertex`. It selects the pi API for projection, the request shape for connection tests, and the model-list endpoint; unknown or absent values fall back to `openai`. Anthropic's SDK appends `/v1`, so its stored base URL is trimmed before projection.
 - Review native commands and `src-tauri/capabilities/` permissions when changing process or system access.
 - Do not commit generated files such as `dist/` or `src-tauri/target/`.

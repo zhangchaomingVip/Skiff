@@ -5,10 +5,10 @@ import { catalogEntryToPriced } from "../chat/pricingPage";
 import { catalogVision } from "../chat/modelVision";
 import { slowOrFailedModels, testModelsConcurrently } from "../chat/providerConnection";
 import { filterPresets, hostOf, matchPreset, PRESET_KINDS, type ProviderPreset } from "../chat/providerPresets";
-import { buildDiscoveredRoutes, discoveredFamily } from "../chat/providerRoutes";
+import { discoveredFamily, routesFromProviderModels } from "../chat/providerRoutes";
 import { modelIdMatchesCatalog } from "../chat/latestModels";
 import { useModelCatalog } from "../chat/useModelCatalog";
-import { blankModel, blankRelay, FAMILY_LABELS, maskBaseUrl, maskKey, type ModelFamily, type ModelSpec, type RelayRouteSpec, type RelaySpec, type TestResult } from "../chat/useModelFamilies";
+import { blankModel, blankRelay, FAMILY_LABELS, maskBaseUrl, maskKey, RELAY_PROTOCOLS, validateModels, type ModelFamily, type ModelSpec, type RelayProtocol, type RelayRouteSpec, type RelaySpec, type TestResult } from "../chat/useModelFamilies";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { Icon } from "./Icon";
 import { ProviderIcon } from "./ProviderIcon";
@@ -24,13 +24,14 @@ type Draft =
 	| { kind: "pick" }
 	| { kind: "relay"; relay: RelaySpec; isNew: boolean; preset?: ProviderPreset };
 
+type ProviderModelDraft = { familyId?: string; model: ModelSpec };
+
 /**
  * Providers alone: one access point per row (endpoint plus one API key, reused
  * by every route on it). Adding starts from a vendor directory (search + kind
  * sections); the editor asks for the key over the preset's endpoint and
- * requires one live connection test before a new provider can be saved. A save
- * that discovers supported models also creates their routes, so the page links
- * across to the route settings.
+ * requires one live connection test before a new provider can be saved. Model
+ * edits in this form are projected back onto their family routes when saved.
  */
 export type ProvidersSettingsProps = {
 	relays: RelaySpec[];
@@ -40,18 +41,21 @@ export type ProvidersSettingsProps = {
 	onSaveRelay: (relay: RelaySpec, routes?: RelayRouteSpec[]) => Promise<RelaySpec | undefined>;
 	onDeleteRelay: (relayId: string) => Promise<boolean>;
 	onSetRelayEnabled: (relayId: string, enabled: boolean) => Promise<boolean>;
-	onTest: (baseUrl: string, apiKey: string, modelId: string, timeoutSeconds: number, requestId?: string) => Promise<TestResult>;
+	onTest: (baseUrl: string, apiKey: string, modelId: string, timeoutSeconds: number, requestId?: string, protocol?: RelayProtocol) => Promise<TestResult>;
 	onCancelTest: (requestId: string) => Promise<unknown>;
-	onDiscover: (baseUrl: string, apiKey: string) => Promise<DiscoveredModel[]>;
+	onDiscover: (baseUrl: string, apiKey: string, protocol?: RelayProtocol) => Promise<DiscoveredModel[]>;
 	onOpenRoutes: () => void;
 	onLockChange: (locked: boolean, pending: boolean) => void;
 };
 
 export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, ProvidersSettingsProps>(function ProvidersSettingsContent({ relays, families, usdCnyRate, configError, onSaveRelay, onDeleteRelay, onSetRelayEnabled, onTest, onCancelTest, onDiscover, onOpenRoutes, onLockChange }, ref) {
-	const { catalog, latest } = useModelCatalog();
+	const { catalog } = useModelCatalog();
 	const [query, setQuery] = useState("");
 	const [notice, setNotice] = useState<string>();
 	const [reveal, setReveal] = useState(false);
+	const [providerModels, setProviderModels] = useState<ProviderModelDraft[]>([]);
+	const [discoveringModels, setDiscoveringModels] = useState(false);
+	const [modelListNotice, setModelListNotice] = useState<string>();
 	const [testing, setTesting] = useState(false);
 	const [testResults, setTestResults] = useState<(TestResult & { modelId: string })[]>([]);
 	const [discoveredModels, setDiscoveredModels] = useState<DiscoveredModel[]>([]);
@@ -68,16 +72,20 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 	const [slowThreshold, setSlowThreshold] = useState(10);
 	const [testSort, setTestSort] = useState<"latency" | "name">("latency");
 	const testRequest = useRef(0);
+	const modelDiscoveryRequest = useRef(0);
+	const originalModelIds = useRef(new Set<string>());
 	const activeTests = useRef(new Map<string, string>());
 	const cancelActiveTest = () => {
 		for (const requestId of activeTests.current.keys()) void onCancelTest(requestId).catch(() => {});
 		activeTests.current.clear();
 	};
-	useEffect(() => () => { testRequest.current += 1; cancelActiveTest(); }, []);
+	useEffect(() => () => { testRequest.current += 1; modelDiscoveryRequest.current += 1; cancelActiveTest(); }, []);
 	const resetConnectionTest = () => {
 		testRequest.current += 1;
+		modelDiscoveryRequest.current += 1;
 		cancelActiveTest();
 		setTesting(false); setTestResults([]); setDiscoveredModels([]); setTestModel(undefined);
+		setDiscoveringModels(false);
 		setShowTestModels(false); setSelectedTestModels([]); setTestModelQuery(""); setTestBatch([]);
 		setCompletedTestModels([]); setTestStopped(false);
 		setRunningTestModels([]); setStoppedTestModels([]);
@@ -101,11 +109,21 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 			const excludedModelIds = excluded ? [...new Set([...previous, ...models])].sort() : previous.filter((model) => !models.includes(model));
 			return { ...current, relay: { ...current.relay, excludedModelIds } };
 		});
+		if (excluded) setProviderModels((previous) => previous.filter((entry) => !models.includes(entry.model.modelId)));
+		else restoreProviderModels(models);
 	};
+	const updateModelIdExclusions = (previousId: string, nextId: string) => setDraft((current) => {
+		if (!current || current.kind !== "relay") return current;
+		const excludedModelIds = new Set(current.relay.excludedModelIds ?? []);
+		if (previousId && previousId !== nextId && originalModelIds.current.has(previousId)) excludedModelIds.add(previousId);
+		if (nextId && nextId !== previousId) excludedModelIds.delete(nextId);
+		return { ...current, relay: { ...current.relay, excludedModelIds: [...excludedModelIds].sort() } };
+	});
 
 	const openPick = () => {
 		rememberEditorTrigger();
 		resetConnectionTest();
+		setProviderModels([]); originalModelIds.current = new Set(); setModelListNotice(undefined);
 		setNotice(undefined);
 		setError(undefined); setReveal(false); setQuery("");
 		setDraft({ kind: "pick" });
@@ -124,12 +142,19 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 		setNotice(undefined);
 		setError(undefined); setReveal(false);
 		if (relay) {
+			const configured = families.flatMap((family) => family.routes.filter((route) => route.relayId === relay.id).flatMap((route) => route.models.map((model) => ({ familyId: family.id, model: { ...model } }))));
+			const excluded = new Set(relay.excludedModelIds ?? []);
+			setProviderModels(configured.filter((entry) => !excluded.has(entry.model.modelId)));
+			originalModelIds.current = new Set(configured.map((entry) => entry.model.modelId));
 			setDraft({ kind: "relay", relay: { ...relay }, isNew: false, preset: preset ?? matchPreset(relay.baseUrl) });
 		} else if (preset) {
-			setDraft({ kind: "relay", relay: { ...blankRelay(), name: preset.name, baseUrl: preset.baseUrl }, isNew: true, preset });
+			setProviderModels([]); originalModelIds.current = new Set();
+			setDraft({ kind: "relay", relay: { ...blankRelay(), name: preset.name, baseUrl: preset.baseUrl, protocol: preset.protocol ?? "openai" }, isNew: true, preset });
 		} else {
+			setProviderModels([]); originalModelIds.current = new Set();
 			setDraft({ kind: "relay", relay: blankRelay(), isNew: true });
 		}
+		setModelListNotice(undefined);
 	};
 	const patchRelay = (value: Partial<RelaySpec>) => {
 		resetConnectionTest();
@@ -156,6 +181,77 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 		};
 	};
 
+	const restoreProviderModels = (models: string[]) => {
+		setProviderModels((previous) => {
+			const restored = [...previous];
+			for (const modelId of models) {
+				if (restored.some((entry) => entry.model.modelId === modelId)) continue;
+				const configured = families.flatMap((family) => family.routes.filter((route) => draft?.kind === "relay" && route.relayId === draft.relay.id).flatMap((route) => route.models.map((model) => ({ familyId: family.id, model })))).find((entry) => entry.model.modelId === modelId);
+				const discovered = discoveredModels.some((model) => model.id === modelId);
+				if (configured) restored.push({ ...configured, model: { ...configured.model } });
+				else if (discovered) restored.push({ familyId: discoveredFamily(modelId) ?? (draft?.kind === "relay" ? draft.preset?.familyId : undefined), model: fillFromCatalog(modelId) });
+			}
+			return restored;
+		});
+	};
+
+	const mergeDiscoveredModels = (models: DiscoveredModel[], relay: RelaySpec, preset?: ProviderPreset) => {
+		const seen = new Set(providerModels.map((entry) => entry.model.modelId));
+		const excluded = new Set(relay.excludedModelIds ?? []);
+		const assignable = models.filter((model) => discoveredFamily(model.id) || preset?.familyId);
+		const added = assignable.filter((model) => !seen.has(model.id.trim()) && !excluded.has(model.id.trim())).length;
+		setProviderModels((previous) => {
+			const merged = [...previous];
+			const mergedIds = new Set(merged.map((entry) => entry.model.modelId));
+			for (const discovered of assignable) {
+				const modelId = discovered.id.trim();
+				if (!modelId || mergedIds.has(modelId) || excluded.has(modelId)) continue;
+				merged.push({ familyId: discoveredFamily(modelId) ?? preset?.familyId, model: fillFromCatalog(modelId) });
+				mergedIds.add(modelId);
+			}
+			return merged;
+		});
+		const unsupported = models.length - assignable.length;
+		setModelListNotice(`获取到 ${models.length} 个模型，新增 ${added} 个${unsupported ? `；${unsupported} 个暂不属于可用家族，未加入` : ""}。`);
+	};
+
+	const discoverProviderModels = async () => {
+		if (draft?.kind !== "relay" || discoveringModels || pending) return;
+		const current = draft;
+		const request = ++modelDiscoveryRequest.current;
+		setDiscoveringModels(true); setError(undefined); setModelListNotice(undefined);
+		try {
+			const models = await onDiscover(current.relay.baseUrl, current.relay.apiKey, current.relay.protocol);
+			if (request !== modelDiscoveryRequest.current) return;
+			if (!models.length) { setError("接口未返回模型"); return; }
+			setDiscoveredModels(models);
+			mergeDiscoveredModels(models, current.relay, current.preset);
+		} catch (e) {
+			if (request === modelDiscoveryRequest.current) setError(String(e));
+		} finally {
+			if (request === modelDiscoveryRequest.current) setDiscoveringModels(false);
+		}
+	};
+
+	const patchProviderModel = (index: number, value: Partial<ModelSpec>) => {
+		const current = providerModels[index];
+		if (!current) return;
+		if (value.modelId !== undefined) updateModelIdExclusions(current.model.modelId, value.modelId.trim());
+		setProviderModels((previous) => previous.map((entry, row) => {
+			if (row !== index) return entry;
+			const model = { ...entry.model, ...value };
+			if (value.contextWindow !== undefined && model.maxTokens > value.contextWindow) model.maxTokens = value.contextWindow;
+			const familyId = value.modelId === undefined ? entry.familyId : discoveredFamily(value.modelId.trim()) ?? entry.familyId;
+			return { familyId, model };
+		}));
+	};
+
+	const removeProviderModel = (index: number) => {
+		const modelId = providerModels[index]?.model.modelId;
+		if (modelId && originalModelIds.current.has(modelId)) setModelExclusions([modelId], true);
+		else setProviderModels((previous) => previous.filter((_, row) => row !== index));
+	};
+
 	// A new provider must pass one live connection test (max_tokens=1) before it
 	// can be saved. After failure, the user chooses which models to test next.
 	const stopConnectionTest = () => {
@@ -173,10 +269,11 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 		setRunningTestModels([]); setStoppedTestModels([]);
 		if (all) setShowTestModels(true);
 		try {
-			const models = discoveredModels.length && !all ? discoveredModels : await onDiscover(relay.baseUrl, relay.apiKey);
+			const models = discoveredModels.length && !all ? discoveredModels : await onDiscover(relay.baseUrl, relay.apiKey, relay.protocol);
 			if (request !== testRequest.current) return;
 			if (!models.length) { setError("接口未返回模型，无法测试连接"); return; }
 			setDiscoveredModels(models);
+			mergeDiscoveredModels(models, relay, draft.preset);
 			const available = models.filter((model) => !excludedTestModels.includes(model.id));
 			const preferred = testModel && available.some((m) => m.id === testModel) ? testModel : (available.find((m) => discoveredFamily(m.id))?.id ?? available[0]?.id);
 			const batch = all ? available.map((m) => m.id) : selected ? available.filter((m) => selected.includes(m.id)).map((m) => m.id) : [preferred].filter((id): id is string => !!id);
@@ -191,7 +288,7 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 					setRunningTestModels((previous) => [...previous, model]);
 				},
 				test: async (model, requestId) => {
-					try { return await onTest(relay.baseUrl, relay.apiKey, model, relay.timeoutSeconds, requestId); }
+					try { return await onTest(relay.baseUrl, relay.apiKey, model, relay.timeoutSeconds, requestId, relay.protocol); }
 					finally {
 						activeTests.current.delete(requestId);
 						if (request === testRequest.current) setRunningTestModels((previous) => previous.filter((item) => item !== model));
@@ -211,6 +308,47 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 		}
 	};
 
+	// One model of this relay, tested exactly like the batch run so its result
+	// lands in the same list the speed panel reads.
+	const testProviderModel = async (modelId: string) => {
+		if (!draft || draft.kind !== "relay" || testing) return;
+		const relay = draft.relay;
+		const requestId = crypto.randomUUID();
+		activeTests.current.set(requestId, modelId);
+		setRunningTestModels((previous) => [...previous, modelId]);
+		setTestModel(modelId);
+		const started = Date.now();
+		try {
+			const result = await onTest(relay.baseUrl, relay.apiKey, modelId, relay.timeoutSeconds, requestId, relay.protocol);
+			if (activeTests.current.has(requestId)) setTestResults((previous) => [...previous.filter((item) => item.modelId !== modelId), { ...result, modelId }]);
+		} catch (cause) {
+			if (activeTests.current.has(requestId)) setTestResults((previous) => [...previous.filter((item) => item.modelId !== modelId), { ok: false, latencyMs: Date.now() - started, status: null, error: String(cause), modelId }]);
+		} finally {
+			activeTests.current.delete(requestId);
+			setRunningTestModels((previous) => previous.filter((item) => item !== modelId));
+		}
+	};
+	const stopProviderModelTest = (modelId: string) => {
+		for (const [requestId, model] of activeTests.current) if (model === modelId) {
+			activeTests.current.delete(requestId);
+			void onCancelTest(requestId).catch(() => {});
+		}
+		setRunningTestModels((previous) => previous.filter((item) => item !== modelId));
+	};
+	/** Status plus action for a model row; the cell always renders so rows keep their shape. */
+	const providerModelTest = (entry: ProviderModelDraft, relay: RelaySpec, preset?: ProviderPreset) => {
+		const modelId = entry.model.modelId.trim();
+		const running = runningTestModels.includes(modelId) || testBatch.includes(modelId) && testing && !completedTestModels.includes(modelId);
+		const tested = testResults.find((item) => item.modelId === modelId);
+		const text = running ? "正在测试…" : tested ? `${tested.ok ? "成功" : "失败"} · ${tested.latencyMs} ms${!tested.ok && tested.status ? ` · HTTP ${tested.status}` : ""}${tested.error ? ` · ${tested.error}` : ""}` : "";
+		return <div className="provider-model-test">
+			{tested && <span className={`test-result ${running ? "muted" : tested.ok ? "ok" : "bad"}`} role="status" title={`${modelId} · ${text}`}>{text}</span>}
+			{running
+				? <Button type="button" variant="ghost" size="compact" onClick={() => stopProviderModelTest(modelId)}>停止</Button>
+				: <Button type="button" variant="ghost" size="compact" disabled={pending || !modelId || !relay.baseUrl.trim() || (!relay.apiKey && !preset?.keyOptional)} onClick={() => void testProviderModel(modelId)}>测试</Button>}
+		</div>;
+	};
+
 	const submitRelay = async (event: FormEvent) => {
 		event.preventDefault();
 		if (!draft || draft.kind !== "relay" || pending || testing) return;
@@ -219,16 +357,22 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 		if (!/^https?:\/\//i.test(relay.baseUrl.trim())) { setError("接口地址必须以 http:// 或 https:// 开头"); return; }
 		if (relays.some((item) => item.id !== relay.id && item.name.trim().toLowerCase() === relay.name.trim().toLowerCase())) { setError("名称不能重复"); return; }
 		if (draft.isNew && !connectionPassed) { setError("请先通过连接测试再保存"); return; }
+		if (draft.isNew && !providerModels.length) { setError("请至少添加一个模型"); return; }
+		if (providerModels.some((entry) => !entry.model.modelId.trim())) { setError("模型 ID 不能为空"); return; }
+		if (providerModels.some((entry) => !entry.familyId)) { setError("请为无法自动识别的模型选择所属家族"); return; }
+		const modelIds = providerModels.map((entry) => entry.model.modelId.trim());
+		if (new Set(modelIds).size !== modelIds.length) { setError("供应商内模型 ID 不能重复"); return; }
+		for (const family of families) {
+			const modelError = validateModels(providerModels.filter((entry) => entry.familyId === family.id).map((entry) => entry.model));
+			if (modelError && providerModels.some((entry) => entry.familyId === family.id)) { setError(modelError); return; }
+		}
 		setPending(true); setError(undefined);
 		try {
-			const failedModels = testResults.filter((item) => !item.ok).map((item) => item.modelId);
-			const routes = buildDiscoveredRoutes(connectionPassed ? discoveredModels.filter((m) => !failedModels.includes(m.id)) : [], relay, families, fillFromCatalog, latest.size ? latest : undefined);
+			const activeModels = providerModels.map((entry) => ({ familyId: entry.familyId!, model: entry.model }));
+			const routes = routesFromProviderModels(relay, families, activeModels);
 			const saved = await onSaveRelay(relay, routes);
 			if (saved) {
-				if (routes.length) setNotice(`已为「${saved.name}」自动添加 ${routes.length} 条路线，包含 ${routes.reduce((sum, item) => sum + item.route.models.length, 0)} 个模型。`);
-				else if (draft.preset?.familyId) setNotice(`已保存「${saved.name}」，去「路线」为 ${FAMILY_LABELS[draft.preset.familyId]} 家族配置模型。`);
-				else if (testModels.length && !testModels.some((id) => discoveredFamily(id))) setNotice(`已保存「${saved.name}」，未发现支持的 DeepSeek、Kimi、GLM 或 Auto 模型，请手动配置路线。`);
-				else setNotice(`已保存「${saved.name}」。`);
+				setNotice(`已保存「${saved.name}」，同步 ${providerModels.length} 个模型到 ${routes.length} 条路线。`);
 				setDraft(undefined);
 			} else {
 				setError("保存失败，请检查填写内容");
@@ -280,7 +424,7 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 					<button type="button" className="preset-custom" onClick={() => openRelay()}>
 						<Icon name="plus" size={14} />
 						<span>自定义供应商</span>
-						<small>任意 OpenAI 兼容地址</small>
+						<small>任意 OpenAI / Anthropic / Google 兼容地址</small>
 					</button>
 				</div>
 			</div>
@@ -298,11 +442,20 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 						{site && <button type="button" className="editor-site" onClick={() => openLink(site)} title={site}>{hostOf(site)} ↗</button>}
 						<IconButton type="button"  onClick={closeDraft} disabled={pending} aria-label="返回列表"><Icon name="close" /></IconButton>
 					</div>
-					<p className="muted">{draft.isNew && preset ? "地址已按预设填好，粘贴密钥并通过连接测试即可。" : "通过连接测试后保存可补齐缺失路线。"}保存时自动为发现的 DeepSeek、Kimi 和 GLM 模型添加路线，已有路线保留。</p>
+					<p className="muted">{draft.isNew ? "新供应商需先通过连接测试。" : "模型列表会同步到现有家族路线。"}保存时保留各路线的能力与优先级设置。</p>
 					<div className="editor-field">
 						<label htmlFor="relay-name">名称</label>
 						<div className="editor-control">
 							<Input id="relay-name" required maxLength={32} placeholder="官方直连 / 硅基低价 / 中转站 A" value={relay.name} onChange={(event) => patchRelay({ name: event.target.value })} disabled={pending} />
+						</div>
+					</div>
+					<div className="editor-field">
+						<label htmlFor="relay-protocol">API协议</label>
+						<div className="editor-control">
+							<Select id="relay-protocol" required value={relay.protocol ?? "openai"} onChange={(event) => patchRelay({ protocol: event.target.value as RelayProtocol })} disabled={pending}>
+								{RELAY_PROTOCOLS.map((protocol) => <option key={protocol.id} value={protocol.id}>{protocol.label}</option>)}
+							</Select>
+							<small>{RELAY_PROTOCOLS.find((protocol) => protocol.id === (relay.protocol ?? "openai"))?.hint}。须与端点实现一致，选择后模型列表与连接测试按该协议请求。</small>
 						</div>
 					</div>
 					<div className="editor-field">
@@ -321,10 +474,30 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 					<div className="editor-field">
 						<label htmlFor="relay-base">端点</label>
 						<div className="editor-control">
-							<Input id="relay-base" required placeholder="https://api.example.com/v1" value={relay.baseUrl} onChange={(event) => patchRelay({ baseUrl: event.target.value })} disabled={pending} />
-							<small>OpenAI 兼容根地址，以 http:// 或 https:// 开头，包含 /v1 等前缀。</small>
+							<Input id="relay-base" required placeholder={relay.protocol === "anthropic" ? "https://api.anthropic.com/v1" : relay.protocol === "google-genai" ? "https://generativelanguage.googleapis.com/v1beta" : relay.protocol === "vertex" ? "https://{region}-aiplatform.googleapis.com/v1/projects/{project}/locations/{region}" : relay.protocol === "openai-responses" ? "https://api.openai.com/v1" : "https://api.example.com/v1"} value={relay.baseUrl} onChange={(event) => patchRelay({ baseUrl: event.target.value })} disabled={pending} />
+							<small>{relay.protocol === "anthropic" ? "Anthropic 兼容根地址（含或不含 /v1 均可），以 http:// 或 https:// 开头。" : relay.protocol === "google-genai" ? "Google 生成式接口根地址，通常以 /v1beta 结尾。" : relay.protocol === "vertex" ? "Vertex AI 接口根地址；连接测试与模型列表需要 API Key，也可使用含项目与区域的完整地址。" : "OpenAI 兼容根地址，以 http:// 或 https:// 开头，包含 /v1 等前缀。"}</small>
 						</div>
 					</div>
+					<section className="provider-model-editor" aria-label="供应商模型配置">
+						<div className="provider-model-editor-heading">
+							<strong>模型</strong><small>{providerModels.length} 个模型</small>
+							<Button type="button" variant="ghost" size="compact" disabled={pending || testing || discoveringModels || !relay.baseUrl || (!relay.apiKey && !preset?.keyOptional)} onClick={() => void discoverProviderModels()}><Icon name="refresh" size={14} />{discoveringModels ? "获取中…" : "获取模型列表"}</Button>
+						</div>
+						<div className="provider-model-editor-columns" aria-hidden="true"><span>模型 ID</span><span>上下文</span><span>显示名</span><span>测试</span><span /></div>
+						{providerModels.map((entry, index) => <div className="provider-model-editor-row" key={index}>
+							<div className="provider-model-id-cell">
+								<Input aria-label={`模型 ID ${index + 1}`} value={entry.model.modelId} maxLength={256} placeholder="模型 ID" onChange={(event) => patchProviderModel(index, { modelId: event.target.value })} disabled={pending || testing} />
+								{entry.familyId ? <small>{FAMILY_LABELS[entry.familyId] ?? entry.familyId}</small> : <small className="provider-model-family-needed">需选择所属家族</small>}
+							</div>
+							<Input aria-label={`模型 ${index + 1} 上下文窗口`} type="number" min={1} step={1} value={entry.model.contextWindow} onChange={(event) => patchProviderModel(index, { contextWindow: Number(event.target.value) })} disabled={pending || testing} />
+							<Input aria-label={`模型 ${index + 1} 显示名`} value={entry.model.alias} maxLength={64} placeholder="可选" onChange={(event) => patchProviderModel(index, { alias: event.target.value })} disabled={pending || testing} />
+							{providerModelTest(entry, relay, preset)}
+							<IconButton type="button" variant="ghost" size="compact" aria-label={`删除模型 ${index + 1}`} title="从供应商模型列表中移除" onClick={() => removeProviderModel(index)} disabled={pending || testing}><Icon name="trash" size={14} /></IconButton>
+							{!entry.familyId && <label className="provider-model-family-select">模型家族<Select aria-label={`模型 ${index + 1} 家族`} value="" onChange={(event) => setProviderModels((previous) => previous.map((item, row) => row === index ? { ...item, familyId: event.target.value } : item))} disabled={pending || testing}><option value="" disabled>选择家族…</option>{Object.entries(FAMILY_LABELS).map(([id, label]) => <option key={id} value={id}>{label}</option>)}</Select></label>}
+						</div>)}
+						{modelListNotice && <small className="provider-model-list-notice" role="status">{modelListNotice}</small>}
+						<Button type="button" variant="ghost" size="compact" className="provider-model-add" disabled={pending || testing} onClick={() => setProviderModels((previous) => [...previous, { familyId: preset?.familyId, model: blankModel() }])}><Icon name="plus" size={14} />添加模型</Button>
+					</section>
 					<div className="editor-field">
 						<label htmlFor="relay-account">扣费账户</label>
 						<div className="editor-control">
@@ -395,18 +568,19 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 		) : (
 			<>
 				<h2 id="providers-title">供应商</h2>
-				<p className="muted">一条供应商是一个访问通道：端点加密钥，可被多条路线复用。保存时自动为发现的模型生成路线；共 {relays.length} 个供应商。</p>
+				<p className="muted">供应商提供模型访问端点与密钥；模型列表在编辑供应商时配置。共 {relays.length} 个供应商。</p>
 				{notice && <p className="family-added-hint" role="status">{notice}<Button type="button" variant="ghost" size="compact" onClick={onOpenRoutes}>查看路线</Button></p>}
 				<section className="family-card" aria-label="供应商列表">
 					{relays.length === 0 && <p className="family-empty">还没添加供应商，从下面的目录挑一个，或用自定义地址。</p>}
 					{relays.map((relay) => {
 						const preset = matchPreset(relay.baseUrl);
+						const protocol = RELAY_PROTOCOLS.find((item) => item.id === (relay.protocol ?? "openai"));
 						return <div className={`provider-row provider-relay-row ${relay.enabled ? "" : "disabled"}`} key={relay.id}>
 							<button type="button" className="provider-relay-btn" onClick={() => openRelay(relay, preset)} disabled={pending} aria-label={`编辑 ${relay.name}`}>
 								<ProviderIcon id={preset?.id ?? ""} name={relay.name} size={22} />
 								<span className="provider-row-text">
 									<span className="provider-row-title"><strong title={relay.name}>{relay.name}</strong>{!relay.enabled && <span className="provider-tag muted-tag">已停用</span>}</span>
-									<small className="provider-row-meta"><span className="provider-row-endpoint" title={maskBaseUrl(relay.baseUrl)}>{maskBaseUrl(relay.baseUrl)}</span><span className="provider-row-count">· {relayModelCount(relay.id) ? `${relayModelCount(relay.id)} 个模型` : "未配置模型"}</span></small>
+									<small className="provider-row-meta"><span className="provider-row-endpoint" title={maskBaseUrl(relay.baseUrl)}>{maskBaseUrl(relay.baseUrl)}</span><span className="provider-row-count">· {protocol?.label ?? "OpenAI"} · {relayModelCount(relay.id) ? `${relayModelCount(relay.id)} 个模型` : "未配置模型"}</span></small>
 								</span>
 							</button>
 							<div className="provider-row-side">

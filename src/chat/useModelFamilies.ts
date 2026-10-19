@@ -60,12 +60,28 @@ export function validateModels(models: ModelSpec[]): string | undefined {
 	return undefined;
 }
 
+/** Wire protocols Skiff can speak to a provider; each maps to pi's own API. */
+export const RELAY_PROTOCOLS = [
+	{ id: "kimi", label: "Kimi", hint: "Kimi / Moonshot 官方接口", api: "openai-completions" },
+	{ id: "openai", label: "OpenAI", hint: "OpenAI Chat Completions 兼容接口", api: "openai-completions" },
+	{ id: "openai-responses", label: "OpenAI Responses", hint: "OpenAI Responses 接口", api: "openai-responses" },
+	{ id: "anthropic", label: "Anthropic", hint: "Anthropic Messages 接口", api: "anthropic-messages" },
+	{ id: "google-genai", label: "Google GenAI", hint: "Google Gemini 生成式接口", api: "google-generative-ai" },
+	{ id: "vertex", label: "Vertex AI", hint: "Google Vertex AI 接口", api: "google-vertex" },
+] as const;
+
+export type RelayProtocol = (typeof RELAY_PROTOCOLS)[number]["id"];
+
+export const DEFAULT_RELAY_PROTOCOL: RelayProtocol = "openai";
+
 /** A relay is one access point: a base URL plus one API key, shared by routes. */
 export interface RelaySpec {
 	id: string;
 	name: string;
 	baseUrl: string;
 	apiKey: string;
+	/** Wire protocol; absent means the legacy OpenAI-compatible default. */
+	protocol?: RelayProtocol;
 	timeoutSeconds: number;
 	enabled: boolean;
 	billingAccountId: string;
@@ -117,7 +133,7 @@ export interface TestResult {
 export const FAMILY_LABELS: Record<string, string> = { deepseek: "DeepSeek", kimi: "Kimi", glm: "GLM", auto: "Auto" };
 
 export function blankRelay(): RelaySpec {
-	return { id: "", name: "", baseUrl: "", apiKey: "", timeoutSeconds: 60, enabled: true, billingAccountId: "", excludedModelIds: [] };
+	return { id: "", name: "", baseUrl: "", apiKey: "", protocol: DEFAULT_RELAY_PROTOCOL, timeoutSeconds: 60, enabled: true, billingAccountId: "", excludedModelIds: [] };
 }
 
 export function blankRoute(relayId = ""): RouteSpec {
@@ -210,10 +226,10 @@ export function useModelFamilies() {
 		setAutoFailover: (autoFailover: boolean) => run("set_family_auto_failover", { autoFailover }),
 		setAutoRetry: (autoRetry: boolean) => run("set_family_auto_retry", { autoRetry }),
 		setUsdCnyRate: (rate: number) => run("set_usd_cny_rate", { rate }),
-		test: (baseUrl: string, apiKey: string, modelId: string, timeoutSeconds: number, requestId?: string) =>
-			invoke<TestResult>("test_provider_connection", { baseUrl, apiKey, modelId, timeoutSeconds, requestId }),
+		test: (baseUrl: string, apiKey: string, modelId: string, timeoutSeconds: number, requestId?: string, protocol?: RelayProtocol) =>
+			invoke<TestResult>("test_provider_connection", { baseUrl, apiKey, modelId, protocol, timeoutSeconds, requestId }),
 		cancelTest: (requestId: string) => invoke("cancel_provider_test", { requestId }),
-		discover: (baseUrl: string, apiKey: string) => invoke<DiscoveredModel[]>("discover_relay_models", { baseUrl, apiKey }),
+		discover: (baseUrl: string, apiKey: string, protocol?: RelayProtocol) => invoke<DiscoveredModel[]>("discover_relay_models", { baseUrl, apiKey, protocol }),
 	};
 }
 

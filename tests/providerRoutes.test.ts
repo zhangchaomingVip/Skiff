@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildDiscoveredRoutes, discoveredFamily } from "../src/chat/providerRoutes.ts";
+import { buildDiscoveredRoutes, discoveredFamily, routesFromProviderModels } from "../src/chat/providerRoutes.ts";
 import { blankModel, blankRelay, blankRoute, type ModelFamily } from "../src/chat/useModelFamilies.ts";
 
 const fillModel = (id: string) => ({ ...blankModel(), modelId: id, inputCost: 1.5, vision: true });
@@ -33,6 +33,28 @@ test("discovery repairs missing routes, retaining existing models and exclusions
 	assert.equal(routes[0].route.relayId, "bailian");
 	assert.equal(routes[0].route.models.length, 1);
 	assert.deepEqual(families, original);
+});
+
+test("provider model editor updates existing family routes and preserves excluded models", () => {
+	const relay = { ...blankRelay(), id: "relay-a", excludedModelIds: ["deepseek-retired"] };
+	const families: ModelFamily[] = [
+		{ id: "deepseek", displayName: "DeepSeek", defaultRouteId: "route-deepseek", routes: [{ ...blankRoute(relay.id), id: "route-deepseek", reasoning: true, models: [fillModel("deepseek-chat"), fillModel("deepseek-retired")] }] },
+		{ id: "kimi", displayName: "Kimi", defaultRouteId: null, routes: [] },
+	];
+	const edited = { ...fillModel("deepseek-chat"), alias: "对话模型", contextWindow: 196000 };
+	const routes = routesFromProviderModels(relay, families, [
+		{ familyId: "deepseek", model: edited },
+		{ familyId: "deepseek", model: fillModel("deepseek-v4") },
+		{ familyId: "kimi", model: fillModel("kimi-k3") },
+	]);
+	assert.deepEqual(routes.map((item) => item.familyId), ["deepseek", "kimi"]);
+	assert.equal(routes[0].route.id, "route-deepseek");
+	assert.equal(routes[0].route.reasoning, true);
+	assert.deepEqual(routes[0].route.models.map((model) => model.modelId), ["deepseek-chat", "deepseek-v4", "deepseek-retired"]);
+	assert.equal(routes[0].route.models[0].alias, "对话模型");
+	assert.equal(routes[0].route.models[0].contextWindow, 196000);
+	assert.equal(routes[1].route.id, "");
+	assert.deepEqual(families[0].routes[0].models.map((model) => model.modelId), ["deepseek-chat", "deepseek-retired"]);
 });
 
 test("classification uses basename boundaries and accepts legacy family aliases", () => {

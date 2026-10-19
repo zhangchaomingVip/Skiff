@@ -34,6 +34,48 @@ const MANAGED_PREFIX: &str = "skiff-";
 /// selectable, and the levels after it are the ones a model may support.
 const THINKING_LEVELS: [&str; 6] = ["minimal", "low", "medium", "high", "xhigh", "max"];
 
+/// Relay protocols in display order: stored id plus the pi API that speaks it.
+const PROTOCOLS: [(&str, &str); 6] = [
+	("kimi", "openai-completions"),
+	("openai", "openai-completions"),
+	("openai-responses", "openai-responses"),
+	("anthropic", "anthropic-messages"),
+	("google-genai", "google-generative-ai"),
+	("vertex", "google-vertex"),
+];
+
+/// Unknown, absent or mixed-case values fall back to the legacy default.
+fn normalize_protocol(raw: Option<&str>) -> String {
+	let candidate = raw.unwrap_or("").trim().to_ascii_lowercase();
+	PROTOCOLS.iter().find(|(id, _)| *id == candidate).map(|(id, _)| (*id).to_string()).unwrap_or_else(|| "openai".into())
+}
+
+/// The pi API name a relay's protocol speaks.
+pub fn protocol_api(relay: &RelaySpec) -> &'static str {
+	let protocol = normalize_protocol(relay.protocol.as_deref());
+	PROTOCOLS.iter().find(|(id, _)| *id == protocol).map(|(_, api)| *api).unwrap_or("openai-completions")
+}
+
+/// Anthropic's SDK appends `/v1` itself, so a relay typed as
+/// `https://api.anthropic.com/v1` must lose that suffix before use.
+pub(crate) fn anthropic_root(base: &str) -> String {
+	let trimmed = base.trim_end_matches('/');
+	match trimmed.strip_suffix("/v1") {
+		Some(root) if !root.is_empty() => root.to_string(),
+		_ => trimmed.to_string(),
+	}
+}
+
+/// The messages endpoint the SDK will actually call for a stored base URL.
+fn anthropic_messages_url(base: &str) -> String {
+	format!("{}/v1/messages", anthropic_root(base))
+}
+
+/// The base URL pi should use for a relay, which differs per adapter.
+pub(crate) fn runtime_base_url(relay: &RelaySpec) -> String {
+	if protocol_api(relay) == "anthropic-messages" { anthropic_root(&relay.base_url) } else { relay.base_url.clone() }
+}
+
 /// pi only lists `xhigh` and `max` when `thinkingLevelMap` declares them, and
 /// otherwise offers every remaining level unconditionally. Projecting real
 /// capabilities therefore means writing the map explicitly.
@@ -136,6 +178,11 @@ pub struct RelaySpec {
 	/// Plain text in memory and on the IPC boundary; sealed on disk.
 	#[serde(default)]
 	pub api_key: String,
+	/// Wire protocol: `openai` (default), `kimi`, `openai-responses`,
+	/// `anthropic`, `google-genai` or `vertex`. Absent means the legacy
+	/// OpenAI-compatible behaviour.
+	#[serde(default)]
+	pub protocol: Option<String>,
 	#[serde(default = "default_timeout")]
 	pub timeout_seconds: u64,
 	#[serde(default = "default_true")]
@@ -511,6 +558,7 @@ fn normalize_relay(mut relay: RelaySpec, config: &FamiliesConfig) -> Result<Rela
 	relay.excluded_model_ids = relay.excluded_model_ids.iter().map(|id| validate_model_id(id)).collect::<Result<Vec<_>, _>>()?;
 	relay.excluded_model_ids.sort();
 	relay.excluded_model_ids.dedup();
+	relay.protocol = Some(normalize_protocol(relay.protocol.as_deref()));
 	Ok(relay)
 }
 
@@ -629,20 +677,22 @@ fn model_thinking_levels(route: &RouteSpec, item: &ModelSpec) -> Vec<String> {
 	route.thinking_levels.clone()
 }
 
-fn project_model(route: &RouteSpec, item: &ModelSpec, key: &str) -> Value {
+fn project_model(route: &RouteSpec, item: &ModelSpec, key: &str, api: &str) -> Value {
 	let vision = if item.vision.unwrap_or(route.vision) { json!(["text", "image"]) } else { json!(["text"]) };
 	let reasoning = route.reasoning;
 	// A level list that is empty (or absent) is "not declared"; pi then keeps its
 	// own five-level default instead of losing `minimal`.
 	let declared = item.thinking_levels.as_ref().filter(|levels| !levels.is_empty()).cloned().unwrap_or_else(|| route.thinking_levels.clone());
 	json!({
-		"id": item.model_id, "name": if item.alias.is_empty() { item.model_id.clone() } else { item.alias.clone() }, "api": "openai-completions", "provider": key,
+		"id": item.model_id, "name": if item.alias.is_empty() { item.model_id.clone() } else { item.alias.clone() }, "api": api, "provider": key,
 		"cost": { "input": item.input_cost, "output": item.output_cost, "cacheRead": item.cache_read_cost, "cacheWrite": item.cache_write_cost },
 		"currency": item.currency, "contextWindow": item.context_window, "maxTokens": item.max_tokens,
 		"input": vision, "reasoning": reasoning,
 		// Only reasoning models get a map: pi lists `xhigh` and `max` from it.
 		"thinkingLevelMap": if reasoning && !declared.is_empty() { thinking_level_map(&declared) } else { Value::Null },
-		"compat": { "supportsDeveloperRole": false },
+		// Only OpenAI-compatible relays need the developer-role opt-out; the
+		// other adapters build their own request shapes.
+		"compat": if api == "openai-completions" { json!({ "supportsDeveloperRole": false }) } else { Value::Null },
 	})
 }
 
@@ -678,12 +728,13 @@ pub fn prepare_runtime(dir: &Path, cmd: &mut std::process::Command) -> Result<()
 					continue;
 				}
 				let route_key = provider_key(&family.id, &relay.id);
+				let api = protocol_api(relay);
 				// Every route of a relay shares one key environment variable.
 				cmd.env(key_env(&route_key), &relay.api_key);
-				routes.push(json!({ "providerKey": route_key, "baseUrl": relay.base_url,
+				routes.push(json!({ "providerKey": route_key, "baseUrl": runtime_base_url(relay), "api": api,
 					"keyEnv": key_env(&route_key), "streaming": route.streaming, "tools": route.tools,
 					"timeoutSeconds": relay.timeout_seconds,
-					"models": models.iter().map(|model| project_model(route, model, &route_key)).collect::<Vec<_>>() }));
+					"models": models.iter().map(|model| project_model(route, model, &route_key, api)).collect::<Vec<_>>() }));
 			}
 		}
 	}
@@ -744,10 +795,11 @@ pub fn project(dir: &Path, config: &FamiliesConfig) -> Result<(), String> {
 		let map = models["providers"].as_object_mut().ok_or("pi 配置的 providers 必须是对象")?;
 		map.retain(|key, _| !is_managed_key(key) || desired.iter().any(|(wanted, _, _)| wanted == key));
 		for (key, relay, route) in &desired {
+			let api = protocol_api(relay);
 			let entry = json!({
-				"api": "openai-completions",
-				"baseUrl": relay.base_url,
-				"models": route.models.iter().filter(|item| !relay.excluded_model_ids.contains(&item.model_id)).map(|item| project_model(route, item, key)).collect::<Vec<_>>(),
+				"api": api,
+				"baseUrl": runtime_base_url(relay),
+				"models": route.models.iter().filter(|item| !relay.excluded_model_ids.contains(&item.model_id)).map(|item| project_model(route, item, key, api)).collect::<Vec<_>>(),
 			});
 			map.insert(key.clone(), entry);
 		}
@@ -841,8 +893,8 @@ fn upsert_relay(config: &mut FamiliesConfig, relay: RelaySpec) {
 	}
 }
 
-/// Commit the relay and discovered routes together, avoiding a saved provider
-/// with no routes if any model fails validation. Discovery never replaces edits.
+/// Commit the relay and route changes together. Empty route IDs add routes;
+/// explicit IDs update a matching route for this relay.
 pub fn save_relay_with_routes_in(dir: &Path, relay: RelaySpec, routes: Vec<RelayRouteSpec>) -> Result<FamiliesConfig, String> {
 	apply(dir, |config| {
 		let mut normalized = normalize_relay(relay, config)?;
@@ -857,6 +909,16 @@ pub fn save_relay_with_routes_in(dir: &Path, relay: RelaySpec, routes: Vec<Relay
 		let excluded = normalized.excluded_model_ids.clone();
 		upsert_relay(config, normalized);
 		for mut item in routes {
+			let existing_id = family_mut(config, &item.family_id)?.routes.iter()
+				.find(|route| !item.route.id.is_empty() && route.id == item.route.id && route.relay_id == relay_id)
+				.map(|route| route.id.clone());
+			if let Some(existing_id) = existing_id {
+				item.route.relay_id = relay_id.clone();
+				let route = normalize_route(&item.route, config, &item.family_id, Some((&item.family_id, &existing_id)))?;
+				let existing = family_mut(config, &item.family_id)?.routes.iter_mut().find(|route| route.id == existing_id).ok_or("找不到要更新的路线")?;
+				*existing = route;
+				continue;
+			}
 			let family = family_mut(config, &item.family_id)?;
 			if family.routes.iter().any(|route| route.relay_id == relay_id) { continue; }
 			item.route.id.clear();
@@ -1123,6 +1185,15 @@ mod tests {
 		assert_eq!(repaired.families[0].default_route_id.as_deref(), Some(edited.id.as_str()));
 		assert_eq!(runtime_offers(&repaired).len(), 3);
 
+		let mut provider_edit = repaired.families[0].routes[0].clone();
+		provider_edit.models[0].alias = "编辑后的显示名".into();
+		provider_edit.models[0].context_window = 196_000;
+		let updated = save_relay_with_routes_in(&dir, relay.clone(), vec![RelayRouteSpec { family_id: "deepseek".into(), route: provider_edit }]).unwrap();
+		assert_eq!(updated.families[0].routes[0].models[0].alias, "编辑后的显示名");
+		assert_eq!(updated.families[0].routes[0].models[0].context_window, 196_000);
+		assert_eq!(updated.families[0].routes[0].models[0].input_cost, 7.0);
+		assert_eq!(updated.families[0].default_route_id.as_deref(), Some(edited.id.as_str()));
+
 		// A malformed discovered route must not leave a partially saved relay.
 		let before = std::fs::read(config_path(&dir)).unwrap();
 		let models_before = std::fs::read(dir.join("models.json")).unwrap();
@@ -1134,6 +1205,62 @@ mod tests {
 		assert_eq!(std::fs::read(config_path(&dir)).unwrap(), before);
 		assert_eq!(std::fs::read(dir.join("models.json")).unwrap(), models_before);
 		std::fs::remove_dir_all(dir).unwrap();
+	}
+
+	#[test]
+	fn relay_protocol_normalizes_projects_and_shapes_requests() {
+		// Absent and unknown values keep the legacy OpenAI-compatible default.
+		assert_eq!(normalize_protocol(None), "openai");
+		assert_eq!(normalize_protocol(Some("nonsense")), "openai");
+		assert_eq!(normalize_protocol(Some(" Anthropic ")), "anthropic");
+		assert_eq!(normalize_protocol(Some("google-genai")), "google-genai");
+
+		let model = ModelSpec { model_id: "claude-sonnet-4".into(), vision: None, thinking_levels: None, alias: String::new(), input_cost: 1.0, output_cost: 4.0, cache_read_cost: 1.0, cache_write_cost: 1.0, currency: Currency::Cny, max_tokens: 8192, context_window: 200_000 };
+		let route = RouteSpec { id: "route-kimi-r1".into(), relay_id: "r1".into(), enabled: true, models: vec![model], streaming: true, tools: true, vision: false, reasoning: false, thinking_levels: Vec::new() };
+		let mut relay = RelaySpec { id: "r1".into(), name: "Anthropic relay".into(), base_url: "https://api.anthropic.com/v1".into(), api_key: "key".into(), protocol: Some("Anthropic".into()), timeout_seconds: 60, enabled: true, billing_account_id: String::new(), excluded_model_ids: Vec::new() };
+		let normalized = normalize_relay(relay.clone(), &FamiliesConfig { version: 4, relays: Vec::new(), families: Vec::new(), auto_failover: false, auto_retry: false, usd_cny_rate: 7.2 }).unwrap();
+		assert_eq!(normalized.protocol.as_deref(), Some("anthropic"));
+		assert_eq!(protocol_api(&normalized), "anthropic-messages");
+		// Other adapters build their own shapes, so no OpenAI compat block leaks in.
+		assert_eq!(project_model(&route, &route.models[0], "skiff-test", "anthropic-messages")["compat"], Value::Null);
+
+		relay.protocol = Some("google-genai".into());
+		assert_eq!(protocol_api(&relay), "google-generative-ai");
+		relay.protocol = Some("openai-responses".into());
+		assert_eq!(protocol_api(&relay), "openai-responses");
+		relay.protocol = None;
+		assert_eq!(protocol_api(&relay), "openai-completions");
+
+		// Anthropic's SDK appends `/v1`; the stored `/v1` suffix must not double up.
+		relay.protocol = Some("anthropic".into());
+		assert_eq!(runtime_base_url(&relay), "https://api.anthropic.com");
+		relay.base_url = "https://claude-proxy.example".into();
+		assert_eq!(runtime_base_url(&relay), "https://claude-proxy.example");
+		assert_eq!(anthropic_root("https://x/v1/"), "https://x");
+		relay.base_url = "https://api.openai.com/v1".into();
+		relay.protocol = Some("openai".into());
+		assert_eq!(runtime_base_url(&relay), "https://api.openai.com/v1");
+
+		// Each protocol gets its own one-shot request shape for the connection test.
+		let (url, body, auth) = connection_test_request("anthropic", "https://api.anthropic.com/v1", "k", "claude-3");
+		assert_eq!(url, "https://api.anthropic.com/v1/messages");
+		assert_eq!(auth, "anthropic");
+		assert_eq!(body["max_tokens"], 1);
+		// The test and the SDK must agree on the endpoint for a suffix-less relay.
+		let (url, _, _) = connection_test_request("anthropic", "https://claude-proxy.example", "k", "claude-3");
+		assert_eq!(url, "https://claude-proxy.example/v1/messages");
+		let (url, body, auth) = connection_test_request("openai-responses", "https://api.openai.com/v1", "k", "gpt-5");
+		assert_eq!(url, "https://api.openai.com/v1/responses");
+		assert_eq!(auth, "bearer");
+		assert_eq!(body["max_output_tokens"], 16);
+		let (url, body, auth) = connection_test_request("google-genai", "https://generativelanguage.googleapis.com/v1beta", "k", "gemini-2.5-pro");
+		assert_eq!(url, "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=k");
+		assert_eq!(auth, "query");
+		assert_eq!(body["generationConfig"]["maxOutputTokens"], 1);
+		let (url, body, auth) = connection_test_request("openai", "https://api.example.com/v1", "k", "m");
+		assert_eq!(url, "https://api.example.com/v1/chat/completions");
+		assert_eq!(auth, "bearer");
+		assert_eq!(body["max_tokens"], 1);
 	}
 
 	#[test]
@@ -1191,7 +1318,7 @@ mod tests {
 
 	#[test]
 	fn runtime_offers_skip_disabled_routes_and_expose_offer_identity() {
-		let relay = RelaySpec { id: "r1".into(), name: "Relay".into(), base_url: "https://relay.example/v1".into(), api_key: String::new(), timeout_seconds: 60, enabled: true, billing_account_id: "wallet-a".into(), excluded_model_ids: Vec::new() };
+		let relay = RelaySpec { id: "r1".into(), name: "Relay".into(), base_url: "https://relay.example/v1".into(), api_key: String::new(), protocol: None, timeout_seconds: 60, enabled: true, billing_account_id: "wallet-a".into(), excluded_model_ids: Vec::new() };
 		let model = ModelSpec { model_id: "kimi-k3".into(), vision: None, thinking_levels: None, alias: "k3-便宜".into(), input_cost: 1.0, output_cost: 4.0, cache_read_cost: 0.5, cache_write_cost: 0.7, currency: Currency::Cny, max_tokens: 8192, context_window: 128000 };
 		let route = RouteSpec { id: "route-kimi-r1".into(), relay_id: "r1".into(), enabled: true, models: vec![model], streaming: true, tools: true, vision: false, reasoning: true, thinking_levels: Vec::new() };
 		let disabled = RouteSpec { id: "route-kimi-r2".into(), relay_id: "r1".into(), enabled: false, models: vec![], streaming: true, tools: true, vision: false, reasoning: false, thinking_levels: Vec::new() };
@@ -1227,8 +1354,8 @@ mod tests {
 		let config = FamiliesConfig {
 			version: 4,
 			relays: vec![
-				RelaySpec { id: "r1".into(), name: "Active".into(), base_url: "https://active.example/v1".into(), api_key: "key-active".into(), timeout_seconds: 60, enabled: true, billing_account_id: "wallet-a".into(), excluded_model_ids: Vec::new() },
-				RelaySpec { id: "r2".into(), name: "Stopped".into(), base_url: "https://stopped.example/v1".into(), api_key: "key-stopped".into(), timeout_seconds: 60, enabled: false, billing_account_id: "wallet-b".into(), excluded_model_ids: Vec::new() },
+				RelaySpec { id: "r1".into(), name: "Active".into(), base_url: "https://active.example/v1".into(), api_key: "key-active".into(), protocol: None, timeout_seconds: 60, enabled: true, billing_account_id: "wallet-a".into(), excluded_model_ids: Vec::new() },
+				RelaySpec { id: "r2".into(), name: "Stopped".into(), base_url: "https://stopped.example/v1".into(), api_key: "key-stopped".into(), protocol: None, timeout_seconds: 60, enabled: false, billing_account_id: "wallet-b".into(), excluded_model_ids: Vec::new() },
 			],
 			families: vec![
 				ModelFamily { id: "kimi".into(), display_name: "Kimi".into(), routes: vec![active, stopped_route, stopped_relay_route], default_route_id: Some("route-kimi-r1".into()) },
@@ -1266,8 +1393,8 @@ mod tests {
 		let config = FamiliesConfig {
 			version: 4,
 			relays: vec![
-				RelaySpec { id: "r1".into(), name: "Primary".into(), base_url: "https://primary.example/v1".into(), api_key: "key-1".into(), timeout_seconds: 60, enabled: true, billing_account_id: String::new(), excluded_model_ids: Vec::new() },
-				RelaySpec { id: "r2".into(), name: "Backup".into(), base_url: "https://backup.example/v1".into(), api_key: "key-2".into(), timeout_seconds: 60, enabled: true, billing_account_id: String::new(), excluded_model_ids: Vec::new() },
+				RelaySpec { id: "r1".into(), name: "Primary".into(), base_url: "https://primary.example/v1".into(), api_key: "key-1".into(), protocol: None, timeout_seconds: 60, enabled: true, billing_account_id: String::new(), excluded_model_ids: Vec::new() },
+				RelaySpec { id: "r2".into(), name: "Backup".into(), base_url: "https://backup.example/v1".into(), api_key: "key-2".into(), protocol: None, timeout_seconds: 60, enabled: true, billing_account_id: String::new(), excluded_model_ids: Vec::new() },
 			],
 			families: vec![ModelFamily { id: "kimi".into(), display_name: "Kimi".into(), routes: vec![
 				RouteSpec { id: "route-kimi-r1".into(), relay_id: "r1".into(), enabled: true, models: vec![model.clone()], streaming: true, tools: true, vision: false, reasoning: false, thinking_levels: Vec::new() },
@@ -1294,10 +1421,10 @@ pub async fn fetch_public_catalog(refresh: Option<bool>) -> Result<providers::Ca
 	providers::public_catalog(&agent_dir()?, refresh.unwrap_or(false)).await
 }
 
-///模型发现沿用 OpenAI 兼容 `/models`，供线路添加时拉取模型 ID 与能力。
+///模型发现按供应商协议选择接口：OpenAI 兼容 `/models`、Anthropic `/models` 或 Google `models`。
 #[tauri::command]
-pub async fn discover_relay_models(base_url: String, api_key: String) -> Result<Vec<providers::DiscoveredModel>, String> {
-	providers::discover(&base_url, &api_key).await
+pub async fn discover_relay_models(base_url: String, api_key: String, protocol: Option<String>) -> Result<Vec<providers::DiscoveredModel>, String> {
+	providers::discover(&base_url, &api_key, protocol.as_deref()).await
 }
 
 /// 各家族官方模型页（6h 缓存），由前端解析出最新在售模型；失败回退过期缓存。
@@ -1343,10 +1470,12 @@ pub fn cancel_provider_test(request_id: String) -> Result<(), String> {
 }
 
 /// One `max_tokens=1` completion proves the relay endpoint, key and model work.
+/// `protocol` selects the request shape; absent means OpenAI Chat Completions.
 #[tauri::command]
-pub async fn test_provider_connection(base_url: String, api_key: String, model_id: String, timeout_seconds: Option<u64>, request_id: Option<String>) -> Result<TestResult, String> {
+pub async fn test_provider_connection(base_url: String, api_key: String, model_id: String, protocol: Option<String>, timeout_seconds: Option<u64>, request_id: Option<String>) -> Result<TestResult, String> {
+	let protocol = normalize_protocol(protocol.as_deref());
 	let Some(request_id) = request_id else {
-		return run_provider_test(base_url, api_key, model_id, timeout_seconds).await;
+		return run_provider_test(base_url, api_key, model_id, protocol, timeout_seconds).await;
 	};
 	if request_id.is_empty() || request_id.len() > 128 { return Err("测试请求标识无效".into()); }
 	let (sender, mut receiver) = tauri::async_runtime::channel(1);
@@ -1357,7 +1486,7 @@ pub async fn test_provider_connection(base_url: String, api_key: String, model_i
 		if requests.running.contains_key(&request_id) { return Err("测试请求标识重复".into()); }
 		requests.running.insert(request_id.clone(), sender);
 	}
-	let mut pending = Box::pin(run_provider_test(base_url, api_key, model_id, timeout_seconds));
+	let mut pending = Box::pin(run_provider_test(base_url, api_key, model_id, protocol, timeout_seconds));
 	let result = std::future::poll_fn(|context| {
 		if receiver.poll_recv(context).is_ready() { return Poll::Ready(Err("测试已停止".into())); }
 		pending.as_mut().poll(context)
@@ -1366,7 +1495,28 @@ pub async fn test_provider_connection(base_url: String, api_key: String, model_i
 	result
 }
 
-async fn run_provider_test(base_url: String, api_key: String, model_id: String, timeout_seconds: Option<u64>) -> Result<TestResult, String> {
+/// The request a protocol's connection test sends: endpoint, JSON body and the
+/// auth style. Anthropic and Google each use a different one-shot shape.
+fn connection_test_request(protocol: &str, base: &str, key: &str, model: &str) -> (String, Value, &'static str) {
+	match protocol {
+		"anthropic" => (anthropic_messages_url(base), json!({
+			"model": model, "max_tokens": 1,
+			"messages": [{ "role": "user", "content": "ping" }],
+		}), "anthropic"),
+		"openai-responses" => (format!("{base}/responses"), json!({
+			"model": model, "input": "ping", "max_output_tokens": 16,
+		}), "bearer"),
+		"google-genai" | "vertex" => (format!("{base}/models/{model}:generateContent?key={key}"), json!({
+			"contents": [{ "role": "user", "parts": [{ "text": "ping" }] }],
+			"generationConfig": { "maxOutputTokens": 1 },
+		}), "query"),
+		_ => (format!("{base}/chat/completions"), json!({
+			"model": model, "messages": [{ "role": "user", "content": "ping" }], "max_tokens": 1,
+		}), "bearer"),
+	}
+}
+
+async fn run_provider_test(base_url: String, api_key: String, model_id: String, protocol: String, timeout_seconds: Option<u64>) -> Result<TestResult, String> {
 	let base = validate_base_url(&base_url)?;
 	let model = validate_model_id(&model_id)?;
 	let key = validate_api_key(&api_key)?;
@@ -1380,16 +1530,13 @@ async fn run_provider_test(base_url: String, api_key: String, model_id: String, 
 		.build()
 		.map_err(|_| "无法初始化连接".to_string())?;
 	let started = std::time::Instant::now();
-	let response = client
-		.post(format!("{base}/chat/completions"))
-		.bearer_auth(&key)
-		.json(&json!({
-			"model": model,
-			"messages": [{ "role": "user", "content": "ping" }],
-			"max_tokens": 1,
-		}))
-		.send()
-		.await;
+	let (url, body, auth) = connection_test_request(&protocol, &base, &key, &model);
+	let mut request = client.post(url).json(&body);
+	request = match auth {
+		"header" => request.header("x-api-key", &key).header("anthropic-version", "2023-06-01"),
+		_ => request.bearer_auth(&key),
+	};
+	let response = request.send().await;
 	let latency_ms = started.elapsed().as_millis() as u64;
 	match response {
 		Ok(mut response) => {
@@ -1470,7 +1617,7 @@ mod connection_test_tests {
 		let token = request_id.clone();
 		let (done_tx, done_rx) = mpsc::channel();
 		tauri::async_runtime::spawn(async move {
-			let result = test_provider_connection(format!("http://{address}/v1"), "test-key".into(), "test-model".into(), Some(60), Some(token)).await;
+			let result = test_provider_connection(format!("http://{address}/v1"), "test-key".into(), "test-model".into(), None, Some(60), Some(token)).await;
 			let _ = done_tx.send(result);
 		});
 		ready_rx.recv_timeout(Duration::from_secs(5)).unwrap();
@@ -1494,7 +1641,7 @@ mod connection_test_tests {
 	fn stopping_before_registration_does_not_send_a_request() {
 		let request_id = "cancel-before-start".to_string();
 		cancel_provider_test(request_id.clone()).unwrap();
-		let result = tauri::async_runtime::block_on(test_provider_connection("http://127.0.0.1:1/v1".into(), "test-key".into(), "test-model".into(), Some(60), Some(request_id)));
+		let result = tauri::async_runtime::block_on(test_provider_connection("http://127.0.0.1:1/v1".into(), "test-key".into(), "test-model".into(), None, Some(60), Some(request_id)));
 		assert_eq!(result.err().unwrap(), "测试已停止");
 	}
 
@@ -1604,10 +1751,10 @@ mod connection_test_tests {
 		let model = ModelSpec { model_id: "m".into(), vision: None, thinking_levels: None, alias: String::new(), input_cost: 0.0, output_cost: 0.0, cache_read_cost: 0.0, cache_write_cost: 0.0, currency: Currency::Cny, max_tokens: 8192, context_window: 128000 };
 		// Undeclared routes stay map-free so pi keeps its five-level default.
 		let route = RouteSpec { id: "r".into(), relay_id: "r1".into(), enabled: true, models: vec![model.clone()], streaming: true, tools: true, vision: false, reasoning: true, thinking_levels: Vec::new() };
-		assert_eq!(project_model(&route, &model, "skiff-test")["thinkingLevelMap"], Value::Null);
+		assert_eq!(project_model(&route, &model, "skiff-test", "openai-completions")["thinkingLevelMap"], Value::Null);
 
 		let declared = RouteSpec { thinking_levels: vec!["low".into(), "high".into()], ..route.clone() };
-		let map = project_model(&declared, &model, "skiff-test")["thinkingLevelMap"].clone();
+		let map = project_model(&declared, &model, "skiff-test", "openai-completions")["thinkingLevelMap"].clone();
 		assert_eq!(map["low"], "low");
 		assert_eq!(map["high"], "high");
 		assert_eq!(map["minimal"], Value::Null);
@@ -1615,7 +1762,7 @@ mod connection_test_tests {
 
 		let mut silent = declared.clone();
 		silent.reasoning = false;
-		assert_eq!(project_model(&silent, &model, "skiff-test")["thinkingLevelMap"], Value::Null);
+		assert_eq!(project_model(&silent, &model, "skiff-test", "openai-completions")["thinkingLevelMap"], Value::Null);
 
 		assert_eq!(normalize_thinking_levels(Some(&["HIGH".into(), "XHigh".into()])).unwrap(), ["high", "xhigh"]);
 		assert!(normalize_thinking_levels(Some(&["ultra".into()])).is_err());

@@ -2,6 +2,33 @@ import type { ModelFamily, ModelSpec, RelaySpec, RelayRouteSpec } from "./useMod
 import type { DiscoveredModel } from "../rpc/modelDiscovery";
 import { pickRecommendedIds, type FamilyLatest } from "./latestModels";
 
+export interface ProviderModelEntry {
+	familyId: string;
+	model: ModelSpec;
+}
+
+/** Projects the provider editor's unified model list back onto family routes. */
+export function routesFromProviderModels(relay: RelaySpec, families: ModelFamily[], entries: ProviderModelEntry[]): RelayRouteSpec[] {
+	const grouped = new Map<string, ModelSpec[]>();
+	for (const entry of entries) {
+		const models = grouped.get(entry.familyId) ?? [];
+		models.push({ ...entry.model, modelId: entry.model.modelId.trim() });
+		grouped.set(entry.familyId, models);
+	}
+	const excluded = new Set(relay.excludedModelIds ?? []);
+	return families.flatMap((family) => {
+		const configured = grouped.get(family.id) ?? [];
+		const existing = family.routes.find((route) => route.relayId === relay.id);
+		if (!existing && !configured.length) return [];
+		if (existing) {
+			const activeIds = new Set(configured.map((model) => model.modelId));
+			const preservedExcluded = existing.models.filter((model) => excluded.has(model.modelId) && !activeIds.has(model.modelId));
+			return [{ familyId: family.id, route: { ...existing, models: [...configured, ...preservedExcluded] } }];
+		}
+		return [{ familyId: family.id, route: { id: "", relayId: relay.id, enabled: true, models: configured, streaming: true, tools: true, vision: false, reasoning: true } }];
+	});
+}
+
 /** Classify the model basename, retaining the exact provider-prefixed API ID. */
 export function discoveredFamily(modelId: string): string | undefined {
 	const id = modelId.trim().split("/").pop()?.toLowerCase() ?? "";

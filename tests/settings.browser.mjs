@@ -14,6 +14,13 @@ const errors = [];
 page.on("pageerror", (error) => errors.push(String(error)));
 const dialog = () => page.getByRole("dialog", { name: "设置", exact: true });
 const button = (name) => dialog().getByRole("button", { name, exact: true });
+const assertNoDisabledFrame = async (element) => {
+	const colors = await element.evaluate((node) => {
+		const style = getComputedStyle(node);
+		return [style.borderTopColor, style.backgroundColor];
+	});
+	assert.deepEqual(colors, ["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"]);
+};
 const wait = (fn, arg) => page.waitForFunction(fn, arg);
 const shot = (name) => page.screenshot({ animations: "disabled", path: new URL(`${name}.png`, output).pathname.replace(/^\/([A-Z]:)/, "$1") });
 const ready = () => wait(() => document.querySelector(".settings-trigger")?.textContent.includes("pi 已连接"));
@@ -87,11 +94,41 @@ try {
 	assert.equal(await button("编辑 官方直连 的路线").count(), 0, "Providers page must not list routes");
 	assert.equal(await button("外观").isDisabled(), true);
 	await wait(() => document.activeElement?.id === "relay-name");
+	assert.equal(await page.locator(".provider-model-editor-row").count(), 3, "Provider editor must list its configured models");
+	// Every model row can be tested on its own against this relay.
+	const firstRow = page.locator(".provider-model-editor-row").first();
+	await firstRow.getByRole("button", { name: "测试", exact: true }).click();
+	await firstRow.locator(".test-result.ok").waitFor();
 	await shot("provider-editor");
+	await button("获取模型列表").click();
+	await page.locator(".provider-model-list-notice").waitFor();
+	const discoveredCount = await page.locator(".provider-model-editor-row").count();
+	assert.ok(discoveredCount > 3, "Model discovery must add supported models to the provider list");
+	await button("添加模型").click();
+	assert.equal(await page.locator(".provider-model-editor-row").count(), discoveredCount + 1);
+	await page.getByRole("button", { name: `删除模型 ${discoveredCount + 1}`, exact: true }).click();
+	assert.equal(await page.locator(".provider-model-editor-row").count(), discoveredCount);
 	await page.keyboard.press("Escape");
 	assert.equal(await dialog().count(), 1);
 	assert.equal(await button("外观").isEnabled(), true);
 	assert.equal(await button("编辑 官方直连").evaluate((el) => el === document.activeElement), true, "Return must focus the original provider row");
+	await button("编辑 官方直连").click();
+	await page.locator('[aria-label="模型 ID 2"]').fill("deepseek-temporary");
+	await page.locator('[aria-label="模型 ID 2"]').fill("deepseek-chat");
+	await page.locator('[aria-label="模型 2 上下文窗口"]').fill("196000");
+	await page.locator('[aria-label="模型 2 显示名"]').fill("编辑器模型名");
+	await button("保存").click();
+	await page.locator("#relay-name").waitFor({ state: "detached" });
+	const savedModel = await page.evaluate(() => {
+		const saved = window.skiffPreview.commands.filter((item) => item.command === "save_relay").at(-1);
+		return {
+			model: saved?.args.routes.find((item) => item.familyId === "deepseek")?.route.models.find((model) => model.modelId === "deepseek-chat"),
+			excluded: saved?.args.relay.excludedModelIds ?? [],
+		};
+	});
+	assert.equal(savedModel.model.contextWindow, 196000);
+	assert.equal(savedModel.model.alias, "编辑器模型名");
+	assert.equal(savedModel.excluded.includes("deepseek-chat"), false, "Restoring a model ID must clear its exclusion");
 	await button("路线").click();
 	assert.equal(await button("编辑 官方直连").count(), 0, "Route page must not list providers");
 	await button("编辑 官方直连 的路线").click();
@@ -221,11 +258,18 @@ try {
 	await input.fill("运行中设置验证"); await input.press("Enter");
 	await page.getByRole("button", { name: "停止生成", exact: true }).waitFor();
 	await page.evaluate(() => { for (const process of window.skiffPreview.processes.values()) clearTimeout(process.timer); });
+	await page.locator(".settings-trigger").click();
+	const menuProvider = page.locator(".settings-menu").getByRole("button", { name: "供应商", exact: true });
+	assert.equal(await menuProvider.isDisabled(), true);
+	await assertNoDisabledFrame(menuProvider);
+	await page.keyboard.press("Escape");
 	await open();
 	assert.equal(await button("供应商").isDisabled(), true);
 	assert.equal(await button("路线").isDisabled(), true);
 	assert.equal(await button("系统提示词").isDisabled(), true);
+	await assertNoDisabledFrame(button("供应商"));
 	await button("深色").click();
+	await assertNoDisabledFrame(button("供应商"));
 	await button("快捷键").click();
 	await page.keyboard.press("Control+Shift+Backspace");
 	await close();

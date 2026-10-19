@@ -112,12 +112,21 @@ pub(crate) struct DiscoveredModel {
 	pub tools: bool,
 }
 
-pub(crate) async fn discover(base: &str, key: &str) -> Result<Vec<DiscoveredModel>, String> {
+/// Lists models over an OpenAI-compatible `/models` endpoint. `protocol`
+/// selects Anthropic's `/models` or Google's `?key=` form; both return model
+/// ids in a different JSON shape.
+pub(crate) async fn discover(base: &str, key: &str, protocol: Option<&str>) -> Result<Vec<DiscoveredModel>, String> {
 	let base = base_url(base)?;
 	validate_key(key)?;
 	if key.trim().is_empty() { return Err("请先填写 API Key".into()); }
+	let protocol = protocol.unwrap_or("openai");
 	let client = reqwest::Client::builder().timeout(Duration::from_secs(10)).redirect(reqwest::redirect::Policy::none()).build().map_err(|_| "无法初始化连接")?;
-	let mut response = client.get(format!("{base}/models")).bearer_auth(key.trim()).send().await.map_err(discovery_network_error)?;
+	let request = match protocol {
+		"anthropic" => client.get(format!("{base}/models?limit=1000")).header("x-api-key", key.trim()).header("anthropic-version", "2023-06-01"),
+		"google-genai" | "vertex" => client.get(format!("{base}/models?key={}", key.trim())),
+		_ => client.get(format!("{base}/models")).bearer_auth(key.trim()),
+	};
+	let mut response = request.send().await.map_err(discovery_network_error)?;
 	let status = response.status();
 	if [401, 404].contains(&status.as_u16()) { return Err(discovery_http_error(status.as_u16(), &[], key.trim())); }
 	let mut bytes = Vec::new();
@@ -132,11 +141,17 @@ pub(crate) async fn discover(base: &str, key: &str) -> Result<Vec<DiscoveredMode
 	}
 	if !status.is_success() { return Err(discovery_http_error(status.as_u16(), &bytes, key.trim())); }
 	let value: Value = serde_json::from_slice(&bytes).map_err(|_| "模型列表不是有效 JSON")?;
-	let mut models: Vec<DiscoveredModel> = value["data"].as_array().ok_or("模型列表应包含 data 数组")?.iter().filter_map(|m| {
-		let id = m["id"].as_str()?;
-		if id.trim().is_empty() { return None; }
+	// OpenAI and Anthropic list under `data`; Gemini lists under `models` with
+	// a `models/` id prefix.
+	let entries = match protocol {
+		"google-genai" | "vertex" => value["models"].as_array().ok_or("模型列表应包含 models 数组")?,
+		_ => value["data"].as_array().ok_or("模型列表应包含 data 数组")?,
+	};
+	let mut models: Vec<DiscoveredModel> = entries.iter().filter_map(|m| {
+		let raw = if protocol == "google-genai" || protocol == "vertex" { m["name"].as_str()?.rsplit('/').next()? } else { m["id"].as_str()? };
+		if raw.trim().is_empty() { return None; }
 		Some(DiscoveredModel {
-			id: id.to_string(),
+			id: raw.to_string(),
 			// Most providers omit these; only adopt them when the endpoint
 			// actually reports the capability, otherwise default to false.
 			reasoning: m["reasoning"].as_bool().unwrap_or(false),
@@ -502,7 +517,7 @@ mod tests {
 				let mut request = [0; 4096]; stream.read(&mut request).unwrap();
 				write!(stream, "HTTP/1.1 {status} Error\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).unwrap();
 			});
-			let error = tauri::async_runtime::block_on(discover(&format!("http://{address}/v1/"), "test-key")).unwrap_err();
+			let error = tauri::async_runtime::block_on(discover(&format!("http://{address}/v1/"), "test-key", None)).unwrap_err();
 			assert_eq!(error, expected); assert!(!error.contains("test-key"));
 			server.join().unwrap();
 		}
@@ -521,7 +536,7 @@ mod tests {
 			let _ = stream;
 		});
 		let start = std::time::Instant::now();
-		let error = tauri::async_runtime::block_on(discover(&format!("http://{address}/v1"), "test-key")).unwrap_err();
+		let error = tauri::async_runtime::block_on(discover(&format!("http://{address}/v1"), "test-key", None)).unwrap_err();
 		assert!(error.contains("超时（10 秒）"));
 		assert!(start.elapsed() >= Duration::from_secs(9));
 		server.join().unwrap();
@@ -541,7 +556,7 @@ mod tests {
 			let body = r#"{"data":[{"id":"z-model"},{"id":"a-model"},{"id":"a-model"}]}"#;
 			write!(stream, "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", body.len(), body).unwrap();
 		});
-		let models = tauri::async_runtime::block_on(discover(&format!("http://{address}/v1"), "test-key")).unwrap();
+		let models = tauri::async_runtime::block_on(discover(&format!("http://{address}/v1"), "test-key", None)).unwrap();
 		assert_eq!(models.iter().map(|model| model.id.as_str()).collect::<Vec<_>>(), ["a-model", "z-model"]); server.join().unwrap();
 	}
 	#[test]

@@ -1,7 +1,10 @@
 // Loaded explicitly by Skiff. Runtime configuration and decrypted keys are
 // inherited from the native parent process; this module never writes secrets.
 import { readFileSync } from "node:fs";
-import { createAssistantMessageEventStream, streamSimpleOpenAICompletions } from "@mariozechner/pi-ai";
+import {
+	anthropicMessagesApi, createAssistantMessageEventStream,
+	googleGenerativeAIApi, googleVertexApi, openAICompletionsApi, openAIResponsesApi,
+} from "@mariozechner/pi-ai";
 
 /** Present a non-streaming completion to pi's normal streaming parser. */
 export async function adaptResponse(response) {
@@ -21,6 +24,18 @@ export async function adaptResponse(response) {
 	});
 }
 
+/** Each relay protocol is served by pi's matching adapter. */
+const ADAPTERS = {
+	"openai-completions": () => openAICompletionsApi(),
+	"openai-responses": () => openAIResponsesApi(),
+	"anthropic-messages": () => anthropicMessagesApi(),
+	"google-generative-ai": () => googleGenerativeAIApi(),
+	"google-vertex": () => googleVertexApi(),
+};
+
+/** Only Chat Completions has a plain-JSON response Skiff can re-present as SSE. */
+const NON_STREAMING_AWARE = new Set(["openai-completions"]);
+
 export default function modelFamilies(pi) {
 	const runtimeFile = process.env.SKIFF_FAMILY_RUNTIME_FILE;
 	let runtime = process.env.SKIFF_FAMILY_RUNTIME ?? "[]";
@@ -32,33 +47,35 @@ export default function modelFamilies(pi) {
 	const streamSimple = (model, context, options = {}) => {
 		const route = lookup.get(model.provider);
 		if (!route) throw new Error("找不到该提供商的请求配置");
+		const api = route.api ?? "openai-completions";
+		// Family routes serve arbitrary relays: pi cannot infer their protocol,
+		// tool support or capability profile from our provider key or URL.
+		const base = { ...model, api, compat: api === "openai-completions" ? { ...model.compat, supportsDeveloperRole: false } : model.compat };
 		const timeout = AbortSignal.timeout(route.timeoutSeconds * 1000);
 		const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
-		const doFetch = options.fetch ?? globalThis.fetch;
-		// Family routes serve DeepSeek, Kimi and GLM through arbitrary relays.
-		// pi cannot infer their role support from our provider key or relay URL.
-		const upstream = streamSimpleOpenAICompletions({
-			...model, api: "openai-completions", compat: { ...model.compat, supportsDeveloperRole: false },
-		}, context, {
-			...options, maxTokens: options.maxTokens ?? model.maxTokens, signal, timeoutMs: route.timeoutSeconds * 1000,
-			apiKey: process.env[route.keyEnv],
+		const optionsForUpstream = {
+			...options, maxTokens: options.maxTokens ?? model.maxTokens, signal,
+			timeoutMs: route.timeoutSeconds * 1000, apiKey: process.env[route.keyEnv],
 			onPayload: async (payload, current) => {
 				payload = await options.onPayload?.(payload, current) ?? payload;
 				if (!route.tools) { delete payload.tools; delete payload.tool_choice; delete payload.parallel_tool_calls; }
 				return payload;
 			},
-			fetch: async (input, init) => {
-				// Keep the SDK in stream parsing mode, but send a normal JSON
-				// request upstream for channels with streaming disabled.
-				if (!route.streaming && typeof init?.body === "string") {
+		};
+		if (NON_STREAMING_AWARE.has(api) && !route.streaming) {
+			// Keep the SDK in stream parsing mode, but send a normal JSON request
+			// upstream for channels with streaming disabled.
+			const doFetch = options.fetch ?? globalThis.fetch;
+			optionsForUpstream.fetch = async (input, init) => {
+				if (typeof init?.body === "string") {
 					const payload = JSON.parse(init.body);
 					payload.stream = false; delete payload.stream_options;
 					init = { ...init, body: JSON.stringify(payload) };
 				}
-				const response = await doFetch(input, init);
-				return route.streaming ? response : adaptResponse(response);
-			},
-		});
+				return adaptResponse(await doFetch(input, init));
+			};
+		}
+		const upstream = ADAPTERS[api]().streamSimple(base, context, optionsForUpstream);
 		const stream = createAssistantMessageEventStream();
 		(async () => {
 			for await (const event of upstream) {
@@ -78,9 +95,13 @@ export default function modelFamilies(pi) {
 		return stream;
 	};
 	for (const route of routes) {
+		const api = route.api ?? "openai-completions";
+		// `api` here names Skiff's dispatch, not a pi built-in, so its own
+		// adapters are never consulted for these routes.
+		const providerApi = `skiff-${api}`;
 		pi.registerProvider(route.providerKey, {
-			baseUrl: route.baseUrl, api: "skiff-openai-completions", apiKey: `$${route.keyEnv}`,
-			models: route.models.map((model) => ({ ...model, api: "skiff-openai-completions" })), streamSimple,
+			baseUrl: route.baseUrl, api: providerApi, apiKey: `$${route.keyEnv}`,
+			models: route.models.map((model) => ({ ...model, api: providerApi })), streamSimple,
 		});
 	}
 }

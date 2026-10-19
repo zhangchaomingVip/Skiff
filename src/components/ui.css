@@ -77,6 +77,8 @@
 }
 @layer accessibility {
 	:is(button, input, textarea, select):disabled, .ui-button:disabled, .ui-input:disabled, .model-discovery-option:disabled { opacity: 1; color: var(--disabled-text); border-color: var(--disabled-text); background: var(--surface); text-shadow: none; }
+	.settings-menu .ui-button[data-variant=ghost]:disabled,
+	.settings-nav .ui-button[data-variant=ghost]:disabled { border-color: transparent; background: transparent; }
 
 	.turn-usage .usage-cost:disabled { background: transparent; }
 	.switch:has(input:focus-visible) .slider { outline: 2px solid var(--accent); outline-offset: 2px; }
