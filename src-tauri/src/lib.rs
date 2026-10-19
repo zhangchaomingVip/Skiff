@@ -122,6 +122,12 @@ async fn rpc_start(app: AppHandle, state: State<'_, AppState>, options: RpcStart
 		.await.map_err(|e| e.to_string())?
 }
 
+fn flatten_line_breaks(text: &str) -> String {
+	text.replace("\r\n", " ")
+		.replace('\n', " ")
+		.replace('\r', " ")
+}
+
 fn start_session(app: AppHandle, sessions: &Mutex<HashMap<String, Proc>>, options: RpcStartOptions) -> Result<(), String> {
 	let instance_id = options.instance_id.unwrap_or_else(|| "main".to_string());
 	if let Some(cwd) = &options.cwd {
@@ -148,7 +154,12 @@ fn start_session(app: AppHandle, sessions: &Mutex<HashMap<String, Proc>>, option
 	cmd.arg("--mode").arg("rpc");
 	if let Some(prompt) = options.append_system_prompt.as_deref() {
 		if !prompt.trim().is_empty() {
-			cmd.arg("--append-system-prompt").arg(prompt);
+			// On Windows we spawn `pi` through `cmd /C`; a newline inside an
+			// argument terminates that command line, silently dropping every
+			// argument that follows (`--extension`, leaving pi with no managed
+			// providers and a placeholder "unknown" model). Flatten line breaks
+			// into spaces so the hint stays a single argument.
+			cmd.arg("--append-system-prompt").arg(flatten_line_breaks(prompt));
 		}
 	}
 	if let Some(cwd) = &options.cwd {

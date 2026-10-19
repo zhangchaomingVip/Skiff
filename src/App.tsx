@@ -183,22 +183,39 @@ export default function App() {
 			...(displayModel.routeId ? { routeId: displayModel.routeId } : {}),
 			...(displayModel.offerId ? { offerId: displayModel.offerId } : {}),
 		} : inherited && (!inherited.provider.startsWith("skiff-") || modelFamilies.offers.some((offer) => offer.providerKey === inherited.provider && offer.modelId === (inherited.modelId ?? inherited.id))) ? inherited : undefined;
+		// Reusing today's empty draft keeps its pi process alive. That process can
+		// predate a relay/route change, so rebuild it around the chosen model like
+		// the launcher path does instead of replaying a provider that pi rejects
+		// with a fatal "Model not found".
+		const reuseEmptyDraft = !!activeChat && activeChat.projectId === activeProject.id && !activeChat.hasMessages && !activeChat.hasDraft && !hasDraft(drafts.get(activeChat.id)) && pool.canClose(activeChat.id);
 		library.createChat(activeProject.id, selectedModel, new Set(allChats.filter((chat) => !pool.canClose(chat.id) || hasDraft(drafts.get(chat.id))).map((chat) => chat.id)));
+		if (reuseEmptyDraft) session.reconnect(selectedModel ? { provider: selectedModel.provider, id: selectedModel.id, modelId: selectedModel.modelId ?? selectedModel.id, ...(selectedModel.routeId ? { routeId: selectedModel.routeId } : {}), ...(selectedModel.offerId ? { offerId: selectedModel.offerId } : {}) } : undefined);
 		setView("chat"); if (window.innerWidth <= 760) setSidebarOpen(false);
-	}, [library, navigationDisabled, activeProject, activeChat?.selectedModel, displayModel, modelFamilies.offers, allChats, pool.canClose]);
+	}, [library, navigationDisabled, activeProject, activeChat, displayModel, modelFamilies.offers, allChats, pool.canClose, session.reconnect]);
 	const startLauncherChat = useCallback(async (offer: RuntimeOffer) => {
 		if (navigationDisabled || modelFamilies.loading) return;
 		if (!activeProject) { setModelNotice("请先选择一个项目后再开始聊天"); return; }
+		const selected = { provider: offer.providerKey, id: offer.modelId, modelId: offer.modelId, ...(offer.routeId ? { routeId: offer.routeId } : {}), ...(offer.offerId ? { offerId: offer.offerId } : {}) };
 		// Reusing the active empty draft keeps its pi process alive. Apply the
 		// explicitly chosen offer there before entering chat, just as the picker does.
 		if (activeChat && !activeChat.hasMessages && !activeChat.hasDraft && !hasDraft(drafts.get(activeChat.id)) && activeChat.projectId === activeProject.id && !busy && !session.loading) {
 			const model = displayModels.find((item) => item.provider === offer.providerKey && item.id === offer.modelId);
-			if (!model || !await actions.setModel(model)) return;
+			if (!model) return;
+			if (!await actions.setModel(model)) {
+				// The recycled empty-draft pi process can predate this managed
+				// provider (or be a spawn race that left it without credentials),
+				// so it rejects set_model with "Model not found". Rebuild the
+				// process around the chosen model instead of stranding the chat.
+				library.createChat(activeProject.id, selected, new Set(allChats.filter((chat) => !pool.canClose(chat.id)).map((chat) => chat.id)));
+				session.reconnect(model);
+				setView("chat");
+				return;
+			}
 		}
 		if (!session.isCurrent()) return;
-		library.createChat(activeProject.id, { provider: offer.providerKey, id: offer.modelId, modelId: offer.modelId, ...(offer.routeId ? { routeId: offer.routeId } : {}), ...(offer.offerId ? { offerId: offer.offerId } : {}) }, new Set(allChats.filter((chat) => !pool.canClose(chat.id)).map((chat) => chat.id)));
+		library.createChat(activeProject.id, selected, new Set(allChats.filter((chat) => !pool.canClose(chat.id)).map((chat) => chat.id)));
 		setView("chat");
-	}, [activeChat, activeProject, actions, displayModels, library, navigationDisabled, modelFamilies.loading, busy, session.loading, session.isCurrent, allChats, pool.canClose]);
+	}, [activeChat, activeProject, actions, displayModels, library, navigationDisabled, modelFamilies.loading, busy, session.loading, session.isCurrent, allChats, pool.canClose, session.reconnect]);
 	useEffect(() => {
 		const onKeyDown = (event: KeyboardEvent) => {
 			if (event.isComposing || event.keyCode === 229 || event.defaultPrevented) return;

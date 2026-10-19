@@ -93,7 +93,12 @@ export function useRuntimeRoutes(session: ReturnType<typeof usePiSession>, chat:
 		if (resolved.invalidated) setNotice(resolved.offer ? `当前模型已失效，已切换到 ${resolved.offer.familyName} · ${resolved.offer.relayName} · ${resolved.offer.modelId}` : "当前模型已失效，请先在中转上配置线路");
 		const model = resolved.offer ? modelFor(resolved.offer) : state.model && !familyFromProvider(state.model.provider) ? state.model : undefined;
 		if (session.loadedConfig !== config) session.reconnect(model);
-		else if (resolved.offer && model && (state.model?.provider !== model.provider || state.model.id !== model.id || state.model.routeId !== model.routeId || state.model.offerId !== model.offerId)) void actions.setModel(model);
+		else if (resolved.offer && model && (state.model?.provider !== model.provider || state.model.id !== model.id || state.model.routeId !== model.routeId || state.model.offerId !== model.offerId)) {
+			// The running pi process can predate a route/config change. If it still
+			// rejects the projection, rebuild it around the chosen model instead of
+			// leaving a fatal "Model not found" that strands the chat.
+			void actions.setModel(model).then((ok) => { if (!ok && isCurrent()) session.reconnect(model); });
+		}
 	}, [configuration.config, configuration.ready, session.connected, session.pending, session.loadedConfig, state.isStreaming, state.activeRun, state.model, state.availableModels, offers, chat.selectedModel]);
 	const selectModel = useCallback(async (model: ModelInfo) => {
 		if (!isCurrent()) return false;
@@ -102,8 +107,12 @@ export function useRuntimeRoutes(session: ReturnType<typeof usePiSession>, chat:
 		const target = live.current.offers.find((offer) => model.offerId ? offer.offerId === model.offerId : offer.providerKey === model.provider && offer.modelId === model.id);
 		const success = await actions.setModel(model);
 		if (success && isCurrent() && source && target && source.offerId !== target.offerId) record(route(source), route(target), `manual:${Date.now()}`, false, "none", "switched");
+		// A live process can predate a relay/route change and reject the chosen
+		// projection. Rebuild it around the model instead of leaving the picker on
+		// a fatal "Model not found".
+		if (!success && isCurrent() && session.canNavigate()) session.reconnect(model);
 		return success && isCurrent();
-	}, [actions, isCurrent]);
+	}, [actions, isCurrent, session.reconnect, session.canNavigate]);
 	const prompt = useCallback<typeof actions.prompt>(async (text, images, delivery) => {
 		requirements.current = { streaming: true, tools: live.current.session.state.model?.tools === true, reasoning: live.current.session.state.model?.reasoning === true, vision: !!images?.length || live.current.session.state.model?.vision === true };
 		const accepted = await actions.prompt(text, images, delivery);
