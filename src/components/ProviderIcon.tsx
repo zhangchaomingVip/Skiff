@@ -72,12 +72,21 @@ const MARKS: Record<string, Mark> = {
 	},
 };
 
+/** Deterministic tile colours for providers without a known mark. */
+const TILE_COLORS = ["#2458be", "#2e7d5b", "#7c5cd6", "#c0564f", "#b07818", "#0e7f8c"];
+const tileColor = (name: string) => {
+	let hash = 7;
+	for (const char of name) hash = (hash * 31 + (char.codePointAt(0) ?? 0)) | 0;
+	return TILE_COLORS[Math.abs(hash) % TILE_COLORS.length];
+};
+
 /** Renders a vendor mark, or a coloured initial tile for unknown providers. */
 export function ProviderIcon({ id, name, size = 20 }: { id: string; name?: string; size?: number }) {
 	const mark = MARKS[id];
 	if (!mark) {
-		const initial = (name ?? "?").trim().charAt(0).toUpperCase() || "?";
-		return <span className="provider-mark generic" style={{ width: size, height: size, fontSize: Math.round(size * 0.5) }} aria-hidden="true">{initial}</span>;
+		const label = (name ?? "?").trim();
+		const initial = label.charAt(0).toUpperCase() || "?";
+		return <span className="provider-mark generic" style={{ width: size, height: size, fontSize: Math.round(size * 0.5), background: tileColor(label), color: "#fff" }} aria-hidden="true">{initial}</span>;
 	}
 	return (
 		<svg className="provider-mark" width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" focusable="false">

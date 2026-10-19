@@ -82,8 +82,12 @@ try {
 	await page.evaluate(() => { window.skiffPreview.pendingTests.splice(0).forEach((pending) => pending.resolve({ ok: false, latencyMs: 1, status: 500, error: "ignored" })); });
 	assert.deepEqual((await metadata()).tests, history.tests);
 	await page.reload(); await open(); await button("供应商").click();
-	await settings().getByRole("button", { name: "编辑 硅基低价" }).getByText(/最近测试：成功.*first\/deepseek-v4.1-flash/).waitFor();
-	assert.match(await settings().getByRole("button", { name: "编辑 官方直连" }).textContent(), /未测试/);
+	const testedRow = settings().getByRole("button", { name: "编辑 硅基低价" });
+	await testedRow.getByText(/最近测试 \d+ ms/).waitFor();
+	assert.match(await testedRow.locator(".provider-row-meta").getAttribute("title") ?? "", /最近测试：成功.*first\/deepseek-v4.1-flash/);
+	const untestedRow = settings().getByRole("button", { name: "编辑 官方直连" });
+	assert.doesNotMatch(await untestedRow.textContent(), /最近测试/, "Untested relays show no inline test hint");
+	assert.equal(await untestedRow.locator(".provider-row-meta").getAttribute("title"), "未测试");
 	await shot("history-reloaded-light");
 	await button("路线").click();
 	assert.match(await settings().locator('[data-route-id="route-deepseek-r2"]').textContent(), /最近测试：成功/);
@@ -100,7 +104,7 @@ try {
 	assert.ok((await metadata()).tests[0].completedAt >= history.tests[0].completedAt);
 	await button("编辑 硅基低价").click(); await settings().locator(".settings-advanced summary").click();
 	await page.locator("#relay-timeout").fill("124"); await button("保存").click(); await page.locator("#relay-name").waitFor({ state: "detached" });
-	assert.match(await settings().getByRole("button", { name: "编辑 硅基低价" }).textContent(), /配置已变化/);
+	assert.match(await settings().getByRole("button", { name: "编辑 硅基低价" }).locator(".provider-row-meta").getAttribute("title") ?? "", /配置已变化/);
 	assert.equal(await page.evaluate(() => (localStorage.getItem("skiff.test.metadata.v1") ?? "").includes("sk-mock")), false);
 
 	await button("路线").click(); const searchRoutes = settings().getByRole("textbox", { name: "搜索路线" });

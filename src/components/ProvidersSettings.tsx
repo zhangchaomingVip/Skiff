@@ -23,8 +23,8 @@ import { Button, IconButton, Input, Select, Tooltip } from "./ui";
 
 const openLink = (url: string) => void invoke("open_url", { url }).catch((error) => console.error(String(error)));
 
-/** Saved-key fingerprint, shown only inside the advanced editor options. */
-const keyHint = (key: string) => (key.length > 8 ? `${key.slice(0, 4)}…${key.slice(-4)}` : maskKey(key));
+/** Saved-key fingerprint, shown in list rows and inside the advanced editor options. */
+const keyHint = (key: string) => (key.length > 8 ? `${key.slice(0, 4)}•••${key.slice(-4)}` : maskKey(key));
 
 type Draft =
 	| { kind: "pick" }
@@ -618,10 +618,12 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 				<div className="settings-toolbar" role="group" aria-label="供应商筛选">
 					<Input aria-label="搜索已配置供应商" placeholder="搜索名称或端点…" value={listQuery} onChange={(event) => setListQuery(event.target.value)} />
 					<div className="settings-filter-group">{([ ["all", "全部"], ["enabled", "启用"], ["disabled", "停用"] ] as const).map(([value, label]) => <Button key={value} size="compact" variant="ghost" aria-pressed={statusFilter === value} onClick={() => setStatusFilter(value)}>{label} {matchedRelays.filter((relay) => value === "all" || relay.enabled === (value === "enabled")).length}</Button>)}</div>
-					<Select aria-label="供应商显示排序" value={view.sort} disabled={pending} onChange={(event) => setView({ ...view, sort: event.target.value as ProviderSort })}><option value="config">配置原顺序</option><option value="name">按名称</option><option value="recent">最近使用</option><option value="status">按状态</option></Select>
-					<label className="provider-toggle inline"><input type="checkbox" checked={view.grouped} disabled={pending} onChange={(event) => setView({ ...view, grouped: event.target.checked })} />按来源分组</label>
-					<Button disabled={pending} aria-pressed={batch} onClick={() => { setBatch(!batch); setSelected([]); }}>{batch ? "退出批量管理" : "批量管理"}</Button>
-					<Button onClick={openPick} disabled={pending || batch}><Icon name="plus" size={14} />添加供应商</Button>
+					<div className="settings-toolbar-extras">
+						<Select aria-label="供应商显示排序" value={view.sort} disabled={pending} onChange={(event) => setView({ ...view, sort: event.target.value as ProviderSort })}><option value="config">配置原顺序</option><option value="name">按名称</option><option value="recent">最近使用</option><option value="status">按状态</option></Select>
+						<label className="provider-toggle inline"><input type="checkbox" checked={view.grouped} disabled={pending} onChange={(event) => setView({ ...view, grouped: event.target.checked })} />按来源分组</label>
+						<Button size="compact" variant="ghost" disabled={pending} aria-pressed={batch} onClick={() => { setBatch(!batch); setSelected([]); }}>{batch ? "退出批量管理" : "批量管理"}</Button>
+						<Button variant="primary" onClick={openPick} disabled={pending || batch}><Icon name="plus" size={14} />添加供应商</Button>
+					</div>
 				</div>
 				{batch && <div className="settings-toolbar settings-batch-bar" role="group" aria-label="供应商批量操作">
 					<label className="provider-toggle inline"><input type="checkbox" aria-label="全选当前结果" checked={!!shownRelays.length && shownRelays.every((relay) => selected.includes(relay.id))} disabled={pending || !shownRelays.length} onChange={(event) => setSelected(event.target.checked ? shownRelays.map((relay) => relay.id) : [])} />全选当前结果</label><span role="status">已选 {selected.length} 个</span>
@@ -633,17 +635,19 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 					{shownRelays.map((relay, index) => {
 						const preset = matchPreset(relay.baseUrl);
 						const protocol = RELAY_PROTOCOLS.find((item) => item.id === (relay.protocol ?? "openai"));
+						const lastTest = latestSettingsTest(metadata.tests, relay.id);
+						const testHint = !lastTest ? "" : lastTest.ok ? ` · 最近测试 ${lastTest.latencyMs} ms` : " · 最近测试失败";
 						return <Fragment key={relay.id}>{view.grouped && (index === 0 || providerSourceLabel(shownRelays[index - 1].baseUrl) !== providerSourceLabel(relay.baseUrl)) && <h3 className="settings-source-heading">{providerSourceLabel(relay.baseUrl)}</h3>}<div className={`provider-row provider-relay-row ${batch ? "is-selecting" : ""} ${relay.enabled ? "" : "disabled"}`}>
 							{batch && <input type="checkbox" aria-label={`选择 ${relay.name}`} checked={selected.includes(relay.id)} disabled={pending} onChange={(event) => setSelected((ids) => event.target.checked ? [...ids, relay.id] : ids.filter((id) => id !== relay.id))} />}
 							<button type="button" className="provider-relay-btn" onClick={() => openRelay(relay, preset)} disabled={pending || batch} aria-label={`编辑 ${relay.name}`}>
-								<ProviderIcon id={preset?.id ?? ""} name={relay.name} size={22} />
+								<ProviderIcon id={preset?.id ?? ""} name={relay.name} size={28} />
 								<span className="provider-row-text">
-									<span className="provider-row-title"><strong title={relay.name}>{relay.name}</strong><span className="provider-tag">{providerSourceLabel(relay.baseUrl)}</span></span>
-									<small className="provider-row-meta"><span className="provider-row-endpoint" title={maskBaseUrl(relay.baseUrl)}>{maskBaseUrl(relay.baseUrl)}</span><span className="provider-row-count">· {protocol?.label ?? "OpenAI"} · {relayModelCount(relay.id) ? `${relayModelCount(relay.id)} 个模型` : "未配置模型"}</span></small>
-									<small className="settings-test-history" title="连接测试请求耗时；历史结果不代表当前在线">{settingsTestSummary(latestSettingsTest(metadata.tests, relay.id))}</small>
+									<span className="provider-row-title"><strong title={relay.name}>{relay.name}</strong>{relay.enabled && <span className="settings-badge" data-tone="success">启用</span>}<span className="provider-tag">{providerSourceLabel(relay.baseUrl)}</span></span>
+									<small className="provider-row-meta" title={settingsTestSummary(lastTest)}><span className="provider-row-endpoint" title={maskBaseUrl(relay.baseUrl)}>{maskBaseUrl(relay.baseUrl)}</span><span className="provider-row-count">· {protocol?.label ?? "OpenAI"} · {relayModelCount(relay.id) ? `${relayModelCount(relay.id)} 个模型` : "未配置模型"}{testHint}</span></small>
 								</span>
 							</button>
 							<div className="provider-row-side">
+								{relay.apiKey && <span className="settings-key-fingerprint" title="已保存密钥的指纹">{keyHint(relay.apiKey)}</span>}
 								<label className="switch" title={relay.enabled ? "停用" : "启用"}>
 									<input type="checkbox" checked={relay.enabled} disabled={pending || batch} onChange={(event) => { const enabled = event.target.checked; void mutate(() => toggleRelay(relay.id, enabled)); }} aria-label={`${relay.enabled ? "停用" : "启用"} ${relay.name}`} />
 									<span className="slider" />
