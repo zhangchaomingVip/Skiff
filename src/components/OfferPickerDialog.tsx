@@ -12,7 +12,7 @@ const capabilities = (offer: RuntimeOffer) => [offer.tools && "工具", offer.vi
 export function OfferPickerDialog({ model, onSelect, onClose }: { model: LauncherModel; onSelect: (offer: RuntimeOffer) => void; onClose: () => void }) {
 	const inputRef = useRef<HTMLInputElement>(null);
 	const [query, setQuery] = useState("");
-	const [active, setActive] = useState(() => Math.max(0, model.offers.findIndex((offer) => offer.offerId === model.defaultOffer.offerId)));
+	const [active, setActive] = useState(() => Math.max(0, model.offers.findIndex((offer) => offer.offerId === model.preferredOffer.offerId)));
 	const choices = useMemo(() => {
 		const needle = query.trim().toLocaleLowerCase();
 		return model.offers.filter((offer) => !needle || `${offer.relayName} ${offer.modelId} ${offer.alias ?? ""} ${offer.billingAccountId ?? ""}`.toLocaleLowerCase().includes(needle));
@@ -27,7 +27,7 @@ export function OfferPickerDialog({ model, onSelect, onClose }: { model: Launche
 		<div className="offer-dialog-head"><div><h2 id="offer-dialog-title">选择线路</h2><p>{model.familyName} · {model.modelId} · 线路决定请求地址和扣费账户。</p></div><IconButton  onClick={onClose} aria-label="关闭"><Icon name="close" /></IconButton></div>
 		<label className="offer-search"><Icon name="search" size={15} /><Input appearance="plain" ref={inputRef} value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={onKeyDown} aria-label="搜索线路" placeholder="搜索线路、模型或扣费账户" /></label>
 		<div className="offer-options" role="listbox" aria-label="可用线路">
-			{choices.map((offer, index) => <button type="button" key={offerKey(offer)} className={`offer-option ${index === active ? "focused" : ""}`} role="option" aria-selected={offer.offerId === model.defaultOffer.offerId} onMouseMove={() => setActive(index)} onClick={() => choose(offer)}>
+			{choices.map((offer, index) => <button type="button" key={offerKey(offer)} className={`offer-option ${index === active ? "focused" : ""}`} role="option" aria-selected={offer.offerId === model.preferredOffer.offerId} onMouseMove={() => setActive(index)} onClick={() => choose(offer)}>
 				<span className="offer-option-icon"><Icon name="terminal" size={16} /></span><span className="offer-option-main"><strong>{offer.relayName}</strong><small>{offer.modelId} · {capabilities(offer).join(" · ") || "基础能力"} · {context(offer.contextWindow)} 上下文</small><small>{offerAccount(offer.billingAccountId)}</small></span><span className="offer-option-price">{offerPrice(offer)}</span>
 			</button>)}
 			{!choices.length && <p className="menu-hint">没有匹配的线路</p>}

@@ -4,8 +4,9 @@
 //! in relays — one base URL plus one API key. A route binds a relay to a family
 //! and lists the models (with per-model prices and limits) the relay serves
 //! for that family, so one relay can back all four families without retyping
-//! credentials. The routes array order is the family's priority: it drives
-//! default-route resolution and failover. Selection happens on (family, model)
+//! credentials. The routes array order is the family's priority: the first
+//! enabled, available route serves a model, and later routes provide failover.
+//! Selection happens on (family, model)
 //! and pins the concrete route; each route is projected into pi's
 //! `models.json` / `auth.json` as `skiff-relay-<relay>-<family>`, with every
 //! route of a relay sharing one key environment variable.
@@ -124,7 +125,7 @@ fn default_timeout() -> u64 {
 }
 
 fn default_schema_version() -> u64 {
-	4
+	5
 }
 
 /// Fallback USD→CNY rate for the public catalog; user-adjustable, not fetched online.
@@ -229,12 +230,9 @@ pub struct RelayRouteSpec {
 pub struct ModelFamily {
 	pub id: String,
 	pub display_name: String,
-	/// Array order is the family's priority: default-route fallback then failover.
+	/// Array order is the family's priority for initial selection and failover.
 	#[serde(default)]
 	pub routes: Vec<RouteSpec>,
-	#[serde(default)]
-	#[serde(alias = "defaultRelayId")]
-	pub default_route_id: Option<String>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -269,7 +267,6 @@ impl Default for FamiliesConfig {
 					id: id.to_string(),
 					display_name: family_display(id).to_string(),
 					routes: Vec::new(),
-					default_route_id: None,
 				})
 				.collect(),
 		}
@@ -330,19 +327,17 @@ fn route_id_seed(family_id: &str, relay_id: &str) -> String {
 	format!("route-{}-{}", sanitize_component(family_id), sanitize_component(relay_id))
 }
 
-/// Adds the v4 identity and pricing fields before serde deserializes the
-/// configuration. This keeps the migration deterministic while preserving the
-/// old route order, credentials and model prices.
-fn migrate_value_to_v4(value: &mut Value) {
+/// Adds route identity and pricing fields, and converts the legacy explicit
+/// route choice into the new ordering rule before serde deserializes the file.
+fn migrate_value_to_v5(value: &mut Value) {
 	let Some(root) = value.as_object_mut() else { return };
 	let mut families = root.get_mut("families").and_then(Value::as_array_mut);
 	if let Some(families) = families.as_deref_mut() {
 		for family in families {
 			let Some(family_obj) = family.as_object_mut() else { continue };
 			let family_id = family_obj.get("id").and_then(Value::as_str).unwrap_or("family").to_string();
-			let legacy_default = family_obj.remove("defaultRelayId");
+			let preferred_route = family_obj.remove("defaultRouteId").filter(Value::is_string).or_else(|| family_obj.remove("defaultRelayId"));
 			let routes = family_obj.get_mut("routes").and_then(Value::as_array_mut);
-			let mut route_ids = Vec::new();
 			if let Some(routes) = routes {
 				for route in routes {
 					let Some(route_obj) = route.as_object_mut() else { continue };
@@ -350,7 +345,6 @@ fn migrate_value_to_v4(value: &mut Value) {
 					let route_id = route_obj.get("id").and_then(Value::as_str).filter(|id| !id.is_empty()).map(str::to_string)
 						.unwrap_or_else(|| route_id_seed(&family_id, &relay_id));
 					route_obj.insert("id".into(), Value::String(route_id.clone()));
-					route_ids.push((relay_id, route_id));
 					route_obj.entry("enabled").or_insert_with(|| Value::Bool(true));
 					if let Some(models) = route_obj.get_mut("models").and_then(Value::as_array_mut) {
 						for model in models {
@@ -363,9 +357,10 @@ fn migrate_value_to_v4(value: &mut Value) {
 					}
 				}
 			}
-			if !family_obj.contains_key("defaultRouteId") {
-				let mapped = legacy_default.and_then(|value| value.as_str().and_then(|relay| route_ids.iter().find(|(id, _)| id == relay).map(|(_, route)| Value::String(route.clone()))));
-				family_obj.insert("defaultRouteId".into(), mapped.unwrap_or(Value::Null));
+			if let (Some(preferred), Some(routes)) = (preferred_route.as_ref().and_then(Value::as_str), family_obj.get_mut("routes").and_then(Value::as_array_mut)) {
+				if let Some(index) = routes.iter().position(|route| route.get("id").and_then(Value::as_str) == Some(preferred) || route.get("relayId").and_then(Value::as_str) == Some(preferred)) {
+					routes.swap(0, index);
+				}
 			}
 		}
 	}
@@ -376,7 +371,7 @@ fn migrate_value_to_v4(value: &mut Value) {
 			}
 		}
 	}
-	root.insert("version".into(), Value::from(4));
+	root.insert("version".into(), Value::from(5));
 }
 
 /// Raw view: keys still carry their on-disk ciphertext.
@@ -395,7 +390,7 @@ pub fn load(dir: &Path) -> Result<FamiliesConfig, String> {
 			.map_err(|_| "无法备份旧版家族配置，请手动处理 skiff-families.json".to_string())?;
 		return Ok(Default::default());
 	}
-	migrate_value_to_v4(&mut value);
+	migrate_value_to_v5(&mut value);
 	let mut config: FamiliesConfig = serde_json::from_value(value)
 		.map_err(|_| "家族配置不是有效 JSON，请修复或删除 skiff-families.json".to_string())?;
 	// Older files may predate a family; reinstate it empty rather than dropping it.
@@ -405,7 +400,6 @@ pub fn load(dir: &Path) -> Result<FamiliesConfig, String> {
 				id: id.to_string(),
 				display_name: family_display(id).to_string(),
 				routes: Vec::new(),
-				default_route_id: None,
 			});
 		}
 	}
@@ -611,12 +605,6 @@ fn validate_config(config: &FamiliesConfig) -> Result<(), String> {
 				}
 			}
 		}
-		if let Some(default_id) = &family.default_route_id {
-			let valid = family.routes.iter().find(|route| &route.id == default_id).is_some_and(|route| {
-				route.enabled && !route.models.is_empty() && config.relays.iter().any(|relay| relay.id == route.relay_id)
-			});
-			if !valid { return Err("默认线路必须是已启用且包含模型的线路".into()); }
-		}
 	}
 	Ok(())
 }
@@ -651,13 +639,6 @@ fn family_mut<'a>(config: &'a mut FamiliesConfig, family_id: &str) -> Result<&'a
 		.ok_or_else(|| format!("找不到模型家族：{family_id}"))
 }
 
-/// True when the relay is enabled and serves at least one model on some route.
-fn relay_enabled_with_models(config: &FamiliesConfig, relay_id: &str) -> bool {
-	config.relays.iter().any(|relay| relay.id == relay_id && relay.enabled)
-		&& config.families.iter().any(|family| family.routes.iter().any(|route| route.relay_id == relay_id && route.enabled && !route.models.is_empty()))
-}
-
-/// Keeps the default pointing at a usable route; falls back to route order.
 // --- projection into pi's own configuration ---------------------------------
 
 /// pi's provider identifier for one route; also its key in `auth.json`.
@@ -893,7 +874,6 @@ pub struct RelayBatchPreview {
 	pub token: String,
 	pub names: Vec<String>,
 	pub route_count: usize,
-	pub default_families: Vec<String>,
 }
 
 pub fn relay_batch_preview(config: &FamiliesConfig, relay_ids: &[String]) -> Result<RelayBatchPreview, String> {
@@ -902,9 +882,8 @@ pub fn relay_batch_preview(config: &FamiliesConfig, relay_ids: &[String]) -> Res
 	let mut names = Vec::new();
 	for id in relay_ids { names.push(config.relays.iter().find(|relay| &relay.id == id).ok_or("所选供应商已不存在，请重新加载预览")?.name.clone()); }
 	let route_count = config.families.iter().flat_map(|family| &family.routes).filter(|route| relay_ids.contains(&route.relay_id)).count();
-	let default_families = config.families.iter().filter(|family| family.routes.iter().any(|route| relay_ids.contains(&route.relay_id) && family.default_route_id.as_deref() == Some(&route.id))).map(|family| family.id.clone()).collect();
 	let token = format!("{:x}", Sha256::digest(serde_json::to_vec(config).map_err(|_| "无法生成确认预览")?));
-	Ok(RelayBatchPreview { token, names, route_count, default_families })
+	Ok(RelayBatchPreview { token, names, route_count })
 }
 
 pub fn batch_relays_in(dir: &Path, relay_ids: &[String], operation: &str, expected_token: &str) -> Result<FamiliesConfig, String> {
@@ -914,7 +893,6 @@ pub fn batch_relays_in(dir: &Path, relay_ids: &[String], operation: &str, expect
 		match operation {
 			"enable" | "disable" => { for relay in &mut config.relays { if relay_ids.contains(&relay.id) { relay.enabled = operation == "enable"; } } }
 			"delete" => {
-				if !preview.default_families.is_empty() { return Err("所选供应商包含默认路线，整批未删除；请先调整或明确清空对应家族默认值".into()); }
 				config.relays.retain(|relay| !relay_ids.contains(&relay.id));
 				for family in &mut config.families { family.routes.retain(|route| !relay_ids.contains(&route.relay_id)); }
 			}
@@ -987,24 +965,16 @@ pub fn delete_relay_in(dir: &Path, relay_id: &str) -> Result<FamiliesConfig, Str
 		if !config.relays.iter().any(|relay| relay.id == relay_id) {
 			return Err("找不到要删除的中转".into());
 		}
-		if config.families.iter().any(|family| family.routes.iter().any(|route| route.relay_id == relay_id && family.default_route_id.as_deref() == Some(route.id.as_str()))) {
-			return Err("该中转包含默认线路，请先选择替代线路或明确清空默认值".into());
-		}
 		config.relays.retain(|relay| relay.id != relay_id);
 		for family in &mut config.families {
-			let removed_default = family.routes.iter().any(|route| route.relay_id == relay_id && family.default_route_id.as_deref() == Some(route.id.as_str()));
 			family.routes.retain(|route| route.relay_id != relay_id);
-			if removed_default {
-				family.default_route_id = None;
-			}
 		}
 		Ok(())
 	})
 }
 
-/// Stopping a relay never rewrites anything else: a default route still
-/// pointing at it just stops offering models, like any disabled relay. `apply`
-/// revalidates, which allows default routes on disabled relays by design.
+/// Stopping a relay never rewrites its routes; runtime selection skips them
+/// until the relay is enabled again.
 pub fn set_relay_enabled_in(dir: &Path, relay_id: &str, enabled: bool) -> Result<FamiliesConfig, String> {
 	apply(dir, |config| {
 		let Some(relay) = config.relays.iter_mut().find(|relay| relay.id == relay_id) else {
@@ -1023,9 +993,6 @@ pub fn save_route_in(dir: &Path, family_id: &str, route: RouteSpec) -> Result<Fa
 			.map(|existing| (family_id, existing.id.as_str()));
 		let normalized = normalize_route(&route, config, family_id, replacing)?;
 		let family = family_mut(config, family_id)?;
-		if !normalized.enabled && family.default_route_id.as_deref() == Some(normalized.id.as_str()) {
-			return Err("不能停用默认线路，请先选择替代线路或明确清空默认值".into());
-		}
 		match family.routes.iter_mut().find(|existing| existing.id == normalized.id || existing.relay_id == normalized.relay_id) {
 			Some(existing) => *existing = normalized,
 			None => family.routes.push(normalized),
@@ -1043,7 +1010,6 @@ pub fn delete_route_in(dir: &Path, family_id: &str, relay_id: &str) -> Result<Fa
 		if family.routes.len() == before {
 			return Err("找不到要删除的线路".into());
 		}
-		if family.default_route_id.as_deref() == removed.as_deref() { return Err("不能删除默认线路，请先选择替代线路或明确清空默认值".into()); }
 		Ok(())
 	})
 }
@@ -1065,26 +1031,6 @@ pub fn reorder_routes_in(dir: &Path, family_id: &str, relay_ids: &[String]) -> R
 			reordered.push(route.clone());
 		}
 		family.routes = reordered;
-		Ok(())
-	})
-}
-
-pub fn set_default_route_in(dir: &Path, family_id: &str, route_id: Option<&str>) -> Result<FamiliesConfig, String> {
-	apply(dir, |config| {
-		let Some(id) = route_id else {
-			family_mut(config, family_id)?.default_route_id = None;
-			return Ok(());
-		};
-		let relay_for_route = config.families.iter().find(|family| family.id == family_id)
-			.and_then(|family| family.routes.iter().find(|route| route.id == id || route.relay_id == id))
-			.filter(|route| route.enabled && !route.models.is_empty())
-			.map(|route| route.relay_id.clone());
-		let usable = relay_for_route.as_deref().is_some_and(|relay| relay_enabled_with_models(config, relay));
-		if !usable {
-			return Err("默认线路必须是该家族内已启用中转上的线路".into());
-		}
-		let resolved = config.families.iter().find(|family| family.id == family_id).and_then(|family| family.routes.iter().find(|route| route.id == id || route.relay_id == id)).map(|route| route.id.clone()).unwrap();
-		family_mut(config, family_id)?.default_route_id = Some(resolved);
 		Ok(())
 	})
 }
@@ -1169,12 +1115,6 @@ pub fn reorder_routes(family_id: String, relay_ids: Vec<String>) -> Result<Famil
 }
 
 #[tauri::command]
-pub fn set_default_route(family_id: String, relay_id: Option<String>) -> Result<FamiliesConfig, String> {
-	let _guard = providers::CONFIG_LOCK.lock().map_err(|_| "配置锁异常")?;
-	set_default_route_in(&agent_dir()?, &family_id, relay_id.as_deref())
-}
-
-#[tauri::command]
 pub fn set_family_auto_failover(auto_failover: bool) -> Result<FamiliesConfig, String> {
 	let _guard = providers::CONFIG_LOCK.lock().map_err(|_| "配置锁异常")?;
 	set_auto_failover_in(&agent_dir()?, auto_failover)
@@ -1224,11 +1164,10 @@ mod tests {
 		assert_eq!(projected["providers"][provider_key("glm", &relay.id)]["models"][0]["compat"]["supportsDeveloperRole"], false);
 		assert!(!std::fs::read_to_string(config_path(&dir)).unwrap().contains("sk-test-discovery"));
 
-		// Retesting must preserve manual edits and explicit defaults.
+		// Retesting must preserve manual route edits and ordering.
 		let mut edited = saved.families[0].routes[0].clone();
 		edited.models[0].input_cost = 7.0;
 		save_route_in(&dir, "deepseek", edited.clone()).unwrap();
-		set_default_route_in(&dir, "deepseek", Some(&edited.id)).unwrap();
 		let mut edit_relay = relay.clone();
 		edit_relay.api_key.clear();
 		edit_relay.excluded_model_ids.clear();
@@ -1236,7 +1175,6 @@ mod tests {
 		assert_eq!(repaired.relays[0].api_key, "sk-test-discovery");
 		assert_eq!(repaired.families[0].routes.len(), 1);
 		assert_eq!(repaired.families[0].routes[0].models[0].input_cost, 7.0);
-		assert_eq!(repaired.families[0].default_route_id.as_deref(), Some(edited.id.as_str()));
 		assert_eq!(runtime_offers(&repaired).len(), 3);
 
 		let mut provider_edit = repaired.families[0].routes[0].clone();
@@ -1246,7 +1184,7 @@ mod tests {
 		assert_eq!(updated.families[0].routes[0].models[0].alias, "编辑后的显示名");
 		assert_eq!(updated.families[0].routes[0].models[0].context_window, 196_000);
 		assert_eq!(updated.families[0].routes[0].models[0].input_cost, 7.0);
-		assert_eq!(updated.families[0].default_route_id.as_deref(), Some(edited.id.as_str()));
+		assert_eq!(updated.families[0].routes[0].id, edited.id);
 
 		// A malformed discovered route must not leave a partially saved relay.
 		let before = std::fs::read(config_path(&dir)).unwrap();
@@ -1272,7 +1210,7 @@ mod tests {
 		let model = ModelSpec { model_id: "claude-sonnet-4".into(), vision: None, thinking_levels: None, alias: String::new(), input_cost: 1.0, output_cost: 4.0, cache_read_cost: 1.0, cache_write_cost: 1.0, currency: Currency::Cny, max_tokens: 8192, context_window: 200_000 };
 		let route = RouteSpec { id: "route-kimi-r1".into(), relay_id: "r1".into(), enabled: true, models: vec![model], streaming: true, tools: true, vision: false, reasoning: false, thinking_levels: Vec::new() };
 		let mut relay = RelaySpec { id: "r1".into(), name: "Anthropic relay".into(), base_url: "https://api.anthropic.com/v1".into(), api_key: "key".into(), protocol: Some("Anthropic".into()), timeout_seconds: 60, enabled: true, billing_account_id: String::new(), excluded_model_ids: Vec::new() };
-		let normalized = normalize_relay(relay.clone(), &FamiliesConfig { version: 4, relays: Vec::new(), families: Vec::new(), auto_failover: false, auto_retry: false, usd_cny_rate: 7.2 }).unwrap();
+		let normalized = normalize_relay(relay.clone(), &FamiliesConfig { version: 5, relays: Vec::new(), families: Vec::new(), auto_failover: false, auto_retry: false, usd_cny_rate: 7.2 }).unwrap();
 		assert_eq!(normalized.protocol.as_deref(), Some("anthropic"));
 		assert_eq!(protocol_api(&normalized), "anthropic-messages");
 		// Other adapters build their own shapes, so no OpenAI compat block leaks in.
@@ -1353,17 +1291,21 @@ mod tests {
 	}
 
 	#[test]
-	fn migrates_v3_route_and_model_fields_without_losing_default() {
+	fn migrates_legacy_route_choice_into_order_and_removes_it() {
 		let mut value = json!({
 			"version": 3,
 			"relays": [{"id": "r1", "name": "Relay", "baseUrl": "https://relay.example/v1", "apiKey": "sealed", "enabled": true}],
-			"families": [{"id": "kimi", "displayName": "Kimi", "defaultRelayId": "r1", "routes": [{"relayId": "r1", "models": [{"modelId": "kimi-k3", "inputCost": 1, "outputCost": 4, "currency": "CNY", "maxTokens": 8192, "contextWindow": 128000}]}]}]
+			"families": [{"id": "kimi", "displayName": "Kimi", "defaultRelayId": "r2", "routes": [
+				{"relayId": "r1", "models": [{"modelId": "kimi-k3", "inputCost": 1, "outputCost": 4, "currency": "CNY", "maxTokens": 8192, "contextWindow": 128000}]},
+				{"relayId": "r2", "models": [{"modelId": "kimi-k2", "inputCost": 1, "outputCost": 4, "currency": "CNY", "maxTokens": 8192, "contextWindow": 128000}]}
+			]}]
 		});
-		migrate_value_to_v4(&mut value);
-		assert_eq!(value["version"], 4);
+		migrate_value_to_v5(&mut value);
+		assert_eq!(value["version"], 5);
 		assert_eq!(value["relays"][0]["billingAccountId"], "");
-		assert_eq!(value["families"][0]["defaultRouteId"], "route-kimi-r1");
-		assert_eq!(value["families"][0]["routes"][0]["id"], "route-kimi-r1");
+		assert!(value["families"][0].get("defaultRouteId").is_none());
+		assert!(value["families"][0].get("defaultRelayId").is_none());
+		assert_eq!(value["families"][0]["routes"][0]["id"], "route-kimi-r2");
 		assert_eq!(value["families"][0]["routes"][0]["enabled"], true);
 		assert_eq!(value["families"][0]["routes"][0]["models"][0]["alias"], "");
 		assert_eq!(value["families"][0]["routes"][0]["models"][0]["cacheReadCost"], 1);
@@ -1376,8 +1318,8 @@ mod tests {
 		let model = ModelSpec { model_id: "kimi-k3".into(), vision: None, thinking_levels: None, alias: "k3-便宜".into(), input_cost: 1.0, output_cost: 4.0, cache_read_cost: 0.5, cache_write_cost: 0.7, currency: Currency::Cny, max_tokens: 8192, context_window: 128000 };
 		let route = RouteSpec { id: "route-kimi-r1".into(), relay_id: "r1".into(), enabled: true, models: vec![model], streaming: true, tools: true, vision: false, reasoning: true, thinking_levels: Vec::new() };
 		let disabled = RouteSpec { id: "route-kimi-r2".into(), relay_id: "r1".into(), enabled: false, models: vec![], streaming: true, tools: true, vision: false, reasoning: false, thinking_levels: Vec::new() };
-		let family = ModelFamily { id: "kimi".into(), display_name: "Kimi".into(), routes: vec![route, disabled], default_route_id: Some("route-kimi-r1".into()) };
-		let config = FamiliesConfig { version: 4, relays: vec![relay], families: vec![family], auto_failover: false, auto_retry: false, usd_cny_rate: 7.2 };
+		let family = ModelFamily { id: "kimi".into(), display_name: "Kimi".into(), routes: vec![route, disabled] };
+		let config = FamiliesConfig { version: 5, relays: vec![relay], families: vec![family], auto_failover: false, auto_retry: false, usd_cny_rate: 7.2 };
 		let offers = runtime_offers(&config);
 		assert_eq!(offers.len(), 1);
 		assert_eq!(offers[0].offer_id, "route-kimi-r1/kimi-k3");
@@ -1406,14 +1348,14 @@ mod tests {
 		let stopped_relay_route = RouteSpec { id: "route-kimi-r2".into(), relay_id: "r2".into(), enabled: true, models: vec![model], streaming: true, tools: true, vision: false, reasoning: false, thinking_levels: Vec::new() };
 		let deepseek_model = ModelSpec { model_id: "deepseek-chat".into(), vision: None, thinking_levels: None, alias: String::new(), input_cost: 0.3, output_cost: 1.2, cache_read_cost: 0.3, cache_write_cost: 0.3, currency: Currency::Cny, max_tokens: 8192, context_window: 128000 };
 		let config = FamiliesConfig {
-			version: 4,
+			version: 5,
 			relays: vec![
 				RelaySpec { id: "r1".into(), name: "Active".into(), base_url: "https://active.example/v1".into(), api_key: "key-active".into(), protocol: None, timeout_seconds: 60, enabled: true, billing_account_id: "wallet-a".into(), excluded_model_ids: Vec::new() },
 				RelaySpec { id: "r2".into(), name: "Stopped".into(), base_url: "https://stopped.example/v1".into(), api_key: "key-stopped".into(), protocol: None, timeout_seconds: 60, enabled: false, billing_account_id: "wallet-b".into(), excluded_model_ids: Vec::new() },
 			],
 			families: vec![
-				ModelFamily { id: "kimi".into(), display_name: "Kimi".into(), routes: vec![active, stopped_route, stopped_relay_route], default_route_id: Some("route-kimi-r1".into()) },
-				ModelFamily { id: "deepseek".into(), display_name: "DeepSeek".into(), routes: vec![RouteSpec { id: "route-deepseek-r1".into(), relay_id: "r1".into(), enabled: true, models: vec![deepseek_model], streaming: true, tools: true, vision: false, reasoning: false, thinking_levels: Vec::new() }], default_route_id: Some("route-deepseek-r1".into()) },
+				ModelFamily { id: "kimi".into(), display_name: "Kimi".into(), routes: vec![active, stopped_route, stopped_relay_route] },
+				ModelFamily { id: "deepseek".into(), display_name: "DeepSeek".into(), routes: vec![RouteSpec { id: "route-deepseek-r1".into(), relay_id: "r1".into(), enabled: true, models: vec![deepseek_model], streaming: true, tools: true, vision: false, reasoning: false, thinking_levels: Vec::new() }] },
 			],
 			auto_failover: false,
 			auto_retry: false,
@@ -1439,13 +1381,13 @@ mod tests {
 	}
 
 	#[test]
-	fn default_route_changes_require_an_explicit_replacement_or_clear() {
-		let dir = std::env::temp_dir().join(format!("skiff-default-test-{}", std::process::id()));
+	fn route_order_allows_disabling_and_deleting_routes() {
+		let dir = std::env::temp_dir().join(format!("skiff-route-choice-test-{}", std::process::id()));
 		let _ = std::fs::remove_dir_all(&dir);
 		std::fs::create_dir_all(&dir).unwrap();
 		let model = ModelSpec { model_id: "kimi-k3".into(), vision: None, thinking_levels: None, alias: String::new(), input_cost: 1.0, output_cost: 4.0, cache_read_cost: 1.0, cache_write_cost: 1.0, currency: Currency::Cny, max_tokens: 8192, context_window: 128000 };
 		let config = FamiliesConfig {
-			version: 4,
+			version: 5,
 			relays: vec![
 				RelaySpec { id: "r1".into(), name: "Primary".into(), base_url: "https://primary.example/v1".into(), api_key: "key-1".into(), protocol: None, timeout_seconds: 60, enabled: true, billing_account_id: String::new(), excluded_model_ids: Vec::new() },
 				RelaySpec { id: "r2".into(), name: "Backup".into(), base_url: "https://backup.example/v1".into(), api_key: "key-2".into(), protocol: None, timeout_seconds: 60, enabled: true, billing_account_id: String::new(), excluded_model_ids: Vec::new() },
@@ -1453,18 +1395,21 @@ mod tests {
 			families: vec![ModelFamily { id: "kimi".into(), display_name: "Kimi".into(), routes: vec![
 				RouteSpec { id: "route-kimi-r1".into(), relay_id: "r1".into(), enabled: true, models: vec![model.clone()], streaming: true, tools: true, vision: false, reasoning: false, thinking_levels: Vec::new() },
 				RouteSpec { id: "route-kimi-r2".into(), relay_id: "r2".into(), enabled: true, models: vec![model], streaming: true, tools: true, vision: false, reasoning: false, thinking_levels: Vec::new() },
-			], default_route_id: Some("route-kimi-r1".into()) }],
+			] }],
 			auto_failover: false,
 			auto_retry: false,
 			usd_cny_rate: 7.2,
 		};
 		std::fs::write(config_path(&dir), serde_json::to_vec(&config).unwrap()).unwrap();
-		// Stopping a relay with a default route is allowed; the runtime simply
-		// offers no models from it until it is re-enabled.
+		// A stopped relay or route is skipped until it is enabled again.
 		assert!(set_relay_enabled_in(&dir, "r1", false).is_ok());
 		assert!(!load_plain(&dir).unwrap().relays[0].enabled);
 		assert!(set_relay_enabled_in(&dir, "r1", true).is_ok());
-		assert!(delete_route_in(&dir, "kimi", "route-kimi-r1").is_err());
+		let mut stopped = load_plain(&dir).unwrap().families.iter().find(|family| family.id == "kimi").unwrap().routes[0].clone();
+		stopped.enabled = false;
+		assert!(save_route_in(&dir, "kimi", stopped).is_ok());
+		assert!(runtime_offers(&load_plain(&dir).unwrap()).iter().all(|offer| offer.route_id != "route-kimi-r1"));
+		assert!(delete_route_in(&dir, "kimi", "route-kimi-r1").is_ok());
 		let _ = std::fs::remove_dir_all(&dir);
 	}
 }

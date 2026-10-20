@@ -108,7 +108,6 @@ export interface ModelFamily {
 	id: string;
 	displayName: string;
 	routes: RouteSpec[];
-	defaultRouteId: string | null;
 }
 
 export interface RelayRouteSpec {
@@ -205,7 +204,7 @@ export function useModelFamilies() {
 
 	// A missing or malformed payload falls back to pi's own model list rather
 	// than blanking the composer.
-	const families = useMemo(() => FAMILY_IDS.map((id) => config?.families?.find((family) => family.id === id) ?? { id, displayName: FAMILY_LABELS[id], routes: [], defaultRouteId: null }), [config]);
+	const families = useMemo(() => FAMILY_IDS.map((id) => config?.families?.find((family) => family.id === id) ?? { id, displayName: FAMILY_LABELS[id], routes: [] }), [config]);
 	const complete = FAMILY_IDS.every((id) => hasFamily(config, id));
 
 	return {
@@ -232,7 +231,6 @@ export function useModelFamilies() {
 		saveRoute: (familyId: string, route: RouteSpec) => run("save_route", { familyId, route }),
 		deleteRoute: (familyId: string, relayId: string) => run("delete_route", { familyId, relayId }),
 		reorderRoutes: (familyId: string, relayIds: string[]) => run("reorder_routes", { familyId, relayIds }),
-		setDefaultRoute: (familyId: string, relayId: string | null) => run("set_default_route", { familyId, relayId }),
 		setAutoFailover: (autoFailover: boolean) => run("set_family_auto_failover", { autoFailover }),
 		setAutoRetry: (autoRetry: boolean) => run("set_family_auto_retry", { autoRetry }),
 		setUsdCnyRate: (rate: number) => run("set_usd_cny_rate", { rate }),

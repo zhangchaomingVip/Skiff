@@ -97,7 +97,7 @@ export function useRuntimeRoutes(session: ReturnType<typeof usePiSession>, chat:
 		// be included in pi's generic available-model response (extensions load
 		// after that response is assembled), so keep the projection as the source
 		// of truth for route reconciliation.
-		const resolved = resolveSelection(requested, [...offers], family, config.families);
+		const resolved = resolveSelection(requested, [...offers], family);
 		if (resolved.invalidated) setNotice(resolved.offer ? `当前模型已失效，已切换到 ${resolved.offer.familyName} · ${resolved.offer.relayName} · ${resolved.offer.modelId}` : "当前模型已失效，请先在中转上配置线路");
 		const model = resolved.offer ? modelFor(resolved.offer) : state.model && !familyFromProvider(state.model.provider) ? state.model : undefined;
 		if (session.loadedConfig !== config) session.reconnect(model);

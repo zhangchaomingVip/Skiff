@@ -23,10 +23,10 @@ const aliasFor = (family: ModelFamily, modelId: string, catalog: readonly Catalo
 
 function modelMappingPanel(family: ModelFamily, relays: RelaySpec[], groups: { modelId: string; targetId?: string }[], catalog: readonly CatalogIdentity[]) {
 	return <div className="model-mapping-panel" aria-label="实际线路映射">
-		<p className="model-mapping-help">★ 家族默认路线；「优先」按各模型的可用候选计算。已有会话仍使用固定路线。以下为真实调用 ID。</p>
+		<p className="model-mapping-help">「优先」按路线顺序取该模型第一条启用且可用的线路。已有会话仍使用固定路线。以下为真实调用 ID。</p>
 		<div className="model-mapping-table-wrap" tabIndex={0} aria-label="实际调用 ID 映射表，可左右滚动"><table className="model-mapping-table"><thead><tr><th scope="col">供应商 / 路线</th>{groups.map((group) => <th scope="col" key={group.modelId}>{group.modelId}</th>)}</tr></thead><tbody>{family.routes.map((route) => {
 			const relay = relays.find((item) => item.id === route.relayId);
-			return <tr key={route.id}><th scope="row">{relay?.name ?? route.relayId}{family.defaultRouteId === route.id && <span aria-label="家族默认路线"> ★ 默认</span>}</th>{groups.map((group) => {
+			return <tr key={route.id}><th scope="row">{relay?.name ?? route.relayId}</th>{groups.map((group) => {
 				const matched = route.models.filter((model) => !group.targetId || matchesModel(model.modelId, group.targetId, catalog));
 				const target = routeForModelTest(family, relays, group.targetId, catalog);
 				return <td key={group.modelId}>{matched.length ? <span className="model-mapping-ids">{target?.route.id === route.id && <span className="provider-tag">优先</span>}{matched.map((model) => {
@@ -199,7 +199,7 @@ export const ModelsSettingsContent = forwardRef<SettingsEditorHandle, ModelsSett
 							return <div className="provider-row model-family-row" key={entry.modelId}>
 								<div className="provider-row-main">
 									<div className="provider-row-title"><strong>{alias || entry.modelId}</strong>{alias && <small>{entry.modelId}</small>}<span className="provider-tag">{entry.origin === "manual" ? "手动" : "自动"}</span></div>
-									<small className="model-family-meta"><span>{count > 0 ? `${count} 条路线可用` : <button type="button" className="link-button" onClick={() => onOpenRoutes(family.id)}>未接路线，去配置</button>}</span>{preferred && <span>未指定路线时优先：{preferred.relay.name}</span>}</small>
+							<small className="model-family-meta"><span>{count > 0 ? `${count} 条路线可用` : <button type="button" className="link-button" onClick={() => onOpenRoutes(family.id)}>未接路线，去配置</button>}</span>{preferred && <span>顺序首选：{preferred.relay.name}</span>}</small>
 								</div>
 								{modelTestStatus(family, entry.modelId)}
 								<div className="provider-row-actions">{modelTestAction(family, entry.modelId)}</div>
@@ -215,7 +215,7 @@ export const ModelsSettingsContent = forwardRef<SettingsEditorHandle, ModelsSett
 						<div className="provider-row-main">
 							<div className="provider-row-title"><strong>Auto</strong><small>自动选择</small></div>
 							<small>{autoRoutes > 0 ? `${autoRoutes} 条路线可用` : <button type="button" className="link-button" onClick={() => onOpenRoutes("auto")}>未接路线，去配置</button>}</small>
-							{routeForModelTest(autoFamily, relays) && <small>未指定路线时优先：{routeForModelTest(autoFamily, relays)!.relay.name}</small>}
+							{routeForModelTest(autoFamily, relays) && <small>顺序首选：{routeForModelTest(autoFamily, relays)!.relay.name}</small>}
 						</div>
 					</div>
 				</section>}

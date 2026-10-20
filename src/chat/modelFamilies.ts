@@ -29,19 +29,18 @@ export interface RuntimeOffer {
 	contextWindow: number;
 }
 
-/** Family defaults used when resolving an unpinned family/model request. */
-export type FamilyDefaults = { id: string; defaultRouteId?: string | null; defaultRelayId?: string | null }[];
+function orderedOffers(offers: RuntimeOffer[]): RuntimeOffer[] {
+	return offers.map((offer, index) => ({ offer, index }))
+		.sort((a, b) => (a.offer.routeOrder ?? a.index) - (b.offer.routeOrder ?? b.index) || a.index - b.index)
+		.map(({ offer }) => offer);
+}
 
 /**
- * Picks the concrete route for a (family, model): the family's default relay
- * first, then the route order the offers arrive in.
+ * Picks the first available route in the configured order for a family/model.
  */
-export function resolveRoute(offers: RuntimeOffer[], familyId: string, modelId: string, defaults: FamilyDefaults = []): RuntimeOffer | undefined {
-	const candidates = offers.filter((offer) => offer.familyId === familyId && offer.modelId === modelId);
-	if (!candidates.length) return undefined;
-	const preferred = defaults.find((family) => family.id === familyId);
-	const defaultRouteId = preferred?.defaultRouteId ?? preferred?.defaultRelayId;
-	return candidates.find((offer) => (offer.routeId ?? offer.relayId) === defaultRouteId || offer.relayId === defaultRouteId) ?? candidates[0];
+export function resolveRoute(offers: RuntimeOffer[], familyId: string, modelId: string): RuntimeOffer | undefined {
+	const candidates = orderedOffers(offers).filter((offer) => offer.familyId === familyId && offer.modelId === modelId);
+	return candidates[0];
 }
 
 /**
@@ -49,9 +48,9 @@ export function resolveRoute(offers: RuntimeOffer[], familyId: string, modelId: 
  * separate even when they expose the same model ID, so the picker can pin the
  * exact route selected by the user.
  */
-export function modelsFromOffers(offers: RuntimeOffer[], _defaults: FamilyDefaults = []): ModelInfo[] {
+export function modelsFromOffers(offers: RuntimeOffer[]): ModelInfo[] {
 	const unique = new Map<string, RuntimeOffer>();
-	for (const offer of offers) unique.set(offer.offerId ?? `${offer.familyId}/${offer.routeId ?? offer.relayId}/${offer.modelId}`, offer);
+	for (const offer of orderedOffers(offers)) unique.set(offer.offerId ?? `${offer.familyId}/${offer.routeId ?? offer.relayId}/${offer.modelId}`, offer);
 	const concrete = [...unique.values()];
 	const titles = new Map<string, number>();
 	for (const offer of concrete) {
@@ -92,9 +91,9 @@ export function modelsFromOffers(offers: RuntimeOffer[], _defaults: FamilyDefaul
  * capabilities, prices and limits take precedence; older offers without capability
  * fields retain pi's values, matched by provider key and model ID.
  */
-export function reconcile(current: ModelInfo | undefined, offers: RuntimeOffer[], available: ModelInfo[] = [], defaults: FamilyDefaults = []): ModelInfo[] {
+export function reconcile(current: ModelInfo | undefined, offers: RuntimeOffer[], available: ModelInfo[] = []): ModelInfo[] {
 	if (!offers.length) return available.length ? available : current ? [current] : [];
-	return modelsFromOffers(offers, defaults).map((model) => {
+	return modelsFromOffers(offers).map((model) => {
 		const live = current?.provider === model.provider && current.id === model.id ? current : available.find((item) => item.provider === model.provider && item.id === model.id);
 		return { ...live, ...model };
 	});
@@ -102,9 +101,10 @@ export function reconcile(current: ModelInfo | undefined, offers: RuntimeOffer[]
 
 /**
  * Selection is pinned: the exact route must still exist. Otherwise fall back
- * within the family by same model, then default relay, then route order.
+ * within the family by the same model, then route order.
  */
-export function resolveSelection(current: ModelInfo | undefined, offers: RuntimeOffer[], familyId?: string, defaults: FamilyDefaults = []): { offer?: RuntimeOffer; invalidated: boolean } {
+export function resolveSelection(current: ModelInfo | undefined, offers: RuntimeOffer[], familyId?: string): { offer?: RuntimeOffer; invalidated: boolean } {
+	offers = orderedOffers(offers);
 	const targetModelId = current?.modelId ?? current?.id;
 	const pinned = current?.routeId && offers.find((offer) => offer.routeId === current.routeId && offer.modelId === targetModelId);
 	if (pinned) return { offer: pinned, invalidated: false };
@@ -112,18 +112,13 @@ export function resolveSelection(current: ModelInfo | undefined, offers: Runtime
 	if (exact) return { offer: exact, invalidated: false };
 	const invalidated = !!current?.provider.startsWith("skiff-");
 	const sameFamily = offers.filter((offer) => offer.familyId === familyId);
-	const preferred = defaults.find((family) => family.id === familyId);
-	const defaultRouteId = preferred?.defaultRouteId ?? preferred?.defaultRelayId;
 	const sameModel = sameFamily.filter((offer) => offer.modelId === targetModelId);
-	const fallback = sameModel.find((offer) => (offer.routeId ?? offer.relayId) === defaultRouteId || offer.relayId === defaultRouteId)
-		?? sameModel[0]
-		?? sameFamily.find((offer) => (offer.routeId ?? offer.relayId) === defaultRouteId || offer.relayId === defaultRouteId)
+	const fallback = sameModel[0]
 		?? sameFamily[0]
 		?? offers.find((offer) => offer.modelId === targetModelId)
 		?? offers[0];
 	if (invalidated) return { offer: fallback, invalidated: true };
 	return { offer: sameModel[0]
-		?? sameFamily.find((offer) => (offer.routeId ?? offer.relayId) === defaultRouteId || offer.relayId === defaultRouteId)
 		?? sameFamily[0]
 		?? offers.find((offer) => offer.modelId === targetModelId)
 		?? offers[0], invalidated: false };

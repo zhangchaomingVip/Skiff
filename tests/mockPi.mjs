@@ -45,7 +45,7 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 	];
 	const route = (familyId, relayId, models, capabilities = {}) => ({ id: `route-${familyId}-${relayId}`, relayId, enabled: true, models, streaming: true, tools: true, vision: false, reasoning: false, ...capabilities });
 	const families = [
-		{ id: "deepseek", displayName: "DeepSeek", defaultRouteId: "route-deepseek-r1", routes: [
+		{ id: "deepseek", displayName: "DeepSeek", routes: [
 			route("deepseek", "r1", [
 				{ modelId: "deepseek-flash", alias: "", inputCost: 1, outputCost: 4, cacheReadCost: 1, cacheWriteCost: 1, currency: "CNY", maxTokens: 4096, contextWindow: 32000 },
 				{ modelId: "deepseek-chat", alias: "", inputCost: 0.3, outputCost: 1.2, cacheReadCost: 0.3, cacheWriteCost: 0.3, currency: "CNY", maxTokens: 8192, contextWindow: 128000 },
@@ -53,13 +53,13 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 			], { reasoning: true }),
 			route("deepseek", "r2", [{ modelId: "deepseek-ai/DeepSeek-V3", alias: "", inputCost: 0.14, outputCost: 0.28, cacheReadCost: 0.14, cacheWriteCost: 0.14, currency: "CNY", maxTokens: 8192, contextWindow: 128000 }]),
 		] },
-		{ id: "kimi", displayName: "Kimi", defaultRouteId: "route-kimi-r3", routes: [
+		{ id: "kimi", displayName: "Kimi", routes: [
 			route("kimi", "r3", [{ modelId: "kimi-k2", alias: "", inputCost: 0.6, outputCost: 2.4, cacheReadCost: 0.6, cacheWriteCost: 0.6, currency: "CNY", maxTokens: 8192, contextWindow: 128000 }], { reasoning: true }),
 		] },
-		{ id: "glm", displayName: "GLM", defaultRouteId: "route-glm-r2", routes: [
+		{ id: "glm", displayName: "GLM", routes: [
 			route("glm", "r2", [{ modelId: "glm-5.2", alias: "", inputCost: 1, outputCost: 4, cacheReadCost: 1, cacheWriteCost: 1, currency: "CNY", maxTokens: 8192, contextWindow: 128000 }, { modelId: "glm-5.1", alias: "", inputCost: 0.8, outputCost: 3, cacheReadCost: 0.8, cacheWriteCost: 0.8, currency: "CNY", maxTokens: 8192, contextWindow: 128000 }]),
 		] },
-		{ id: "auto", displayName: "Auto", defaultRouteId: null, routes: [] },
+		{ id: "auto", displayName: "Auto", routes: [] },
 	];
 	if (fixture) {
 		families[0].routes[1].models.push({ ...families[0].routes[0].models[1], inputCost: .14, outputCost: .28 });
@@ -106,7 +106,7 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 	const models = familyModels();
 	let autoFailover = false;
 	let autoRetry = false;
-	const familiesConfig = () => ({ version: 4, relays: structuredClone(relays), autoFailover, autoRetry, families: structuredClone(families) });
+	const familiesConfig = () => ({ version: 5, relays: structuredClone(relays), autoFailover, autoRetry, families: structuredClone(families) });
 	const offers = () => familyRoutes().flatMap(({ family, route }, routeOrder) => {
 		const relay = relayOf(route.relayId);
 		if (!relay?.enabled || !route.enabled) return [];
@@ -160,11 +160,10 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 			if (command === "preview_relay_batch" || command === "batch_relays") {
 				if (!args.relayIds.length || new Set(args.relayIds).size !== args.relayIds.length || args.relayIds.some((id) => !relayOf(id))) throw new Error("所选供应商已不存在，请重新加载预览");
 				const config = familiesConfig(); const token = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(config))))).map((byte) => byte.toString(16).padStart(2, "0")).join("");
-				const impact = { token, names: args.relayIds.map((id) => relayOf(id).name), routeCount: families.flatMap((f) => f.routes).filter((r) => args.relayIds.includes(r.relayId)).length, defaultFamilies: families.filter((f) => f.routes.some((r) => args.relayIds.includes(r.relayId) && f.defaultRouteId === r.id)).map((f) => f.id) };
+				const impact = { token, names: args.relayIds.map((id) => relayOf(id).name), routeCount: families.flatMap((f) => f.routes).filter((r) => args.relayIds.includes(r.relayId)).length };
 				if (command === "preview_relay_batch") return impact;
 				if (failBatch) { failBatch = false; throw new Error("模拟保存失败，整批未提交"); }
 				if (token !== args.expectedToken) throw new Error("配置已变化，操作未提交，请重新确认影响预览");
-				if (args.operation === "delete" && impact.defaultFamilies.length) throw new Error("所选供应商包含默认路线，整批未删除");
 				if (args.operation === "delete") { for (let i = relays.length - 1; i >= 0; i--) if (args.relayIds.includes(relays[i].id)) relays.splice(i, 1); for (const family of families) family.routes = family.routes.filter((r) => !args.relayIds.includes(r.relayId)); }
 				else { for (const relay of relays) if (args.relayIds.includes(relay.id)) relay.enabled = args.operation === "enable"; }
 				return familiesConfig();
@@ -220,10 +219,7 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 				const index = relays.findIndex((relay) => relay.id === args.relayId);
 				if (index < 0) throw new Error("找不到要删除的中转");
 				relays.splice(index, 1);
-				for (const family of families) {
-					family.routes = family.routes.filter((route) => route.relayId !== args.relayId);
-					if (!family.routes.some((route) => route.id === family.defaultRouteId)) family.defaultRouteId = null;
-				}
+				for (const family of families) family.routes = family.routes.filter((route) => route.relayId !== args.relayId);
 				return familiesConfig();
 			}
 			if (command === "set_relay_enabled") {
@@ -245,7 +241,6 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 				incoming.enabled ??= true;
 				const index = family.routes.findIndex((route) => route.id === incoming.id || route.relayId === incoming.relayId);
 				if (index < 0) family.routes.push(incoming); else family.routes[index] = incoming;
-				if (!family.defaultRouteId) family.defaultRouteId = incoming.id;
 				return familiesConfig();
 			}
 			if (command === "delete_route") {
@@ -253,7 +248,6 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 				const before = family?.routes.length ?? 0;
 			if (family) family.routes = family.routes.filter((route) => route.id !== args.relayId && route.relayId !== args.relayId);
 				if (!family || family.routes.length === before) throw new Error("找不到要删除的线路");
-				if (family && !family.routes.some((route) => route.id === family.defaultRouteId)) family.defaultRouteId = null;
 				return familiesConfig();
 			}
 			if (command === "reorder_routes") {
@@ -262,16 +256,6 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 				if (!family || args.relayIds.length !== family.routes.length) throw new Error("排序请求与现有线路数量不一致");
 				if (new Set(args.relayIds).size !== family.routes.length || args.relayIds.some((id) => !family.routes.some((r) => r.id === id))) throw new Error("路线集合已变化，请重新加载");
 				family.routes = args.relayIds.map((id) => family.routes.find((route) => route.id === id));
-				return familiesConfig();
-			}
-			if (command === "set_default_route") {
-				const family = families.find((item) => item.id === args.familyId);
-				if (!family) throw new Error(`未知模型家族：${args.familyId}`);
-				if (args.relayId == null) { family.defaultRouteId = null; return familiesConfig(); }
-				const route = family.routes.find((item) => item.id === args.relayId || item.relayId === args.relayId);
-				const relay = route && relayOf(route.relayId);
-				if (!route || !route.enabled || !route.models.length || !relay?.enabled) throw new Error("默认线路必须是该家族内已启用中转上的线路");
-				family.defaultRouteId = route.id;
 				return familiesConfig();
 			}
 			if (command === "discover_relay_models") {

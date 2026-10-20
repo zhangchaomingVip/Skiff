@@ -32,12 +32,12 @@ export function settingsModelCandidates(family: ModelFamily, relays: RelaySpec[]
 
 export function settingsTestTarget(family: ModelFamily, relays: RelaySpec[], modelId?: string, catalog: readonly CatalogIdentity[] = []) {
 	const candidates = settingsModelCandidates(family, relays, modelId, catalog);
-	return candidates.find(({ route }) => route.id === family.defaultRouteId) ?? candidates[0];
+	return candidates[0];
 }
 
 export function routeSummaryModels(route: RouteSpec, visibleIds: readonly string[], catalog: readonly CatalogIdentity[]) {
 	const preferred = route.models.filter((model) => visibleIds.some((id) => matchesSettingsModel(model.modelId, id, catalog)));
-	return [...preferred, ...route.models.filter((model) => !preferred.includes(model))].slice(0, 2);
+	return [...preferred, ...route.models.filter((model) => !preferred.includes(model))].slice(0, 3);
 }
 
 export function routeMatchesQuery(route: RouteSpec, relay: RelaySpec | undefined, query: string) {

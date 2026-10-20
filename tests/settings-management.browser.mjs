@@ -86,7 +86,7 @@ try {
 	await select("官方直连").check(); await select("自定义端点").check();
 	await button("批量停用").click(); const disable = confirm("批量停用供应商");
 	await disable.getByRole("button", { name: "确认操作" }).waitFor();
-	assert.match(await disable.textContent(), /影响 2 条关联路线/); assert.match(await disable.textContent(), /DeepSeek/);
+	assert.match(await disable.textContent(), /影响 2 条关联路线/); assert.match(await disable.textContent(), /官方直连.*自定义端点/);
 	await shot("batch-impact-light");
 	await page.evaluate(() => window.skiffPreview.failNextBatch()); await disable.getByRole("button", { name: "确认操作" }).click();
 	await disable.getByRole("alert").waitFor(); assert.match(await disable.textContent(), /整批未提交/);
@@ -98,10 +98,9 @@ try {
 	assert.match(await settings().locator(".settings-batch-bar").textContent(), /已选 0 个/);
 	await select("官方直连").check(); await select("自定义端点").check(); await button("批量删除").click();
 	const blocked = confirm("批量删除供应商");
-	assert.equal(await blocked.getByRole("button", { name: "确认操作" }).isDisabled(), true);
-	assert.match(await blocked.textContent(), /整批禁止删除/);
-	assert.equal(await blocked.getByRole("button", { name: "去 DeepSeek 调整默认路线" }).count(), 1);
-	await shot("batch-default-blocked-light"); await page.keyboard.press("Escape");
+	assert.equal(await blocked.getByRole("button", { name: "确认操作" }).isDisabled(), false);
+	assert.match(await blocked.textContent(), /影响 \d+ 条关联路线/);
+	await shot("batch-delete-preview-light"); await page.keyboard.press("Escape");
 	await button("批量启用").click(); const enable = confirm("批量启用供应商");
 	await enable.getByRole("button", { name: "确认操作" }).waitFor();
 	// Change the latest native-side config after the preview was produced.
@@ -131,7 +130,7 @@ try {
 	assert.equal(await untestedRow.locator(".provider-row-meta").getAttribute("title"), "未测试");
 	await shot("history-reloaded-light");
 	await button("路线").click();
-	assert.match(await settings().locator('[data-route-id="route-deepseek-r2"]').textContent(), /最近测试：成功/);
+	assert.match(await settings().locator('[data-route-id="route-deepseek-r2"] .settings-test-history').getAttribute("title") ?? "", /最近测试成功.*first\/deepseek-v4.1-flash/);
 	assert.match(await settings().locator('[data-route-id="route-auto-r2"]').textContent(), /未测试/, "A record cannot spread to another model of the same relay");
 	await button("供应商").click(); await button("编辑 硅基低价").click();
 	await settings().getByRole("button", { name: "测试", exact: true }).first().click();
@@ -149,15 +148,15 @@ try {
 	assert.equal(await page.evaluate(() => (localStorage.getItem("skiff.test.metadata.v1") ?? "").includes("sk-mock")), false);
 
 	await button("路线").click(); const searchRoutes = settings().getByRole("textbox", { name: "搜索路线" });
-	await searchRoutes.fill("no-match"); await settings().getByRole("checkbox", { name: "仅看可用", exact: true }).check();
+	await searchRoutes.fill("硅基低价"); await settings().getByRole("checkbox", { name: "仅看可用", exact: true }).check();
 	const beforeOrder = await config();
-	const family = settings().locator(".family-card", { has: page.locator(".family-card-title", { hasText: "DeepSeek" }) });
+	const family = settings().locator(".routes-family-group", { has: page.locator(".family-card-title", { hasText: "DeepSeek" }) });
 	await family.getByRole("button", { name: "调整切换顺序", exact: true }).click();
 	assert.equal(await settings().locator("[data-order-id]").count(), beforeOrder.families[0].routes.length);
 	assert.equal(await button("供应商").isDisabled(), true);
 	await settings().getByRole("button", { name: "上移 硅基低价", exact: true }).click();
 	assert.deepEqual(await config(), beforeOrder, "Keyboard reordering only changes the draft");
-	await page.keyboard.press("Escape"); assert.equal(await searchRoutes.inputValue(), "no-match");
+	await page.keyboard.press("Escape"); assert.equal(await searchRoutes.inputValue(), "硅基低价");
 	assert.equal(await settings().getByRole("checkbox", { name: "仅看可用", exact: true }).isChecked(), true);
 	await family.getByRole("button", { name: "调整切换顺序", exact: true }).click();
 	await settings().locator('[data-order-id="route-deepseek-custom"]').dragTo(settings().locator('[data-order-id="route-deepseek-r1"]'));
@@ -169,7 +168,6 @@ try {
 	assert.deepEqual((await config()).families[0].routes, beforeOrder.families[0].routes);
 	await button("保存顺序").click();
 	assert.deepEqual((await config()).families[0].routes.map((route) => route.id), draftOrder);
-	assert.equal((await config()).families[0].defaultRouteId, beforeOrder.families[0].defaultRouteId);
 	await family.getByRole("button", { name: "调整切换顺序", exact: true }).click();
 	await page.evaluate(() => { window.skiffPreview.families[0].routes.pop(); });
 	await button("保存顺序").click(); await settings().getByText("路线集合已变化，旧顺序不能保存，请重新加载后调整。").waitFor();
@@ -182,7 +180,7 @@ try {
 	let deletion = confirm("批量删除供应商"); assert.match(await deletion.textContent(), /影响 2 条关联路线/);
 	await page.keyboard.press("Escape"); assert.equal((await config()).relays.length, 5);
 	await button("批量删除").click(); deletion = confirm("批量删除供应商"); await deletion.getByRole("button", { name: "确认操作" }).click(); await deletion.waitFor({ state: "detached" });
-	assert.equal((await config()).relays.length, 3); assert.equal((await config()).families[0].defaultRouteId, "route-deepseek-r1");
+	assert.equal((await config()).relays.length, 3);
 	await button("退出批量管理").click();
 	assert.equal((await metadata()).tests.length, 0, "Removing the final route model cleans history");
 	// A completed chat response counts exactly once; opening settings and history do not.
@@ -242,6 +240,6 @@ try {
 	await settings().locator(".provider-empty-state").getByRole("button", { name: "添加供应商", exact: true }).click();
 	assert.equal(await settings().getByRole("heading", { name: "添加供应商", exact: true }).count(), 1, "Empty-state action opens the provider picker and exits batch mode");
 	assert.deepEqual(errors, []);
-	console.log("PASS settings management: provider source tabs/order/filtering, empty states and add action, selection scope, atomic failure/retry and stale preview, default protection, exact persisted history/drafts/invalidation, full route order keyboard/drag/save/cancel/conflict, themes/narrow layout");
+	console.log("PASS settings management: provider source tabs/order/filtering, empty states and add action, selection scope, atomic failure/retry and stale preview, route-order selection, exact persisted history/drafts/invalidation, full route order keyboard/drag/save/cancel/conflict, themes/narrow layout");
 } catch (error) { await shot("failure"); throw error; }
 finally { await browser.close(); }

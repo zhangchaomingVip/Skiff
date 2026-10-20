@@ -4,7 +4,7 @@ import { Input, Button, ListRow, Chip, SegmentedControl, Popover } from "./ui";
 import { useMemo, useRef, useState, useEffect } from "react";
 import type { Conversation, Project } from "../chat/workspace";
 import type { RuntimeOffer } from "../chat/modelFamilies";
-import { groupLauncherOffers, groupLauncherFamilies, recentLauncherOfferIds, type LauncherFamilyDefault, type LauncherModel } from "../chat/launcherModels";
+import { groupLauncherOffers, groupLauncherFamilies, recentLauncherOfferIds, type LauncherModel } from "../chat/launcherModels";
 import { familyLatest, familyUpdates, type FamilyUpdate } from "../chat/latestModels";
 import { fetchOfficialPages } from "../rpc/officialPages";
 import { fetchPublicCatalog } from "../rpc/pricingPage";
@@ -48,14 +48,13 @@ const saveDismissed = (dismissed: ReadonlySet<string>) => {
 	try { localStorage.setItem(DISMISS_KEY, JSON.stringify([...dismissed])); } catch { /* Optional preference; hints reappear next launch. */ }
 };
 
-export function LauncherView({ activeChat, activeProject, projects, chats, offers, recentOfferIds, familyDefaults, loading, disabled = false, navigationDisabled = disabled, error, onResume, onSelectProject, onAddProject, onManageProviders, onRetryModels, onStartChat, onOpenChat }: {
+export function LauncherView({ activeChat, activeProject, projects, chats, offers, recentOfferIds, loading, disabled = false, navigationDisabled = disabled, error, onResume, onSelectProject, onAddProject, onManageProviders, onRetryModels, onStartChat, onOpenChat }: {
 	activeChat?: Conversation;
 	activeProject?: Project;
 	projects: Project[];
 	chats: Conversation[];
 	offers: RuntimeOffer[];
 	recentOfferIds: string[];
-	familyDefaults: LauncherFamilyDefault[];
 	loading: boolean;
 	disabled?: boolean;
 	navigationDisabled?: boolean;
@@ -68,7 +67,7 @@ export function LauncherView({ activeChat, activeProject, projects, chats, offer
 	onStartChat: (offer: RuntimeOffer) => void;
 	onOpenChat: (id: string) => void;
 }) {
-	const models = useMemo(() => groupLauncherOffers(offers, familyDefaults), [offers, familyDefaults]);
+	const models = useMemo(() => groupLauncherOffers(offers), [offers]);
 	const [scope, setScope] = useState<"recent" | "all">(recentOfferIds.length ? "recent" : "all");
 	const [query, setQuery] = useState("");
 	const [routeModel, setRouteModel] = useState<LauncherModel>();
@@ -130,7 +129,7 @@ export function LauncherView({ activeChat, activeProject, projects, chats, offer
 		return next;
 	});
 	const renderRow = (model: LauncherModel, solo: boolean) => {
-		const offer = model.defaultOffer;
+		const offer = model.preferredOffer;
 		const mark = brand(model.familyId);
 		const labels = capabilityLabels(offer);
 		const selected = !!activeChat?.selectedModel && !!((activeChat.selectedModel.offerId && activeChat.selectedModel.offerId === offer.offerId) || (activeChat.selectedModel.routeId && activeChat.selectedModel.routeId === offer.routeId && activeChat.selectedModel.id === offer.modelId));
@@ -143,7 +142,7 @@ export function LauncherView({ activeChat, activeProject, projects, chats, offer
 				{selected && <Chip tone="success">当前选择</Chip>}
 			</div>
 			<div className="launcher-row-chips">{labels.map((label) => <Chip key={label}>{label}</Chip>)}<Chip>{context(offer.contextWindow)} 上下文</Chip></div>
-			<span className="launcher-row-line">默认线路 <strong>{offer.relayName}</strong> · {model.offers.length} 条线路 · {offerAccount(offer.billingAccountId)}</span>
+			<span className="launcher-row-line">优先线路 <strong>{offer.relayName}</strong> · {model.offers.length} 条线路 · {offerAccount(offer.billingAccountId)}</span>
 			<span className="launcher-row-price">{offerPriceCompact(offer)}</span>
 			<Button variant={selected ? "primary" : "secondary"} disabled={blocked} onClick={start} title={blocked ? activeProject ? "当前不可用" : "请先选择项目" : model.offers.length > 1 ? "先选择具体线路与扣费账户" : "使用此线路开始聊天"}>{model.offers.length > 1 ? "选择线路" : "开始聊天"}</Button>
 		</div>;

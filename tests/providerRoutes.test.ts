@@ -26,7 +26,7 @@ test("Bailian discovery groups direct and namespaced models without changing API
 
 test("discovery repairs missing routes, retaining existing models and exclusions", () => {
 	const relay = { ...blankRelay(), id: "bailian", excludedModelIds: ["kimi-k3"] };
-	const families: ModelFamily[] = [{ id: "deepseek", displayName: "DeepSeek", defaultRouteId: "existing", routes: [{ ...blankRoute(relay.id), id: "existing", enabled: false, models: [fillModel("deepseek-chat")] }] }];
+	const families: ModelFamily[] = [{ id: "deepseek", displayName: "DeepSeek", routes: [{ ...blankRoute(relay.id), id: "existing", enabled: false, models: [fillModel("deepseek-chat")] }] }];
 	const original = structuredClone(families);
 	const routes = buildDiscoveredRoutes(asDiscovered(["deepseek-v4-pro", "kimi-k3", "glm-5.3", " glm-5.3 "]), relay, families, fillModel);
 	assert.deepEqual(routes.map((item) => item.familyId), ["glm"]);
@@ -38,8 +38,8 @@ test("discovery repairs missing routes, retaining existing models and exclusions
 test("provider model editor updates existing family routes and preserves excluded models", () => {
 	const relay = { ...blankRelay(), id: "relay-a", excludedModelIds: ["deepseek-retired"] };
 	const families: ModelFamily[] = [
-		{ id: "deepseek", displayName: "DeepSeek", defaultRouteId: "route-deepseek", routes: [{ ...blankRoute(relay.id), id: "route-deepseek", reasoning: true, models: [fillModel("deepseek-chat"), fillModel("deepseek-retired")] }] },
-		{ id: "kimi", displayName: "Kimi", defaultRouteId: null, routes: [] },
+		{ id: "deepseek", displayName: "DeepSeek", routes: [{ ...blankRoute(relay.id), id: "route-deepseek", reasoning: true, models: [fillModel("deepseek-chat"), fillModel("deepseek-retired")] }] },
+		{ id: "kimi", displayName: "Kimi", routes: [] },
 	];
 	const edited = { ...fillModel("deepseek-chat"), alias: "对话模型", contextWindow: 196000 };
 	const routes = routesFromProviderModels(relay, families, [

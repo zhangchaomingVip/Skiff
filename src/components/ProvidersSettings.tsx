@@ -755,7 +755,7 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 			await mutate(async () => { success = await onBatch(ids, operation, token); return success; });
 			if (success) { setSelected([]); setBatchAction(undefined); setNotice("批量操作已完成"); }
 			return success;
-		}} pending={pending} error={configError || error} onClose={() => setBatchAction(undefined)} onOpenFamily={(familyId) => { setSelected([]); setBatchAction(undefined); onOpenRoutes({ familyId }); }} />}
+		}} pending={pending} error={configError || error} onClose={() => setBatchAction(undefined)} />}
 		{removing && <ConfirmDialog title={removing.title} description={removing.description} onConfirm={() => void mutate(removing.action)} onClose={() => setRemoving(undefined)} />}
 	</div>;
 });

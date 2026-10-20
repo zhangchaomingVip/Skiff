@@ -268,13 +268,12 @@ mod tests {
 	}
 
 	#[test]
-	fn batch_transactions_protect_defaults_stale_previews_and_failed_writes() {
-		let mut f = fixture(); f.config.families[0].default_route_id = Some("ra".into());
+	fn batch_transactions_refresh_previews_and_allow_deleting_routes() {
+		let f = fixture();
 		crate::families::save(&f.dir, &f.config).unwrap();
 		let ids = vec!["a".into(), "b".into()];
 		let preview = crate::families::relay_batch_preview(&f.config, &ids).unwrap();
-		assert_eq!(preview.route_count, 2); assert_eq!(preview.default_families, ["deepseek"]);
-		assert!(crate::families::batch_relays_in(&f.dir, &ids, "delete", &preview.token).is_err());
+		assert_eq!(preview.route_count, 2);
 		assert!(crate::families::batch_relays_in(&f.dir, &["a".into(), "missing".into()], "disable", &preview.token).is_err());
 		let disabled = crate::families::batch_relays_in(&f.dir, &ids, "disable", &preview.token).unwrap();
 		assert!(disabled.relays.iter().all(|r| !r.enabled));
@@ -285,8 +284,7 @@ mod tests {
 		assert!(crate::families::batch_relays_in(&f.dir, &ids, "enable", &token).is_err());
 		assert!(crate::families::load_plain(&f.dir).unwrap().relays.iter().all(|r| !r.enabled));
 		std::fs::write(f.dir.join("auth.json"), "{}").unwrap();
-		let without_default = crate::families::set_default_route_in(&f.dir, "deepseek", None).unwrap();
-		let token = crate::families::relay_batch_preview(&without_default, &ids).unwrap().token;
+		let token = crate::families::relay_batch_preview(&disabled, &ids).unwrap().token;
 		let deleted = crate::families::batch_relays_in(&f.dir, &ids, "delete", &token).unwrap();
 		assert!(deleted.relays.is_empty()); assert!(deleted.families[0].routes.is_empty());
 	}

@@ -4,7 +4,6 @@ import { classifyProviderFailure, modelsFromOffers, reconcile, needsFallback, ne
 import { maskBaseUrl, maskKey, blankRelay, blankRoute, blankModel, validateModels, FAMILY_LABELS } from "../src/chat/useModelFamilies.ts";
 import { modelBrand } from "../src/chat/modelDisplay.ts";
 
-const defaults = [{ id: "deepseek", defaultRelayId: "default" }, { id: "kimi", defaultRelayId: "k1" }, { id: "glm", defaultRelayId: null }];
 const offer = (familyId: string, relayId: string, overrides: Partial<RuntimeOffer> = {}): RuntimeOffer => ({
 	familyId, familyName: FAMILY_LABELS[familyId], relayId,
 	relayName: relayId === "low" ? "硅基低价" : "官方直连",
@@ -14,7 +13,7 @@ const offer = (familyId: string, relayId: string, overrides: Partial<RuntimeOffe
 
 test("same-model routes remain separate selectable offers", () => {
 	const offers = [offer("deepseek", "low"), offer("deepseek", "default")];
-	const models = modelsFromOffers(offers, defaults);
+	const models = modelsFromOffers(offers);
 	assert.deepEqual(models.map((model) => [model.provider, model.id, model.providerName]), [
 		["skiff-relay-low-deepseek", "deepseek-chat", "硅基低价"],
 		["skiff-relay-default-deepseek", "deepseek-chat", "官方直连"],
@@ -35,7 +34,7 @@ test("offer aliases become labels while route and offer identities stay distinct
 
 test("the live model keeps pi's capabilities but gains the relay name and price", () => {
 	const current = { provider: "skiff-relay-low-deepseek", id: "deepseek-chat", name: "deepseek-chat", contextWindow: 64000, reasoning: true };
-	const models = reconcile(current, [offer("deepseek", "low"), offer("kimi", "k1", { modelId: "kimi-k2" })], [], defaults);
+	const models = reconcile(current, [offer("deepseek", "low"), offer("kimi", "k1", { modelId: "kimi-k2" })]);
 	assert.equal(models[0].providerName, "硅基低价");
 	assert.equal(models[0].contextWindow, 64000);
 	assert.equal(models[0].reasoning, true);
@@ -131,10 +130,10 @@ test("failover filters candidates by request capabilities and route order", () =
 
 test("picker order stays stable when a later route is selected or disabled", () => {
 	const current = { provider: "skiff-relay-b-deepseek", id: "deepseek-chat", contextWindow: 64000 };
-	const models = reconcile(current, [offer("deepseek", "a", { modelId: "deepseek-flash" }), offer("deepseek", "b")], [], defaults);
+	const models = reconcile(current, [offer("deepseek", "a", { modelId: "deepseek-flash" }), offer("deepseek", "b")]);
 	assert.deepEqual(models.map((model) => model.provider), ["skiff-relay-a-deepseek", "skiff-relay-b-deepseek"]);
 	assert.equal(models[1].contextWindow, 64000);
-	assert.equal(reconcile(current, [offer("deepseek", "a")], [], defaults).length, 1);
+	assert.equal(reconcile(current, [offer("deepseek", "a")]).length, 1);
 });
 
 test("three models share a route while keeping their own limits, prices and selection", () => {
@@ -142,7 +141,7 @@ test("three models share a route while keeping their own limits, prices and sele
 	const current = { provider: offers[2].providerKey, id: offers[2].modelId, contextWindow: 42 };
 	assert.equal(resolveSelection(current, offers, "deepseek").offer, offers[2]);
 	assert.equal(resolveSelection(current, offers, "deepseek").invalidated, false);
-	const models = reconcile(current, offers, [], defaults);
+	const models = reconcile(current, offers);
 	assert.deepEqual(models.map((model) => model.id), offers.map((offer) => offer.modelId));
 	assert.equal(models[2].contextWindow, 256000);
 	assert.equal(models[2].maxTokens, 16384);
@@ -158,11 +157,11 @@ test("deleted models/routes fall back to the first available model in the same f
 	assert.equal(resolveSelection({ provider: offers[2].providerKey, id: offers[2].modelId }, offers.slice(0, 2), "deepseek").offer, offers[1]);
 });
 
-test("invalidated pinned routes prefer the same model on the default route", () => {
-	const offers = [offer("deepseek", "first"), offer("deepseek", "default")];
+test("invalidated pinned routes prefer the same model in route order", () => {
+	const offers = [offer("deepseek", "first", { routeOrder: 0 }), offer("deepseek", "later", { routeOrder: 1 })];
 	const current = { provider: "skiff-relay-gone-deepseek", id: "deepseek-chat", routeId: "route-gone" };
-	const resolved = resolveSelection(current, offers, "deepseek", [{ id: "deepseek", defaultRouteId: "default" }]);
-	assert.equal(resolved.offer, offers[1]);
+	const resolved = resolveSelection(current, offers, "deepseek");
+	assert.equal(resolved.offer, offers[0]);
 	assert.equal(resolved.invalidated, true);
 });
 
@@ -172,8 +171,9 @@ test("model rows validate IDs and integer limits independently", () => {
 	for (const rows of [[], [blankModel()], [first, { ...first, modelId: " deepseek-chat " }], [{ ...first, contextWindow: 0 }], [{ ...first, maxTokens: 1.5 }], [{ ...first, maxTokens: 128001 }]]) assert.ok(validateModels(rows));
 });
 
-test("initial selection and invalid selections honor the default route", () => {
-	const offers = [offer("deepseek", "first"), offer("deepseek", "default")];
-	assert.equal(resolveSelection(undefined, offers, "deepseek", defaults).offer, offers[1]);
-	assert.equal(resolveSelection({ provider: "skiff-relay-gone-deepseek", id: "removed" }, offers, "deepseek", defaults).offer, offers[1]);
+test("initial and invalidated selections follow route order", () => {
+	const offers = [offer("deepseek", "later", { routeOrder: 1 }), offer("deepseek", "first", { routeOrder: 0 })];
+	assert.equal(resolveRoute(offers, "deepseek", "deepseek-chat"), offers[1]);
+	assert.equal(resolveSelection(undefined, offers, "deepseek").offer, offers[1]);
+	assert.equal(resolveSelection({ provider: "skiff-relay-gone-deepseek", id: "removed" }, offers, "deepseek").offer, offers[1]);
 });

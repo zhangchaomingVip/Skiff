@@ -1,17 +1,12 @@
 import type { RuntimeOffer } from "./modelFamilies";
 import type { Conversation } from "./workspace";
 
-export interface LauncherFamilyDefault {
-	id: string;
-	defaultRouteId?: string | null;
-}
-
 export interface LauncherModel {
 	familyId: string;
 	familyName: string;
 	modelId: string;
 	offers: RuntimeOffer[];
-	defaultOffer: RuntimeOffer;
+	preferredOffer: RuntimeOffer;
 }
 
 const offerKey = (offer: RuntimeOffer) => offer.offerId ?? `${offer.familyId}/${offer.routeId ?? offer.relayId}/${offer.modelId}`;
@@ -82,7 +77,7 @@ export function groupLauncherFamilies(models: LauncherModel[], recentIds: Readon
 }
 
 /** Groups runtime offers for the Launcher while preserving every route. */
-export function groupLauncherOffers(offers: RuntimeOffer[], defaults: LauncherFamilyDefault[] = []): LauncherModel[] {
+export function groupLauncherOffers(offers: RuntimeOffer[]): LauncherModel[] {
 	const unique = new Map<string, RuntimeOffer>();
 	for (const offer of offers) {
 		if (!offer.familyId || !offer.modelId || !offer.relayId || !offer.relayName) continue;
@@ -93,12 +88,10 @@ export function groupLauncherOffers(offers: RuntimeOffer[], defaults: LauncherFa
 		const key = `${offer.familyId}/${offer.modelId}`;
 		const existing = groups.get(key);
 		if (existing) existing.offers.push(offer);
-		else groups.set(key, { familyId: offer.familyId, familyName: offer.familyName, modelId: offer.modelId, offers: [offer], defaultOffer: offer });
+		else groups.set(key, { familyId: offer.familyId, familyName: offer.familyName, modelId: offer.modelId, offers: [offer], preferredOffer: offer });
 	}
 	return [...groups.values()].map((group) => {
-		const preferred = defaults.find((family) => family.id === group.familyId)?.defaultRouteId;
 		const ordered = [...group.offers].sort((a, b) => (a.routeOrder ?? Number.MAX_SAFE_INTEGER) - (b.routeOrder ?? Number.MAX_SAFE_INTEGER));
-		const defaultOffer = ordered.find((offer) => preferred && (offer.routeId === preferred || offer.relayId === preferred)) ?? ordered[0];
-		return { ...group, offers: ordered, defaultOffer };
+		return { ...group, offers: ordered, preferredOffer: ordered[0] };
 	});
 }

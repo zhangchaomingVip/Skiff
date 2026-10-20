@@ -11,15 +11,15 @@ test("Launcher groups same model offers while preserving route choices", () => {
 	const models = groupLauncherOffers([offer(), offer({ offerId: "route-b/model-a", routeId: "route-b", relayId: "relay-b", relayName: "线路 B", providerKey: "provider-b", routeOrder: 2 }), offer()]);
 	assert.equal(models.length, 1);
 	assert.equal(models[0].offers.length, 2);
-	assert.equal(models[0].defaultOffer.routeId, "route-a");
+	assert.equal(models[0].preferredOffer.routeId, "route-a");
 });
 
-test("Launcher defaults follow the configured family route", () => {
+test("Launcher prefers the first offer in route order", () => {
 	const models = groupLauncherOffers([
 		offer({ offerId: "route-b/model-a", routeId: "route-b", relayId: "relay-b", relayName: "线路 B", providerKey: "provider-b", routeOrder: 2 }),
 		offer({ routeOrder: 1 }),
-	], [{ id: "deepseek", defaultRouteId: "route-b" }]);
-	assert.equal(models[0].defaultOffer.routeId, "route-b");
+	]);
+	assert.equal(models[0].preferredOffer.routeId, "route-a");
 });
 
 test("Launcher drops malformed offers without inventing a card", () => {

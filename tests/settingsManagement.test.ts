@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { latestSettingsTest, providerBatchImpact, settingsTestSummary, sortSettingsProviders, type SettingsTestRecord } from "../src/chat/settingsManagement.ts";
+import { latestSettingsTest, providerBatchImpact, settingsTestDisplay, settingsTestSummary, sortSettingsProviders, type SettingsTestRecord } from "../src/chat/settingsManagement.ts";
 import { blankRelay, type ModelFamily } from "../src/chat/useModelFamilies.ts";
 
 test("provider display sorting and grouping are stable and leave configuration untouched", () => {
@@ -28,9 +28,21 @@ test("history selects the exact provider and actual model and reports failure, c
 	assert.match(settingsTestSummary({ ...record, configChanged: true }, 101), /配置已变化/);
 });
 
-test("batch impact includes disabled, empty and default routes without changing their switches", () => {
+test("route test display keeps performance and relative time visible while details stay in the tooltip", () => {
+	const now = Date.now();
+	const test: SettingsTestRecord = { relayId: "a", modelId: "actual/model", completedAt: now - 11 * 60 * 60 * 1000, ok: true, latencyMs: 1364, status: 200, errorCategory: null, configVersion: "v1", configChanged: false };
+	const display = settingsTestDisplay(test, now);
+	assert.equal(display.label, "✓ 1364 ms · 11 小时前");
+	assert.match(display.title, /HTTP 200.*actual\/model/);
+	assert.match(display.title, /最近测试成功.*1364 ms/);
+	assert.equal(display.tone, "success");
+	assert.equal(settingsTestDisplay(undefined, now).label, "未测试");
+	assert.equal(settingsTestDisplay({ ...test, ok: false, status: 401 }, now).tone, "error");
+});
+
+test("batch impact includes disabled and empty routes without changing their switches", () => {
 	const relays = ["a", "b"].map((id) => ({ ...blankRelay(), id, name: id }));
-	const families = [{ id: "deepseek", defaultRouteId: "1", routes: [{ id: "1", relayId: "a", enabled: false, models: [] }, { id: "2", relayId: "a", enabled: true, models: [] }, { id: "3", relayId: "b", models: [] }] }] as unknown as ModelFamily[];
-	assert.deepEqual(providerBatchImpact(relays, families, ["a"]), { names: ["a"], routeCount: 2, defaultFamilies: ["deepseek"] });
+	const families = [{ id: "deepseek", routes: [{ id: "1", relayId: "a", enabled: false, models: [] }, { id: "2", relayId: "a", enabled: true, models: [] }, { id: "3", relayId: "b", models: [] }] }] as unknown as ModelFamily[];
+	assert.deepEqual(providerBatchImpact(relays, families, ["a"]), { names: ["a"], routeCount: 2 });
 	assert.equal(families[0].routes[0].enabled, false);
 });

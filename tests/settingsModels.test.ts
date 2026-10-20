@@ -9,9 +9,9 @@ const relay = { ...blankRelay(), id: "a", name: "Same name", baseUrl: "https://a
 const other = { ...relay, id: "b" };
 const catalog = [{ modelId: "deepseek-flash", name: "DeepSeek V4.1 Flash 1017" }];
 const route = { ...blankRoute("a"), id: "first", models: [model("vendor/deepseek-v4.1-flash"), model("deepseek-flash"), model("other/deepseek-v4.1-flash")] };
-const family: ModelFamily = { id: "deepseek", displayName: "DeepSeek", defaultRouteId: "default", routes: [route, { ...route, id: "default", relayId: "b", models: [model("deepseek-old")] }] };
+const family: ModelFamily = { id: "deepseek", displayName: "DeepSeek", routes: [route, { ...route, id: "later", relayId: "b", models: [model("deepseek-old")] }] };
 
-test("settings candidate selection skips unsupported default and resolves the exact API ID first", () => {
+test("settings candidate selection follows route order and resolves the exact API ID first", () => {
 	const before = structuredClone(family);
 	const target = settingsTestTarget(family, [relay, other], "deepseek-flash", catalog)!;
 	assert.equal(target.route.id, "first");
@@ -22,7 +22,7 @@ test("settings candidate selection skips unsupported default and resolves the ex
 	const excluded = { ...relay, excludedModelIds: ["deepseek-flash"] };
 	assert.equal(settingsTestTarget(family, [excluded, other], "deepseek-flash", catalog)?.model.modelId, "vendor/deepseek-v4.1-flash");
 	assert.deepEqual(family, before);
-	assert.equal(settingsTestTarget({ ...family, routes: [route, { ...route, id: "default", relayId: "b" }] }, [relay, other], "deepseek-flash", catalog)?.route.id, "default");
+	assert.equal(settingsTestTarget({ ...family, routes: [{ ...route, enabled: false }, { ...route, id: "later", relayId: "b" }] }, [relay, other], "deepseek-flash", catalog)?.route.id, "later");
 });
 
 test("available counts and Auto require an enabled provider, enabled route and an included actual model", () => {
@@ -34,13 +34,13 @@ test("available counts and Auto require an enabled provider, enabled route and a
 	assert.equal(settingsModelCandidates({ ...family, routes: [route] }, [excluded]).length, 0);
 	assert.equal(routeBlockedReason(route, excluded), "所有模型已剔除");
 	assert.equal(route.enabled, true);
-	assert.equal(settingsTestTarget({ ...family, defaultRouteId: "first", routes: [route, { ...route, id: "second", relayId: "b" }] }, [relay, other], "deepseek-flash", catalog)?.route.id, "first");
+	assert.equal(settingsTestTarget({ ...family, routes: [{ ...route, id: "second", relayId: "b" }, route] }, [relay, other], "deepseek-flash", catalog)?.route.id, "second");
 });
 
 test("route summaries prefer visible models then retain historical/manual IDs without mutating configuration", () => {
 	const historic = { ...route, models: [model("old"), model("manual"), model("deepseek-flash")] };
-	assert.deepEqual(routeSummaryModels(historic, ["deepseek-flash"], catalog).map((item) => item.modelId), ["deepseek-flash", "old"]);
-	assert.deepEqual(routeSummaryModels(historic, [], []).map((item) => item.modelId), ["old", "manual"]);
+	assert.deepEqual(routeSummaryModels(historic, ["deepseek-flash"], catalog).map((item) => item.modelId), ["deepseek-flash", "old", "manual"]);
+	assert.deepEqual(routeSummaryModels({ ...historic, models: [...historic.models, model("fourth")] }, [], []).map((item) => item.modelId), ["old", "manual", "deepseek-flash"]);
 	assert.equal(routeMatchesQuery({ ...historic, models: [{ ...model("old"), alias: "Custom Display" }] }, relay, "DISPLAY"), true);
 	assert.equal(routeMatchesQuery(historic, relay, "same NAME"), true);
 	assert.equal(historic.models.length, 3);
@@ -81,5 +81,5 @@ test("provider saves preserve excluded model positions, prices, capabilities and
 	assert.deepEqual(saved.models[0], { ...original.models[0], alias: "Changed", contextWindow: 64000 });
 	assert.deepEqual({ ...saved, models: [] }, { ...original, models: [] });
 	assert.deepEqual(saved.models.slice(1), original.models.slice(1));
-	assert.equal(config[0].defaultRouteId, family.defaultRouteId);
+	assert.deepEqual(config[0].routes.map((item) => item.id), [original.id]);
 });
