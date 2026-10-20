@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Button, Popover } from "./ui";
 import type { ModelInfo } from "../chat/types";
 import { FAMILY_LABELS } from "../chat/useModelFamilies";
@@ -7,6 +7,8 @@ import { ModelPicker } from "./ModelPicker";
 import { BrandIcon, type BrandName } from "./BrandIcon";
 import { Icon } from "./Icon";
 import { modelBrand } from "../chat/modelDisplay";
+import { pickerModelName, visiblePickerModels } from "../chat/modelPicker";
+import { useFamilyModels } from "../chat/useFamilyModels";
 
 const BRANDABLE = ["deepseek", "kimi", "glm"] as const;
 const brand = (familyId?: string): BrandName | undefined => BRANDABLE.find((name) => name === familyId);
@@ -20,6 +22,8 @@ export function ModelMenu({ models, model, disabled, onModel }: {
 }) {
 	const { familyOf, manage: onManage, models: familyModels, current, select, configurationHint } = useModelFamily();
 	models = familyModels ?? models;
+	const { config: visibleModels, catalog } = useFamilyModels();
+	const pickerModels = useMemo(() => visiblePickerModels(models, visibleModels, catalog, familyOf), [models, visibleModels, catalog, familyOf]);
 	model = current ?? model;
 	onModel = select ?? onModel;
 	const [open, setOpen] = useState(false);
@@ -27,7 +31,7 @@ export function ModelMenu({ models, model, disabled, onModel }: {
 	const trigger = useRef<HTMLButtonElement>(null);
 	const family = model ? familyOf(model) : undefined;
 	const mark = brand(family?.id) ?? modelBrand(model?.provider, model?.id, model?.name);
-	const displayName = model?.name ?? model?.id ?? "选择模型";
+	const displayName = model ? pickerModelName(model) : "选择模型";
 	const fullTitle = model ? [family ? FAMILY_LABELS[family.id] ?? family.name : undefined, displayName, model.providerName, model.routeId, `${model.provider}/${model.id}`].filter(Boolean).join(" · ") : "选择模型";
 
 	return <div className="model-chip-wrap" ref={root}>
@@ -37,7 +41,7 @@ export function ModelMenu({ models, model, disabled, onModel }: {
 			<span className="chev-caret"><Icon name="chevron" size={12} /></span>
 		</Button>
 		{open && <Popover anchor={trigger} onClose={() => setOpen(false)} className="model-popover" aria-label="选择模型">
-			<ModelPicker configurationHint={configurationHint} models={models} familyOf={familyOf} current={model} onManage={() => { setOpen(false); onManage(); }} onSelect={(next) => { onModel(next); setOpen(false); trigger.current?.focus(); }} disabled={disabled} />
+			<ModelPicker configurationHint={configurationHint} models={pickerModels} familyOf={familyOf} current={model} onManage={() => { setOpen(false); onManage(); }} onSelect={(next) => { onModel(next); setOpen(false); trigger.current?.focus(); }} disabled={disabled} />
 		</Popover>}
 	</div>;
 }

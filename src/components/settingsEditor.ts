@@ -1,13 +1,14 @@
 import { useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type Dispatch, type Ref, type RefObject, type SetStateAction } from "react";
 
 /** Handle the settings shell uses to coordinate Escape, pending saves and back. */
-export type SettingsEditorHandle = { pending: boolean; editing: boolean; back: () => void };
+export type SettingsEditorHandle = { pending: boolean; editing: boolean; dirty?: boolean; back: () => void };
 
 /** A destructive action awaiting confirmation inside a settings form. */
 export type SettingsRemoval = { title: string; description: string; action: () => Promise<boolean> };
 
 type SettingsEditor<D> = {
 	draft: D | undefined;
+	dirty: boolean;
 	setDraft: Dispatch<SetStateAction<D | undefined>>;
 	pending: boolean;
 	setPending: (pending: boolean) => void;
@@ -45,10 +46,11 @@ export function useSettingsListFocus(content: RefObject<HTMLDivElement>, editing
  * between the triggering row and the form, and the lock the shell reads.
  * `onClose` lets a page reset state it owns, such as a running connection test.
  */
-export function useSettingsEditor<D extends { kind: string }>({ ref, onLockChange, onClose }: {
+export function useSettingsEditor<D extends { kind: string }>({ ref, onLockChange, onClose, isDirty }: {
 	ref: Ref<SettingsEditorHandle>;
 	onLockChange: (locked: boolean, pending: boolean) => void;
 	onClose?: () => void;
+	isDirty?: (draft: D) => boolean;
 }): SettingsEditor<D> {
 	const [draft, setDraft] = useState<D>();
 	const [pending, setPending] = useState(false);
@@ -65,8 +67,9 @@ export function useSettingsEditor<D extends { kind: string }>({ ref, onLockChang
 		}
 	};
 	const closeDraft = () => { onClose?.(); setDraft(undefined); setError(undefined); };
-	useImperativeHandle(ref, () => ({ pending, editing: !!draft, back: closeDraft }));
-	useLayoutEffect(() => { onLockChange(pending || !!draft, pending); }, [pending, !!draft, onLockChange]);
+	const dirty = !!draft && !!isDirty?.(draft);
+	useImperativeHandle(ref, () => ({ pending, editing: !!draft, dirty: isDirty ? dirty : undefined, back: closeDraft }));
+	useLayoutEffect(() => { onLockChange(pending || !!draft, pending); }, [pending, !!draft, dirty, onLockChange]);
 	useLayoutEffect(() => {
 		if (draft) {
 			(contentRef.current?.querySelector<HTMLElement>("input:not([type=checkbox]):not(:disabled), select:not(:disabled)") ?? contentRef.current?.querySelector<HTMLElement>("button:not(:disabled)"))?.focus();
@@ -85,5 +88,5 @@ export function useSettingsEditor<D extends { kind: string }>({ ref, onLockChang
 		try { await action(); } catch (e) { setError(String(e)); }
 		finally { mutationPending.current = false; setPending(false); }
 	};
-	return { draft, setDraft, pending, setPending, error, setError, removing, setRemoving, contentRef, closeDraft, mutate, rememberEditorTrigger };
+	return { draft, dirty, setDraft, pending, setPending, error, setError, removing, setRemoving, contentRef, closeDraft, mutate, rememberEditorTrigger };
 }

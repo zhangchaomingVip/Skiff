@@ -86,6 +86,13 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 		families[1].routes.push(route("kimi", "local", []));
 		families[3].routes = [route("auto", "r2", [{ ...families[0].routes[0].models[0], modelId: "excluded/deepseek-flash" }])];
 	}
+	if (fixture === "picker") {
+		const sample = families[0].routes[0].models[0];
+		families[0].routes[0].models.push({ ...sample, modelId: "deepseek-v4-pro" });
+		families[0].routes[1].models.push(...["deepseek-v4-pro", "deepseek-flash", "deepseek-flash-1017"].map((modelId) => ({ ...sample, modelId })));
+		families[1].routes[0].models.push(...["kimi-k3", "kimi-k2.7-code"].map((modelId) => ({ ...sample, modelId })));
+		families[2].routes[0].models.push(...["glm-5.3", "glm-5.3-flash"].map((modelId) => ({ ...sample, modelId })));
+	}
 	const relayOf = (relayId) => relays.find((relay) => relay.id === relayId);
 	// Same ladder pi uses: a level exists only when thinkingLevelMap declares it.
 	const THINKING_LEVELS = ["minimal", "low", "medium", "high", "xhigh", "max"];
@@ -97,7 +104,7 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 		if (!relay?.enabled || !route.enabled) return [];
 		return route.models.filter((model) => !relay.excludedModelIds?.includes(model.modelId)).map((model) => ({
 			provider: providerKey(family.id, relay.id), id: model.modelId, name: model.modelId,
-			contextWindow: model.contextWindow, maxTokens: model.maxTokens, currency: model.currency, cost: { input: model.inputCost, output: model.outputCost },
+			contextWindow: model.contextWindow, maxTokens: model.maxTokens, currency: model.currency, cost: { input: model.inputCost * (relay.priceMultiplier ?? 1), output: model.outputCost * (relay.priceMultiplier ?? 1) },
 			reasoning: route.reasoning, input: (model.vision ?? route.vision) ? ["text", "image"] : ["text"],
 			thinkingLevels: thinkingLevelsOf(route, model),
 			thinkingLevelMap: route.reasoning ? thinkingMap(model.thinkingLevels ?? route.thinkingLevels ?? THINKING_LEVELS.slice(0, 4)) : null,
@@ -110,7 +117,7 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 	const offers = () => familyRoutes().flatMap(({ family, route }, routeOrder) => {
 		const relay = relayOf(route.relayId);
 		if (!relay?.enabled || !route.enabled) return [];
-		return route.models.filter((model) => !relay.excludedModelIds?.includes(model.modelId)).map((model) => ({ offerId: `${route.id}/${model.modelId}`, routeId: route.id, familyId: family.id, familyName: family.displayName, relayId: relay.id, relayName: relay.name, providerKey: providerKey(family.id, relay.id), modelId: model.modelId, alias: model.alias, billingAccountId: relay.billingAccountId, routeOrder, streaming: route.streaming, tools: route.tools, vision: model.vision ?? route.vision, reasoning: route.reasoning, thinkingLevels: thinkingLevelsOf(route, model), inputCost: model.inputCost, outputCost: model.outputCost, cacheReadCost: model.cacheReadCost, cacheWriteCost: model.cacheWriteCost, currency: model.currency, maxTokens: model.maxTokens, contextWindow: model.contextWindow }));
+		return route.models.filter((model) => !relay.excludedModelIds?.includes(model.modelId)).map((model) => ({ offerId: `${route.id}/${model.modelId}`, routeId: route.id, familyId: family.id, familyName: family.displayName, relayId: relay.id, relayName: relay.name, providerKey: providerKey(family.id, relay.id), modelId: model.modelId, alias: model.alias, billingAccountId: relay.billingAccountId, priceMultiplier: relay.priceMultiplier, routeOrder, streaming: route.streaming, tools: route.tools, vision: model.vision ?? route.vision, reasoning: route.reasoning, thinkingLevels: thinkingLevelsOf(route, model), inputCost: model.inputCost * (relay.priceMultiplier ?? 1), outputCost: model.outputCost * (relay.priceMultiplier ?? 1), cacheReadCost: model.cacheReadCost * (relay.priceMultiplier ?? 1), cacheWriteCost: model.cacheWriteCost * (relay.priceMultiplier ?? 1), currency: model.currency, maxTokens: model.maxTokens, contextWindow: model.contextWindow }));
 	});
 	const persist = () => storage?.setItem("skiff.test.sessions", JSON.stringify(saved));
 	const emit = (instanceId, event) => {
@@ -126,7 +133,7 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 		transformCallback(callback) { const id = ++sequence; callbacks.set(id, callback); return id; },
 		async invoke(command, args) {
 			// Model discovery credentials must never enter the preview command log.
-			commands.push({ command, args: command === "discover_relay_models" ? { baseUrl: args.baseUrl } : command === "test_settings_connection" ? { ...args, relay: { ...args.relay, apiKey: "[redacted]" } } : command === "test_provider_connection" ? { ...args, apiKey: "[redacted]" } : args });
+			commands.push({ command, args: command === "discover_relay_models" ? { baseUrl: args.baseUrl } : command === "test_settings_connection" ? { ...args, relay: { ...args.relay, apiKey: "[redacted]" } } : command === "test_provider_connection" || command === "probe_relay_endpoint" ? { ...args, apiKey: "[redacted]" } : args });
 			if (command === "plugin:event|listen") { const id = ++sequence; listeners.set(id, args); return id; }
 			if (command === "plugin:event|unlisten") return;
 			if (command === "set_history_workspace") { historyTargets = args.targets; return; }
@@ -257,6 +264,13 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 				if (new Set(args.relayIds).size !== family.routes.length || args.relayIds.some((id) => !family.routes.some((r) => r.id === id))) throw new Error("路线集合已变化，请重新加载");
 				family.routes = args.relayIds.map((id) => family.routes.find((route) => route.id === id));
 				return familiesConfig();
+			}
+			if (command === "probe_relay_endpoint") {
+				await new Promise((resolve) => target.setTimeout(resolve, 350));
+				if (args.apiKey === "invalid" || String(args.baseUrl).includes("fail")) return { ok: false, latencyMs: 25, status: 401, error: "密钥无效" };
+				if (String(args.baseUrl).includes("timeout")) return { ok: false, latencyMs: 10000, status: null, error: "连接超时" };
+				if (String(args.baseUrl).includes("missing")) return { ok: false, latencyMs: 25, status: 404, error: "端点不支持模型列表接口" };
+				return { ok: true, latencyMs: 132, status: 200, error: null };
 			}
 			if (command === "discover_relay_models") {
 				await new Promise((resolve) => target.setTimeout(resolve, 350));

@@ -76,7 +76,7 @@ export function SettingsRouteRow({ family, route, relay, catalog, visibleIds, pe
 		{expanded && <div className="route-model-prices">{route.models.map((model) => <div key={model.modelId}>
 			<code>{model.modelId}</code>{model.alias && <span>{model.alias}</span>}
 			<small>{relay?.excludedModelIds?.includes(model.modelId) ? "模型已剔除" : reason ?? "可用"}</small>
-			<span>输入 {model.inputCost} / 输出 {model.outputCost} {model.currency} / 百万 token</span>
+			<span>输入 {model.inputCost * (relay?.priceMultiplier ?? 1)} / 输出 {model.outputCost * (relay?.priceMultiplier ?? 1)} {model.currency} / 百万 token</span>
 		</div>)}</div>}
 	</div>;
 }

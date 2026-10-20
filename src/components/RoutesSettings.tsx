@@ -252,6 +252,7 @@ export const RoutesSettingsContent = forwardRef<SettingsEditorHandle, RoutesSett
 				</Select><small>地址与密钥来自中转，无需重复填写。</small></div>
 				<label className="provider-toggle inline"><input type="checkbox" checked={draft.route.enabled} onChange={(event) => patchRoute({ enabled: event.target.checked })} disabled={pending} />启用此路线（供应商总开关也须启用）</label>
 				<div className="provider-models">
+					{relays.find((relay) => relay.id === draft.route.relayId)?.priceMultiplier !== undefined && <p className="muted">此提供商按官方价 × {relays.find((relay) => relay.id === draft.route.relayId)?.priceMultiplier} 计费。以下输入、输出及缓存单价请填写官方价；价格导入也应使用官方价。</p>}
 					<div className="provider-models-heading"><strong>模型配置</strong><small>单价按每百万令牌填写，顺序与选择器一致</small><PriceImport key={`${draft.familyId}:${draft.route.relayId}`} familyId={draft.familyId} addedIds={draft.route.models.map((model) => model.modelId.trim()).filter(Boolean)} extractors={extractors} catalog={catalog} catalogStale={catalogStale} catalogFetchedAt={catalogFetchedAt} usdCnyRate={usdCnyRate} onSaveRate={onSaveRate} relayBaseUrl={relays.find((relay) => relay.id === draft.route.relayId)?.baseUrl ?? ""} disabled={pending} onImport={importPriced} /></div>
 					{draft.route.models.map((model, index) => <div className="provider-model-row" key={index}>
 						<div className="provider-model-first">

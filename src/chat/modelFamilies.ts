@@ -13,6 +13,7 @@ export interface RuntimeOffer {
 	modelId: string;
 	alias?: string;
 	billingAccountId?: string;
+	priceMultiplier?: number;
 	routeOrder?: number;
 	streaming?: boolean;
 	tools?: boolean;
@@ -76,6 +77,8 @@ export function modelsFromOffers(offers: RuntimeOffer[]): ModelInfo[] {
 			...(resolved.reasoning === undefined ? {} : { reasoning: resolved.reasoning }),
 			...(resolved.thinkingLevels === undefined ? {} : { thinkingLevels: resolved.thinkingLevels }),
 			name: title,
+			alias: resolved.alias,
+			priceMultiplier: resolved.priceMultiplier,
 			providerName: resolved.relayName,
 			billingAccountId: resolved.billingAccountId,
 			cost: { input: resolved.inputCost, output: resolved.outputCost, cacheRead: resolved.cacheReadCost, cacheWrite: resolved.cacheWriteCost },

@@ -1,8 +1,9 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { mergeFamilyModels, pickVisibleIds, seedFamilyModels, type FamilyModelEntry, type FamilyModelsConfig } from "./latestModels";
 import { useModelCatalog } from "./useModelCatalog";
 
 const STORAGE_KEY = "skiff.family-models.v1";
+const CHANGE_EVENT = "skiff:family-models-changed";
 
 const readStored = (): FamilyModelsConfig | undefined => {
 	try {
@@ -34,11 +35,20 @@ export function useFamilyModels() {
 	// batched state updates never overwrite each other.
 	const configRef = useRef(config);
 	configRef.current = config;
+	useEffect(() => {
+		const update = (next: FamilyModelsConfig) => { configRef.current = next; setConfig(next); };
+		const onChange = (event: Event) => update((event as CustomEvent<FamilyModelsConfig>).detail);
+		const onStorage = (event: StorageEvent) => { if (event.key === STORAGE_KEY) update(seedFamilyModels(readStored())); };
+		window.addEventListener(CHANGE_EVENT, onChange);
+		window.addEventListener("storage", onStorage);
+		return () => { window.removeEventListener(CHANGE_EVENT, onChange); window.removeEventListener("storage", onStorage); };
+	}, []);
 
 	const save = useCallback((next: FamilyModelsConfig) => {
 		configRef.current = next;
 		setConfig(next);
 		persist(next);
+		window.dispatchEvent(new CustomEvent(CHANGE_EVENT, { detail: next }));
 	}, []);
 
 	const setFamilyModels = useCallback((familyId: string, entries: FamilyModelEntry[]) => {

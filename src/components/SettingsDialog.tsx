@@ -27,10 +27,18 @@ export function SettingsDialog({ initialCategory, restrictions, prompt, provider
 }) {
 	const [category, setCategoryRaw] = useState(initialCategory);
 	const [location, setLocation] = useState<SettingsLocation>();
-	const setCategory = useCallback((next: SettingsCategory, location?: SettingsLocation) => { setCategoryRaw(next); setLocation(location); }, []);
 	const [{ locked, pending }, setInteraction] = useState({ locked: false, pending: false });
+	const setCategory = useCallback((next: SettingsCategory, location?: SettingsLocation) => { setInteraction({ locked: false, pending: false }); setCategoryRaw(next); setLocation(location); }, []);
 	const updateInteraction = useCallback((locked: boolean, pending: boolean) => setInteraction({ locked, pending }), []);
 	const editor = useRef<SettingsEditorHandle>(null);
+	const [switchTarget, setSwitchTarget] = useState<SettingsCategory>();
+	const switchCancel = useRef<HTMLButtonElement>(null);
+	const navigationLocked = pending || (locked && editor.current?.dirty === undefined);
+	const switchCategory = (next: SettingsCategory) => {
+		if (next === category) return;
+		if (editor.current?.dirty) setSwitchTarget(next);
+		else setCategory(next);
+	};
 	const theme = useThemePreference();
 	const modifier = isMacPlatform() ? "Cmd" : "Ctrl";
 	const close = () => { if (!editor.current?.pending) onClose(); };
@@ -38,8 +46,7 @@ export function SettingsDialog({ initialCategory, restrictions, prompt, provider
 	return <Dialog className="settings-dialog" aria-labelledby="settings-title" onClose={close} onEscape={escape} pending={pending} returnFocusSelector=".chat-header .header-settings, .settings-trigger">
 		<div className="settings-heading"><h1 id="settings-title">设置</h1><IconButton aria-label="关闭设置" disabled={pending} onClick={close}><Icon name="close" /></IconButton></div>
 		<div className="settings-layout">
-			<nav className="settings-nav" aria-label="设置分类">{settingsCategories.map(({ id, label, icon }) => <Button key={id} variant="ghost" aria-pressed={category === id} disabled={locked || !!restrictions[id]} title={locked ? "请先返回列表或等待保存完成" : restrictions[id]} onClick={() => setCategory(id)}><Icon name={icon} size={16} />{label}{category === id && <Icon name="check" size={14} />}</Button>)}
-				{locked && <p>请先返回列表或等待保存完成，再切换分类。</p>}
+			<nav className="settings-nav" aria-label="设置分类">{settingsCategories.map(({ id, label, icon }) => <Button key={id} variant="ghost" aria-pressed={category === id} disabled={navigationLocked || !!restrictions[id]} title={navigationLocked ? "请先返回列表或等待保存完成" : restrictions[id]} onClick={() => switchCategory(id)}><Icon name={icon} size={16} />{label}{category === id && <Icon name="check" size={14} />}</Button>)}
 			</nav>
 			<div className="settings-content">
 				{category === "appearance" && <section aria-labelledby="appearance-title"><h2 id="appearance-title">外观</h2><p className="muted">选择应用主题，立即生效。</p><div className="settings-themes" role="group" aria-label="应用主题">{([
@@ -63,5 +70,13 @@ export function SettingsDialog({ initialCategory, restrictions, prompt, provider
 				{Object.entries(restrictions).map(([id, reason]) => reason && <p className="settings-restriction" key={id}>{settingsCategories.find((item) => item.id === id)?.label}：{reason}</p>)}
 			</div>
 		</div>
+		{switchTarget && <Dialog className="project-dialog" aria-labelledby="settings-discard-title" initialFocus={switchCancel} onClose={() => setSwitchTarget(undefined)}>
+			<div className="dialog-heading"><h2 id="settings-discard-title">放弃更改并切换？</h2></div>
+			<p>当前供应商有未保存的更改，切换分类将放弃这些更改。</p>
+			<div className="dialog-actions">
+				<Button ref={switchCancel} variant="secondary" onClick={() => setSwitchTarget(undefined)}>继续编辑</Button>
+				<Button variant="primary" onClick={() => { setCategory(switchTarget); setSwitchTarget(undefined); }}>放弃更改并切换</Button>
+			</div>
+		</Dialog>}
 	</Dialog>;
 }

@@ -1,4 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { RelayProtocol, TestResult } from "../chat/useModelFamilies";
+
+export function probeRelayEndpoint(baseUrl: string, apiKey: string, protocol?: RelayProtocol): Promise<TestResult> {
+	return invoke<TestResult>("probe_relay_endpoint", { baseUrl, apiKey, protocol });
+}
 
 /** A model reported by an OpenAI-compatible `/models` endpoint, with the
  * capability flags Skiff can act on. */

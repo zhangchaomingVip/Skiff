@@ -87,6 +87,8 @@ export interface RelaySpec {
 	timeoutSeconds: number;
 	enabled: boolean;
 	billingAccountId: string;
+	/** Official model prices are multiplied by this factor; absent keeps legacy prices. */
+	priceMultiplier?: number;
 	excludedModelIds?: string[];
 }
 

@@ -190,6 +190,9 @@ pub struct RelaySpec {
 	pub enabled: bool,
 	#[serde(default)]
 	pub billing_account_id: String,
+	/// Applied to official model prices for runtime billing; absent preserves legacy prices.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub price_multiplier: Option<f64>,
 	#[serde(default)]
 	pub excluded_model_ids: Vec<String>,
 }
@@ -287,6 +290,8 @@ pub struct RuntimeOffer {
 	pub model_id: String,
 	pub alias: String,
 	pub billing_account_id: String,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub price_multiplier: Option<f64>,
 	pub route_order: usize,
 	pub streaming: bool,
 	pub tools: bool,
@@ -548,6 +553,9 @@ fn normalize_relay(mut relay: RelaySpec, config: &FamiliesConfig) -> Result<Rela
 	relay.name = name;
 	relay.base_url = validate_base_url(&relay.base_url)?;
 	relay.api_key = validate_api_key(&relay.api_key)?;
+	if relay.price_multiplier.is_some_and(|value| !value.is_finite() || value < 0.0) {
+		return Err("价格倍率必须为非负数".into());
+	}
 	relay.timeout_seconds = relay.timeout_seconds.clamp(5, 600);
 	relay.excluded_model_ids = relay.excluded_model_ids.iter().map(|id| validate_model_id(id)).collect::<Result<Vec<_>, _>>()?;
 	relay.excluded_model_ids.sort();
@@ -591,6 +599,15 @@ fn normalize_models(models: &[ModelSpec]) -> Result<Vec<ModelSpec>, String> {
 }
 
 fn validate_config(config: &FamiliesConfig) -> Result<(), String> {
+	for relay in &config.relays {
+		if relay.price_multiplier.is_some_and(|value| !value.is_finite() || value < 0.0) {
+			return Err("价格倍率必须为非负数".into());
+		}
+		let multiplier = relay.price_multiplier.unwrap_or(1.0);
+		if relay_models(config, &relay.id).iter().any(|(_, model)| [model.input_cost, model.output_cost, model.cache_read_cost, model.cache_write_cost].iter().any(|cost| !(cost * multiplier).is_finite())) {
+			return Err("模型单价与价格倍率的乘积超出范围".into());
+		}
+	}
 	let mut route_ids = std::collections::HashSet::new();
 	let mut offer_ids = std::collections::HashSet::new();
 	for family in &config.families {
@@ -658,7 +675,7 @@ fn model_thinking_levels(route: &RouteSpec, item: &ModelSpec) -> Vec<String> {
 	route.thinking_levels.clone()
 }
 
-fn project_model(route: &RouteSpec, item: &ModelSpec, key: &str, api: &str) -> Value {
+fn project_model(route: &RouteSpec, item: &ModelSpec, key: &str, api: &str, multiplier: f64) -> Value {
 	let vision = if item.vision.unwrap_or(route.vision) { json!(["text", "image"]) } else { json!(["text"]) };
 	let reasoning = route.reasoning;
 	// A level list that is empty (or absent) is "not declared"; pi then keeps its
@@ -666,7 +683,7 @@ fn project_model(route: &RouteSpec, item: &ModelSpec, key: &str, api: &str) -> V
 	let declared = item.thinking_levels.as_ref().filter(|levels| !levels.is_empty()).cloned().unwrap_or_else(|| route.thinking_levels.clone());
 	json!({
 		"id": item.model_id, "name": if item.alias.is_empty() { item.model_id.clone() } else { item.alias.clone() }, "api": api, "provider": key,
-		"cost": { "input": item.input_cost, "output": item.output_cost, "cacheRead": item.cache_read_cost, "cacheWrite": item.cache_write_cost },
+		"cost": { "input": item.input_cost * multiplier, "output": item.output_cost * multiplier, "cacheRead": item.cache_read_cost * multiplier, "cacheWrite": item.cache_write_cost * multiplier },
 		"currency": item.currency, "contextWindow": item.context_window, "maxTokens": item.max_tokens,
 		"input": vision, "reasoning": reasoning,
 		// Only reasoning models get a map: pi lists `xhigh` and `max` from it.
@@ -715,7 +732,7 @@ pub fn prepare_runtime(dir: &Path, cmd: &mut std::process::Command) -> Result<()
 				routes.push(json!({ "providerKey": route_key, "baseUrl": runtime_base_url(relay), "api": api,
 					"keyEnv": key_env(&route_key), "streaming": route.streaming, "tools": route.tools,
 					"timeoutSeconds": relay.timeout_seconds,
-					"models": models.iter().map(|model| project_model(route, model, &route_key, api)).collect::<Vec<_>>() }));
+					"models": models.iter().map(|model| project_model(route, model, &route_key, api, relay.price_multiplier.unwrap_or(1.0))).collect::<Vec<_>>() }));
 			}
 		}
 	}
@@ -780,7 +797,7 @@ pub fn project(dir: &Path, config: &FamiliesConfig) -> Result<(), String> {
 			let entry = json!({
 				"api": api,
 				"baseUrl": runtime_base_url(relay),
-				"models": route.models.iter().filter(|item| !relay.excluded_model_ids.contains(&item.model_id)).map(|item| project_model(route, item, key, api)).collect::<Vec<_>>(),
+				"models": route.models.iter().filter(|item| !relay.excluded_model_ids.contains(&item.model_id)).map(|item| project_model(route, item, key, api, relay.price_multiplier.unwrap_or(1.0))).collect::<Vec<_>>(),
 			});
 			map.insert(key.clone(), entry);
 		}
@@ -832,6 +849,7 @@ pub fn runtime_offers(config: &FamiliesConfig) -> Vec<RuntimeOffer> {
 					model_id: model.model_id.clone(),
 					alias: model.alias.clone(),
 					billing_account_id: relay.billing_account_id.clone(),
+					price_multiplier: relay.price_multiplier,
 					route_order,
 					streaming: route.streaming,
 					tools: route.tools,
@@ -843,10 +861,10 @@ pub fn runtime_offers(config: &FamiliesConfig) -> Vec<RuntimeOffer> {
 					} else {
 						vec!["off".to_string()]
 					},
-					input_cost: model.input_cost,
-					output_cost: model.output_cost,
-					cache_read_cost: model.cache_read_cost,
-					cache_write_cost: model.cache_write_cost,
+					input_cost: model.input_cost * relay.price_multiplier.unwrap_or(1.0),
+					output_cost: model.output_cost * relay.price_multiplier.unwrap_or(1.0),
+					cache_read_cost: model.cache_read_cost * relay.price_multiplier.unwrap_or(1.0),
+					cache_write_cost: model.cache_write_cost * relay.price_multiplier.unwrap_or(1.0),
 					currency: model.currency,
 					max_tokens: model.max_tokens,
 					context_window: model.context_window,
@@ -1140,6 +1158,36 @@ mod tests {
 	use super::*;
 
 	#[test]
+	fn provider_multiplier_scales_billing_and_projection_without_changing_official_prices() {
+		let dir = std::env::temp_dir().join(format!("skiff-price-multiplier-{}", std::process::id()));
+		std::fs::create_dir_all(&dir).unwrap();
+		let relay: RelaySpec = serde_json::from_value(json!({ "id": "discount", "name": "Discount", "baseUrl": "https://relay.example/v1", "apiKey": "sk-test-multiplier", "priceMultiplier": 0.5 })).unwrap();
+		let routes: Vec<RelayRouteSpec> = serde_json::from_value(json!([{ "familyId": "kimi", "route": { "relayId": "discount", "models": [{ "modelId": "kimi-k3", "inputCost": 2, "outputCost": 8, "cacheReadCost": 0.4, "cacheWriteCost": 3, "currency": "CNY", "maxTokens": 8192, "contextWindow": 128000 }] } }])).unwrap();
+		let saved = save_relay_with_routes_in(&dir, relay, routes).unwrap();
+		let reloaded = load_plain(&dir).unwrap();
+		assert_eq!(reloaded.relays[0].price_multiplier, Some(0.5));
+		let kimi = reloaded.families.iter().find(|family| family.id == "kimi").unwrap();
+		assert_eq!(kimi.routes[0].models[0].input_cost, 2.0);
+		let offers = runtime_offers(&reloaded);
+		assert_eq!((offers[0].input_cost, offers[0].output_cost, offers[0].cache_read_cost, offers[0].cache_write_cost), (1.0, 4.0, 0.2, 1.5));
+		assert_eq!(offers[0].price_multiplier, Some(0.5));
+		let projection = providers::read_config(&dir.join("models.json")).unwrap();
+		assert_eq!(projection["providers"][provider_key("kimi", "discount")]["models"][0]["cost"], json!({ "input": 1.0, "output": 4.0, "cacheRead": 0.2, "cacheWrite": 1.5 }));
+		for multiplier in [None, Some(1.0), Some(0.25), Some(0.0), Some(1.5)] {
+			let mut relay = saved.relays[0].clone();
+			relay.price_multiplier = multiplier;
+			let updated = save_relay_with_routes_in(&dir, relay, vec![]).unwrap();
+			assert_eq!(runtime_offers(&updated)[0].input_cost, 2.0 * multiplier.unwrap_or(1.0));
+		}
+		for multiplier in [-0.5, f64::NAN, f64::INFINITY] {
+			let mut relay = saved.relays[0].clone();
+			relay.price_multiplier = Some(multiplier);
+			assert!(save_relay_with_routes_in(&dir, relay, vec![]).is_err());
+		}
+		std::fs::remove_dir_all(dir).unwrap();
+	}
+
+	#[test]
 	fn relay_and_discovered_routes_save_together_and_preserve_existing_settings() {
 		let dir = std::env::temp_dir().join(format!("skiff-discovered-routes-test-{}", std::process::id()));
 		std::fs::create_dir_all(&dir).unwrap();
@@ -1209,12 +1257,12 @@ mod tests {
 
 		let model = ModelSpec { model_id: "claude-sonnet-4".into(), vision: None, thinking_levels: None, alias: String::new(), input_cost: 1.0, output_cost: 4.0, cache_read_cost: 1.0, cache_write_cost: 1.0, currency: Currency::Cny, max_tokens: 8192, context_window: 200_000 };
 		let route = RouteSpec { id: "route-kimi-r1".into(), relay_id: "r1".into(), enabled: true, models: vec![model], streaming: true, tools: true, vision: false, reasoning: false, thinking_levels: Vec::new() };
-		let mut relay = RelaySpec { id: "r1".into(), name: "Anthropic relay".into(), base_url: "https://api.anthropic.com/v1".into(), api_key: "key".into(), protocol: Some("Anthropic".into()), timeout_seconds: 60, enabled: true, billing_account_id: String::new(), excluded_model_ids: Vec::new() };
+		let mut relay = RelaySpec { id: "r1".into(), name: "Anthropic relay".into(), base_url: "https://api.anthropic.com/v1".into(), api_key: "key".into(), protocol: Some("Anthropic".into()), timeout_seconds: 60, enabled: true, billing_account_id: String::new(), price_multiplier: None, excluded_model_ids: Vec::new() };
 		let normalized = normalize_relay(relay.clone(), &FamiliesConfig { version: 5, relays: Vec::new(), families: Vec::new(), auto_failover: false, auto_retry: false, usd_cny_rate: 7.2 }).unwrap();
 		assert_eq!(normalized.protocol.as_deref(), Some("anthropic"));
 		assert_eq!(protocol_api(&normalized), "anthropic-messages");
 		// Other adapters build their own shapes, so no OpenAI compat block leaks in.
-		assert_eq!(project_model(&route, &route.models[0], "skiff-test", "anthropic-messages")["compat"], Value::Null);
+		assert_eq!(project_model(&route, &route.models[0], "skiff-test", "anthropic-messages", 1.0)["compat"], Value::Null);
 
 		relay.protocol = Some("google-genai".into());
 		assert_eq!(protocol_api(&relay), "google-generative-ai");
@@ -1314,7 +1362,7 @@ mod tests {
 
 	#[test]
 	fn runtime_offers_skip_disabled_routes_and_expose_offer_identity() {
-		let relay = RelaySpec { id: "r1".into(), name: "Relay".into(), base_url: "https://relay.example/v1".into(), api_key: String::new(), protocol: None, timeout_seconds: 60, enabled: true, billing_account_id: "wallet-a".into(), excluded_model_ids: Vec::new() };
+		let relay = RelaySpec { id: "r1".into(), name: "Relay".into(), base_url: "https://relay.example/v1".into(), api_key: String::new(), protocol: None, timeout_seconds: 60, enabled: true, billing_account_id: "wallet-a".into(), price_multiplier: None, excluded_model_ids: Vec::new() };
 		let model = ModelSpec { model_id: "kimi-k3".into(), vision: None, thinking_levels: None, alias: "k3-便宜".into(), input_cost: 1.0, output_cost: 4.0, cache_read_cost: 0.5, cache_write_cost: 0.7, currency: Currency::Cny, max_tokens: 8192, context_window: 128000 };
 		let route = RouteSpec { id: "route-kimi-r1".into(), relay_id: "r1".into(), enabled: true, models: vec![model], streaming: true, tools: true, vision: false, reasoning: true, thinking_levels: Vec::new() };
 		let disabled = RouteSpec { id: "route-kimi-r2".into(), relay_id: "r1".into(), enabled: false, models: vec![], streaming: true, tools: true, vision: false, reasoning: false, thinking_levels: Vec::new() };
@@ -1350,8 +1398,8 @@ mod tests {
 		let config = FamiliesConfig {
 			version: 5,
 			relays: vec![
-				RelaySpec { id: "r1".into(), name: "Active".into(), base_url: "https://active.example/v1".into(), api_key: "key-active".into(), protocol: None, timeout_seconds: 60, enabled: true, billing_account_id: "wallet-a".into(), excluded_model_ids: Vec::new() },
-				RelaySpec { id: "r2".into(), name: "Stopped".into(), base_url: "https://stopped.example/v1".into(), api_key: "key-stopped".into(), protocol: None, timeout_seconds: 60, enabled: false, billing_account_id: "wallet-b".into(), excluded_model_ids: Vec::new() },
+				RelaySpec { id: "r1".into(), name: "Active".into(), base_url: "https://active.example/v1".into(), api_key: "key-active".into(), protocol: None, timeout_seconds: 60, enabled: true, billing_account_id: "wallet-a".into(), price_multiplier: None, excluded_model_ids: Vec::new() },
+				RelaySpec { id: "r2".into(), name: "Stopped".into(), base_url: "https://stopped.example/v1".into(), api_key: "key-stopped".into(), protocol: None, timeout_seconds: 60, enabled: false, billing_account_id: "wallet-b".into(), price_multiplier: None, excluded_model_ids: Vec::new() },
 			],
 			families: vec![
 				ModelFamily { id: "kimi".into(), display_name: "Kimi".into(), routes: vec![active, stopped_route, stopped_relay_route] },
@@ -1389,8 +1437,8 @@ mod tests {
 		let config = FamiliesConfig {
 			version: 5,
 			relays: vec![
-				RelaySpec { id: "r1".into(), name: "Primary".into(), base_url: "https://primary.example/v1".into(), api_key: "key-1".into(), protocol: None, timeout_seconds: 60, enabled: true, billing_account_id: String::new(), excluded_model_ids: Vec::new() },
-				RelaySpec { id: "r2".into(), name: "Backup".into(), base_url: "https://backup.example/v1".into(), api_key: "key-2".into(), protocol: None, timeout_seconds: 60, enabled: true, billing_account_id: String::new(), excluded_model_ids: Vec::new() },
+				RelaySpec { id: "r1".into(), name: "Primary".into(), base_url: "https://primary.example/v1".into(), api_key: "key-1".into(), protocol: None, timeout_seconds: 60, enabled: true, billing_account_id: String::new(), price_multiplier: None, excluded_model_ids: Vec::new() },
+				RelaySpec { id: "r2".into(), name: "Backup".into(), base_url: "https://backup.example/v1".into(), api_key: "key-2".into(), protocol: None, timeout_seconds: 60, enabled: true, billing_account_id: String::new(), price_multiplier: None, excluded_model_ids: Vec::new() },
 			],
 			families: vec![ModelFamily { id: "kimi".into(), display_name: "Kimi".into(), routes: vec![
 				RouteSpec { id: "route-kimi-r1".into(), relay_id: "r1".into(), enabled: true, models: vec![model.clone()], streaming: true, tools: true, vision: false, reasoning: false, thinking_levels: Vec::new() },
@@ -1424,6 +1472,48 @@ pub async fn fetch_public_catalog(refresh: Option<bool>) -> Result<providers::Ca
 #[tauri::command]
 pub async fn discover_relay_models(base_url: String, api_key: String, protocol: Option<String>) -> Result<Vec<providers::DiscoveredModel>, String> {
 	providers::discover(&base_url, &api_key, protocol.as_deref()).await
+}
+
+/// Measures the model-list HTTP round trip without making a generation request.
+#[tauri::command]
+pub async fn probe_relay_endpoint(base_url: String, api_key: String, protocol: Option<String>) -> Result<TestResult, String> {
+	let mut base = validate_base_url(&base_url)?;
+	let key = validate_api_key(&api_key)?;
+	let protocol = normalize_protocol(protocol.as_deref());
+	if matches!(protocol.as_str(), "openai" | "kimi" | "openai-responses" | "anthropic") {
+		let url = reqwest::Url::parse(&base).map_err(|_| "接口地址格式不正确")?;
+		if url.path().trim_matches('/').is_empty() { base.push_str("/v1"); }
+	}
+	let client = reqwest::Client::builder()
+		.timeout(std::time::Duration::from_secs(10))
+		.redirect(reqwest::redirect::Policy::none())
+		.build().map_err(|_| "无法初始化连接")?;
+	let mut url = reqwest::Url::parse(&format!("{base}/models")).map_err(|_| "接口地址格式不正确")?;
+	if matches!(protocol.as_str(), "google-genai" | "vertex") { url.query_pairs_mut().append_pair("key", &key); }
+	let request = client.get(url);
+	let request = match protocol.as_str() {
+		"anthropic" => request.header("x-api-key", &key).header("anthropic-version", "2023-06-01"),
+		"google-genai" | "vertex" => request,
+		_ if !key.is_empty() => request.bearer_auth(&key),
+		_ => request,
+	};
+	let started = std::time::Instant::now();
+	let response = request.send().await;
+	let latency_ms = started.elapsed().as_millis() as u64;
+	Ok(match response {
+		Ok(response) => {
+			let status = response.status();
+			let error = if status.is_success() { None } else { Some(match status.as_u16() {
+				401 => "密钥无效".into(),
+				403 => "访问被拒绝".into(),
+				404 => "端点不支持模型列表接口".into(),
+				429 => "请求过于频繁，请稍后重试".into(),
+				_ => "端点请求失败".into(),
+			}) };
+			TestResult { ok: status.is_success(), latency_ms, status: Some(status.as_u16()), error }
+		}
+		Err(error) => TestResult { ok: false, latency_ms, status: None, error: Some(if error.is_timeout() { "连接超时".into() } else { "连接失败，请检查地址和网络".into() }) },
+	})
 }
 
 /// 各家族官方模型页（6h 缓存），由前端解析出最新在售模型；失败回退过期缓存。
@@ -1808,10 +1898,10 @@ mod connection_test_tests {
 		let model = ModelSpec { model_id: "m".into(), vision: None, thinking_levels: None, alias: String::new(), input_cost: 0.0, output_cost: 0.0, cache_read_cost: 0.0, cache_write_cost: 0.0, currency: Currency::Cny, max_tokens: 8192, context_window: 128000 };
 		// Undeclared routes stay map-free so pi keeps its five-level default.
 		let route = RouteSpec { id: "r".into(), relay_id: "r1".into(), enabled: true, models: vec![model.clone()], streaming: true, tools: true, vision: false, reasoning: true, thinking_levels: Vec::new() };
-		assert_eq!(project_model(&route, &model, "skiff-test", "openai-completions")["thinkingLevelMap"], Value::Null);
+		assert_eq!(project_model(&route, &model, "skiff-test", "openai-completions", 1.0)["thinkingLevelMap"], Value::Null);
 
 		let declared = RouteSpec { thinking_levels: vec!["low".into(), "high".into()], ..route.clone() };
-		let map = project_model(&declared, &model, "skiff-test", "openai-completions")["thinkingLevelMap"].clone();
+		let map = project_model(&declared, &model, "skiff-test", "openai-completions", 1.0)["thinkingLevelMap"].clone();
 		assert_eq!(map["low"], "low");
 		assert_eq!(map["high"], "high");
 		assert_eq!(map["minimal"], Value::Null);
@@ -1819,7 +1909,7 @@ mod connection_test_tests {
 
 		let mut silent = declared.clone();
 		silent.reasoning = false;
-		assert_eq!(project_model(&silent, &model, "skiff-test", "openai-completions")["thinkingLevelMap"], Value::Null);
+		assert_eq!(project_model(&silent, &model, "skiff-test", "openai-completions", 1.0)["thinkingLevelMap"], Value::Null);
 
 		assert_eq!(normalize_thinking_levels(Some(&["HIGH".into(), "XHigh".into()])).unwrap(), ["high", "xhigh"]);
 		assert!(normalize_thinking_levels(Some(&["ultra".into()])).is_err());

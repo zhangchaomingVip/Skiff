@@ -531,7 +531,7 @@ pub fn run() {
 			settings_metadata::list_settings_metadata,
 			families::save_route, families::delete_route, families::reorder_routes,
 			families::set_family_auto_failover, families::set_family_auto_retry,
-			families::test_provider_connection, families::cancel_provider_test, families::discover_relay_models,
+			families::test_provider_connection, families::cancel_provider_test, families::discover_relay_models, families::probe_relay_endpoint,
 			families::fetch_pricing_page, families::extract_pricing_table,
 			families::fetch_public_catalog, families::fetch_official_pages, families::set_usd_cny_rate,
 			search::get_web_search_status, search::validate_web_search, search::save_web_search_key, search::clear_web_search_key, search::install_web_search_extension

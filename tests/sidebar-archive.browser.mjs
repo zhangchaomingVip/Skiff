@@ -127,6 +127,16 @@ try {
 	assert.match((await modelTrigger.textContent()) ?? "", /Skiff Long Model Alias/);
 	assert.doesNotMatch((await modelTrigger.textContent()) ?? "", /DeepSeek/);
 	assert.match(await modelTrigger.getAttribute("title"), /route-deepseek-r1/);
+	// Older models remain selectable when explicitly added to the settings display list.
+	await page.keyboard.press("Control+Comma");
+	await page.getByRole("button", { name: "模型", exact: true }).click();
+	await page.getByRole("button", { name: "编辑家族模型", exact: true }).click();
+	const deepseekSettings = page.locator(".family-card").filter({ hasText: "DeepSeek" }).first();
+	await deepseekSettings.getByRole("button", { name: "添加模型", exact: true }).click();
+	await page.getByRole("textbox", { name: "DeepSeek 新模型 ID" }).fill("deepseek-chat");
+	await deepseekSettings.getByRole("button", { name: "添加", exact: true }).click();
+	await page.getByRole("button", { name: "返回", exact: true }).click();
+	await page.getByRole("button", { name: "关闭设置", exact: true }).click();
 	await waitUntil(() => !document.querySelector(".model-trigger")?.disabled, "Model menu remained disabled after chat selection");
 	await modelTrigger.press("Enter");
 	await waitUntil(() => document.querySelector(".model-trigger")?.getAttribute("aria-expanded") === "true", "Keyboard did not open the model menu");

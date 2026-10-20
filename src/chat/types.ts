@@ -16,6 +16,8 @@ export interface ModelInfo {
 	relayId?: string;
 	billingAccountId?: string;
 	name?: string;
+	alias?: string;
+	priceMultiplier?: number;
 	providerName?: string;
 	contextWindow?: number;
 	maxTokens?: number;
