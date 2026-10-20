@@ -6,6 +6,7 @@ import type { ChatMessage, ContentBlock } from "../chat/types";
 import { splitAttachments } from "../chat/textAttachments";
 import { TurnSummary } from "./TurnSummary";
 import { shouldShowThinking } from "../chat/thinking";
+import { turnReplyText } from "../chat/turns";
 import type { ModelDisplay } from "../chat/modelDisplay";
 import type { ToolRunItem } from "../chat/toolRuns";
 import { Markdown } from "./Markdown";
@@ -64,6 +65,7 @@ export const MessageItem = memo(function MessageItem({ onEdit, onRegenerate, onC
 			}
 			nodes.push(group.length > 1 ? <ToolRun key={entry.key} items={group} /> : <ToolCallBlock key={entry.key} tool={group[0].block} result={group[0].result} />);
 		} else if (block.kind === "text") {
+			if (!block.text.trim()) continue;
 			const parsed = isUser ? splitAttachments(block.text) : undefined;
 			if (parsed?.attachments.length) nodes.push(<div key={entry.key} className="text-with-attachments">{parsed.text && <Markdown text={parsed.text} />}{parsed.attachments.map((attachment, i) => <TextAttachmentBlock key={i} attachment={attachment} />)}</div>);
 			else nodes.push(<Markdown key={entry.key} text={block.text} streaming={message.streaming} />);
@@ -77,15 +79,19 @@ export const MessageItem = memo(function MessageItem({ onEdit, onRegenerate, onC
 		else nodes.push(<details key={entry.key} className={`tool-result ${block.isError ? "err" : ""}`}><summary>{block.name} · 执行结果</summary><pre>{block.text}</pre></details>);
 	}
 	// Keep action buttons in the DOM so keyboard users can reach earlier replies.
-	const showActions = true;
+	const copyText = isUser ? text : turnMessages ? turnReplyText(turnMessages) : "";
+	const canCopy = !!copyText.trim();
+	const canRegenerate = !readOnly && !isUser && isLast;
+	const showActions = canCopy || (isUser && !readOnly) || canRegenerate;
 	const showHeader = !isUser && turnHead && (turnSteps > 0 || turnRunning || !!outcomeLabel(turnOutcome));
 	const showUsage = !isUser && !turnRunning && !message.streaming && !(isLast && running) && turnMessages?.some((entry) => entry.usage);
 	// Intermediate process-only messages vanish when the turn is collapsed.
 	if (!nodes.length && !showHeader && !showUsage && !message.streaming && !showActions) return null;
-	return <article data-message-id={message.id} data-search-hit={searchQuery ? "true" : undefined} className={`msg ${isUser ? "user" : "assistant"}${compact ? " compact" : ""}${searchQuery ? " search-message-hit" : ""}`} aria-label={isUser ? "你的消息" : "Skiff 的消息"}>
+	const metadataOnly = !nodes.length && !showHeader && !message.streaming;
+	return <article data-message-id={message.id} data-search-hit={searchQuery ? "true" : undefined} className={`msg ${isUser ? "user" : "assistant"}${compact ? " compact" : ""}${metadataOnly ? " metadata-only" : ""}${searchQuery ? " search-message-hit" : ""}`} aria-label={isUser ? "你的消息" : "Skiff 的消息"}>
 		{showRole && <div className="msg-role">{roleDisplay.brand && <BrandIcon name={roleDisplay.brand} size={14} />}{roleDisplay.label}{message.timestamp !== undefined && <span className="msg-time">{formatMessageTime(message.timestamp)}</span>}</div>}
 		{searchQuery && <details open className="search-source"><summary>搜索命中原文</summary><pre><SearchText text={text} query={searchQuery} /></pre></details>}
-		<div className="msg-body">
+		{!metadataOnly && <div className="msg-body">
 			{isUser && message.turnResult === "manual" && <span className="turn-outcome manual">已手动停止{onContinue && <Button disabled={continuing} onClick={onContinue}>继续</Button>}</span>}
 			{showHeader && <div className="turn-header">
 				{turnSteps > 0 ? <DisclosureButton className="thinking-toggle" expanded={turnOpen} onClick={() => onToggleTurn(turnId)} aria-label={turnOpen ? "收起本轮执行过程" : "展开本轮执行过程"} title={turnOpen ? "收起本轮执行过程" : "展开本轮执行过程"}>
@@ -94,14 +100,14 @@ export const MessageItem = memo(function MessageItem({ onEdit, onRegenerate, onC
 			{(!turnRunning || turnOutcome === "length") && turnOutcome !== "manual" && outcomeLabel(turnOutcome) && <span className={`turn-outcome ${turnOutcome ?? ""}`}>{outcomeLabel(turnOutcome)}{(turnOutcome === "length" || turnOutcome === "aborted" || turnOutcome === "manual") && !readOnly && onContinue && <Button disabled={continuing} onClick={onContinue}>继续</Button>}</span>}
 			</div>}
 			{!nodes.length && message.streaming ? <span className="typing">正在思考…</span> : nodes}
-		</div>
-		{(showActions || showUsage) && <div className="message-actions">
+		</div>}
+		{(showActions || showUsage) && <div className={`message-actions${showUsage ? " with-usage" : ""}`}>
+			{showUsage && <TurnUsage message={[...(turnMessages ?? [])].reverse().find((entry) => entry.role === "assistant") ?? message} messages={turnMessages} />}
 			{showActions && <div className="message-buttons">
-				<CopyButton text={text} label="复制消息" />
+				{canCopy && <CopyButton text={copyText} label="复制消息" />}
 				{!readOnly && isUser && <Button variant="ghost" disabled={!onEdit || running} onClick={() => onEdit?.(message)}>编辑并重发</Button>}
-				{!readOnly && !isUser && isLast && <Button variant="ghost" disabled={!onRegenerate || running} onClick={() => onRegenerate?.(message)}>重新生成</Button>}
+				{canRegenerate && <Button variant="ghost" disabled={!onRegenerate || running} onClick={() => onRegenerate?.(message)}>重新生成</Button>}
 			</div>}
-			{showUsage && <TurnUsage message={message} messages={turnMessages} />}
 		</div>}
 	</article>;
 });

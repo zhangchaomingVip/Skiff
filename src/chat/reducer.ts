@@ -233,6 +233,8 @@ function reduceChat(state: SessionState, event: RpcEvent, options: ReducerOption
 			if (dialog) return state.dialogs?.some((item) => item.id === dialog.id) ? state : { ...state, dialogs: [...(state.dialogs ?? []), dialog] };
 			if (event.method === "notify" && typeof event.message === "string") {
 				const kind = event.notifyType === "error" || event.notifyType === "warning" ? event.notifyType : "info";
+				// The transcript already shows completion; pi extensions may notify it twice.
+				if (kind === "info" && /^Agent finished its current task\.?$/i.test(event.message.trim())) return state;
 				return {
 					...state,
 					notices: [...state.notices, { id: nextId("notice"), kind, text: event.message }],

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { parseMessages } from "../src/chat/parse.ts";
 import { reduce } from "../src/chat/reducer.ts";
 import { initialSessionState } from "../src/chat/types.ts";
-import { forkEntry, forkTurn, groupTurns, turnDraft, userForTurn } from "../src/chat/turns.ts";
+import { forkEntry, forkTurn, groupTurns, turnContentTails, turnReplyText, turnDraft, userForTurn } from "../src/chat/turns.ts";
 import { readTextFiles, appendTextFiles, splitAttachments } from "../src/chat/textAttachments.ts";
 import { highlightCode } from "../src/chat/highlight.ts";
 import { completedAtTooltip, formatCompletedAt, formatDuration } from "../src/chat/usage.ts";
@@ -12,6 +12,43 @@ import { isNotableThinking, shouldShowThinking } from "../src/chat/thinking.ts";
 import { toolKind, toolKindLabel, toolRunSummary, toolTarget, type ToolRunItem } from "../src/chat/toolRuns.ts";
 import { PiRpc } from "../src/rpc/RpcClient.ts";
 import { installMockPi } from "./mockPi.mjs";
+
+test("turn copy includes every reply step once and excludes prompts, reasoning and tool output", () => {
+	const messages = parseMessages([
+		{ role: "user", content: "检查项目" },
+		{ role: "assistant", content: [{ type: "thinking", thinking: "内部推理" }, { type: "text", text: "先读取文件。" }, { type: "toolCall", id: "read", name: "read", arguments: { path: "README.md" } }] },
+		{ role: "toolResult", toolCallId: "read", toolName: "read", content: "工具输出" },
+		{ role: "assistant", content: "" },
+		{ role: "assistant", content: [{ type: "text", text: "检查完成。" }, { type: "text", text: "**结论**：正常。" }] },
+	]);
+	assert.equal(turnReplyText(messages), "先读取文件。\n\n检查完成。\n\n**结论**：正常。");
+	assert.equal(turnReplyText([]), "");
+});
+
+test("turn footers stay on content when pi adds empty usage receipts", () => {
+	const messages = parseMessages([
+		{ role: "user", content: "检查间距" },
+		{ role: "assistant", content: [{ type: "toolCall", id: "read", name: "read", arguments: { path: "README.md" } }] },
+		{ role: "assistant", content: "" },
+		{ role: "assistant", content: "完成" },
+		{ role: "assistant", content: "  ", usage: { input: 123, output: 45, totalTokens: 168 } },
+		{ role: "user", content: "继续" },
+		{ role: "assistant", content: [{ type: "toolCall", id: "next", name: "read", arguments: { path: "src/App.tsx" } }] },
+		{ role: "assistant", content: "" },
+	]);
+	const turns = groupTurns(messages);
+	const tails = turnContentTails(messages, turns);
+	assert.equal(tails.get(turns[0].turnId), 3);
+	assert.equal(tails.get(turns[5].turnId), 6);
+	assert.equal(messages[4].usage?.input, 123);
+	assert.equal(tails.size, 2);
+});
+
+test("an empty assistant-only turn keeps an anchor for its receipt and actions", () => {
+	const messages = parseMessages([{ role: "assistant", content: "", usage: { input: 1, output: 0, totalTokens: 1 } }]);
+	const turns = groupTurns(messages);
+	assert.equal(turnContentTails(messages, turns).get(turns[0].turnId), 0);
+});
 
 test("tool IDs pair out-of-order results with the correct assistant in live and restored history", () => {
 	const calls = [

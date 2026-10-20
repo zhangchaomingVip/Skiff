@@ -1,6 +1,6 @@
 import { seedPolishPreview } from "./polishFixture.mjs";
 
-export const fixtures = ["launcher", "single", "multi", "unknown", "empty", "loading", "error", "chat", "long", "settings", "settings-info", "picker", "voyage", "voyage-output", "voyage-thinking", "voyage-fishing", "voyage-tool", "voyage-moored", "voyage-high", "authorization", "sidebar", "archive", "visual"];
+export const fixtures = ["launcher", "single", "multi", "unknown", "empty", "loading", "error", "chat", "long", "settings", "settings-info", "picker", "voyage", "voyage-output", "voyage-thinking", "voyage-fishing", "voyage-tool", "voyage-moored", "voyage-high", "authorization", "sidebar", "archive", "visual", "tool-spacing"];
 
 // This entry runs only on the separate preview origin. It never uses real pi.
 export function preparePreview(target) {
@@ -59,9 +59,25 @@ export function preparePreview(target) {
 		}));
 		for (const chat of chats) if (chat.hasMessages) chat.selectedModel = { provider: "skiff-relay-r1-deepseek", id: "deepseek-chat", modelId: "deepseek-chat", routeId: "route-deepseek-r1", offerId: "route-deepseek-r1/deepseek-chat" };
 		storage.setItem("skiff.workspace.v1", JSON.stringify({ version: 1, projects: [project, otherProject], chats, activeId: "archive-active" }));
-	} else if (["chat", "long", "picker", "voyage", "authorization", "visual"].includes(fixture) || fixture.startsWith("voyage-")) {
+	} else if (["chat", "long", "picker", "voyage", "authorization", "visual", "tool-spacing"].includes(fixture) || fixture.startsWith("voyage-")) {
 		seedPolishPreview(storage, fixture === "long");
 		const sessions = JSON.parse(storage.getItem("skiff.test.sessions"));
+		if (fixture === "tool-spacing") sessions["polish-preview.jsonl"] = [
+			{ role: "user", content: "检查对话页面，收紧工具调用之间的间距。" },
+			{ role: "assistant", content: [
+				{ type: "thinking", thinking: "先检查消息列表、工具摘要与正文样式，确认哪些父级间距和子元素外边距发生叠加。\n再检查连续工具步骤、空的结束消息以及折叠后的布局。" },
+				{ type: "text", text: "我继续读关键文件。" },
+				{ type: "toolCall", id: "spacing-read", name: "read", arguments: { path: "src/components/MessageItem.tsx" } },
+				{ type: "toolCall", id: "spacing-command", name: "bash", arguments: { command: "node scripts/inspect-chat-layout.mjs --include-thinking --include-tool-results --check-collapsed-height --theme light --theme dark --report layout-spacing.json" } },
+			] },
+			{ role: "toolResult", toolCallId: "spacing-read", toolName: "read", content: "已读取消息组件。" },
+			{ role: "toolResult", toolCallId: "spacing-command", toolName: "bash", content: "检查了消息与工具之间的间距。" },
+			{ role: "assistant", content: [{ type: "toolCall", id: "spacing-next", name: "bash", arguments: { command: "node scripts/inspect-chat-layout.mjs --include-thinking --include-tool-results --check-collapsed-height --theme light --theme dark --report layout-spacing.json" } }] },
+			{ role: "toolResult", toolCallId: "spacing-next", toolName: "bash", isError: true, content: "示例错误：保留完整命令和输出供展开检查。" },
+			{ role: "assistant", content: "" },
+			{ role: "assistant", content: "### 检查完成\n\n正文与工具步骤使用一致的间距，连续调用默认折叠。\n\n- 长命令保持单行，展开后查看全文\n- 空消息不再占用正文高度\n\n> 复制、重新生成和用量明细仍然可用。\n\n```css\n.stack { gap: 8px; }\n```" },
+			{ role: "assistant", content: "", usage: { input: 4096, cacheRead: 0, cacheWrite: 0, output: 234, totalTokens: 4330 }, durationMs: 2000 },
+		];
 		if (fixture === "visual") sessions["polish-preview.jsonl"] = [
 			{ role: "user", content: "检查仪表盘的读数、主题与窄屏布局。" },
 			{ role: "assistant", content: [
@@ -76,6 +92,10 @@ export function preparePreview(target) {
 			message.timestamp = now - 60000 + index * 1000;
 			message.entryId = `preview-entry-${index}`;
 			if (message.role === "assistant") { message.provider = "skiff-relay-r1-deepseek"; message.model = "deepseek-chat"; }
+			if (fixture === "tool-spacing" && message.role === "assistant") {
+				message.usage ??= { input: 128, cacheRead: 512, cacheWrite: 0, output: message.content ? 32 : 0, totalTokens: message.content ? 672 : 640 };
+				message.routeSnapshot = { providerKey: message.provider, familyId: "deepseek", familyName: "DeepSeek", relayId: "r1", modelId: message.model, relayName: "官方直连", billingAccountId: "演示账户", currency: "CNY", inputCost: 2, outputCost: 4, cacheReadCost: .2, cacheWriteCost: 2 };
+			}
 		});
 		if (fixture.startsWith("voyage-")) for (const messages of Object.values(sessions)) {
 			const last = messages.findLast((message) => message.role === "assistant");
@@ -86,7 +106,7 @@ export function preparePreview(target) {
 		}
 		storage.setItem("skiff.test.sessions", JSON.stringify(sessions));
 		const workspace = JSON.parse(storage.getItem("skiff.workspace.v1"));
-		if (fixture === "visual") workspace.chats[0].routeSnapshots = sessions["polish-preview.jsonl"].filter((message) => message.role === "assistant").map((message) => message.routeSnapshot ?? null);
+		if (fixture === "visual" || fixture === "tool-spacing") workspace.chats[0].routeSnapshots = sessions["polish-preview.jsonl"].filter((message) => message.role === "assistant").map((message) => message.routeSnapshot ?? null);
 		workspace.chats[0].selectedModel = { provider: "skiff-relay-r1-deepseek", id: "deepseek-chat", modelId: "deepseek-chat", routeId: "route-deepseek-r1", offerId: "route-deepseek-r1/deepseek-chat" };
 		storage.setItem("skiff.workspace.v1", JSON.stringify(workspace));
 	} else {

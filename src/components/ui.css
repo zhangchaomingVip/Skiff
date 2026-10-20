@@ -1,6 +1,7 @@
 @layer components {
 .msg .message-buttons { opacity: 0; }
 .msg:hover .message-buttons, .msg:focus-within .message-buttons { opacity: 1; }
+.msg.assistant .message-buttons { opacity: 1; }
 @media (hover: none) { .msg .message-buttons { opacity: 1; } }
 .delivery-control > .ui-input { width: auto; max-width: 50%; flex: 0 0 auto; }
 .extension-dialog { width: min(520px, calc(100vw - 32px)); padding: var(--space-5); display: flex; flex-direction: column; gap: var(--space-4); }
@@ -72,8 +73,6 @@
 	.process-disclosure .disclosure { display: inline-flex; flex: none; color: var(--muted); transform: rotate(0deg); transition: transform var(--transition-base); }
 	.process-disclosure[aria-expanded=true] .disclosure, details[open] > summary.process-disclosure .disclosure { transform: rotate(90deg); }
 	.process-disclosure-status { color: var(--muted); margin-left: auto; }
-	.usage-route-details { display: grid; gap: var(--space-2); margin-bottom: var(--space-3); padding-bottom: var(--space-3); border-bottom: 1px solid var(--border); }
-	.usage-route-details .usage-model { white-space: normal; text-align: left; overflow-wrap: anywhere; }
 }
 @layer accessibility {
 	:is(button, input, textarea, select):disabled, .ui-button:disabled, .ui-input:disabled, .model-discovery-option:disabled { opacity: 1; color: var(--disabled-text); border-color: var(--disabled-text); background: var(--surface); text-shadow: none; }

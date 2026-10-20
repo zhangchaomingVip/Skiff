@@ -55,6 +55,8 @@
 		--font-size-3xl: 24px;
 		--font-size-gauge-min: 14px;
 		--chat-gutter: var(--space-10);
+		--chat-message-gap: var(--space-5);
+		--chat-block-gap: var(--space-2);
 		--gauge-track: var(--boundary);
 		--bubble-bg: var(--panel);
 		--bubble-border: var(--boundary);

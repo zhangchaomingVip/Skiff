@@ -5,6 +5,18 @@ import { initialSessionState } from "../src/chat/types.ts";
 import { DialogRuntime, extensionDialog, queueSize } from "../src/chat/interactions.ts";
 import { prepareDraft, persistedAttachmentBytes, type DraftRecord } from "../src/chat/drafts.ts";
 
+test("routine completion notifications stay quiet while extension warnings and errors remain visible", () => {
+	let state = initialSessionState;
+	for (const message of ["Agent finished its current task.", " Agent finished its current task. "]) {
+		state = reduce(state, { type: "extension_ui_request", method: "notify", notifyType: "info", message });
+	}
+	assert.equal(state.notices.length, 0);
+	for (const [notifyType, message] of [["warning", "Agent finished its current task."], ["error", "工具执行失败"], ["info", "已开启联网搜索"]]) {
+		state = reduce(state, { type: "extension_ui_request", method: "notify", notifyType, message });
+	}
+	assert.deepEqual(state.notices.map(({ kind }) => kind), ["warning", "error", "info"]);
+});
+
 test("queue updates replace both snapshots, including an empty snapshot", () => {
 	let state = reduce(initialSessionState, { type: "queue_update", steering: ["a"], followUp: ["b"] });
 	state = reduce(state, { type: "queue_update", steering: ["c"], followUp: [] });

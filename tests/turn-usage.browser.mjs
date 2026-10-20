@@ -114,10 +114,10 @@ try {
 	const snapshot = { providerKey: "old-provider", familyId: "deepseek", familyName: "DeepSeek", modelId: "deepseek-flash", alias: "旧别名", relayId: "custom", relayName: "基元律动", billingAccountId: "xxx", currency: "CNY", inputCost: 1, outputCost: 147 / 190 };
 	const completed = { role: "assistant", provider: "old-provider", model: "deepseek-flash", content: "完成", usage: usage(73, 1917, 0, 190), routeSnapshot: snapshot, timestamp: new Date("2026-10-13T12:31:00+08:00").getTime() };
 	await render({ messages: [{ role: "user", content: "验证 chip" }, completed], current: { provider: "other", id: "other", providerName: "新渠道" } }, 1);
-	assert.equal(await page.locator(".usage-model").count(), 0);
-	assert.equal(await page.locator(".usage-time").count(), 0);
+	assert.equal(await page.locator(".usage-model").count(), 1);
+	assert.equal(await page.locator(".usage-time").count(), 1);
 	await chip.click();
-	assert.equal(await page.locator(".usage-model-label").textContent(), "基元律动 · deepseek-flash");
+	assert.equal(await page.locator(".usage-model-label").textContent(), "DeepSeek · 基元律动 · deepseek-flash");
 	assert.equal(await page.locator(".usage-model").getAttribute("title"), "完整线路：基元律动 · deepseek-flash · 账户xxx");
 	assert.equal(await page.locator(".message-route").count(), 0);
 	assert.deepEqual(await totals(), ["1.99k(+73)"]);
@@ -137,8 +137,8 @@ try {
 	await page.keyboard.press("Escape");
 	await page.locator(".usage-cost").click();
 	assert.deepEqual(await page.evaluate(() => window.copiedValues), ["deepseek-flash", "¥0.002137"]);
-	assert.equal(await page.locator(".usage-model").count(), 0);
-	assert.equal(await page.locator(".usage-time").count(), 0);
+	assert.equal(await page.locator(".usage-model").count(), 1);
+	assert.equal(await page.locator(".usage-time").count(), 1);
 	assert.equal(await panel.count(), 0);
 	assert.deepEqual(await page.evaluate(() => window.copiedValues), ["deepseek-flash", "¥0.002137"]);
 	for (const theme of ["dark", "light"]) {
@@ -159,8 +159,14 @@ try {
 	await render({ messages: [{ role: "user", content: "缓存写入" }, { ...completed, usage: usage(50, 1900, 40, 500) }] }, 1);
 	await page.waitForFunction(() => document.querySelector(".usage-new")?.textContent === "(+90)");
 	assert.deepEqual(await totals(), ["1.99k(+90)"]);
+	// Missing prices are explicit, while route/time remain visible outside the popover.
+	await render({ messages: [{ role: "user", content: "未配置价格" }, { ...completed, routeSnapshot: { ...snapshot, inputCost: 0, outputCost: 0 } }] }, 1);
+	await page.waitForFunction(() => document.querySelector(".usage-cost")?.textContent === "未配置单价");
+	assert.equal(await page.locator(".usage-model").isVisible(), true);
+	assert.equal(await page.locator(".usage-time").isVisible(), true);
+	assert.equal(await page.locator(".usage-cost").isDisabled(), true);
 	assert.deepEqual(errors, []);
-	console.log("PASS: compact token/cost entries and cache/route/time details, route snapshots, exact cost/model copying, full date titles, new input boundaries, tool aggregation, folding, pending/history turns, click/keyboard dismissal, small-window popovers and 6 theme/width screenshots");
+	console.log("PASS: visible route/token/cost/time footer, explicit missing prices, route snapshots, exact cost/model copying, full date titles, new input boundaries, tool aggregation, folding, pending/history turns, click/keyboard dismissal, small-window popovers and 6 theme/width screenshots");
 } finally {
 	await browser.close();
 }

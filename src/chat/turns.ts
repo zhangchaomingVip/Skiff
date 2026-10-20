@@ -50,6 +50,24 @@ export function groupTurns(messages: ChatMessage[]): TurnInfo[] {
 	});
 }
 
+/** Attach turn actions and usage to content, skipping empty assistant receipts. */
+export function turnContentTails(messages: ChatMessage[], turns: TurnInfo[]): Map<string, number> {
+	const tails = new Map<string, number>();
+	messages.forEach((message, index) => {
+		if (message.role !== "assistant") return;
+		const id = turns[index].turnId;
+		if (!tails.has(id) || message.blocks.some((block) => block.kind !== "text" || !!block.text.trim())) tails.set(id, index);
+	});
+	return tails;
+}
+
+/** Copy the complete assistant reply in reading order, excluding process details. */
+export function turnReplyText(messages: ChatMessage[]): string {
+	return messages.filter((message) => message.role === "assistant")
+		.flatMap((message) => message.blocks.filter((block): block is Extract<ChatMessage["blocks"][number], { kind: "text" }> => block.kind === "text"))
+		.map((block) => block.text).filter((text) => text.trim()).join("\n\n");
+}
+
 export function userForTurn(messages: ChatMessage[], id: string): ChatMessage | undefined {
 	const index = messages.findIndex((message) => message.id === id);
 	if (index < 0) return undefined;
