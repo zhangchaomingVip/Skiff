@@ -1,6 +1,6 @@
 import { CopyButton } from "./CopyButton";
 import { ExtensionDialog } from "./ExtensionDialog";
-import { turnDraft, userForTurn } from "../chat/turns";
+import { turnDraft } from "../chat/turns";
 import { draftAttachments, type DraftRecord } from "../chat/drafts";
 import { outcomeLabel, queueSize, type Delivery } from "../chat/interactions";
 import { Button, IconButton } from "./ui";
@@ -107,23 +107,6 @@ export function ChatView({
 			setEditing(message); setEditNotice(undefined); setFocusSignal((n) => n + 1);
 		} finally { if (mounted.current) setEditPending(false); }
 	};
-	const regenerate = async (message: ChatMessage) => {
-		if (!canEdit) return;
-		const user = userForTurn(state.messages, message.id);
-		if (!user) return;
-		setEditPending(true);
-		try {
-			const context = await actions.captureEdit(user.id);
-			if (!context || !await actions.validateEdit(context.target, context.branchVersion)) return;
-			if (await actions.rewind(user.id, context, draftTarget ? storedDraft.rebase : undefined)) {
-				const content = turnDraft(user);
-				if (!await onSend(user.blocks.filter((block) => block.kind === "text").map((block) => block.text).join("\n\n"), content.images) && mounted.current) {
-					if (draftTarget) storedDraft.update({ text: content.text, attachments: draftAttachments(content.images, content.files), edit: undefined });
-					else { setDraft(content.text); setRestoredImages(content.images); setRestoredFiles(content.files); }
-				}
-			}
-		} finally { if (mounted.current) setEditPending(false); }
-	};
 	const continueRun = async () => {
 		if (continuing || state.stopping) return;
 		setContinuing(true);
@@ -153,7 +136,7 @@ export function ChatView({
 
 	return (
 		<section className="chat">
-			{loading ? <div className="session-loading" role="status" aria-label="正在加载会话"><span className="dot busy" />正在加载会话…</div> : <MessageList messages={state.messages} pendingPrompt={state.pendingPrompt} activeTurnId={state.activeRun?.turnId} projectName={projectName} running={state.isStreaming} models={state.availableModels} model={state.model} onSuggestion={(text) => { setDraft(text); setFocusSignal((n) => n + 1); }} followSignal={followSignal} revealMessage={revealMessage} onEdit={canEdit ? beginEdit : undefined} onRegenerate={canEdit ? regenerate : undefined} onContinue={continueRun} continuing={continuing} lastOutcome={state.lastOutcome} />}
+			{loading ? <div className="session-loading" role="status" aria-label="正在加载会话"><span className="dot busy" />正在加载会话…</div> : <MessageList messages={state.messages} pendingPrompt={state.pendingPrompt} activeTurnId={state.activeRun?.turnId} projectName={projectName} running={state.isStreaming} models={state.availableModels} model={state.model} onSuggestion={(text) => { setDraft(text); setFocusSignal((n) => n + 1); }} followSignal={followSignal} revealMessage={revealMessage} onEdit={canEdit ? beginEdit : undefined} onContinue={continueRun} continuing={continuing} lastOutcome={state.lastOutcome} />}
 			{alerts.length > 0 && (
 				<div className="notices">
 					{alerts.slice(-3).map((notice) => (

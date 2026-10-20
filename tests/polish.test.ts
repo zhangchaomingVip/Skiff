@@ -114,7 +114,7 @@ test("syntax highlighting escapes input and only handles registered languages", 
 	assert.equal(highlightCode("plain", "not-a-real-language"), undefined);
 });
 
-test("tool runs collapse into one Codex-style phrase with a dominant category icon", () => {
+test("tool runs separate mixed actions and label each count with its unit", () => {
 	const tool = (id: string, name: string, args: Record<string, unknown>): ToolRunItem["block"] => ({ kind: "tool", id, name, argsText: JSON.stringify(args), done: true });
 	const ok = (name: string): ToolRunItem["result"] => ({ kind: "toolResult", name, text: "ok", isError: false });
 	const read: ToolRunItem[] = [
@@ -123,16 +123,33 @@ test("tool runs collapse into one Codex-style phrase with a dominant category ic
 	];
 	const finished = toolRunSummary(read);
 	assert.equal(finished.kind, "read");
-	assert.equal(finished.label, "读取了文件运行了命令");
+	assert.equal(finished.label, "read + bash · 读取了 1 个文件；执行了 1 条命令");
 	assert.equal(finished.running, false);
 	assert.equal(finished.steps, 2);
 	const live = toolRunSummary([...read, { key: 2, block: tool("c", "edit", {}), result: undefined }]);
 	assert.equal(live.kind, "write");
-	assert.equal(live.label, "读取文件运行命令编辑文件");
+	assert.equal(live.label, "read + bash + edit · 读取了 1 个文件；执行了 1 条命令；执行 1 次文件操作");
 	assert.equal(live.running, true);
 	assert.equal(toolKind("MULTI_EDIT"), "write");
 	assert.equal(toolKindLabel("unknown-tool"), "unknown-tool");
 	assert.equal(toolTarget(tool("d", "read", { path: "src/chat/parse.ts" })), "src/chat/parse.ts");
+});
+
+test("file counts deduplicate known paths and fall back to calls for unknown or multi-file targets", () => {
+	const call = (key: number, name: string, argsText: string, isError = false): ToolRunItem => ({ key, block: { kind: "tool", id: String(key), name, argsText, done: true }, result: { kind: "toolResult", name, text: "done", isError } });
+	assert.equal(toolRunSummary([call(0, "bash", "{}"), call(1, "bash", "{}"), call(2, "bash", "{}")]).label, "bash · 执行了 3 条命令");
+	assert.equal(toolRunSummary([call(0, "write", '{"path":"src/App.tsx"}'), call(1, "edit", '{"path":"src/App.tsx"}')]).label, "write + edit · 修改了 1 个文件");
+	assert.equal(toolRunSummary([call(0, "write", '{"path":"a.txt"}'), call(1, "edit", '{"file_path":"b.txt"}')]).label, "write + edit · 修改了 2 个文件");
+	assert.equal(toolRunSummary([call(0, "write", '{"path":"a.txt"}')]).label, "write · 写入了 1 个文件");
+	assert.equal(toolRunSummary([call(0, "apply_patch", '{"path":"a.txt"}')]).label, "apply_patch · 执行了 1 次文件操作");
+	for (const args of ["{", "null", "{}", '{"path":42}']) {
+		assert.equal(toolRunSummary([call(0, "edit", args)]).label, "edit · 执行了 1 次文件操作");
+		assert.equal(toolTarget(call(0, "edit", args).block), undefined);
+	}
+	const failed = toolRunSummary([call(0, "edit", '{"path":"a.txt"}', true)]);
+	assert.equal(failed.label, "edit · 修改 1 个文件");
+	assert.equal(failed.error, true);
+	assert.equal(toolRunSummary([call(0, "custom", "{}")]).label, "custom · 调用了 1 次工具");
 });
 
 test("consecutive assistant messages between user prompts fold as one turn", () => {
@@ -149,17 +166,23 @@ test("consecutive assistant messages between user prompts fold as one turn", () 
 	assert.notEqual(infos[2].turnId, infos[4].turnId);
 });
 
-test("the editable append prompt defaults to the narration hint and round-trips through storage", () => {
+test("the append prompt defaults to empty and keeps an explicit clear across reloads", () => {
 	const store = new Map<string, string>();
 	const previous = (globalThis as { localStorage?: unknown }).localStorage;
 	(globalThis as { localStorage?: unknown }).localStorage = { getItem: (key: string) => store.get(key) ?? null, setItem: (key: string, value: string) => void store.set(key, value), removeItem: (key: string) => void store.delete(key) };
 	try {
+		assert.equal(DEFAULT_APPEND_PROMPT, "");
 		assert.equal(loadAppendPrompt(), DEFAULT_APPEND_PROMPT);
 		saveAppendPrompt("自定义旁白指令");
 		assert.equal(loadAppendPrompt(), "自定义旁白指令");
-		saveAppendPrompt(DEFAULT_APPEND_PROMPT);
-		assert.equal(loadAppendPrompt(), DEFAULT_APPEND_PROMPT);
-		assert.equal(store.size, 0);
+		saveAppendPrompt("");
+		assert.equal(store.get("skiff.prompt.append"), "");
+		assert.equal(loadAppendPrompt(), "");
+		saveAppendPrompt("  \n\t");
+		assert.equal(store.get("skiff.prompt.append"), "");
+		assert.equal(loadAppendPrompt(), "");
+		saveAppendPrompt("  自定义多行指令\n第二行  ");
+		assert.equal(loadAppendPrompt(), "  自定义多行指令\n第二行  ");
 	} finally {
 		(globalThis as { localStorage?: unknown }).localStorage = previous;
 	}

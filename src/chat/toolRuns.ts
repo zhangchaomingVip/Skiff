@@ -17,8 +17,7 @@ const KIND_BY_NAME: Record<string, ToolKind> = {
 /** `write` outranks `read` etc. so a mixed group shows the most consequential icon. */
 const WEIGHT: Record<ToolKind, number> = { write: 4, read: 3, search: 2, command: 1, other: 0 };
 
-const DONE_PHRASES: Record<ToolKind, string> = { read: "读取了文件", write: "编辑了文件", command: "运行了命令", search: "搜索了内容", other: "调用了工具" };
-const RUNNING_PHRASES: Record<ToolKind, string> = { read: "读取文件", write: "编辑文件", command: "运行命令", search: "搜索内容", other: "调用工具" };
+const RUNNING_PHRASES: Record<ToolKind, string> = { read: "读取文件", write: "修改文件", command: "执行命令", search: "搜索内容", other: "调用工具" };
 
 export function toolKind(name: string): ToolKind {
 	return KIND_BY_NAME[name.toLowerCase()] ?? "other";
@@ -34,11 +33,13 @@ export function toolKindLabel(name: string): string {
 export function toolTarget(tool: Tool): string | undefined {
 	let args: Record<string, unknown> = {};
 	try {
-		args = JSON.parse(tool.argsText);
+		const parsed: unknown = JSON.parse(tool.argsText);
+		if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return undefined;
+		args = parsed as Record<string, unknown>;
 	} catch {
 		return undefined;
 	}
-	for (const key of ["command", "path", "file", "filePath", "pattern", "query", "url"] as const) {
+	for (const key of ["command", "path", "file", "filePath", "file_path", "pattern", "query", "url"] as const) {
 		const value = args[key];
 		if (typeof value === "string" && value.trim()) return value.trim();
 	}
@@ -48,11 +49,40 @@ export function toolTarget(tool: Tool): string | undefined {
 export interface ToolRunSummary {
 	/** Dominant category of the whole run. */
 	kind: ToolKind;
-	/** One compact phrase, e.g. `读取了文件编辑了文件运行了命令`. */
+	/** Tool names followed by actions with explicit units, separated by punctuation. */
 	label: string;
 	running: boolean;
 	error: boolean;
 	steps: number;
+}
+
+/** Count distinct files only for tools whose single-file target is explicit. */
+function fileCount(items: ToolRunItem[]): number | undefined {
+	const paths = new Set<string>();
+	for (const { block } of items) {
+		if (!["read", "view", "view_image", "cat", "write", "edit", "create"].includes(block.name.toLowerCase())) return undefined;
+		try {
+			const args = JSON.parse(block.argsText);
+			const path = args.path ?? args.file ?? args.filePath ?? args.file_path;
+			if (typeof path !== "string" || !path.trim()) return undefined;
+			paths.add(path.trim().replace(/\\/g, "/"));
+		} catch {
+			return undefined;
+		}
+	}
+	return paths.size;
+}
+
+function actionSummary(kind: ToolKind, items: ToolRunItem[]): string {
+	const completed = items.every((item) => item.result && !item.result.isError);
+	const suffix = completed ? "了" : "";
+	if (kind === "command") return `执行${suffix} ${items.length} 条命令`;
+	if (kind === "search") return `搜索${suffix} ${items.length} 次`;
+	if (kind === "other") return `调用${suffix} ${items.length} 次工具`;
+	const count = fileCount(items);
+	if (count === undefined) return `执行${suffix} ${items.length} 次文件操作`;
+	const verb = kind === "read" ? "读取" : items.every((item) => ["write", "create"].includes(item.block.name.toLowerCase())) ? "写入" : "修改";
+	return `${verb}${suffix} ${count} 个文件`;
 }
 
 /** Compact Codex-style summary of a (possibly mixed) run of consecutive tool calls. */
@@ -66,7 +96,7 @@ export function toolRunSummary(items: ToolRunItem[]): ToolRunSummary {
 	const kind = kinds.reduce<ToolKind>((best, current) => (WEIGHT[current] > WEIGHT[best] ? current : best), kinds[0] ?? "other");
 	return {
 		kind,
-		label: kinds.map((value) => (running ? RUNNING_PHRASES : DONE_PHRASES)[value]).join(""),
+		label: `${[...new Set(items.map((item) => item.block.name))].join(" + ") || "工具"} · ${kinds.map((value) => actionSummary(value, items.filter((item) => toolKind(item.block.name) === value))).join("；") || "0 次调用"}`,
 		running,
 		error: items.some((item) => item.result?.isError),
 		steps: items.length,

@@ -8,17 +8,17 @@ import { TurnSummary } from "./TurnSummary";
 import { shouldShowThinking } from "../chat/thinking";
 import { turnReplyText } from "../chat/turns";
 import type { ModelDisplay } from "../chat/modelDisplay";
-import type { ToolRunItem } from "../chat/toolRuns";
+import { toolKind, type ToolRunItem } from "../chat/toolRuns";
 import { Markdown } from "./Markdown";
 import { ToolCallBlock } from "./ToolCallBlock";
 import { ToolRun } from "./ToolRun";
 import { TextAttachmentBlock } from "./TextAttachmentBlock";
 import { CopyButton } from "./CopyButton";
 import { TurnUsage } from "./TurnUsage";
-import { Icon } from "./Icon";
 import { ImagePreview } from "./ImagePreview";
 import { BrandIcon } from "./BrandIcon";
-import { DisclosureButton, DisclosureLabel } from "./Disclosure";
+import { ProcessDisclosure, ProcessDisclosureButton } from "./ProcessDisclosure";
+import { TOOL_ICONS } from "./toolIcons";
 
 /** Compact, locale-aware timestamp shown beside a message role. */
 const formatMessageTime = (ts?: number): string | undefined => {
@@ -32,8 +32,8 @@ const formatMessageTime = (ts?: number): string | undefined => {
 type Tool = Extract<ContentBlock, { kind: "tool" }>;
 type Result = Extract<ContentBlock, { kind: "toolResult" }>;
 
-export const MessageItem = memo(function MessageItem({ onEdit, onRegenerate, onContinue, continuing, turnOutcome, searchQuery, message, turnMessages, showRole, roleDisplay, compact, running, turnRunning = false, turnId, turnHead, turnSteps, turnDuration, turnOpen, onToggleTurn, isLast, readOnly = false }: {
-	onEdit?: (message: ChatMessage) => void; onRegenerate?: (message: ChatMessage) => void; onContinue?: () => void; continuing?: boolean; turnOutcome?: string;
+export const MessageItem = memo(function MessageItem({ onEdit, onContinue, continuing, turnOutcome, searchQuery, message, turnMessages, showRole, roleDisplay, compact, running, turnRunning = false, turnId, turnHead, turnSteps, turnDuration, turnOpen, onToggleTurn, isLast, readOnly = false }: {
+	onEdit?: (message: ChatMessage) => void; onContinue?: () => void; continuing?: boolean; turnOutcome?: string;
 	searchQuery?: string;
 	turnMessages?: ChatMessage[]; readOnly?: boolean;
 	turnRunning?: boolean;
@@ -74,16 +74,16 @@ export const MessageItem = memo(function MessageItem({ onEdit, onRegenerate, onC
 		else if (block.kind === "thinking") {
 			// Short filler reasoning disappears once the turn settles.
 			if (!shouldShowThinking(block.text, !!message.streaming)) continue;
-			nodes.push(<details key={entry.key} className="thinking"><summary className="process-disclosure"><DisclosureLabel status={<span className="thinking-size">{block.text.trim().length} 字</span>}><Icon name="spark" size={13} /><span>思考过程</span></DisclosureLabel></summary><pre>{block.text}</pre></details>);
+			nodes.push(<ProcessDisclosure key={entry.key} className="thinking" icon="spark" label={<>思考过程 · <span className="thinking-size">{block.text.trim().length} 字</span></>}><pre>{block.text}</pre></ProcessDisclosure>);
 		}
-		else nodes.push(<details key={entry.key} className={`tool-result ${block.isError ? "err" : ""}`}><summary>{block.name} · 执行结果</summary><pre>{block.text}</pre></details>);
+		else nodes.push(<ProcessDisclosure key={entry.key} className={`tool-result ${block.isError ? "err" : ""}`} icon={TOOL_ICONS[toolKind(block.name)]} label={`${block.name} · 执行结果`} status={block.isError ? "执行失败" : "已完成"}><pre>{block.text}</pre></ProcessDisclosure>);
 	}
 	// Keep action buttons in the DOM so keyboard users can reach earlier replies.
 	const copyText = isUser ? text : turnMessages ? turnReplyText(turnMessages) : "";
 	const canCopy = !!copyText.trim();
-	const canRegenerate = !readOnly && !isUser && isLast;
-	const showActions = canCopy || (isUser && !readOnly) || canRegenerate;
+	const showActions = canCopy || (isUser && !readOnly);
 	const showHeader = !isUser && turnHead && (turnSteps > 0 || turnRunning || !!outcomeLabel(turnOutcome));
+	const showOutcome = (!turnRunning || turnOutcome === "length") && turnOutcome !== "manual" && !!outcomeLabel(turnOutcome);
 	const showUsage = !isUser && !turnRunning && !message.streaming && !(isLast && running) && turnMessages?.some((entry) => entry.usage);
 	// Intermediate process-only messages vanish when the turn is collapsed.
 	if (!nodes.length && !showHeader && !showUsage && !message.streaming && !showActions) return null;
@@ -94,20 +94,17 @@ export const MessageItem = memo(function MessageItem({ onEdit, onRegenerate, onC
 		{!metadataOnly && <div className="msg-body">
 			{isUser && message.turnResult === "manual" && <span className="turn-outcome manual">已手动停止{onContinue && <Button disabled={continuing} onClick={onContinue}>继续</Button>}</span>}
 			{showHeader && <div className="turn-header">
-				{turnSteps > 0 ? <DisclosureButton className="thinking-toggle" expanded={turnOpen} onClick={() => onToggleTurn(turnId)} aria-label={turnOpen ? "收起本轮执行过程" : "展开本轮执行过程"} title={turnOpen ? "收起本轮执行过程" : "展开本轮执行过程"}>
-					<TurnSummary turnId={turnId} durationMs={turnDuration} steps={turnSteps} />
-				</DisclosureButton> : <TurnSummary turnId={turnId} durationMs={turnDuration} steps={0} />}
-			{(!turnRunning || turnOutcome === "length") && turnOutcome !== "manual" && outcomeLabel(turnOutcome) && <span className={`turn-outcome ${turnOutcome ?? ""}`}>{outcomeLabel(turnOutcome)}{(turnOutcome === "length" || turnOutcome === "aborted" || turnOutcome === "manual") && !readOnly && onContinue && <Button disabled={continuing} onClick={onContinue}>继续</Button>}</span>}
+				{turnSteps > 0 ? <ProcessDisclosureButton className="thinking-toggle" icon="clock" expanded={turnOpen} onClick={() => onToggleTurn(turnId)} aria-label={turnOpen ? "收起本轮执行过程" : "展开本轮执行过程"} title={turnOpen ? "收起本轮执行过程" : "展开本轮执行过程"} label={<TurnSummary turnId={turnId} durationMs={turnDuration} steps={turnSteps} />} status={showOutcome ? <span className={`turn-outcome ${turnOutcome ?? ""}`}>{outcomeLabel(turnOutcome)}</span> : undefined} /> : <><TurnSummary turnId={turnId} durationMs={turnDuration} steps={0} />{showOutcome && <span className={`turn-outcome ${turnOutcome ?? ""}`}>{outcomeLabel(turnOutcome)}</span>}</>}
+				{showOutcome && (turnOutcome === "length" || turnOutcome === "aborted") && !readOnly && onContinue && <Button disabled={continuing} onClick={onContinue}>继续</Button>}
 			</div>}
 			{!nodes.length && message.streaming ? <span className="typing">正在思考…</span> : nodes}
 		</div>}
 		{(showActions || showUsage) && <div className={`message-actions${showUsage ? " with-usage" : ""}`}>
-			{showUsage && <TurnUsage message={[...(turnMessages ?? [])].reverse().find((entry) => entry.role === "assistant") ?? message} messages={turnMessages} />}
 			{showActions && <div className="message-buttons">
 				{canCopy && <CopyButton text={copyText} label="复制消息" />}
 				{!readOnly && isUser && <Button variant="ghost" disabled={!onEdit || running} onClick={() => onEdit?.(message)}>编辑并重发</Button>}
-				{canRegenerate && <Button variant="ghost" disabled={!onRegenerate || running} onClick={() => onRegenerate?.(message)}>重新生成</Button>}
 			</div>}
+			{showUsage && <TurnUsage message={[...(turnMessages ?? [])].reverse().find((entry) => entry.role === "assistant") ?? message} messages={turnMessages} />}
 		</div>}
 	</article>;
 });

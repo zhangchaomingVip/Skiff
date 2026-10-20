@@ -262,9 +262,6 @@ export default function App() {
 		manage: () => openSettings("providers"),
 	}), [modelFamilies.offers, modelFamilies.families, displayModels, displayModel, selectModel, pricingModels, openSettings]);
 
-	const headerModel: ModelInfo | undefined = displayModel ?? state.model ?? (activeChat?.selectedModel ? { ...activeChat.selectedModel, modelId: activeChat.selectedModel.modelId ?? activeChat.selectedModel.id, name: activeChat.selectedModel.modelId ?? activeChat.selectedModel.id, providerName: activeChat.selectedModel.routeId ?? activeChat.selectedModel.provider } : undefined);
-	const headerFamily = headerModel ? familyContext.familyOf(headerModel) : undefined;
-
 	return (
 		<ModelFamilyContext.Provider value={familyContext}>
 		{pool.runtimes}
@@ -277,8 +274,8 @@ export default function App() {
 				<header className="chat-header">
 					{!sidebarOpen && <Tooltip text="展开侧栏" align="start"><IconButton onClick={() => setSidebarOpen(true)} aria-label="展开侧栏"><Icon name="panel" /></IconButton></Tooltip>}
 					<div className="header-title">
-						<div className="header-title-row"><span>{currentView === "launcher" ? "主页" : activeChat ? conversationLabel(activeChat, visibleChats) : "新聊天"}</span>{currentView === "chat" && activeProject && <span className="header-project" title={activeProject.path}><Icon name="folder" size={14} />{activeProject.name}</span>}</div>
-						{currentView === "launcher" ? <span className="header-subtitle">模型优先的任务入口</span> : headerModel && <span className="header-model" title={`${headerFamily?.name ?? headerModel.familyName ?? headerModel.provider} · ${headerModel.providerName ?? headerModel.provider} · ${headerModel.id}`}><span>{headerFamily?.name ?? headerModel.familyName ?? headerModel.provider}</span><span className="header-model-sep">·</span><span>{headerModel.modelId ?? headerModel.id}</span><span className="header-model-sep">·</span><span>{headerModel.providerName ?? headerModel.provider}</span></span>}
+						<div className="header-title-row"><span>{currentView === "launcher" ? "主页" : activeChat ? conversationLabel(activeChat, visibleChats) : "新聊天"}</span></div>
+						{currentView === "launcher" && <span className="header-subtitle">模型优先的任务入口</span>}
 					</div>
 					<div className="header-actions">{busy && <span className="working"><span className="dot busy" />{state.isStreaming ? "运行中" : "等待响应"}</span>}{currentView === "chat" && state.messages.length > 0 && <Tooltip text="分享对话"><IconButton onClick={() => setShareDialogOpen(true)} disabled={busy} aria-label="分享对话"><Icon name="share" /></IconButton></Tooltip>}{!desktopSidebarOpen && <Tooltip text="设置"><IconButton className="header-settings" onClick={() => openSettings()} aria-label="设置"><Icon name="settings" /></IconButton></Tooltip>}</div>
 				</header>

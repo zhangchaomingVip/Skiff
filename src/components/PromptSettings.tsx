@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { DEFAULT_APPEND_PROMPT, loadAppendPrompt, saveAppendPrompt } from "../chat/prompt";
+import { loadAppendPrompt, saveAppendPrompt } from "../chat/prompt";
 import { Icon } from "./Icon";
 import { Button, TextArea } from "./ui";
 
@@ -28,8 +28,8 @@ export function PromptSettings({ sessionPath, onSaved }: { sessionPath?: string;
 	const save = () => { saveAppendPrompt(text); onSaved(); };
 	return <div className="prompt-settings">
 		<label htmlFor="append-prompt">附加指令</label>
-		<TextArea id="append-prompt" className="prompt-input" rows={8} value={text} onChange={(event) => setText(event.target.value)} placeholder="例如：每次调用工具前先用一句话说明你要做什么。" spellCheck={false} />
-		<div className="prompt-hint"><span>默认指令会让模型像 Codex 一样在工具前先说一句旁白。</span><Button type="button" variant="ghost" size="compact" onClick={() => setText(DEFAULT_APPEND_PROMPT)}>恢复默认</Button></div>
+		<TextArea id="append-prompt" className="prompt-input" rows={8} value={text} onChange={(event) => setText(event.target.value)} placeholder="留空则不添加额外指令。" spellCheck={false} />
+		<div className="prompt-hint"><span>默认不附加指令。清空后点击“保存并重启”即可生效。</span><Button type="button" variant="ghost" size="compact" onClick={() => setText("")}>清空</Button></div>
 
 		<details className="prompt-system" onToggle={(event) => { if ((event.target as HTMLDetailsElement).open && !sections) void loadSystemPrompt(); }}>
 			<summary><Icon name="file" size={13} />查看 pi 当前系统提示词（只读）</summary>

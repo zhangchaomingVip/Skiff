@@ -124,7 +124,7 @@ try {
 	assert.match(await page.locator(".chat").innerText(), /未能确认队列已清空/);
 	assert.notEqual(await page.evaluate(() => window.switchFixture.currentSession.state.lastOutcome?.reason), "manual");
 	evidence.checks.push("failed queued send preserves input; stop shortcut reachable; failed queue clear still aborts, reports uncertainty and does not claim manual-stop success");
-	// Regeneration keeps image and text attachments from the corresponding user.
+	// Editing and resending keeps image and text attachments from the corresponding user.
 	await page.goto(`${base}/tests/session-switch.html?messages=4&chats=3&expanded=1&kind=image`); await ready();
 	await page.evaluate(async () => {
 		const { appendTextFiles } = await import("/src/chat/textAttachments.ts");
@@ -135,9 +135,10 @@ try {
 	await wait(() => document.querySelector(".msg.user:last-of-type") || [...document.querySelectorAll(".msg.user")].some((node) => node.textContent.includes("attached original")));
 	await page.getByRole("button", { name: "编辑并重发" }).last().click(); await wait(() => !!document.querySelector(".editing-banner"));
 	assert.equal(await page.locator(".attachment-list img").count(), 1); assert.match(await page.locator(".text-attachments").innerText(), /source.txt/); assert.equal(await input().inputValue(), "attached original");
-	await input().press("Escape"); await page.getByRole("button", { name: "重新生成", exact: true }).click();
+	assert.equal(await page.getByRole("button", { name: "重新生成", exact: true }).count(), 0);
+	await input().press("Enter");
 	await wait(() => window.switchFixture.currentSession.state.isStreaming); await freeze();
-	const regenerated = (await commands()).findLast((command) => command.type === "prompt"); assert.equal(regenerated.images.length, 1); assert.match(regenerated.message, /attachment body/);
+	const resent = (await commands()).findLast((command) => command.type === "prompt"); assert.equal(resent.images.length, 1); assert.match(resent.message, /attachment body/);
 	assert.equal((await commands()).filter((command) => command.type === "fork").length, 1);
 	// A background owner remains running when the active owner stops.
 	const backgroundFile = await page.evaluate(() => window.switchFixture.currentSession.sessionFile);
@@ -155,7 +156,7 @@ try {
 	await page.evaluate(() => window.switchFixture.currentSession.reconnect()); await ready(); await wait(() => !document.querySelector(".extension-dialog"));
 	assert.equal((await commands()).filter((command) => command.id === "old-generation").length, 1);
 	assert.equal((await commands()).find((command) => command.id === "old-generation").cancelled, true);
-	evidence.checks.push("regenerate forks corresponding user with image and text attachments; stop affects only active owner; IME guard; reconnect cancels old-generation id once");
+	evidence.checks.push("edit and resend forks corresponding user with image and text attachments; stop affects only active owner; IME guard; reconnect cancels old-generation id once");
 	// Verify the state fallback on two runs of a bridge without agent_settled.
 	await page.goto(`${base}/tests/session-switch.html?messages=4&chats=3&expanded=1`); await ready();
 	for (const text of ["old protocol one", "old protocol two"]) {

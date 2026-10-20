@@ -1,6 +1,6 @@
 import { seedPolishPreview } from "./polishFixture.mjs";
 
-export const fixtures = ["launcher", "single", "multi", "unknown", "empty", "loading", "error", "chat", "long", "settings", "settings-info", "picker", "voyage", "voyage-output", "voyage-thinking", "voyage-fishing", "voyage-tool", "voyage-moored", "voyage-high", "authorization", "sidebar", "archive", "visual", "tool-spacing"];
+export const fixtures = ["launcher", "single", "multi", "unknown", "empty", "loading", "error", "chat", "long", "settings", "settings-info", "picker", "voyage", "voyage-output", "voyage-thinking", "voyage-fishing", "voyage-tool", "voyage-moored", "voyage-high", "authorization", "sidebar", "archive", "visual", "tool-spacing", "process-rows"];
 
 // This entry runs only on the separate preview origin. It never uses real pi.
 export function preparePreview(target) {
@@ -59,9 +59,34 @@ export function preparePreview(target) {
 		}));
 		for (const chat of chats) if (chat.hasMessages) chat.selectedModel = { provider: "skiff-relay-r1-deepseek", id: "deepseek-chat", modelId: "deepseek-chat", routeId: "route-deepseek-r1", offerId: "route-deepseek-r1/deepseek-chat" };
 		storage.setItem("skiff.workspace.v1", JSON.stringify({ version: 1, projects: [project, otherProject], chats, activeId: "archive-active" }));
-	} else if (["chat", "long", "picker", "voyage", "authorization", "visual", "tool-spacing"].includes(fixture) || fixture.startsWith("voyage-")) {
+	} else if (["chat", "long", "picker", "voyage", "authorization", "visual", "tool-spacing", "process-rows"].includes(fixture) || fixture.startsWith("voyage-")) {
 		seedPolishPreview(storage, fixture === "long");
 		const sessions = JSON.parse(storage.getItem("skiff.test.sessions"));
+		if (fixture === "process-rows") sessions["polish-preview.jsonl"] = [
+			{ role: "user", content: "先检查环境，再写入与编辑文件，最后验证工具结果。" },
+			{ role: "assistant", content: [
+				{ type: "thinking", thinking: "先用三条命令检查目录、工作路径和运行环境。\n随后写入一个文件、编辑另一个文件，确认工具摘要区分文件数和调用次数。" },
+				...["ls", "pwd", "node --version"].map((command, index) => ({ type: "toolCall", id: `process-bash-${index}`, name: "bash", arguments: { command } })),
+			] },
+			...["Skiff", "D:/workspace/Skiff", "v24.19.0"].map((content, index) => ({ role: "toolResult", toolCallId: `process-bash-${index}`, toolName: "bash", content })),
+			{ role: "assistant", content: [
+				{ type: "text", text: "环境检查完成，接下来更新两个文件。" },
+				{ type: "toolCall", id: "process-write", name: "write", arguments: { path: "notes.md", content: "# 工具检查\n" } },
+				{ type: "toolCall", id: "process-edit", name: "edit", arguments: { path: "src/App.tsx", oldText: "const ready = false;", newText: "const ready = true;" } },
+			] },
+			{ role: "toolResult", toolCallId: "process-write", toolName: "write", content: "已写入 notes.md" },
+			{ role: "toolResult", toolCallId: "process-edit", toolName: "edit", content: "已更新 src/App.tsx" },
+			{ role: "assistant", content: [
+				{ type: "thinking", thinking: "两个文件已经更新，接下来读取并再次编辑同一个文件。\n这一组应分别显示读取一个文件和修改一个文件，避免把两次调用误写成两个文件。" },
+				{ type: "toolCall", id: "process-read", name: "read", arguments: { path: "notes.md" } },
+				{ type: "toolCall", id: "process-edit-note", name: "edit", arguments: { path: "notes.md", oldText: "# 工具检查", newText: "# 检查完成" } },
+			] },
+			{ role: "toolResult", toolCallId: "process-read", toolName: "read", content: "# 工具检查" },
+			{ role: "toolResult", toolCallId: "process-edit-note", toolName: "edit", content: "已更新 notes.md" },
+			{ role: "assistant", content: [{ type: "toolCall", id: "process-check", name: "bash", arguments: { command: "node scripts/check-tools.mjs --verify-output --include-command-details --theme light --theme dark --report tool-check.json" } }] },
+			{ role: "toolResult", toolCallId: "process-check", toolName: "bash", isError: true, content: "演示失败状态：检查脚本不存在。" },
+			{ role: "assistant", content: "工具检查已收尾。失败的命令保留输入与输出，可展开复盘。", durationMs: 15000 },
+		];
 		if (fixture === "tool-spacing") sessions["polish-preview.jsonl"] = [
 			{ role: "user", content: "检查对话页面，收紧工具调用之间的间距。" },
 			{ role: "assistant", content: [
@@ -75,7 +100,7 @@ export function preparePreview(target) {
 			{ role: "assistant", content: [{ type: "toolCall", id: "spacing-next", name: "bash", arguments: { command: "node scripts/inspect-chat-layout.mjs --include-thinking --include-tool-results --check-collapsed-height --theme light --theme dark --report layout-spacing.json" } }] },
 			{ role: "toolResult", toolCallId: "spacing-next", toolName: "bash", isError: true, content: "示例错误：保留完整命令和输出供展开检查。" },
 			{ role: "assistant", content: "" },
-			{ role: "assistant", content: "### 检查完成\n\n正文与工具步骤使用一致的间距，连续调用默认折叠。\n\n- 长命令保持单行，展开后查看全文\n- 空消息不再占用正文高度\n\n> 复制、重新生成和用量明细仍然可用。\n\n```css\n.stack { gap: 8px; }\n```" },
+			{ role: "assistant", content: "### 检查完成\n\n正文与工具步骤使用一致的间距，连续调用默认折叠。\n\n- 长命令保持单行，展开后查看全文\n- 空消息不再占用正文高度\n\n> 复制与线路、用量、费用和时间排列在同一底栏。\n\n```css\n.stack { gap: 8px; }\n```" },
 			{ role: "assistant", content: "", usage: { input: 4096, cacheRead: 0, cacheWrite: 0, output: 234, totalTokens: 4330 }, durationMs: 2000 },
 		];
 		if (fixture === "visual") sessions["polish-preview.jsonl"] = [

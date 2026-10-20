@@ -68,7 +68,7 @@ try {
 		const delta = counters().map((value, index) => value - before[index]);
 		assert(delta.every((value) => value === 1), `Duplicate work: ${delta}`);
 		assert(document.querySelector('[aria-label="你的消息"]')?.textContent && document.querySelector('[aria-label="Skiff 的消息"]')?.textContent.includes("预览任务已完成"), "History missing");
-		assert(document.querySelector(".header-model")?.textContent.includes("deepseek-chat"), "Selected model changed");
+		assert(document.querySelector(".model-trigger")?.title.includes("deepseek-chat"), "Selected model changed");
 		record(`切换到 ${project}：启动/停止/恢复/读取历史各 1 次`);
 	}
 	click('[aria-label="展开Skiff"]');
@@ -121,7 +121,7 @@ try {
 	const beforeRemoval = count("rpc_start");
 	click('[aria-label="停用 官方直连"]');
 	await until(() => count("rpc_start") > beforeRemoval && ready(), "Disabled route not refreshed");
-	assert(document.querySelector(".header-model")?.textContent.includes("硅基低价") && document.querySelector(".header-model")?.textContent.includes("deepseek-chat"), "Invalid model did not fall back within family");
+	assert(document.querySelector(".model-trigger")?.title.includes("硅基低价") && document.querySelector(".model-trigger")?.title.includes("deepseek-chat"), "Invalid model did not fall back within family");
 	assert(document.querySelector('[aria-label="Skiff 的消息"]')?.textContent.includes("预览任务已完成"), "Fallback lost history");
 	record("停用当前供应商后保留历史，并回退到同家族可用线路");
 	root.render(null);

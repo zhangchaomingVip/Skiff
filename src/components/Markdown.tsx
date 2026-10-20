@@ -32,7 +32,11 @@ export const Markdown = memo(function Markdown({ text, streaming = false }: { te
 	const components = useMemo<Components>(() => ({
 		pre: ({ children }) => <CodeBlock streaming={streaming}>{children}</CodeBlock>,
 		code: ({ children, className }) => <code className={className ?? "inline-code"}>{children}</code>,
-		a: ({ children, href }) => <a href={href} target="_blank" rel="noreferrer">{children}</a>,
+		a: ({ children, href }) => {
+			const isBareUrl = typeof href === "string" && String(children).trim() === href;
+			const label = href?.replace(/^https?:\/\//, "").replace(/\/$/, "") ?? "来源";
+			return <a className={isBareUrl ? "citation-chip" : undefined} href={href} title={href} target="_blank" rel="noreferrer">{isBareUrl ? `来源 · ${label}` : children}</a>;
+		},
 		img: ({ src, alt }) => src ? <ImagePreview src={src} alt={alt || "回复中的图片"} /> : null,
 		table: ({ children }) => <div className="table-scroll"><table>{children}</table></div>,
 	}), [streaming]);

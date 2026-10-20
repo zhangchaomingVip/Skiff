@@ -35,8 +35,7 @@ try {
 	assert.equal(await page.getByRole("separator", { name: "调整左侧导航宽度" }).getAttribute("aria-valuenow"), "240", "Invalid left width should use its default");
 	assert.equal(await page.getByRole("separator", { name: "调整右侧航行台宽度" }).getAttribute("aria-valuenow"), "260", "Invalid right width should use its default");
 	assert.equal(await page.locator(".project-chats .chat-row").count(), 3, "Unarchived chats appear exactly once");
-	const projectCount = await page.locator(".project-row").filter({ hasText: "Skiff Archive" }).locator(".project-count").textContent();
-	assert.equal(projectCount, "2", "Archived chats must not affect project counts");
+	assert.equal(await page.locator(".project-count, .header-model, .header-project").count(), 0, "Project counts and header route/folder details stay hidden");
 	const beforeArchiveSearch = await page.locator(".sidebar-scroll .chat-row").count();
 	await page.getByRole("button", { name: "搜索项目与聊天" }).click();
 	await page.getByRole("textbox", { name: "搜索项目与聊天" }).fill("已归档会话");
@@ -112,7 +111,7 @@ try {
 	await page.mouse.click(actionPoint.x, actionPoint.y);
 	await waitUntil(() => document.querySelector(".header-title-row > span:first-child")?.textContent?.trim() === "主页", "Archiving the active chat did not return home");
 	assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem("skiff.workspace.v1")).activeId), "archive-candidate", "Active archive should select the latest unarchived chat in its project");
-	assert.equal(await page.locator(".project-row").filter({ hasText: "Skiff Archive" }).locator(".project-count").textContent(), "2");
+	assert.equal(await page.locator(".project-count").count(), 0);
 
 	await openSettings();
 	await page.locator(".archive-session-row").filter({ hasText: "已归档会话" }).getByRole("button", { name: "删除归档" }).click();

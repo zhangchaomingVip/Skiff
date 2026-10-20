@@ -19,10 +19,10 @@ export function TurnUsage({ message, messages }: { message: ChatMessage; message
 	const routeModel = info ?? (!routeMessage.model && !routeMessage.provider ? current : undefined);
 	const modelName = snapshot?.modelId ?? routeModel?.modelId ?? routeMessage.model ?? routeModel?.id ?? "未知模型";
 	const relayName = snapshot?.relayName ?? routeModel?.providerName ?? routeMessage.provider ?? routeModel?.provider ?? "未知渠道";
-	const familyName = snapshot?.familyName ?? routeModel?.familyName;
 	const account = snapshot ? snapshot.billingAccountId : routeModel?.billingAccountId;
 	const preciseCost = formatCosts(cost, 6);
 	const inputTitle = `输入 Token ${usage.inputTotal.toLocaleString("zh-CN")}，新增 ${newInput.toLocaleString("zh-CN")}`;
+	const cacheRate = `${Math.round(usage.hitRate * 100)}%`;
 	const [open, setOpen] = useState(false);
 	const [copyStatus, setCopyStatus] = useState("");
 	const trigger = useRef<HTMLButtonElement>(null);
@@ -38,11 +38,11 @@ export function TurnUsage({ message, messages }: { message: ChatMessage; message
 	};
 	return <div className="turn-usage">
 		<div className="usage-route-details">
-			<button type="button" className="usage-model" title={`完整线路：${relayName} · ${modelName} · ${account?.trim() ? `账户${account.trim()}` : "未知账户"}`} aria-label={`复制模型名 ${modelName}`} onClick={() => void copy(modelName, "模型名")}><span className="usage-model-label">{familyName && `${familyName} · `}{relayName} · {modelName}</span></button>
+			<button type="button" className="usage-model" title={`完整线路：${relayName} · ${modelName} · ${account?.trim() ? `账户${account.trim()}` : "未知账户"}`} aria-label={`复制模型名 ${modelName}`} onClick={() => void copy(modelName, "模型名")}><span className="usage-model-label">{relayName} · {modelName}</span></button>
 		</div>
 		<div className="usage-tokens">
 			<div className="usage-details">
-				<button type="button" ref={trigger} className="usage-trigger" title={inputTitle} aria-label={`${inputTitle}，输出 ${usage.output.toLocaleString("zh-CN")}，展示本轮 Token 消耗明细`} aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? panelId : undefined} onClick={() => setOpen((value) => !value)}><span aria-hidden="true">⇣</span><span className="usage-input">{formatTokens(usage.inputTotal)}{showNewInput && <span className="usage-new">(+{formatTokens(newInput)})</span>}</span><span className="usage-output" title={`输出 Token ${usage.output.toLocaleString("zh-CN")}`}>⇡ {formatTokens(usage.output)}</span></button>
+				<button type="button" ref={trigger} className="usage-trigger" title={inputTitle} aria-label={`${inputTitle}，缓存命中率 ${cacheRate}，输出 ${usage.output.toLocaleString("zh-CN")}，展示本轮 Token 消耗明细`} aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? panelId : undefined} onClick={() => setOpen((value) => !value)}><span aria-hidden="true">⇣</span><span className="usage-input">{formatTokens(usage.inputTotal)}{showNewInput && <span className="usage-new">(+{formatTokens(newInput)})</span>}</span><span className="usage-cache" title={`缓存命中率 ${(usage.hitRate * 100).toFixed(1)}%`}>⚡ {cacheRate}</span><span className="usage-output" title={`输出 Token ${usage.output.toLocaleString("zh-CN")}`}>⇡ {formatTokens(usage.output)}</span></button>
 				{open && <Popover anchor={trigger} onClose={close} id={panelId} className="usage-popover" aria-label="本轮 Token 消耗明细">
 					<div className="usage-heading"><strong>本轮 Token 消耗</strong><span>新增输入 <b className="usage-new">{formatTokens(newInput)}</b></span></div>
 					<dl><div className="usage-row"><dt><i className="swatch input" />输入（发给模型）</dt><dd>{formatTokens(usage.inputTotal)}</dd></div>
