@@ -35,21 +35,23 @@ try {
 	await page.keyboard.press("Control+Comma");
 	await button("供应商").click();
 	const original = await config();
-	assert.deepEqual(await dialog().locator(".provider-row-title .provider-tag").allTextContents(), ["官方直连", "中转", "官方直连", "本机", "自定义"]);
+	assert.deepEqual(await dialog().locator(".provider-row-title .provider-source-tag").allTextContents(), ["官方直连", "官方直连", "自定义", "本机", "自定义"]);
 	assert.equal(await dialog().locator(".provider-key").count(), 0);
+	assert.deepEqual(await dialog().getByRole("group", { name: "供应商筛选" }).locator(".settings-filter-group").getByRole("button").allTextContents(), ["启用 3", "停用 2"]);
 	await button("停用 2").click();
 	assert.equal(await dialog().locator(".provider-relay-row").count(), 2);
 	const search = dialog().getByRole("textbox", { name: "搜索已配置供应商" });
 	await search.fill("LOCALHOST");
-	assert.equal(await button("全部 1").count(), 1);
 	assert.equal(await button("启用 0").count(), 1);
+	assert.equal(await button("停用 1").count(), 1);
 	await search.fill("sk-mock");
 	assert.equal(await dialog().locator(".provider-relay-row").count(), 0);
 	await search.fill("");
 	await dialog().getByRole("checkbox", { name: "启用 自定义端点", exact: true }).locator("..").click();
 	await page.waitForFunction(() => document.activeElement?.getAttribute("aria-label") === "搜索已配置供应商");
 	assert.equal(await button("停用 1").count(), 1);
-	await button("全部 5").click();
+	await button("停用 1").click();
+	assert.equal(await dialog().locator(".provider-relay-row").count(), 5);
 	await shot("providers-light");
 	await button("编辑 硅基低价").click();
 	assert.equal(await page.locator("#relay-protocol option").count(), 6);
@@ -200,9 +202,8 @@ try {
 	const rowTest = localProvider.getByRole("button", { name: "测试连接 本机服务", exact: true });
 	assert.equal(await rowTest.isEnabled(), true, "An unconfigured key-optional provider can discover a model before testing");
 	await rowTest.click();
-	await page.waitForFunction(() => window.skiffPreview.metadata.tests.some((record) => record.relayId === "local"));
-	assert.equal(await page.evaluate(() => window.skiffPreview.testRequests.at(-1).modelId), "deepseek-chat");
 	await localProvider.getByText(/最近测试 137 ms/).waitFor();
+	assert.equal(await page.evaluate(() => window.skiffPreview.testRequests.at(-1).modelId), "deepseek-chat");
 
 	for (const [width, height] of [[1100, 750], [600, 400], [550, 375]]) {
 		await page.setViewportSize({ width, height });

@@ -16,5 +16,6 @@ export default defineConfig({
 		target: "es2021",
 		outDir: "dist",
 		emptyOutDir: true,
+		chunkSizeWarningLimit: 100 * 1024,
 	},
 });

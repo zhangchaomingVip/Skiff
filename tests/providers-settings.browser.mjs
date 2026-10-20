@@ -46,11 +46,11 @@ try {
 	const providerRow = dialog().locator(".provider-relay-row").filter({ hasText: "官方直连" }).first();
 	assert.equal(await providerRow.locator(".settings-badge").count(), 0, "The accent bar and switch already identify enabled providers");
 	const spacing = await page.evaluate(() => {
-		const list = document.querySelector(".provider-list"); const heading = list.querySelector(".settings-source-heading"); const row = list.querySelector(".provider-relay-row");
+		const list = document.querySelector(".provider-list"); const tabs = document.querySelector(".provider-source-tabs"); const row = list.querySelector(".provider-relay-row");
 		const side = row.querySelector(".provider-row-side"); const key = side.querySelector(".settings-key-fingerprint"); const actions = side.querySelector(".provider-row-actions");
-		return { groupGap: getComputedStyle(list).gap, headingBottom: getComputedStyle(heading).paddingBottom, sideGap: getComputedStyle(side).gap, keyGap: getComputedStyle(key).marginRight, actionGap: getComputedStyle(actions).gap };
+		return { groupGap: getComputedStyle(list).gap, tabGap: getComputedStyle(tabs).gap, tabRadius: getComputedStyle(tabs).borderRadius, sideGap: getComputedStyle(side).gap, keyGap: getComputedStyle(key).marginRight, actionGap: getComputedStyle(actions).gap };
 	});
-	assert.deepEqual(spacing, { groupGap: "12px", headingBottom: "0px", sideGap: "8px", keyGap: "8px", actionGap: "6px" });
+	assert.deepEqual(spacing, { groupGap: "12px", tabGap: "4px", tabRadius: "8px", sideGap: "8px", keyGap: "8px", actionGap: "6px" });
 	const iconColor = await providerRow.locator(".provider-edit-button").evaluate((button) => getComputedStyle(button).color);
 	const inactiveIconColor = await providerRow.evaluate((row) => { row.classList.add("disabled"); const color = getComputedStyle(row.querySelector(".provider-edit-button")).color; row.classList.remove("disabled"); return color; });
 	assert.equal(inactiveIconColor, iconColor, "Disabling a provider must not dim its action icons");

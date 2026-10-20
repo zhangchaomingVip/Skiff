@@ -26,9 +26,10 @@ try {
 	await dialog().waitFor();
 	await button("供应商").click();
 
-	// The list shows each provider's protocol.
+	// OpenAI is the default protocol and stays implicit in the list.
 	await button("编辑 官方直连").waitFor();
-	assert.match(await dialog().getByText(/· OpenAI ·/).first().textContent(), /OpenAI/);
+	assert.equal(await dialog().locator(".provider-protocol-tag").count(), 0);
+	assert.doesNotMatch(await dialog().locator(".provider-row-meta").first().textContent(), /OpenAI/);
 
 	// Existing provider: the selector appears between 名称 and API 密钥 and defaults to OpenAI.
 	await button("编辑 官方直连").click();
@@ -50,8 +51,27 @@ try {
 	await page.locator("#relay-protocol").selectOption("anthropic");
 	await button("保存").click();
 	await button("编辑 官方直连").waitFor();
-	assert.match(await dialog().getByText(/· Anthropic ·/).first().textContent(), /Anthropic/);
+	const officialRow = dialog().locator(".provider-relay-row").filter({ hasText: /^官方直连/ }).first();
+	const protocolBadge = officialRow.locator(".provider-row-title .provider-protocol-tag");
+	assert.deepEqual(await protocolBadge.allTextContents(), ["Anthropic"]);
+	assert.equal(await protocolBadge.evaluate((node) => node.previousElementSibling?.tagName), "STRONG");
+	assert.ok((await protocolBadge.getAttribute("class")).includes("muted-tag"), "Non-default protocols use the muted badge style");
+	assert.doesNotMatch(await officialRow.locator(".provider-row-meta").textContent(), /Anthropic|OpenAI/);
 	await shot("provider-protocol-saved");
+
+	// Long Aliyun endpoints keep a compact host label and expose the safe full URL on hover.
+	await button("编辑 官方直连").click();
+	await page.locator("#relay-protocol").selectOption("openai");
+	await page.locator("#relay-base").fill("https://ws-u4rxmkejbrrkfhif.cn-beijing.maas.aliyuncs.com/compatible-mode/v1");
+	await button("保存").click();
+	await page.locator("#relay-name").waitFor({ state: "detached" });
+	await button("编辑 官方直连").waitFor();
+	const endpoint = dialog().locator(".provider-row-endpoint").filter({ hasText: "ws-u4rxmke" });
+	assert.equal(await endpoint.count(), 1);
+	assert.equal(await endpoint.textContent(), "ws-u4rxmke…aliyuncs.com");
+	assert.equal(await endpoint.getAttribute("title"), "https://ws-u4rxmkejbrrkfhif.cn-beijing.maas.aliyuncs.com/compatible-mode/v1");
+	assert.equal(await dialog().locator(".provider-protocol-tag").count(), 0, "OpenAI remains implicit after changing the endpoint");
+	await shot("provider-aliyun-short");
 
 	// A Kimi preset starts on the Kimi protocol instead of OpenAI.
 	await button("添加供应商").click();

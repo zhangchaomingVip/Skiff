@@ -1,6 +1,6 @@
-import { forwardRef, useEffect, useLayoutEffect, useMemo, useRef, useState, Fragment, type FormEvent } from "react";
+import { forwardRef, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { latestSettingsTest, settingsTestSummary, sortSettingsProviders, providerBatchImpact, type BatchOperation, type RelayBatchPreview } from "../chat/settingsManagement";
+import { latestSettingsTest, settingsTestSummary, sortSettingsProviders, providerBatchImpact, PROVIDER_GROUPS, type BatchOperation, type RelayBatchPreview } from "../chat/settingsManagement";
 import { useSettingsMetadata } from "../chat/useSettingsMetadata";
 import { ProviderBatchDialog } from "./ProviderBatchDialog";
 import type { DiscoveredModel } from "../rpc/modelDiscovery";
@@ -11,8 +11,8 @@ import { filterPresets, hostOf, matchPreset, PRESET_KINDS, type ProviderPreset }
 import { discoveredFamily, routesFromProviderModels } from "../chat/providerRoutes";
 import { modelIdMatchesCatalog } from "../chat/latestModels";
 import { useModelCatalog } from "../chat/useModelCatalog";
-import { blankModel, blankRelay, FAMILY_LABELS, maskBaseUrl, maskKey, RELAY_PROTOCOLS, validateModels, type ModelFamily, type ModelSpec, type RelayProtocol, type RelayRouteSpec, type RelaySpec, type TestResult } from "../chat/useModelFamilies";
-import { filterSettingsProviders, providerSourceLabel } from "../chat/settingsModels";
+import { blankModel, blankRelay, FAMILY_LABELS, maskKey, RELAY_PROTOCOLS, validateModels, type ModelFamily, type ModelSpec, type RelayProtocol, type RelayRouteSpec, type RelaySpec, type TestResult } from "../chat/useModelFamilies";
+import { filterSettingsProviders, providerSourceLabel, settingsProviderEndpointLabel, settingsProviderEndpointTitle } from "../chat/settingsModels";
 import type { SettingsLocation } from "./settingsNavigation";
 import { DisclosureLabel } from "./Disclosure";
 import { ConfirmDialog } from "./ConfirmDialog";
@@ -31,6 +31,15 @@ type Draft =
 	| { kind: "relay"; relay: RelaySpec; isNew: boolean; preset?: ProviderPreset };
 
 type ProviderModelDraft = { familyId?: string; model: ModelSpec };
+
+type ProviderSourceTabId = "all" | "official" | "custom" | "local";
+type ProviderSourceTab = { id: ProviderSourceTabId; label: string; sources?: readonly string[] };
+const PROVIDER_SOURCE_TABS: readonly ProviderSourceTab[] = [
+	{ id: "all", label: "全部", sources: undefined },
+	{ id: "official", label: "官方直连", sources: [PROVIDER_GROUPS[0]] },
+	{ id: "custom", label: "自定义", sources: [PROVIDER_GROUPS[1], PROVIDER_GROUPS[3]] },
+	{ id: "local", label: "本机", sources: [PROVIDER_GROUPS[2]] },
+];
 
 /**
  * Providers alone: one access point per row (endpoint plus one API key, reused
@@ -60,6 +69,7 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 	const { catalog } = useModelCatalog();
 	const [query, setQuery] = useState("");
 	const [listQuery, setListQuery] = useState("");
+	const [sourceFilter, setSourceFilter] = useState<ProviderSourceTabId>("all");
 	const [statusFilter, setStatusFilter] = useState<"all" | "enabled" | "disabled">("all");
 	const [advanced, setAdvanced] = useState(false);
 	const [savedLocation, setSavedLocation] = useState<{ relayId: string; familyIds: string[] }>();
@@ -67,10 +77,13 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 	const [batch, setBatch] = useState(false);
 	const [selected, setSelected] = useState<string[]>([]);
 	const [batchAction, setBatchAction] = useState<BatchOperation>();
-	useLayoutEffect(() => { setSelected([]); setBatchAction(undefined); }, [listQuery, statusFilter]);
+	useLayoutEffect(() => { setSelected([]); setBatchAction(undefined); }, [listQuery, sourceFilter, statusFilter]);
 	const completedTests = useRef(new Set<string>());
 	const matchedRelays = filterSettingsProviders(relays, listQuery);
-	const shownRelays = sortSettingsProviders(matchedRelays.filter((relay) => statusFilter === "all" || relay.enabled === (statusFilter === "enabled")), "config", metadata.usage, true);
+	const currentSourceTab = PROVIDER_SOURCE_TABS.find((tab) => tab.id === sourceFilter)!;
+	const sourceRelays = matchedRelays.filter((relay) => !currentSourceTab.sources || currentSourceTab.sources.includes(providerSourceLabel(relay.baseUrl)));
+	const shownRelays = sortSettingsProviders(sourceRelays.filter((relay) => statusFilter === "all" || relay.enabled === (statusFilter === "enabled")), "config", metadata.usage, true);
+	const hasActiveProviderFilters = !!listQuery.trim() || statusFilter !== "all";
 	const [notice, setNotice] = useState<string>();
 	const [reveal, setReveal] = useState(false);
 	const [rowTestingRelayId, setRowTestingRelayId] = useState<string>();
@@ -155,6 +168,11 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 		setNotice(undefined);
 		setError(undefined); setReveal(false); setQuery("");
 		setDraft({ kind: "pick" });
+	};
+	const openPickFromEmpty = () => {
+		setBatch(false);
+		setSelected([]);
+		openPick();
 	};
 	// Toggling a row's switch is a list action: failures surface as `error`, and
 	// the alert below is scrolled into view so the reason is actually seen.
@@ -664,9 +682,15 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 					const route = families.find((item) => item.id === familyId)?.routes.find((item) => item.relayId === savedLocation.relayId);
 					return <Button key={familyId} type="button" variant="ghost" size="compact" onClick={() => onOpenRoutes({ familyId, relayId: savedLocation.relayId, routeId: route?.id })}>查看{FAMILY_LABELS[familyId] ?? familyId}路线</Button>;
 				})}</div>}
+				<div className="family-model-tabs provider-source-tabs" role="tablist" aria-label="供应商来源">
+					{PROVIDER_SOURCE_TABS.map((tab) => {
+						const count = tab.sources ? matchedRelays.filter((relay) => tab.sources!.includes(providerSourceLabel(relay.baseUrl))).length : matchedRelays.length;
+						return <button type="button" className={`family-model-tab provider-source-tab${sourceFilter === tab.id ? " is-active" : ""}`} id={`provider-source-tab-${tab.id}`} role="tab" aria-selected={sourceFilter === tab.id} aria-controls="provider-list" key={tab.id} onClick={() => setSourceFilter(tab.id)}><span>{tab.label}</span><span className="provider-source-count">{count}</span></button>;
+					})}
+				</div>
 				<div className="settings-toolbar providers-toolbar" role="group" aria-label="供应商筛选">
-					<Input aria-label="搜索已配置供应商" placeholder="搜索名称或端点…" value={listQuery} onChange={(event) => setListQuery(event.target.value)} />
-					<div className="settings-filter-group">{([ ["all", "全部"], ["enabled", "启用"], ["disabled", "停用"] ] as const).map(([value, label]) => <Button key={value} size="compact" variant="ghost" aria-pressed={statusFilter === value} onClick={() => setStatusFilter(value)}>{label} {matchedRelays.filter((relay) => value === "all" || relay.enabled === (value === "enabled")).length}</Button>)}</div>
+					<Input className="provider-search-input" aria-label="搜索已配置供应商" placeholder="搜索名称或端点…" value={listQuery} onChange={(event) => setListQuery(event.target.value)} />
+					<div className="settings-filter-group">{([ ["enabled", "启用"], ["disabled", "停用"] ] as const).map(([value, label]) => <Button key={value} className="provider-status-filter" size="compact" variant="ghost" aria-pressed={statusFilter === value} onClick={() => setStatusFilter((current) => current === value ? "all" : value)}>{label} {sourceRelays.filter((relay) => relay.enabled === (value === "enabled")).length}</Button>)}</div>
 					<div className="settings-toolbar-extras">
 						<Button variant="secondary" disabled={pending} aria-pressed={batch} onClick={() => { setBatch(!batch); setSelected([]); }}>{batch ? "退出批量管理" : "批量管理"}</Button>
 						<Button variant="primary" onClick={openPick} disabled={pending || batch}><Icon name="plus" size={14} />添加供应商</Button>
@@ -676,17 +700,15 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 					<label className="provider-toggle inline"><input type="checkbox" aria-label="全选当前结果" checked={!!shownRelays.length && shownRelays.every((relay) => selected.includes(relay.id))} disabled={pending || !shownRelays.length} onChange={(event) => setSelected(event.target.checked ? shownRelays.map((relay) => relay.id) : [])} />全选当前结果</label><span role="status">已选 {selected.length} 个</span>
 					{([ ["enable", "批量启用"], ["disable", "批量停用"], ["delete", "批量删除"] ] as const).map(([action, label]) => <Button key={action} variant={action === "delete" ? "danger" : "secondary"} disabled={pending || !selected.length} onClick={() => setBatchAction(action)}>{label}</Button>)}
 				</div>}
-				<section className="provider-list family-card" aria-label="供应商列表">
-					{relays.length === 0 && <p className="family-empty">还没添加供应商，点击「添加供应商」选择预设或填写自定义地址。</p>}
-					{!shownRelays.length && relays.length > 0 && <p className="family-empty">没有匹配的供应商，请调整搜索或状态筛选。</p>}
-					{shownRelays.map((relay, index) => {
+				<section className="provider-list family-card" id="provider-list" role="tabpanel" aria-labelledby={`provider-source-tab-${sourceFilter}`} aria-label="供应商列表">
+					{!shownRelays.length && (hasActiveProviderFilters
+						? <p className="family-empty">没有匹配的供应商，请调整搜索或状态筛选</p>
+						: <div className="provider-empty-state"><p className="family-empty">{sourceFilter === "all" ? "还没添加供应商" : "此来源下暂无供应商"}</p><Button variant="primary" disabled={pending} onClick={openPickFromEmpty}><Icon name="plus" size={14} />添加供应商</Button></div>)}
+					{shownRelays.map((relay) => {
 						const preset = matchPreset(relay.baseUrl);
+						const sourceLabel = providerSourceLabel(relay.baseUrl);
 						const protocol = RELAY_PROTOCOLS.find((item) => item.id === (relay.protocol ?? "openai"));
 						const lastTest = latestSettingsTest(metadata.tests, relay.id);
-						const sourceLabel = providerSourceLabel(relay.baseUrl);
-						const groupStart = index === 0 || providerSourceLabel(shownRelays[index - 1].baseUrl) !== sourceLabel;
-						const groupSize = shownRelays.slice(index).findIndex((item) => providerSourceLabel(item.baseUrl) !== sourceLabel);
-						const groupCount = groupSize === -1 ? shownRelays.length - index : groupSize;
 						const testModel = relayTestModels.get(relay.id);
 						const rowTestError = rowTestErrors[relay.id];
 						const rowTestResult = rowTestResults[relay.id];
@@ -699,13 +721,13 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 						const copyTitle = copyState === "copied" ? "API 密钥已复制" : copyState === "failed" ? "复制 API 密钥失败" : "复制 API 密钥";
 						const copyIcon = copyState === "copied" ? "check" : copyState === "failed" ? "alert" : "copy";
 						const rowTestTitle = rowTestError || (rowTestResult ? `${rowTestResult.ok ? "连接成功" : "连接失败"} · ${rowTestResult.latencyMs} ms${rowTestResult.status ? ` · HTTP ${rowTestResult.status}` : rowTestResult.error ? ` · ${rowTestResult.error}` : ""}` : settingsTestSummary(lastTest));
-						return <Fragment key={relay.id}>{groupStart && <h3 className="settings-source-heading">{sourceLabel}<span className="settings-source-count">{groupCount}</span></h3>}<div className={`provider-row provider-relay-row ${batch ? "is-selecting" : ""} ${relay.enabled ? "" : "disabled"}`}>
+						return <div key={relay.id} className={`provider-row provider-relay-row ${batch ? "is-selecting" : ""} ${relay.enabled ? "" : "disabled"}`}>
 							{batch && <input type="checkbox" aria-label={`选择 ${relay.name}`} checked={selected.includes(relay.id)} disabled={pending} onChange={(event) => setSelected((ids) => event.target.checked ? [...ids, relay.id] : ids.filter((id) => id !== relay.id))} />}
 							<div className="provider-relay-main">
 								<span className="provider-avatar"><ProviderIcon id={preset?.id ?? ""} name={relay.name} size={32} /></span>
 								<span className="provider-row-text">
-									<span className="provider-row-title"><strong title={relay.name}>{relay.name}</strong><span className="provider-tag">{providerSourceLabel(relay.baseUrl)}</span></span>
-									<small className="provider-row-meta" title={rowTestTitle}><span className="provider-row-endpoint" title={maskBaseUrl(relay.baseUrl)}>{maskBaseUrl(relay.baseUrl)}</span><span className="provider-row-count">· {protocol?.label ?? "OpenAI"} · {relayModelCount(relay.id) ? `${relayModelCount(relay.id)} 个模型` : "未配置模型"}</span>{rowTestStatus && <span className={`provider-row-test-status is-${rowTestStatus.tone}`} role="status" aria-live="polite">· {rowTestStatus.label}</span>}</small>
+										<span className="provider-row-title"><strong title={relay.name}>{relay.name}</strong>{protocol && protocol.id !== "openai" && <span className="provider-tag muted-tag provider-protocol-tag">{protocol.label}</span>}<span className="provider-tag provider-source-tag">{sourceLabel === "中转" ? "自定义" : sourceLabel}</span></span>
+										<small className="provider-row-meta" title={rowTestTitle}><span className="provider-row-endpoint" title={settingsProviderEndpointTitle(relay.baseUrl)}>{settingsProviderEndpointLabel(relay.baseUrl)}</span><span className="provider-row-count">· {relayModelCount(relay.id) ? `${relayModelCount(relay.id)} 个模型` : "未配置模型"}</span>{rowTestStatus && <span className={`provider-row-test-status is-${rowTestStatus.tone}`} role="status" aria-live="polite">· {rowTestStatus.label}</span>}</small>
 								</span>
 							</div>
 							<div className="provider-row-side">
@@ -722,7 +744,7 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 									<span className="slider" />
 								</label>
 							</div>
-						</div></Fragment>;
+						</div>;
 					})}
 					{(configError || error) && <p className="form-error provider-error" role="alert">{configError || error}</p>}
 				</section>

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { filterSettingsProviders, providerSourceLabel, routeBlockedReason, routeMatchesQuery, routeSummaryModels, settingsModelCandidates, settingsTestTarget } from "../src/chat/settingsModels.ts";
+import { filterSettingsProviders, providerSourceLabel, routeBlockedReason, routeMatchesQuery, routeSummaryModels, settingsModelCandidates, settingsProviderEndpointLabel, settingsProviderEndpointTitle, settingsTestTarget } from "../src/chat/settingsModels.ts";
 import { blankModel, blankRelay, blankRoute, type ModelFamily } from "../src/chat/useModelFamilies.ts";
 import { routesFromProviderModels } from "../src/chat/providerRoutes.ts";
 
@@ -56,6 +56,16 @@ test("provider search uses only name and masked endpoint, source tags safely fal
 	assert.equal(providerSourceLabel("https://api.deepseek.com/v1"), "官方直连");
 	assert.equal(providerSourceLabel("https://api.siliconflow.cn/v1"), "中转");
 	assert.equal(providerSourceLabel("http://localhost:11434/v1"), "本机");
+});
+
+test("provider endpoint labels keep Aliyun recognizable without crowding list details", () => {
+	assert.equal(settingsProviderEndpointLabel("https://ws-u4rxmkejbrrkfhif.cn-beijing.maas.aliyuncs.com/compatible-mode/v1"), "ws-u4rxmke…aliyuncs.com");
+	assert.equal(settingsProviderEndpointLabel("https://dashscope.aliyuncs.com/compatible-mode/v1"), "dashscope.aliyuncs.com");
+	assert.equal(settingsProviderEndpointLabel("https://relay.example.com/customer-secret/v1"), "relay.example.com/…");
+	assert.equal(settingsProviderEndpointLabel("https://user:password@relay.example.com/private-path?token=hidden"), "relay.example.com/…");
+	assert.equal(settingsProviderEndpointTitle("https://ws-u4rxmkejbrrkfhif.cn-beijing.maas.aliyuncs.com/compatible-mode/v1"), "https://ws-u4rxmkejbrrkfhif.cn-beijing.maas.aliyuncs.com/compatible-mode/v1");
+	assert.equal(settingsProviderEndpointTitle("https://user:password@ws-u4rxmkejbrrkfhif.cn-beijing.maas.aliyuncs.com/compatible-mode/v1?token=hidden"), "https://ws-u4rxmkejbrrkfhif.cn-beijing.maas.aliyuncs.com/compatible-mode/v1");
+	assert.equal(settingsProviderEndpointTitle("https://user:password@relay.example.com/private-path?token=hidden"), "relay.example.com/…");
 });
 
 test("a prefixed alias before the full exact ID does not steal the settings test target", () => {

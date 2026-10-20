@@ -5,7 +5,7 @@ import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const { chromium } = process.env.SKIFF_PLAYWRIGHT_DIR ? require(process.env.SKIFF_PLAYWRIGHT_DIR) : await import("playwright");
 const origin = process.argv[2] ?? "http://127.0.0.1:1421";
-const output = new URL("../features/029-settings-management-tools/screenshots/", import.meta.url);
+const output = new URL(process.env.SKIFF_SETTINGS_SCREENSHOTS ?? "../features/029-settings-management-tools/screenshots/", import.meta.url);
 await fs.mkdir(output, { recursive: true });
 const browser = await chromium.launch({ headless: true, channel: "msedge" });
 const page = await browser.newPage({ viewport: { width: 1100, height: 750 } });
@@ -33,16 +33,57 @@ try {
 	const original = await config();
 	assert.equal(await settings().getByRole("combobox", { name: "供应商显示排序" }).count(), 0, "Provider sorting is fixed to config order");
 	assert.equal(await settings().getByRole("checkbox", { name: "按来源分组" }).count(), 0, "Source grouping has no toolbar toggle");
-	assert.ok(await settings().locator(".settings-source-heading").count() > 0, "Providers stay grouped by source despite an old saved preference");
+	const sourceTabs = settings().getByRole("tablist", { name: "供应商来源" });
+	assert.equal(await sourceTabs.getByRole("tab").count(), 4, "Provider sources share four horizontal tabs");
+	assert.deepEqual(await sourceTabs.getByRole("tab").allTextContents(), ["全部5", "官方直连2", "自定义2", "本机1"], "Tabs follow the requested order and combine relays with custom endpoints");
+	assert.deepEqual(await settings().getByRole("group", { name: "供应商筛选" }).locator(".settings-filter-group").getByRole("button").allTextContents(), ["启用 3", "停用 2"], "Status chips omit the redundant all filter");
+	const searchField = settings().getByRole("textbox", { name: "搜索已配置供应商" });
+	const searchStyle = await searchField.evaluate((node) => ({ height: getComputedStyle(node).height, border: getComputedStyle(node).borderColor }));
+	const statusPill = settings().getByRole("button", { name: "启用 3", exact: true });
+	const pillStyle = await statusPill.evaluate((node) => ({ height: getComputedStyle(node).height, border: getComputedStyle(node).borderColor }));
+	assert.deepEqual(searchStyle, pillStyle, "Search and status filters share a compact height and light border");
+	assert.equal(await settings().locator(".settings-source-heading").count(), 0, "Source headings are replaced by tabs");
+	await sourceTabs.getByRole("tab", { name: "官方直连 2", exact: true }).click();
+	assert.equal(await settings().locator(".provider-relay-row").count(), 2, "The official tab filters to official providers");
+	await sourceTabs.getByRole("tab", { name: "自定义 2", exact: true }).click();
+	assert.equal(await settings().locator(".provider-relay-row").count(), 2, "The custom tab includes relays and custom endpoints");
+	assert.match(await settings().locator(".provider-relay-row").nth(0).textContent(), /硅基低价/);
+	assert.match(await settings().locator(".provider-relay-row").nth(1).textContent(), /自定义端点/);
+	assert.deepEqual(await settings().locator(".provider-relay-row .provider-source-tag").allTextContents(), ["自定义", "自定义"], "Relay and custom endpoint cards use the same badge label");
+	await sourceTabs.getByRole("tab", { name: "本机 1", exact: true }).click();
+	assert.equal(await settings().locator(".provider-relay-row").count(), 1, "Local providers have their own tab");
+	assert.match(await settings().locator(".provider-relay-row").textContent(), /本机服务/);
+	await sourceTabs.getByRole("tab", { name: "全部 5", exact: true }).click();
 	await button("批量管理").focus(); await page.keyboard.press("Enter");
-	const search = settings().getByRole("textbox", { name: "搜索已配置供应商" });
-	await search.fill("官方"); await settings().getByRole("checkbox", { name: "全选当前结果" }).check();
+	await sourceTabs.getByRole("tab", { name: "官方直连 2", exact: true }).click();
+	assert.equal(await settings().locator(".provider-relay-row").count(), 2, "Source tabs limit the current provider results");
+	await settings().getByRole("checkbox", { name: "全选当前结果" }).check();
+	assert.match(await settings().locator(".settings-batch-bar").textContent(), /已选 2 个/);
+	await sourceTabs.getByRole("tab", { name: "全部 5", exact: true }).click();
+	assert.match(await settings().locator(".settings-batch-bar").textContent(), /已选 0 个/, "Changing source clears hidden batch selections");
+	const search = searchField;
+	await search.fill("硅基");
+	assert.equal(await sourceTabs.getByRole("tab", { name: "自定义 1", exact: true }).count(), 1, "Custom counts include matching relay providers");
+	await sourceTabs.getByRole("tab", { name: "自定义 1", exact: true }).click();
+	assert.equal(await settings().locator(".provider-relay-row").count(), 1);
+	await search.fill("官方");
+	await sourceTabs.getByRole("tab", { name: "全部 2", exact: true }).click();
+	assert.equal(await sourceTabs.getByRole("tab", { name: "官方直连 2", exact: true }).count(), 1, "Source counts follow the current search");
+	await settings().getByRole("checkbox", { name: "全选当前结果" }).check();
 	assert.equal(await settings().getByRole("checkbox", { name: /^选择 / }).count(), 2);
-	assert.equal(await settings().locator(".settings-source-heading").count(), 1, "No empty groups");
+	assert.equal(await settings().locator(".provider-relay-row").count(), 2);
 	await search.fill("");
 	await settings().getByRole("checkbox", { name: "全选当前结果" }).check(); await button("停用 2").click();
+	await page.waitForFunction(() => { const node = document.querySelector('.provider-status-filter[aria-pressed="true"]'); return node && getComputedStyle(node).borderColor === getComputedStyle(node).color; });
+	const selectedStatus = await button("停用 2").evaluate((node) => { const style = getComputedStyle(node); return { pressed: node.getAttribute("aria-pressed"), border: style.borderColor, color: style.color, background: style.backgroundColor }; });
+	assert.equal(selectedStatus.pressed, "true", "Status selection is exposed to assistive technology");
+	assert.equal(selectedStatus.border, selectedStatus.color, "Active status pill uses the accent for its border and text");
+	assert.notEqual(selectedStatus.background, "rgba(0, 0, 0, 0)", "Active status pill has a tinted background");
 	assert.match(await settings().locator(".settings-batch-bar").textContent(), /已选 0 个/);
-	await button("全部 5").click(); await select("官方直连").check(); await select("自定义端点").check();
+	assert.equal(await settings().locator(".provider-relay-row").count(), 2, "The status chip filters the list");
+	await button("停用 2").click();
+	assert.equal(await settings().locator(".provider-relay-row").count(), 5, "Clicking the active status chip clears the filter");
+	await select("官方直连").check(); await select("自定义端点").check();
 	await button("批量停用").click(); const disable = confirm("批量停用供应商");
 	await disable.getByRole("button", { name: "确认操作" }).waitFor();
 	assert.match(await disable.textContent(), /影响 2 条关联路线/); assert.match(await disable.textContent(), /DeepSeek/);
@@ -154,17 +195,22 @@ try {
 	await page.waitForFunction(() => window.skiffPreview.metadata.usage.length === 1);
 	assert.equal((await metadata()).usage[0].relayId, "r3");
 	assert.deepEqual(await settings().locator(".provider-relay-row").evaluateAll((nodes) => nodes.map((node) => node.querySelector(".provider-edit-button")?.getAttribute("aria-label"))), providerOrderBeforeUse, "Usage does not change the fixed config order");
-		await page.waitForFunction(() => document.querySelector(".provider-edit-button")?.getAttribute("aria-label") === "编辑 官方");
+	await page.waitForFunction(() => document.querySelector(".provider-edit-button")?.getAttribute("aria-label") === "编辑 官方直连");
 	assert.equal((await metadata()).usage.length, 1);
 	await shot("fixed-order-light");
 	for (const theme of ["light", "dark"]) {
 		await button("外观").click(); await button(theme === "light" ? "浅色" : "深色").click(); await button("供应商").click();
+		const themedSourceTabs = settings().getByRole("tablist", { name: "供应商来源" });
+		assert.equal(await themedSourceTabs.getByRole("tab").count(), 4, `${theme} theme keeps all source tabs visible`);
 		await button("批量管理").click();
 		for (const [width, height] of [[1100, 750], [550, 375]]) {
 			await page.setViewportSize({ width, height }); await layout(); await shot(`batch-${theme}-${width}`);
+			const tabMetrics = await settings().locator(".provider-source-tabs").evaluate((node) => ({ clientWidth: node.clientWidth, scrollWidth: node.scrollWidth, buttonsFit: [...node.children].every((button) => button.scrollWidth <= button.clientWidth) }));
+			assert.equal(tabMetrics.buttonsFit, true, "Source tab labels and counts fit their buttons");
+			assert.equal(await settings().locator(".provider-source-tabs").evaluate((node) => getComputedStyle(node).overflowX), "auto", "The source tab strip remains horizontally scrollable when needed");
 			if (width === 1100) {
-				const toolbarRects = await settings().locator(".providers-toolbar").evaluate((node) => [...node.children].map((child) => { const rect = child.getBoundingClientRect(); return { y: rect.y, width: rect.width }; }));
-				assert.equal(new Set(toolbarRects.map((rect) => rect.y)).size, 1, "Search, filters and actions share one toolbar row on desktop");
+				const toolbarRects = await settings().locator(".providers-toolbar").evaluate((node) => [...node.children].map((child) => { const rect = child.getBoundingClientRect(); return { top: rect.top, bottom: rect.bottom, width: rect.width }; }));
+				assert.ok(Math.max(...toolbarRects.map((rect) => rect.top)) < Math.min(...toolbarRects.map((rect) => rect.bottom)), "Search, filters and actions share one toolbar row on desktop");
 				assert.ok(toolbarRects[0].width <= 320, "Search stays compact");
 			}
 			if (width === 550) {
@@ -179,7 +225,23 @@ try {
 		}
 		await button("退出批量管理").click(); await page.setViewportSize({ width: 1100, height: 750 });
 	}
+	await page.goto(`${origin}/tests/preview.html?fixture=settings&theme=light`); await open(); await button("供应商").click();
+	const emptySourceTabs = settings().getByRole("tablist", { name: "供应商来源" });
+	await emptySourceTabs.getByRole("tab", { name: "本机 0", exact: true }).click();
+	assert.equal(await settings().locator(".provider-empty-state .family-empty").textContent(), "此来源下暂无供应商");
+	assert.equal(await settings().locator(".provider-empty-state").getByRole("button", { name: "添加供应商", exact: true }).count(), 1);
+	const emptySearch = settings().getByRole("textbox", { name: "搜索已配置供应商" });
+	await emptySearch.fill("not-configured");
+	assert.equal(await settings().locator(".provider-list .family-empty").textContent(), "没有匹配的供应商，请调整搜索或状态筛选");
+	assert.equal(await settings().locator(".provider-empty-state").count(), 0, "Filtered empty states do not suggest a category has no providers");
+	await emptySearch.fill("");
+	await button("启用 0").click();
+	assert.equal(await settings().locator(".provider-list .family-empty").textContent(), "没有匹配的供应商，请调整搜索或状态筛选");
+	await button("启用 0").click();
+	await button("批量管理").click();
+	await settings().locator(".provider-empty-state").getByRole("button", { name: "添加供应商", exact: true }).click();
+	assert.equal(await settings().getByRole("heading", { name: "添加供应商", exact: true }).count(), 1, "Empty-state action opens the provider picker and exits batch mode");
 	assert.deepEqual(errors, []);
-	console.log("PASS settings management: fixed provider order/grouping, selection scope, atomic failure/retry and stale preview, default protection, exact persisted history/drafts/invalidation, full route order keyboard/drag/save/cancel/conflict, themes/narrow layout");
+	console.log("PASS settings management: provider source tabs/order/filtering, empty states and add action, selection scope, atomic failure/retry and stale preview, default protection, exact persisted history/drafts/invalidation, full route order keyboard/drag/save/cancel/conflict, themes/narrow layout");
 } catch (error) { await shot("failure"); throw error; }
 finally { await browser.close(); }
