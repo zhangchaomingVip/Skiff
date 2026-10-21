@@ -1,15 +1,17 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ChatMessage, ModelInfo, SessionState } from "../chat/types";
 import { groupTurns, turnContentTails } from "../chat/turns";
 import { modelDisplay } from "../chat/modelDisplay";
 import { MessageItem } from "./MessageItem";
 import { Icon } from "./Icon";
 import type { MessageReveal } from "../chat/useConversationSearch";
+import { ProcessRow } from "./ProcessDisclosure";
+import { classifyProviderFailure } from "../chat/modelFamilies";
 import { WaitingReply } from "./WaitingReply";
 import { turnProcessPresentation, type ProcessCounts } from "../chat/turnProcess";
 
 /** Scrolling transcript with an auto-follow anchor at the bottom. */
-export function MessageList({ messages, pendingPrompt, activeTurnId, projectName, running, models, model, onSuggestion, followSignal, onEdit, onContinue, continuing, lastOutcome, readOnly = false, revealTurn, revealMessage }: { onEdit?: (message: ChatMessage) => void; onContinue?: () => void; continuing?: boolean; lastOutcome?: SessionState["lastOutcome"]; revealMessage?: MessageReveal; revealTurn?: { turnId: string; requestKey: string }; messages: ChatMessage[]; pendingPrompt?: SessionState["pendingPrompt"]; activeTurnId?: string; projectName?: string; running: boolean; models: ModelInfo[]; model?: ModelInfo; onSuggestion: (text: string) => void; followSignal: number; readOnly?: boolean }) {
+export function MessageList({ retryAttempts, messages, pendingPrompt, activeTurnId, projectName, running, models, model, onSuggestion, followSignal, onEdit, onContinue, continuing, lastOutcome, readOnly = false, revealTurn, revealMessage }: { retryAttempts?: SessionState["retryAttempts"]; onEdit?: (message: ChatMessage) => void; onContinue?: () => void; continuing?: boolean; lastOutcome?: SessionState["lastOutcome"]; revealMessage?: MessageReveal; revealTurn?: { turnId: string; requestKey: string }; messages: ChatMessage[]; pendingPrompt?: SessionState["pendingPrompt"]; activeTurnId?: string; projectName?: string; running: boolean; models: ModelInfo[]; model?: ModelInfo; onSuggestion: (text: string) => void; followSignal: number; readOnly?: boolean }) {
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const followingRef = useRef(true);
 	const [away, setAway] = useState(false);
@@ -57,7 +59,7 @@ export function MessageList({ messages, pendingPrompt, activeTurnId, projectName
 		// One update per frame; smooth animation is reserved for explicit jumps.
 		const frame = requestAnimationFrame(() => { const el = scrollRef.current; if (el) el.scrollTo({ top: el.scrollHeight, behavior: "instant" }); });
 		return () => cancelAnimationFrame(frame);
-	}, [displayMessages, waitingForAssistant]);
+	}, [displayMessages, waitingForAssistant, retryAttempts]);
 
 	useEffect(() => {
 		if (!revealMessage) return;
@@ -94,7 +96,9 @@ export function MessageList({ messages, pendingPrompt, activeTurnId, projectName
 		<div className="transcript">
 		<div className="messages" ref={scrollRef} onScroll={() => { const el = scrollRef.current; if (el) { followingRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80; setAway(!followingRef.current); if (followingRef.current) setUnread(false); } }}>
 			{displayMessages.map((message, index) => (
-				<MessageItem onEdit={onEdit} onContinue={onContinue} continuing={continuing} turnOutcome={(() => { const group = messagesByTurn.get(turns[index].turnId) ?? []; const final = [...group].reverse().find((entry) => entry.role === "assistant"); return group.find((entry) => entry.turnResult)?.turnResult ?? (lastOutcome?.turnId === turns[index].turnId ? lastOutcome.reason : final?.stopReason); })()} searchQuery={revealMessage?.messageId === message.id ? revealMessage.query : undefined} key={message.id} message={message} processPresentation={process.presentation.get(message.id)} expandedGroups={expandedGroups} onExpandedChange={setProcessExpanded} turnMessages={message.role === "assistant" && turnTails.get(turns[index].turnId) === index ? messagesByTurn.get(turns[index].turnId) : undefined} showRole={index === 0 || displayMessages[index - 1].role !== message.role} roleDisplay={message.role === "user" ? { label: "你" } : modelDisplay(message, models, model)} compact={message.role === "assistant" && displayMessages[index - 1]?.role === "assistant"} running={running} turnRunning={running && turns[index].turnId === processTurnId} turnHead={turns[index].head} isLast={message.role === "assistant" ? index === lastAssistant && displayMessages[displayMessages.length - 1]?.role === "assistant" : index === displayMessages.length - 1} readOnly={readOnly} />
+				<Fragment key={message.id}><MessageItem onEdit={onEdit} onContinue={onContinue} continuing={continuing} turnOutcome={(() => { const group = messagesByTurn.get(turns[index].turnId) ?? []; const final = [...group].reverse().find((entry) => entry.role === "assistant"); return group.find((entry) => entry.turnResult)?.turnResult ?? (lastOutcome?.turnId === turns[index].turnId ? lastOutcome.reason : final?.stopReason); })()} searchQuery={revealMessage?.messageId === message.id ? revealMessage.query : undefined} key={message.id} message={message} processPresentation={process.presentation.get(message.id)} expandedGroups={expandedGroups} onExpandedChange={setProcessExpanded} turnMessages={message.role === "assistant" && turnTails.get(turns[index].turnId) === index ? messagesByTurn.get(turns[index].turnId) : undefined} showRole={index === 0 || displayMessages[index - 1].role !== message.role} roleDisplay={message.role === "user" ? { label: "你" } : modelDisplay(message, models, model)} compact={message.role === "assistant" && displayMessages[index - 1]?.role === "assistant"} running={running} turnRunning={running && turns[index].turnId === processTurnId} turnHead={turns[index].head} isLast={message.role === "assistant" ? index === lastAssistant && displayMessages[displayMessages.length - 1]?.role === "assistant" : index === displayMessages.length - 1} readOnly={readOnly} />
+				{retryAttempts?.filter((retry) => retry.afterMessageId === message.id).map((retry) => <div key={retry.id} className="retry-progress" role="status"><ProcessRow icon="wifi" label={`${retryReason(retry.error)}，正在重新连接 ${retry.attempt}/${retry.maxAttempts}`} /></div>)}
+				</Fragment>
 			))}
 			{waitingForAssistant && <WaitingReply turnId={activeTurnId} roleDisplay={modelDisplay({ id: "waiting", role: "assistant", blocks: [] }, models, model)} />}
 		</div>
@@ -102,4 +106,12 @@ export function MessageList({ messages, pendingPrompt, activeTurnId, projectName
 		<span className="sr-only" role="status">{running ? "Skiff 正在生成回复" : "回复已就绪"}</span>
 		</div>
 	);
+}
+
+function retryReason(error: string): string {
+	switch (classifyProviderFailure(error)) {
+		case "timeout": return "请求超时";
+		case "network": return "连接中断";
+		default: return "服务器繁忙";
+	}
 }

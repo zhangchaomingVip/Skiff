@@ -84,7 +84,8 @@ export default function modelFamilies(pi) {
 					if (key && event.error.errorMessage) event.error.errorMessage = event.error.errorMessage.replaceAll(key, "[密钥已隐藏]");
 					if (timeout.aborted && !options.signal?.aborted) {
 						event.error.stopReason = "error";
-						event.error.errorMessage = `提供商请求超时（${route.timeoutSeconds} 秒）`;
+						// Keep the transport marker so pi recognises this translated error as retryable.
+						event.error.errorMessage = `提供商请求超时（${route.timeoutSeconds} 秒） · request timeout`;
 						event.reason = "error";
 					}
 				}

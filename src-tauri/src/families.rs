@@ -728,6 +728,7 @@ fn is_managed_key(key: &str) -> bool {
 pub fn prepare_runtime(dir: &Path, cmd: &mut std::process::Command) -> Result<(), String> {
 	let _guard = providers::CONFIG_LOCK.lock().map_err(|_| "配置锁异常")?;
 	let config = load_plain(dir)?;
+	prepare_retry(dir)?;
 	let mut routes = Vec::new();
 	for relay in &config.relays {
 		if relay_models(&config, &relay.id).is_empty() {
@@ -774,6 +775,18 @@ pub fn prepare_runtime(dir: &Path, cmd: &mut std::process::Command) -> Result<()
 	if encoded.len() <= 24_000 { cmd.env("SKIFF_FAMILY_RUNTIME", encoded); }
 	else { cmd.env_remove("SKIFF_FAMILY_RUNTIME"); }
 	cmd.arg("--extension").arg(extension);
+	Ok(())
+}
+
+/// Let pi own continuation, backoff and cancellation; never resend user prompts.
+fn prepare_retry(dir: &Path) -> Result<(), String> {
+	let path = dir.join("settings.json");
+	let original = providers::read_config(&path)?;
+	let mut settings = original.clone();
+	if !settings["retry"].is_object() { settings["retry"] = json!({}); }
+	settings["retry"]["enabled"] = json!(true);
+	settings["retry"]["maxRetries"] = json!(5);
+	if settings != original { providers::atomic_write(&path, &settings)?; }
 	Ok(())
 }
 
@@ -1170,6 +1183,20 @@ pub fn set_usd_cny_rate(rate: f64) -> Result<FamiliesConfig, String> {
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	#[test]
+	fn reconnect_policy_preserves_other_pi_settings() {
+		let dir = std::env::temp_dir().join(format!("skiff-retry-{}", next_id()));
+		std::fs::create_dir_all(&dir).unwrap();
+		let path = dir.join("settings.json");
+		providers::atomic_write(&path, &json!({ "theme": "dark", "retry": { "enabled": false, "maxRetries": 20, "baseDelayMs": 1000 }, "compaction": { "enabled": false } })).unwrap();
+		prepare_retry(&dir).unwrap();
+		assert_eq!(providers::read_config(&path).unwrap(), json!({ "theme": "dark", "retry": { "enabled": true, "maxRetries": 5, "baseDelayMs": 1000 }, "compaction": { "enabled": false } }));
+		std::fs::write(&path, "invalid json").unwrap();
+		assert!(prepare_retry(&dir).is_err());
+		assert_eq!(std::fs::read_to_string(&path).unwrap(), "invalid json");
+		std::fs::remove_dir_all(dir).unwrap();
+	}
 
 	#[test]
 	fn provider_multiplier_scales_billing_and_projection_without_changing_official_prices() {

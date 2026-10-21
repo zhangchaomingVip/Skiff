@@ -225,6 +225,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .process-row-status { display: flex; align-items: center; justify-content: flex-end; width: 8em; color: var(--muted); font-size: var(--font-size-sm); white-space: nowrap; }
 .process-row .disclosure { flex: 0 0 var(--space-4); width: var(--space-4); transition: transform var(--transition-base) ease; }
 .process-row-static { cursor: default; }
+.retry-progress { margin-block: var(--chat-block-gap); }
+.retry-progress .process-row { color: var(--muted); }
 .process-row-static .disclosure { visibility: hidden; }
 .process-row[aria-expanded=true] .disclosure { transform: rotate(90deg); }
 .process-details[open] > .process-row { color: var(--text); }

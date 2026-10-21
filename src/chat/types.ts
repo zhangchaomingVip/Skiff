@@ -109,6 +109,9 @@ export interface ContextUsage {
 }
 
 export interface SessionState {
+	/** Retry events stay beside the failed attempt for the current run. */
+	retryAttempts?: { id: string; afterMessageId?: string; attempt: number; maxAttempts: number; error: string }[];
+	retrying?: boolean;
 	queue?: QueueSnapshot;
 	withdrawn?: QueueSnapshot;
 	steeringMode?: string;

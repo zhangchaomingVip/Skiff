@@ -136,7 +136,7 @@ export function ChatView({
 
 	return (
 		<section className="chat">
-			{loading ? <div className="session-loading" role="status" aria-label="正在加载会话"><span className="dot busy" />正在加载会话…</div> : <MessageList messages={state.messages} pendingPrompt={state.pendingPrompt} activeTurnId={state.activeRun?.turnId} projectName={projectName} running={state.isStreaming} models={state.availableModels} model={state.model} onSuggestion={(text) => { setDraft(text); setFocusSignal((n) => n + 1); }} followSignal={followSignal} revealMessage={revealMessage} onEdit={canEdit ? beginEdit : undefined} onContinue={continueRun} continuing={continuing} lastOutcome={state.lastOutcome} />}
+			{loading ? <div className="session-loading" role="status" aria-label="正在加载会话"><span className="dot busy" />正在加载会话…</div> : <MessageList retryAttempts={state.retryAttempts} messages={state.messages} pendingPrompt={state.pendingPrompt} activeTurnId={state.activeRun?.turnId} projectName={projectName} running={state.isStreaming} models={state.availableModels} model={state.model} onSuggestion={(text) => { setDraft(text); setFocusSignal((n) => n + 1); }} followSignal={followSignal} revealMessage={revealMessage} onEdit={canEdit ? beginEdit : undefined} onContinue={continueRun} continuing={continuing} lastOutcome={state.lastOutcome} />}
 			{alerts.length > 0 && (
 				<div className="notices">
 					{alerts.slice(-3).map((notice) => (
@@ -161,7 +161,7 @@ export function ChatView({
 					</div>
 				</div>
 			)}
-			{state.lastError && (
+			{state.lastError && !state.retrying && !(state.isStreaming && isProviderFailure(state.lastError)) && (
 				<div className={`banner error ${connected && isProviderFailure(state.lastError) ? "provider-toast" : ""}`} role="alert"><span>{state.lastError}</span>{failover && <Button variant="ghost" disabled={disabled} onClick={() => failover.switch()}>切换到同家族下一个可用提供商（{failover.label}）</Button>}{!connected ? <Button variant="ghost" onClick={() => onReconnect()}>重新连接</Button> : <IconButton onClick={actions.clearError} aria-label="关闭错误提示"><Icon name="close" /></IconButton>}</div>
 			)}
 			{connected && !state.availableModels.length && <div className="notice model-notice">暂无已启用的提供商，请添加或启用提供商。<Button variant="ghost" onClick={manage}>管理提供商…</Button></div>}

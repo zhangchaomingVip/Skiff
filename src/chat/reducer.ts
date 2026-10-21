@@ -42,6 +42,13 @@ export interface ReducerOptions {
 
 function reduceChat(state: SessionState, event: RpcEvent, options: ReducerOptions = {}): SessionState {
 	switch (event.type) {
+		case "auto_retry_start": {
+			if (typeof event.attempt !== "number" || !Number.isInteger(event.attempt) || event.attempt < 1 || typeof event.maxAttempts !== "number" || !Number.isInteger(event.maxAttempts) || event.attempt > event.maxAttempts) return state;
+			const retry = { id: nextId("retry"), afterMessageId: state.messages[state.messages.length - 1]?.id, attempt: event.attempt, maxAttempts: event.maxAttempts, error: String(event.errorMessage ?? "") };
+			return { ...state, retrying: true, lastError: undefined, lastOutcome: undefined, retryAttempts: [...(state.retryAttempts ?? []), retry] };
+		}
+		case "auto_retry_end":
+			return { ...state, retrying: false, ...(event.success === true ? { lastError: undefined, lastOutcome: undefined } : event.finalError === "Retry cancelled" ? { lastError: undefined } : typeof event.finalError === "string" ? { lastError: event.finalError } : {}) };
 		case "queue_update": return { ...state, queue: queueSnapshot(event) };
 		case "queue_withdrawn": return { ...state, withdrawn: queueSnapshot(event) };
 		case "stop_pending": return { ...state, stopping: true };
@@ -59,7 +66,7 @@ function reduceChat(state: SessionState, event: RpcEvent, options: ReducerOption
 			const message = event.message as ChatMessage | undefined;
 			if (startedAt === undefined || typeof event.promptId !== "string" || message?.role !== "user" || typeof message.id !== "string") return state;
 			return {
-				...state, isStreaming: true, lastError: undefined, lastOutcome: undefined,
+				...state, isStreaming: true, lastError: undefined, lastOutcome: undefined, retryAttempts: [], retrying: false,
 				activeRun: { startedAt, turnId: `turn:${message.id}`, promptId: event.promptId },
 				pendingPrompt: { id: event.promptId, userMessage: message },
 			};
@@ -82,6 +89,7 @@ function reduceChat(state: SessionState, event: RpcEvent, options: ReducerOption
 			return {
 				...settled,
 				isStreaming: false,
+				retrying: false,
 				activeRun: undefined,
 				pendingPrompt: undefined,
 				messages: settled.messages.map((m) => (m.streaming ? { ...m, streaming: false } : m)),

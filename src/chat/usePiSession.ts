@@ -518,7 +518,7 @@ export function usePiSession(target?: SessionTarget, runtimeOffers: readonly Run
 			let wasRunning = true;
 			try {
 				const before = await rpc.request<Record<string, unknown>>({ type: "get_state" }).catch(() => undefined);
-				wasRunning = !before || !!before.isStreaming || !!before.isCompacting || Number(before.pendingMessageCount) > 0 || !!stateRef.current.dialogs?.length;
+				wasRunning = !before || !!before.isStreaming || !!before.isCompacting || Number(before.pendingMessageCount) > 0 || !!stateRef.current.dialogs?.length || !!stateRef.current.retrying;
 				if (!ownsRpc(rpc) || !wasRunning) return;
 				try { const result = await rpc.request<Record<string, unknown>>({ type: "clear_queue" }); if (ownsRpc(rpc)) setState((s) => reduce(s, { type: "queue_withdrawn", ...result })); }
 				catch { cleared = false; if (ownsRpc(rpc)) fail("未能确认队列已清空，仍将尝试中止运行。"); }
