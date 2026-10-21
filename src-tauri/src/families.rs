@@ -675,9 +675,23 @@ fn model_thinking_levels(route: &RouteSpec, item: &ModelSpec) -> Vec<String> {
 	route.thinking_levels.clone()
 }
 
-fn project_model(route: &RouteSpec, item: &ModelSpec, key: &str, api: &str, multiplier: f64) -> Value {
+fn project_model(family_id: &str, route: &RouteSpec, item: &ModelSpec, key: &str, api: &str, multiplier: f64) -> Value {
 	let vision = if item.vision.unwrap_or(route.vision) { json!(["text", "image"]) } else { json!(["text"]) };
 	let reasoning = route.reasoning;
+	let compat = if api == "openai-completions" {
+		let mut compat = json!({ "supportsDeveloperRole": false });
+		// Custom relay provider names and URLs hide DeepSeek from pi-ai's
+		// built-in detection. LiteLLM requires reasoning_content on every
+		// assistant turn, including assistant tool-call messages with no
+		// reasoning block, so explicitly retain DeepSeek's wire format.
+		if family_id == "deepseek" {
+			compat["requiresReasoningContentOnAssistantMessages"] = json!(true);
+			compat["thinkingFormat"] = json!("deepseek");
+		}
+		compat
+	} else {
+		Value::Null
+	};
 	// A level list that is empty (or absent) is "not declared"; pi then keeps its
 	// own five-level default instead of losing `minimal`.
 	let declared = item.thinking_levels.as_ref().filter(|levels| !levels.is_empty()).cloned().unwrap_or_else(|| route.thinking_levels.clone());
@@ -690,7 +704,7 @@ fn project_model(route: &RouteSpec, item: &ModelSpec, key: &str, api: &str, mult
 		"thinkingLevelMap": if reasoning && !declared.is_empty() { thinking_level_map(&declared) } else { Value::Null },
 		// Only OpenAI-compatible relays need the developer-role opt-out; the
 		// other adapters build their own request shapes.
-		"compat": if api == "openai-completions" { json!({ "supportsDeveloperRole": false }) } else { Value::Null },
+		"compat": compat,
 	})
 }
 
@@ -732,7 +746,7 @@ pub fn prepare_runtime(dir: &Path, cmd: &mut std::process::Command) -> Result<()
 				routes.push(json!({ "providerKey": route_key, "baseUrl": runtime_base_url(relay), "api": api,
 					"keyEnv": key_env(&route_key), "streaming": route.streaming, "tools": route.tools,
 					"timeoutSeconds": relay.timeout_seconds,
-					"models": models.iter().map(|model| project_model(route, model, &route_key, api, relay.price_multiplier.unwrap_or(1.0))).collect::<Vec<_>>() }));
+				"models": models.iter().map(|model| project_model(&family.id, route, model, &route_key, api, relay.price_multiplier.unwrap_or(1.0))).collect::<Vec<_>>() }));
 			}
 		}
 	}
@@ -779,33 +793,33 @@ pub fn project(dir: &Path, config: &FamiliesConfig) -> Result<(), String> {
 
 	// Only valid routes are projected; disabled routes remain in this config so
 	// they can be restored without losing their credentials.
-	let mut desired: Vec<(String, &RelaySpec, &RouteSpec)> = Vec::new();
+	let mut desired: Vec<(String, &str, &RelaySpec, &RouteSpec)> = Vec::new();
 	for family in &config.families {
 		for route in &family.routes {
 			if !route.enabled || route.models.is_empty() { continue; }
 			let Some(relay) = config.relays.iter().find(|relay| relay.id == route.relay_id) else { continue };
 			if !relay.enabled || route.models.iter().all(|model| relay.excluded_model_ids.contains(&model.model_id)) { continue; }
-			desired.push((provider_key(&family.id, &relay.id), relay, route));
+			desired.push((provider_key(&family.id, &relay.id), &family.id, relay, route));
 		}
 	}
 
 	{
 		let map = models["providers"].as_object_mut().ok_or("pi 配置的 providers 必须是对象")?;
-		map.retain(|key, _| !is_managed_key(key) || desired.iter().any(|(wanted, _, _)| wanted == key));
-		for (key, relay, route) in &desired {
+		map.retain(|key, _| !is_managed_key(key) || desired.iter().any(|(wanted, _, _, _)| wanted == key));
+		for (key, family_id, relay, route) in &desired {
 			let api = protocol_api(relay);
 			let entry = json!({
 				"api": api,
 				"baseUrl": runtime_base_url(relay),
-				"models": route.models.iter().filter(|item| !relay.excluded_model_ids.contains(&item.model_id)).map(|item| project_model(route, item, key, api, relay.price_multiplier.unwrap_or(1.0))).collect::<Vec<_>>(),
+				"models": route.models.iter().filter(|item| !relay.excluded_model_ids.contains(&item.model_id)).map(|item| project_model(family_id, route, item, key, api, relay.price_multiplier.unwrap_or(1.0))).collect::<Vec<_>>(),
 			});
 			map.insert(key.clone(), entry);
 		}
 	}
 
 	if let Some(map) = auth.as_object_mut() {
-		map.retain(|key, _| !is_managed_key(key) || desired.iter().any(|(wanted, _, _)| wanted == key));
-		for (key, relay, _) in &desired {
+		map.retain(|key, _| !is_managed_key(key) || desired.iter().any(|(wanted, _, _, _)| wanted == key));
+		for (key, _, relay, _) in &desired {
 			if relay.api_key.trim().is_empty() { continue; }
 			map.insert(key.clone(), json!({ "type": "api_key", "key": format!("${}", key_env(key)) }));
 		}
@@ -1262,7 +1276,7 @@ mod tests {
 		assert_eq!(normalized.protocol.as_deref(), Some("anthropic"));
 		assert_eq!(protocol_api(&normalized), "anthropic-messages");
 		// Other adapters build their own shapes, so no OpenAI compat block leaks in.
-		assert_eq!(project_model(&route, &route.models[0], "skiff-test", "anthropic-messages", 1.0)["compat"], Value::Null);
+		assert_eq!(project_model("kimi", &route, &route.models[0], "skiff-test", "anthropic-messages", 1.0)["compat"], Value::Null);
 
 		relay.protocol = Some("google-genai".into());
 		assert_eq!(protocol_api(&relay), "google-generative-ai");
@@ -1898,10 +1912,10 @@ mod connection_test_tests {
 		let model = ModelSpec { model_id: "m".into(), vision: None, thinking_levels: None, alias: String::new(), input_cost: 0.0, output_cost: 0.0, cache_read_cost: 0.0, cache_write_cost: 0.0, currency: Currency::Cny, max_tokens: 8192, context_window: 128000 };
 		// Undeclared routes stay map-free so pi keeps its five-level default.
 		let route = RouteSpec { id: "r".into(), relay_id: "r1".into(), enabled: true, models: vec![model.clone()], streaming: true, tools: true, vision: false, reasoning: true, thinking_levels: Vec::new() };
-		assert_eq!(project_model(&route, &model, "skiff-test", "openai-completions", 1.0)["thinkingLevelMap"], Value::Null);
+		assert_eq!(project_model("auto", &route, &model, "skiff-test", "openai-completions", 1.0)["thinkingLevelMap"], Value::Null);
 
 		let declared = RouteSpec { thinking_levels: vec!["low".into(), "high".into()], ..route.clone() };
-		let map = project_model(&declared, &model, "skiff-test", "openai-completions", 1.0)["thinkingLevelMap"].clone();
+		let map = project_model("auto", &declared, &model, "skiff-test", "openai-completions", 1.0)["thinkingLevelMap"].clone();
 		assert_eq!(map["low"], "low");
 		assert_eq!(map["high"], "high");
 		assert_eq!(map["minimal"], Value::Null);
@@ -1909,7 +1923,7 @@ mod connection_test_tests {
 
 		let mut silent = declared.clone();
 		silent.reasoning = false;
-		assert_eq!(project_model(&silent, &model, "skiff-test", "openai-completions", 1.0)["thinkingLevelMap"], Value::Null);
+		assert_eq!(project_model("auto", &silent, &model, "skiff-test", "openai-completions", 1.0)["thinkingLevelMap"], Value::Null);
 
 		assert_eq!(normalize_thinking_levels(Some(&["HIGH".into(), "XHigh".into()])).unwrap(), ["high", "xhigh"]);
 		assert!(normalize_thinking_levels(Some(&["ultra".into()])).is_err());
