@@ -5,6 +5,8 @@ import { initialSessionState } from "../src/chat/types.ts";
 import { parseMessages } from "../src/chat/parse.ts";
 import { reduce } from "../src/chat/reducer.ts";
 import { turnProcessPresentation, processBlocks, processCountLabel, type ProcessCounts } from "../src/chat/turnProcess.ts";
+import { processStepLabel } from "../src/chat/processStepLabel.ts";
+import { processStatus } from "../src/chat/processStatus.ts";
 
 const user: ChatMessage = { id: "user", role: "user", blocks: [{ kind: "text", text: "检查项目" }] };
 const thought = (text = "分析"): ContentBlock => ({ kind: "thinking", text });
@@ -67,7 +69,7 @@ test("text_start does not freeze the header; the first text token does, includin
 	}
 });
 
-test("reply interruptions get separate inline groups anchored between text blocks", () => {
+test("reply interruptions keep every text visible while labeling following tool groups", () => {
 	const message = assistant("a", [thought("开头"), text("第一段"), thought("中间"), call("one"), result("one"), text("第二段"), call("two"), result("two"), text("结论")]);
 	const { presentation, groups } = turnProcessPresentation([user, message]);
 	assert.deepEqual(groups.map((group) => group.placement), ["head", "inline", "inline"]);
@@ -75,6 +77,7 @@ test("reply interruptions get separate inline groups anchored between text block
 	assert.equal(presentation.get("a")!.groups.get(2), groups[1]);
 	assert.equal(presentation.get("a")!.groups.get(6), groups[2]);
 	assert.equal(processCountLabel(groups[1]), "思考了 1 段（2 字） · 执行了 1 条命令");
+	assert.deepEqual(groups[2].narrationTexts, ["第二段"]);
 	for (const key of [1, 5, 8]) assert.equal(presentation.get("a")!.hidden.has(key), false);
 });
 
@@ -153,9 +156,9 @@ test("optional active IDs and resuming a prelude keep counters live until actual
 });
 
 test("thinking-only groups omit zero tool actions and tool-only groups omit zero thinking", () => {
-	const { groups } = turnProcessPresentation([user, assistant("a", [thought("分析一下"), text("正文"), { kind: "tool", id: "read", name: "read", argsText: '{"path":"skills/README.md"}', done: true }, result("read"), text("回答")])]);
+	const { groups } = turnProcessPresentation([user, assistant("a", [thought("分析一下"), text("正文"), thought("继续"), { kind: "tool", id: "read", name: "read", argsText: '{"path":"skills/README.md"}', done: true }, result("read"), text("回答")])]);
 	assert.equal(processCountLabel(groups[0]), "思考了 1 段（4 字） · 步骤 1");
-	assert.equal(processCountLabel(groups[1]), "读取了 1 个文件");
+	assert.equal(processCountLabel(groups[1]), "思考了 1 段（2 字） · 读取了 1 个文件");
 });
 
 test("mixed actions and failures aggregate across messages without branding successful actions failed", () => {
@@ -192,5 +195,87 @@ test("file discovery joins commands in process summaries without inflating file-
 		{ kind: "toolResult", id: "glob", name: "glob", text: "skills/demo/SKILL.md\nskills/other/SKILL.md", isError: false },
 		text("找到了说明文件。"),
 	])]);
-	assert.equal(processCountLabel(groups[1]), "执行了 1 条命令");
+	assert.equal(processCountLabel(groups[0]), "执行了 1 条命令 · 步骤 1");
+});
+
+test("tool-adjacent narration labels its process group without consuming any text", () => {
+	const messages = [user,
+		assistant("a", [thought("先检查项目中的配置和测试入口，明确后续修改范围。"), text("读取配置文件和现有测试，确认设置入口的行为。")]),
+		assistant("b", [call("read", "read"), result("read"), text("第一段正文说明。"), text("再次核对错误分支和现有提示文案。"), call("test"), result("test"), text("最终给用户的完整回答。")]),
+	];
+	const before = structuredClone(messages);
+	const { presentation, groups } = turnProcessPresentation(messages);
+	assert.deepEqual(groups.map((group) => group.placement), ["head", "inline", "inline"]);
+	assert.deepEqual(groups.map((group) => group.entries.map((entry) => entry.block.kind)), [["thinking"], ["tool"], ["tool"]]);
+	assert.equal(processStepLabel(groups[1]), "读取配置文件和现有测试…");
+	assert.equal(processStepLabel(groups[2]), "再次核对错误分支和现有提示文案。");
+	assert.match(processStatus(groups[1], false).label, /读取了 1 个文件/);
+	assert.equal(presentation.get("a")!.hidden.has(1), false);
+	assert.equal(presentation.get("b")!.hidden.has(2), false);
+	assert.equal(presentation.get("b")!.hidden.has(3), false);
+	assert.equal(presentation.get("b")!.hidden.has(6), false);
+	assert.deepEqual(messages, before);
+});
+
+test("streaming text becomes narration only after its following tool call arrives", () => {
+	const unfinished = [user, assistant("a", [text("检查配置文件并确认当前模型的连接方式。")], true)];
+	assert.equal(turnProcessPresentation(unfinished, live).groups[0].entries.length, 0);
+	const completed = [user, assistant("a", [...unfinished[1].blocks, call("read", "read")], true)];
+	const { groups, presentation } = turnProcessPresentation(completed, live);
+	assert.deepEqual(groups[0].entries.map((entry) => entry.block.kind), ["tool"]);
+	assert.equal(presentation.get("a")!.hidden.has(0), false);
+	assert.match(processStatus(groups[0], true).label, /^检查配置文件/);
+});
+
+test("an intervening raw result prevents a false narration match", () => {
+	const blocks = [text("这是正文，后面还有一个孤立的工具结果。"), { kind: "toolResult", id: "orphan", name: "read", text: "旧结果", isError: false } as ContentBlock, call("next")];
+	const { groups, presentation } = turnProcessPresentation([user, assistant("a", blocks)]);
+	assert.equal(presentation.get("a")!.hidden.has(0), false);
+	assert.equal(groups[0].entries.length, 0);
+});
+
+test("short, meta and code-heavy narration falls through to thinking and mechanical counts", () => {
+	const thoughtText = "先核对配置加载与失败回退的实际路径，随后修正相应逻辑。第二段不进入标签。\n\n更多推理细节。";
+	const withThinking = turnProcessPresentation([user, assistant("a", [thought(thoughtText), text("好的，我来处理这个问题。"), call("one")])]).groups[0];
+	assert.equal(processStepLabel(withThinking), "先核对配置加载与失败回退的实际路径…");
+	const mechanical = turnProcessPresentation([user, assistant("a", [thought("分析"), text("src/chat/reducer.ts /foo/bar baz/qux"), call("one")])]).groups[1];
+	assert.equal(processStepLabel(mechanical), undefined);
+	assert.equal(processStatus(mechanical, false).label, processCountLabel(mechanical, false, true, true));
+	const englishMeta = turnProcessPresentation([user, assistant("a", [text("Let me think about the next step."), call("one")])]).groups[0];
+	assert.equal(processStepLabel(englishMeta), undefined);
+});
+
+test("long model labels cut at a semantic boundary and preserve aggregate counts", () => {
+	const narration = "先核对模型配置与请求参数，确认不同协议的映射行为。然后检查历史消息恢复和实时事件的顺序，定位可能丢失旁白的环节。";
+	const group = turnProcessPresentation([user, assistant("a", [text(narration), call("read", "read"), result("read")])]).groups[0];
+	assert.equal(processStepLabel(group), "先核对模型配置与请求参数…");
+	assert.match(processStatus(group, false).label, /读取了 1 个文件 · 步骤 1/);
+});
+
+test("model labels use only a cleaned first line and reject bare section headings", () => {
+	const source = "### 3. write （创建文件）**核对 `settings.json` 的读取方式**，并检查回退规则。\n第二行的正文原样保留，不能进入标签。";
+	const messages = [user, assistant("a", [text(source), call("one")], true)];
+	const before = structuredClone(messages);
+	const group = turnProcessPresentation(messages, live).groups[0];
+	const label = processStepLabel(group)!;
+	assert.ok(label.length >= 10 && label.length <= 21);
+	assert.doesNotMatch(label, /[#*`]|3\. write|第二行/);
+	assert.match(label, /^核对 settings\.json/);
+	assert.deepEqual(messages, before);
+	for (const heading of ["### 0. bash", "3. write（创建文件）", "## `read`", "嗯，先看看仓库里有哪些测试。", "{\"path\":\"src/config.json\"}", "src/chat/reducer.ts /foo/bar baz/qux", "settings.json", "npm test --coverage"]) {
+		const rejected = turnProcessPresentation([user, assistant("a", [text(heading), call("one")], true)], live).groups[0];
+		assert.equal(processStepLabel(rejected), undefined, heading);
+		assert.equal(processStatus(rejected, true).label, "正在运行命令");
+	}
+});
+
+test("reasoning_content variants normalize into ordered thinking steps in history and live completion", () => {
+	const raw = { role: "assistant", reasoning_content: "先检查请求顺序，再定位工具调用的归属。", content: [{ type: "text", text: "读取配置文件并核对协议设置。", reasoning_content: "先检查请求顺序，再定位工具调用的归属。" }, { type: "toolCall", id: "one", name: "read" }, { type: "text", text: "完成回答" }] };
+	const restored = parseMessages([{ role: "user", content: "检查" }, raw]);
+	assert.deepEqual(restored[1].blocks.map((block) => block.kind), ["thinking", "text", "tool", "text"]);
+	assert.equal(processStepLabel(turnProcessPresentation(restored).groups[1]), "读取配置文件并核对协议设置。");
+	let state: SessionState = { ...initialSessionState, messages: [user] };
+	state = reduce(state, { type: "message_end", message: { role: "assistant", reasoning_content: "先检查请求顺序，再定位工具调用的归属。", content: [{ type: "toolCall", id: "two", name: "read" }] } });
+	assert.deepEqual(state.messages[1].blocks.map((block) => block.kind), ["thinking", "tool"]);
+	assert.deepEqual(parseMessages([{ role: "assistant", content: [{ type: "reasoning_content", reasoning_content: "先检查配置与请求参数。" }, { type: "text", text: "完成回答" }] }])[0].blocks.map((block) => block.kind), ["thinking", "text"]);
 });

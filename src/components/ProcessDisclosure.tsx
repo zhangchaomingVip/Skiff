@@ -20,7 +20,7 @@ export function ProcessRow(props: ProcessLabelProps) {
 }
 
 /** Native keyboard behavior with the same icon, label, status and arrow slots for every process row. */
-export function ProcessDisclosure({ children, className = "", title, summaryLabel, expanded: controlledExpanded, onExpandedChange, collapseOnSpace = false, ...labelProps }: ProcessLabelProps & { children: ReactNode; className?: string; title?: string; summaryLabel?: string; expanded?: boolean; onExpandedChange?: (expanded: boolean) => void; collapseOnSpace?: boolean }) {
+export function ProcessDisclosure({ children, className = "", summaryLabel, expanded: controlledExpanded, onExpandedChange, collapseOnSpace = false, ...labelProps }: ProcessLabelProps & { children: ReactNode; className?: string; summaryLabel?: string; expanded?: boolean; onExpandedChange?: (expanded: boolean) => void; collapseOnSpace?: boolean }) {
 	const [localExpanded, setLocalExpanded] = useState(false);
 	const expanded = controlledExpanded ?? localExpanded;
 	const setExpanded = (value: boolean) => { setLocalExpanded(value); onExpandedChange?.(value); };
@@ -28,7 +28,7 @@ export function ProcessDisclosure({ children, className = "", title, summaryLabe
 	return <details className={`process-details ${className}`} open={expanded} onToggle={(event) => {
 		if (event.target === event.currentTarget && event.currentTarget.open !== expanded) setExpanded(event.currentTarget.open);
 	}}>
-		<summary role="button" className="process-row" title={title} aria-label={summaryLabel} aria-describedby={summaryLabel ? `${contentId}-label ${contentId}-status` : undefined} aria-expanded={expanded} aria-controls={contentId} onClick={(event) => { event.preventDefault(); setExpanded(!expanded); }} onKeyDown={(event) => {
+		<summary role="button" className="process-row" aria-label={summaryLabel} aria-describedby={summaryLabel ? `${contentId}-label ${contentId}-status` : undefined} aria-expanded={expanded} aria-controls={contentId} onClick={(event) => { event.preventDefault(); setExpanded(!expanded); }} onKeyDown={(event) => {
 			if (collapseOnSpace && event.key === " ") { event.preventDefault(); setExpanded(false); }
 		}}><ProcessLabel {...labelProps} labelId={summaryLabel ? `${contentId}-label` : undefined} statusId={summaryLabel ? `${contentId}-status` : undefined} /></summary>
 		<div className="process-detail-content" id={contentId}>{children}</div>

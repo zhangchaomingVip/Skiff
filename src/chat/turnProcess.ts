@@ -10,10 +10,13 @@ export type TurnProcessGroup = {
 	turnId: string;
 	placement: "head" | "inline";
 	entries: LocatedProcessBlock[];
+	narrationTexts: string[];
 	counts: ProcessCounts;
 	closed: boolean;
+	advanced: boolean;
 	pending: boolean;
 	error: boolean;
+	terminal?: boolean;
 };
 export type ProcessPresentation = { head?: TurnProcessGroup; groups: Map<number, TurnProcessGroup>; hidden: Set<number> };
 
@@ -34,6 +37,20 @@ export function processBlocks(message: ChatMessage): ProcessBlock[] {
 
 const emptyCounts = (): ProcessCounts => ({ thinkingSegments: 0, thinkingChars: 0, steps: 0 });
 
+/** A text block is process narration only when the next assistant step calls a tool. */
+function narrationKeys(messages: ChatMessage[]): Set<string> {
+	const keys = new Set<string>();
+	let previousText: string | undefined;
+	for (const message of messages) {
+		if (message.role === "user") { previousText = undefined; continue; }
+		for (const [key, block] of message.blocks.entries()) {
+			if (block.kind === "tool" && previousText) keys.add(previousText);
+			previousText = block.kind === "text" && block.text.length ? `${message.id}:${key}` : undefined;
+		}
+	}
+	return keys;
+}
+
 /** Reasoning and step totals freeze at reply boundaries; tool outcomes remain live. */
 function countProcess(entries: LocatedProcessBlock[]): ProcessCounts {
 	const counts = emptyCounts();
@@ -51,29 +68,32 @@ function countProcess(entries: LocatedProcessBlock[]): ProcessCounts {
 
 /** Split at visible reply boundaries without modifying messages, transport, usage or copy content. */
 export function turnProcessPresentation(messages: ChatMessage[], { running = false, activeTurnId, frozenCounts = new Map() }: { running?: boolean; activeTurnId?: string; frozenCounts?: ReadonlyMap<string, ProcessCounts> } = {}) {
+	const narration = narrationKeys(messages);
 	const presentation = new Map<string, ProcessPresentation>();
 	const groups: TurnProcessGroup[] = [];
 	let turnId = "";
 	let hasReply = false;
 	let current: TurnProcessGroup | undefined;
 	let head: TurnProcessGroup | undefined;
+	let pendingNarration: string | undefined;
 	const forMessage = (id: string) => {
 		let value = presentation.get(id);
 		if (!value) { value = { groups: new Map(), hidden: new Set() }; presentation.set(id, value); }
 		return value;
 	};
 	const createGroup = (id: string, placement: TurnProcessGroup["placement"]): TurnProcessGroup => {
-		const group: TurnProcessGroup = { id, turnId, placement, entries: [], counts: emptyCounts(), closed: false, pending: false, error: false };
+		const group: TurnProcessGroup = { id, turnId, placement, entries: [], narrationTexts: [], counts: emptyCounts(), closed: false, advanced: false, pending: false, error: false };
 		groups.push(group);
 		return group;
 	};
 	for (const message of messages) {
 		if (message.role === "user" || !turnId) {
-			if (current) current.closed = true;
+			if (current) { current.closed = true; current.advanced = true; }
 			turnId = `turn:${message.id}`;
 			hasReply = false;
 			current = undefined;
 			head = undefined;
+			pendingNarration = undefined;
 		}
 		if (message.role !== "assistant") continue;
 		if (!head) {
@@ -87,14 +107,24 @@ export function turnProcessPresentation(messages: ChatMessage[], { running = fal
 			// text_start contains no token yet. The first received token closes the prelude.
 			if (block.kind === "text" || block.kind === "image") {
 				if (block.kind === "text" && !block.text.length) continue;
-				if (current) current.closed = true;
+				pendingNarration = block.kind === "text" && narration.has(`${message.id}:${entry.key}`) ? block.text : undefined;
+				// The first narrated text can precede the prelude's first tool. Keep
+				// that empty head group as its anchor, while rendering text normally.
+				if (current && !(current === head && !current.entries.length && pendingNarration)) {
+					current.closed = true;
+					current.advanced = true;
+					current = undefined;
+				}
 				hasReply = true;
-				current = undefined;
 				continue;
 			}
 			if (!current) {
 				current = createGroup(`${turnId}:inline:${message.id}:${entry.key}`, hasReply ? "inline" : "head");
 				forMessage(message.id).groups.set(entry.key, current);
+			}
+			if (block.kind === "tool" && pendingNarration) {
+				current.narrationTexts.push(pendingNarration);
+				pendingNarration = undefined;
 			}
 			const thinkingComplete = block.kind === "thinking" && (!message.streaming || blocks.slice(index + 1).some((next) => next.block.kind !== "toolResult" && (next.block.kind !== "text" || next.block.text.length > 0)));
 			current.entries.push({ ...entry, messageId: message.id, thinkingComplete });
@@ -102,7 +132,9 @@ export function turnProcessPresentation(messages: ChatMessage[], { running = fal
 		}
 	}
 	const active = activeTurnId ?? groups[groups.length - 1]?.turnId;
+	const tails = new Map(groups.map((group) => [group.turnId, group.id]));
 	for (const group of groups) {
+		group.terminal = tails.get(group.turnId) === group.id;
 		if (!running || group.turnId !== active) group.closed = true;
 		group.counts = (group.closed ? frozenCounts.get(group.id) : undefined) ?? countProcess(group.entries);
 		group.pending = group.entries.some((entry) => entry.block.kind === "tool" && !entry.result);
@@ -111,13 +143,13 @@ export function turnProcessPresentation(messages: ChatMessage[], { running = fal
 	return { presentation, groups };
 }
 
-export function processCountLabel(group: Pick<TurnProcessGroup, "placement" | "counts" | "entries">, thinking = false): string {
+export function processCountLabel(group: Pick<TurnProcessGroup, "placement" | "counts" | "entries">, thinking = false, includeFailures = true, settled = false): string {
 	const { thinkingSegments, thinkingChars, steps } = group.counts;
 	const format = (value: number) => value.toLocaleString("en-US");
 	const tools: ToolRunItem[] = group.entries.flatMap(({ key, block, result }) => block.kind === "tool" ? [{ key, block, result }] : block.kind === "toolResult" ? [{ key, block: { kind: "tool", id: block.id ?? `result:${key}`, name: block.name, argsText: "{}", done: true }, result: block }] : []);
 	const parts = [];
 	if (thinkingSegments || thinkingChars) parts.push(thinking && !thinkingSegments ? `思考中（${format(thinkingChars)} 字）` : `思考了 ${format(thinkingSegments)} 段（${format(thinkingChars)} 字）`);
-	parts.push(...toolActionSummaries(tools));
+	parts.push(...toolActionSummaries(includeFailures ? tools : tools.map((item) => ({ ...item, result: item.result && { ...item.result, isError: false } })), settled));
 	if (!parts.length && thinking) parts.push("思考中");
 	if (group.placement === "head") parts.push(`步骤 ${format(steps)}`);
 	return parts.join(" · ");

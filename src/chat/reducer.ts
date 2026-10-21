@@ -1,5 +1,5 @@
 import { extensionDialog, queueSnapshot } from "./interactions";
-import { parseBlocks } from "./parse";
+import { parseBlocks, parseMessageBlocks } from "./parse";
 import type { ChatMessage, ContentBlock, SessionState } from "./types";
 import type { RpcEvent } from "../rpc/RpcClient";
 import type { RuntimeOffer } from "./modelFamilies";
@@ -195,7 +195,7 @@ function reduceChat(state: SessionState, event: RpcEvent, options: ReducerOption
 			const finalised: ChatMessage = {
 				id: index >= 0 ? state.messages[index].id : nextId(role),
 				role,
-				blocks: parseBlocks(message?.content),
+				blocks: role === "assistant" ? parseMessageBlocks(message ?? {}) : parseBlocks(message?.content),
 				streaming: false,
 				provider: typeof message?.provider === "string" ? message.provider : undefined,
 				model: typeof message?.model === "string" ? message.model : undefined,

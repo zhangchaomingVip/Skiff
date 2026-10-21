@@ -1,6 +1,6 @@
 import { seedPolishPreview } from "./polishFixture.mjs";
 
-export const fixtures = ["launcher", "single", "multi", "unknown", "empty", "loading", "error", "chat", "long", "settings", "settings-info", "picker", "voyage", "voyage-output", "voyage-thinking", "voyage-tool", "voyage-moored", "voyage-high", "authorization", "sidebar", "archive", "visual", "tool-spacing", "process-rows", "repeated-process", "process-folding", "process-actions", "file-discovery"];
+export const fixtures = ["launcher", "single", "multi", "unknown", "empty", "loading", "error", "chat", "long", "settings", "settings-info", "picker", "voyage", "voyage-output", "voyage-thinking", "voyage-tool", "voyage-moored", "voyage-high", "authorization", "sidebar", "archive", "visual", "tool-spacing", "process-rows", "repeated-process", "process-folding", "process-actions", "file-discovery", "content-replay-a", "content-replay-b"];
 
 // This entry runs only on the separate preview origin. It never uses real pi.
 export function preparePreview(target) {
@@ -59,9 +59,38 @@ export function preparePreview(target) {
 		}));
 		for (const chat of chats) if (chat.hasMessages) chat.selectedModel = { provider: "skiff-relay-r1-deepseek", id: "deepseek-chat", modelId: "deepseek-chat", routeId: "route-deepseek-r1", offerId: "route-deepseek-r1/deepseek-chat" };
 		storage.setItem("skiff.workspace.v1", JSON.stringify({ version: 1, projects: [project, otherProject], chats, activeId: "archive-active" }));
-	} else if (["chat", "long", "picker", "voyage", "authorization", "visual", "tool-spacing", "process-rows", "repeated-process", "process-folding", "process-actions", "file-discovery"].includes(fixture) || fixture.startsWith("voyage-")) {
+	} else if (["chat", "long", "picker", "voyage", "authorization", "visual", "tool-spacing", "process-rows", "repeated-process", "process-folding", "process-actions", "file-discovery", "content-replay-a", "content-replay-b"].includes(fixture) || fixture.startsWith("voyage-")) {
 		seedPolishPreview(storage, fixture === "long");
 		const sessions = JSON.parse(storage.getItem("skiff.test.sessions"));
+		if (fixture === "content-replay-a") sessions["polish-preview.jsonl"] = [
+			{ role: "user", content: "验证旁白、多工具和尾段正文同时可见。" },
+			{ role: "assistant", content: [
+				{ type: "text", text: "旁白 A：先运行命令并搜索资料，随后读取说明文件。" },
+				{ type: "toolCall", id: "replay-a-bash", name: "bash", arguments: { command: "pwd" } },
+				{ type: "toolCall", id: "replay-a-web", name: "web_search", arguments: { query: "Skiff 文档" } },
+				{ type: "toolCall", id: "replay-a-read", name: "read", arguments: { path: "README.md" } },
+			] },
+			{ role: "toolResult", toolCallId: "replay-a-bash", name: "bash", content: "D:/workspace/Skiff" },
+			{ role: "toolResult", toolCallId: "replay-a-web", name: "web_search", content: "找到文档" },
+			{ role: "toolResult", toolCallId: "replay-a-read", name: "read", content: "说明文件正文" },
+			{ role: "assistant", content: "尾段正文 A：三种工具的结果都已核对，完整回答保留在这里。", stopReason: "length" },
+		];
+		if (fixture === "content-replay-b") sessions["polish-preview.jsonl"] = [
+			{ role: "user", content: "验证正文中间穿插旁白和工具。" },
+			{ role: "assistant", content: [
+				{ type: "text", text: "首段正文 B：先说明本轮的检查目标。" },
+				{ type: "thinking", thinking: "核对第一阶段的输入和结果，保持内容顺序。" },
+				{ type: "toolCall", id: "replay-b-read", name: "read", arguments: { path: "README.md" } },
+				{ type: "text", text: "中段旁白 B：接下来同时运行命令并搜索资料。" },
+				{ type: "toolCall", id: "replay-b-bash", name: "bash", arguments: { command: "pwd" } },
+				{ type: "toolCall", id: "replay-b-web", name: "web_search", arguments: { query: "Skiff 文档" } },
+				{ type: "text", text: "尾段正文 B：所有阶段均完成，文字保持原样。" },
+			] },
+			{ role: "toolResult", toolCallId: "replay-b-read", name: "read", content: "说明文件正文" },
+			{ role: "toolResult", toolCallId: "replay-b-bash", name: "bash", content: "D:/workspace/Skiff" },
+			{ role: "toolResult", toolCallId: "replay-b-web", name: "web_search", content: "找到文档" },
+			{ role: "assistant", content: "", stopReason: "length" },
+		];
 		if (fixture === "file-discovery") sessions["polish-preview.jsonl"] = [
 			{ role: "user", content: "汇总思考、读取、编辑、命令和联网搜索；grep、find 计入命令。" },
 			{ role: "assistant", content: [

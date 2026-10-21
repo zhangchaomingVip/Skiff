@@ -13,6 +13,6 @@ export function ToolSummaryLabel({ label, target, single = false, settled = fals
 				return <span className="tool-action" key={index}>{single ? verb === "联网搜索" ? verb : `${verb}${tense}${object}` : <>{verb}{tense} <span className="tool-count">{Number(parts[2]).toLocaleString("en-US")} {parts[3]}</span></>}{failure && <span className="tool-count">{failure}</span>}</span>;
 			})}
 		</span>
-		{target && <span className="tool-target" title={target}>{target}</span>}
+		{target && <span className="tool-target">{target}</span>}
 	</>;
 }

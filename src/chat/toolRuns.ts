@@ -17,9 +17,6 @@ const KIND_BY_NAME: Record<string, ToolKind> = {
 	web_search: "web",
 };
 
-/** `write` outranks `read` etc. so a mixed group shows the most consequential icon. */
-const WEIGHT: Record<ToolKind, number> = { write: 4, read: 3, find: 2, list: 2, search: 2, web: 2, command: 1, other: 0 };
-
 const RUNNING_PHRASES: Record<ToolKind, string> = { read: "读取文件", write: "编辑文件", find: "查找文件", list: "列举目录", command: "执行命令", search: "搜索内容", web: "联网搜索", other: "调用工具" };
 
 type SummaryKind = Exclude<ToolKind, "find" | "list" | "search">;
@@ -69,8 +66,8 @@ export interface ToolRunSummary {
 	steps: number;
 }
 
-function actionSummary(kind: ToolKind, items: ToolRunItem[]): string {
-	const completed = items.every((item) => item.result);
+function actionSummary(kind: ToolKind, items: ToolRunItem[], settled = false): string {
+	const completed = settled || items.every((item) => item.result);
 	const suffix = completed ? "了" : "";
 	if (kind === "read") return `读取${suffix} ${items.length} 个文件`;
 	if (kind === "write") return `编辑${suffix} ${items.length} 个文件`;
@@ -83,16 +80,16 @@ function actionSummary(kind: ToolKind, items: ToolRunItem[]): string {
 	return `调用${suffix} ${items.length} 次工具`;
 }
 
-function actionLabel(kind: ToolKind, items: ToolRunItem[]): string {
+function actionLabel(kind: ToolKind, items: ToolRunItem[], settled = false): string {
 	const failures = items.filter((item) => item.result?.isError).length;
-	return `${actionSummary(kind, items)}${failures ? `（${failures.toLocaleString("en-US")} 失败）` : ""}`;
+	return `${actionSummary(kind, items, settled)}${failures ? `（${failures.toLocaleString("en-US")} 失败）` : ""}`;
 }
 
 /** Count tool calls in a fixed order; local lookup joins commands, web_search stays separate. */
-export function toolActionSummaries(items: ToolRunItem[]): string[] {
+export function toolActionSummaries(items: ToolRunItem[], settled = false): string[] {
 	return SUMMARY_ORDER.flatMap((kind) => {
 		const actions = items.filter((item) => summaryKind(item.block.name) === kind);
-		return actions.length ? [actionLabel(kind, actions)] : [];
+		return actions.length ? [actionLabel(kind, actions, settled)] : [];
 	});
 }
 
@@ -104,7 +101,7 @@ export function toolRunSummary(items: ToolRunItem[]): ToolRunSummary {
 		const kind = summaryKind(item.block.name);
 		if (!kinds.includes(kind)) kinds.push(kind);
 	}
-	const kind = kinds.reduce<ToolKind>((best, current) => (WEIGHT[current] > WEIGHT[best] ? current : best), kinds[0] ?? "other");
+	const kind = kinds.length === 1 ? kinds[0] : "other";
 	return {
 		kind,
 		label: `${[...new Set(items.map((item) => item.block.name))].join(" + ") || "工具"} · ${toolActionSummaries(items).join("；") || "0 次调用"}`,

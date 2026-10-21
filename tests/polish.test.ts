@@ -122,12 +122,13 @@ test("tool runs separate mixed actions and label each count with its unit", () =
 		{ key: 1, block: tool("b", "bash", { command: "npm run build" }), result: ok("bash") },
 	];
 	const finished = toolRunSummary(read);
-	assert.equal(finished.kind, "read");
+	assert.equal(finished.kind, "other");
 	assert.equal(finished.label, "read + bash · 读取了 1 个文件；执行了 1 条命令");
 	assert.equal(finished.running, false);
 	assert.equal(finished.steps, 2);
 	const live = toolRunSummary([...read, { key: 2, block: tool("c", "edit", {}), result: undefined }]);
-	assert.equal(live.kind, "write");
+	assert.equal(live.kind, "other");
+	assert.equal(toolRunSummary([{ key: 0, block: tool("cmd", "bash", { command: "pwd" }) }, { key: 1, block: tool("web", "web_search", { query: "docs" }) }]).kind, "other");
 	assert.equal(live.label, "read + bash + edit · 读取了 1 个文件；编辑 1 个文件；执行了 1 条命令");
 	assert.equal(live.running, true);
 	assert.equal(toolKind("MULTI_EDIT"), "write");

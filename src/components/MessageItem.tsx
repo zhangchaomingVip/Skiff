@@ -20,6 +20,7 @@ import { ProcessDisclosure } from "./ProcessDisclosure";
 import { TOOL_ICONS } from "./toolIcons";
 import { processBlocks, type ProcessPresentation } from "../chat/turnProcess";
 import { TurnProcessGroup } from "./TurnProcessGroup";
+import { ThinkingContent } from "./ThinkingContent";
 
 /** Compact, locale-aware timestamp shown beside a message role. */
 const formatMessageTime = (ts?: number): string | undefined => {
@@ -50,8 +51,8 @@ export const MessageItem = memo(function MessageItem({ onEdit, onContinue, conti
 		const entry = rendered[index];
 		const block = entry.block;
 		const group = processPresentation?.groups.get(entry.key);
-		if (group) { nodes.push(renderProcess(group)); continue; }
-		if (processPresentation?.hidden.has(entry.key)) continue;
+		if (group && block.kind !== "text") { nodes.push(renderProcess(group)); continue; }
+		if (block.kind !== "text" && processPresentation?.hidden.has(entry.key)) continue;
 		if (block.kind === "tool") {
 			const group: ToolRunItem[] = [{ key: entry.key, block, result: entry.result }];
 			while (rendered[index + 1]?.block.kind === "tool") {
@@ -69,9 +70,9 @@ export const MessageItem = memo(function MessageItem({ onEdit, onContinue, conti
 		else if (block.kind === "thinking") {
 			// Short filler reasoning disappears once the turn settles.
 			if (!shouldShowThinking(block.text, !!message.streaming)) continue;
-			nodes.push(<ProcessDisclosure key={entry.key} className="thinking" icon="spark" label={<span>思考过程 · <span className="thinking-size">{block.text.trim().length.toLocaleString("en-US")} 字</span></span>}><pre>{block.text}</pre></ProcessDisclosure>);
+			nodes.push(<ProcessDisclosure key={entry.key} className="thinking" icon="spark" label={<span>思考过程 · <span className="thinking-size">{block.text.trim().length.toLocaleString("en-US")} 字</span></span>}><ThinkingContent text={block.text} /></ProcessDisclosure>);
 		}
-		else nodes.push(<ProcessDisclosure key={entry.key} className={`tool-result ${block.isError ? "err" : ""}`} icon={TOOL_ICONS[toolKind(block.name)]} label="执行结果" status={block.isError ? undefined : "已完成"}>{block.isError && <div className="tool-output-heading">error</div>}<pre>{block.text}</pre></ProcessDisclosure>);
+		else nodes.push(<ProcessDisclosure key={entry.key} className={`tool-result ${block.isError ? "err" : ""}`} icon={TOOL_ICONS[toolKind(block.name)]} label="执行结果">{block.isError && <div className="tool-output-heading">error</div>}<pre>{block.text}</pre></ProcessDisclosure>);
 	}
 	// Keep action buttons in the DOM so keyboard users can reach earlier replies.
 	const copyText = isUser ? text : turnMessages ? turnReplyText(turnMessages) : "";

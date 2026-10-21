@@ -48,12 +48,13 @@ export function parseBlocks(content: unknown): ContentBlock[] {
 		const type = String(block.type ?? "");
 
 		if (type === "text") {
+			if (typeof block.reasoning_content === "string" && block.reasoning_content) blocks.push({ kind: "thinking", text: block.reasoning_content });
 			const text = String(block.text ?? "");
 			if (text) blocks.push({ kind: "text", text });
 		} else if (type === "image" && typeof block.data === "string" && typeof block.mimeType === "string" && /^image\/(png|jpeg|webp|gif)$/.test(block.mimeType)) {
 			blocks.push({ kind: "image", data: block.data, mimeType: block.mimeType });
-		} else if (type === "thinking" || type === "reasoning") {
-			const text = String(block.thinking ?? block.text ?? "");
+		} else if (type === "thinking" || type === "reasoning" || type === "reasoning_content") {
+			const text = String(block.thinking ?? block.reasoning_content ?? block.text ?? "");
 			if (text) blocks.push({ kind: "thinking", text });
 		} else if (type === "toolCall" || type === "tool_call" || type === "toolcall") {
 			const args = block.arguments ?? block.input ?? block.args;
@@ -76,6 +77,15 @@ export function parseBlocks(content: unknown): ContentBlock[] {
 		}
 	}
 	return blocks;
+}
+
+/** Some compatible providers place reasoning beside content rather than in it. */
+export function parseMessageBlocks(message: Record<string, unknown>): ContentBlock[] {
+	const blocks = parseBlocks(message.content);
+	const reasoning = message.reasoning_content;
+	return typeof reasoning === "string" && reasoning && !blocks.some((block) => block.kind === "thinking")
+		? [{ kind: "thinking", text: reasoning }, ...blocks]
+		: blocks;
 }
 
 /** Normalise the `models` array from `get_available_models`. */
@@ -110,7 +120,7 @@ export function parseMessages(raw: unknown): ChatMessage[] {
 		} else if (message.role === "user" || message.role === "assistant") {
 			messages.push({
 				entryId: typeof message.entryId === "string" ? message.entryId : undefined,
-				id: `history_${index}`, role: message.role, blocks: parseBlocks(message.content),
+				id: `history_${index}`, role: message.role, blocks: message.role === "assistant" ? parseMessageBlocks(message) : parseBlocks(message.content),
 				provider: typeof message.provider === "string" ? message.provider : undefined,
 				model: typeof message.model === "string" ? message.model : undefined,
 				usage: message.usage as ChatMessage["usage"],
