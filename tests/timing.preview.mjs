@@ -66,7 +66,7 @@ function begin() {
 	emit({ type: "message_update", assistantMessageEvent: { type: "thinking_start", contentIndex: 0 } });
 	emit({ type: "message_update", assistantMessageEvent: { type: "thinking_delta", contentIndex: 0, delta: "这是没有后续消息到达的长时间思考过程。" } });
 }
-const waiting = () => [...document.querySelectorAll(".msg.assistant")].at(-1)?.textContent.includes("等待回复…");
+const waiting = () => !!document.querySelector(".waiting-reply");
 function answer(held, success = true) {
 	mock.emit(held.instanceId, { type: "response", id: held.request.id, success, data: success ? {} : undefined, error: success ? undefined : "Simulated send rejection" });
 }
@@ -113,17 +113,17 @@ try {
 	assert(document.querySelector(".msg.assistant .msg-role").textContent.includes(latest.state.model.name), "Placeholder model label missing");
 	assert(!document.querySelector(".msg.assistant").textContent.includes("0 步"), "Placeholder invented steps");
 	await advance(2200);
-	assert(rail() === "2s" && document.querySelector(".msg.assistant").textContent.includes("耗时 2s"), "Pre-agent clock did not advance");
+	assert(rail() === "2s" && document.querySelector(".msg.assistant").textContent.includes("思考中"), "Pre-agent clock did not advance");
 	confirmUser(sent.held);
 	await until(() => latest.state.pendingPrompt?.userMessage === undefined, "User confirmation did not reconcile");
 	assert(document.querySelectorAll(".msg.user").length === 1 && waiting(), "User confirmation duplicated a bubble");
 	await advance(1000);
 	emit({ type: "message_start", message: { role: "assistant" } });
-	await until(() => !waiting() && header()?.includes("耗时 3s"), "Empty assistant did not take over the elapsed clock");
+	await until(() => !waiting() && header()?.includes("思考中"), "Empty assistant did not expose its live process summary");
 	assert(document.querySelectorAll(".msg.assistant").length === 1 && !document.querySelector(".thinking-toggle"), "Empty assistant duplicated or offered an empty fold");
 	await advance(1100);
 	emit({ type: "message_update", assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: "纯文本回复" } });
-	await until(() => header()?.includes("耗时 4s"), "Pure-text duration missing");
+	await until(() => header()?.includes("思考过程"), "Pure-text reply did not freeze its summary");
 	await finishReply(sent.held, "纯文本回复");
 	assert(await sent.task, "Successful prompt rejected");
 	assert(latest.state.messages.at(-1).durationMs === 4300 && latest.elapsedMs === 4300, "Send latency missing from final duration");
@@ -196,7 +196,7 @@ try {
 	await until(() => rail() === "0s", "Missing duration before first assistant");
 	assert(intervals.size === 1, "Expected exactly one clock interval");
 	begin();
-	await until(() => header()?.includes("耗时 0s"), "Initial header missing");
+	await until(() => header()?.includes("思考中"), "Initial header missing");
 	// Let the initial message-follow animation frame finish before watching clock-only updates.
 	await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 	const messages = latest.state.messages;
@@ -209,18 +209,18 @@ try {
 	const originalScroll = scroller.scrollTo;
 	scroller.scrollTo = () => scrollCalls++;
 	await advance(3100);
-	assert(rail() === "3s" && header()?.includes("耗时 3s"), "Quiet reasoning clock did not advance in both views");
+	assert(rail() === "3s" && header()?.includes("思考中"), "Quiet reasoning clock or live summary missing");
 	assert(latest.state.messages === messages && mutations === 0 && scrollCalls === 0, `Clock mutated transcript, body or scroll: messages=${latest.state.messages === messages}, mutations=${mutations}, scroll=${scrollCalls}`);
 	observer.disconnect(); scroller.scrollTo = originalScroll;
-	record("无消息事件时，两处耗时增长；正文、消息数组和滚动不变");
+	record("无消息事件时，航行台耗时增长；过程计数、正文、消息数组和滚动不变");
 	emit({ type: "message_end", message: { role: "assistant", content: [{ type: "thinking", thinking: "继续处理" }, { type: "toolCall", id: "read", name: "read", arguments: { path: "README.md" } }] } });
 	await until(() => !latest.state.messages.at(-1).streaming, "Message did not finalize");
 	await advance(2000);
-	assert(rail() === "5s" && header()?.includes("耗时 5s"), "Tool wait stopped the clock");
+	assert(rail() === "5s" && header()?.includes("步骤 2"), "Tool wait stopped the clock");
 	emit({ type: "message_start", message: { role: "assistant" } });
 	emit({ type: "message_update", assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: "最终回复" } });
 	await advance(1000);
-	assert(rail() === "6s" && header()?.includes("耗时 6s"), "New assistant step reset the clock");
+	assert(rail() === "6s" && header()?.includes("步骤 2"), "New assistant step reset the clock");
 	record("工具等待和下一条流式回复沿用同一个起点");
 	emit({ type: "agent_end" });
 	await until(() => !latest.state.isStreaming && intervals.size === 0, "Completion did not stop the interval");
@@ -228,7 +228,7 @@ try {
 	await advance(2000);
 	emit({ type: "agent_settled" });
 	await delay(30);
-	assert(rail() === "6s" && header()?.includes("耗时 6s") && latest.elapsedMs === 6100, "Settled duration changed or accumulated twice");
+	assert(rail() === "6s" && header()?.includes("步骤 2") && latest.elapsedMs === 6100, "Settled duration changed or accumulated twice");
 	record("结束后固定实测耗时，重复结束事件不重复累计");
 	const oldHeader = header();
 	emit({ type: "agent_start" });
@@ -244,14 +244,14 @@ try {
 	await advance(2400);
 	document.querySelector('[aria-label="停止生成"]').click();
 	await until(() => intervals.size === 0, "Abort did not stop the clock");
-	assert(rail() === "2s" && header()?.includes("耗时 2s"), "Abort duration missing");
+	assert(rail() === "2s" && header()?.includes("步骤 1"), "Abort duration missing");
 	assert(document.querySelector('.voyage-tool-log .tool-interrupted[data-tool-id="abort-tool"]'), "Explicit abort without stopReason lost the tool's terminal state");
 	record("中止后计时停止并固定读数");
 	begin();
 	await advance(1200);
 	emit({ type: "bridge_exit", message: "simulated pi exit" });
 	await until(() => intervals.size === 0 && !latest.connected, "Bridge exit did not stop");
-	assert(rail() === "1s" && header()?.includes("耗时 1s") && !latest.state.messages.at(-1).streaming, "Bridge exit did not settle the current turn");
+	assert(rail() === "1s" && header()?.includes("思考过程") && !latest.state.messages.at(-1).streaming, "Bridge exit did not settle the current turn");
 	record("进程退出也结算当前轮并清理流式状态");
 	latest.reconnect();
 	await until(() => latest.connected, "Reconnect failed");
@@ -272,7 +272,7 @@ try {
 		assert(latest.state.activeRun.startedAt === startedAt, "Restoration chose the wrong start time");
 		await advance(1000);
 		const seconds = withTimestamp ? "5s" : "1s";
-		assert(rail() === seconds && header()?.includes(`耗时 ${seconds}`), "Restored clock did not advance in both views");
+		assert(rail() === seconds && header()?.includes("段思考"), "Restored clock or process summary missing");
 		emit({ type: "agent_end" });
 		await until(() => intervals.size === 0, "Restored run did not stop");
 		assert(latest.state.messages.at(-1).durationMs === now - startedAt, "Restored final duration used a different origin");

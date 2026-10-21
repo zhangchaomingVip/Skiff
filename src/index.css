@@ -211,7 +211,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 /* Per-turn header: folds every reasoning chain of that reply. */
 .turn-header { display: flex; flex-direction: column; align-items: stretch; gap: var(--space-2); }
 .turn-header > .ui-button { align-self: flex-end; }
-.turn-header .thinking-toggle { font-weight: var(--font-weight-semibold); }
+.turn-process-head > .process-row { font-weight: var(--font-weight-medium); }
 
 /* Every process fold uses fixed icon and trailing state/arrow slots. */
 .process-details { min-width: 0; margin: 0; }
@@ -238,9 +238,18 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .tool-count { white-space: nowrap; }
 .turn-summary { font-variant-numeric: tabular-nums; }
 .tool-state.running { color: var(--accent); }
+.tool-state.failed { color: var(--danger); }
+.turn-process-body { display: flex; flex-direction: column; gap: var(--chat-block-gap); min-width: 0; }
+.process-count-label { min-width: 0; font-variant-numeric: tabular-nums; }
+.turn-process-inline > .process-row { color: var(--muted); font-size: var(--font-size-sm); }
+.turn-process-inline > .process-row:hover { background: transparent; }
+.turn-process-inline > .process-row .process-count-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.turn-process[open] > .process-detail-content { animation-name: process-fade; }
+@keyframes process-fade { from { opacity: 0; } to { opacity: 1; } }
 .thinking-size { color: var(--muted); }
 .thinking pre, .tool-result pre { margin: 0; overflow-x: auto; white-space: pre-wrap; font-size: var(--font-size-sm); color: var(--muted); }
 @media (prefers-reduced-motion: reduce) { .process-details[open] > .process-detail-content { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .process-row .process-spinner { animation: none; } }
 /* Notices read as quiet inline chips instead of bare text floating over the composer. */
 .notices { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-1-5); width: 100%; max-width: calc(var(--content-width) + 2 * var(--chat-gutter)); margin: 0 auto; padding: 0 var(--chat-gutter) var(--space-2); }
 .notice { display: inline-flex; align-items: center; gap: var(--space-1-5); max-width: 100%; padding: var(--space-1) var(--space-2-5); border-radius: var(--radius-lg); background: color-mix(in srgb, var(--accent) 10%, transparent); color: var(--secondary); font-size: var(--font-size-sm); line-height: var(--line-height-base); overflow-wrap: anywhere; }
@@ -790,7 +799,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .field-with-action input { flex: 1; }
 .model-discovery .field-with-action input { min-width: 0; }
 .model-discovery-trigger { flex-shrink: 0; white-space: nowrap; min-height: 34px; }
-.model-discovery-spinner { width: 12px; height: 12px; border: 2px solid currentColor; border-right-color: transparent; border-radius: var(--radius-full); animation: model-discovery-spin .8s linear infinite; }
+.model-discovery-spinner, .process-spinner { width: 12px; height: 12px; border: 2px solid currentColor; border-right-color: transparent; border-radius: var(--radius-full); animation: model-discovery-spin .8s linear infinite; }
 @keyframes model-discovery-spin { to { transform: rotate(360deg); } }
 .model-discovery-menu { margin-top: 6px; padding: 4px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--panel); box-shadow: var(--shadow-lg); }
 .model-discovery-recommended { margin-left: 6px; padding: 0 5px; border-radius: var(--radius-full); background: var(--subtle); color: var(--color-success); font-size: var(--font-size-sm); font-style: normal; }

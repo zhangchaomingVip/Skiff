@@ -9,7 +9,7 @@ import { highlightCode } from "../src/chat/highlight.ts";
 import { completedAtTooltip, formatCompletedAt, formatDuration } from "../src/chat/usage.ts";
 import { DEFAULT_APPEND_PROMPT, loadAppendPrompt, saveAppendPrompt } from "../src/chat/prompt.ts";
 import { isNotableThinking, shouldShowThinking } from "../src/chat/thinking.ts";
-import { toolKind, toolKindLabel, toolRunSummary, toolTarget, type ToolRunItem } from "../src/chat/toolRuns.ts";
+import { toolActionSummaries, toolCallSummary, toolKind, toolKindLabel, toolRunSummary, toolTarget, type ToolRunItem } from "../src/chat/toolRuns.ts";
 import { PiRpc } from "../src/rpc/RpcClient.ts";
 import { installMockPi } from "./mockPi.mjs";
 
@@ -128,28 +128,72 @@ test("tool runs separate mixed actions and label each count with its unit", () =
 	assert.equal(finished.steps, 2);
 	const live = toolRunSummary([...read, { key: 2, block: tool("c", "edit", {}), result: undefined }]);
 	assert.equal(live.kind, "write");
-	assert.equal(live.label, "read + bash + edit · 读取了 1 个文件；执行了 1 条命令；执行 1 次文件操作");
+	assert.equal(live.label, "read + bash + edit · 读取了 1 个文件；编辑 1 个文件；执行了 1 条命令");
 	assert.equal(live.running, true);
 	assert.equal(toolKind("MULTI_EDIT"), "write");
 	assert.equal(toolKindLabel("unknown-tool"), "unknown-tool");
 	assert.equal(toolTarget(tool("d", "read", { path: "src/chat/parse.ts" })), "src/chat/parse.ts");
 });
 
-test("file counts deduplicate known paths and fall back to calls for unknown or multi-file targets", () => {
+test("file totals count calls even for repeated paths, missing arguments and multi-file tools", () => {
 	const call = (key: number, name: string, argsText: string, isError = false): ToolRunItem => ({ key, block: { kind: "tool", id: String(key), name, argsText, done: true }, result: { kind: "toolResult", name, text: "done", isError } });
 	assert.equal(toolRunSummary([call(0, "bash", "{}"), call(1, "bash", "{}"), call(2, "bash", "{}")]).label, "bash · 执行了 3 条命令");
-	assert.equal(toolRunSummary([call(0, "write", '{"path":"src/App.tsx"}'), call(1, "edit", '{"path":"src/App.tsx"}')]).label, "write + edit · 修改了 1 个文件");
-	assert.equal(toolRunSummary([call(0, "write", '{"path":"a.txt"}'), call(1, "edit", '{"file_path":"b.txt"}')]).label, "write + edit · 修改了 2 个文件");
-	assert.equal(toolRunSummary([call(0, "write", '{"path":"a.txt"}')]).label, "write · 写入了 1 个文件");
-	assert.equal(toolRunSummary([call(0, "apply_patch", '{"path":"a.txt"}')]).label, "apply_patch · 执行了 1 次文件操作");
+	assert.equal(toolRunSummary([call(0, "write", '{"path":"src/App.tsx"}'), call(1, "edit", '{"path":"src/App.tsx"}')]).label, "write + edit · 编辑了 2 个文件");
+	assert.equal(toolRunSummary([call(0, "read", '{"path":"a.txt"}'), call(1, "read", '{"path":"a.txt"}')]).label, "read · 读取了 2 个文件");
+	assert.equal(toolRunSummary([call(0, "write", '{"path":"a.txt"}'), call(1, "edit", '{"file_path":"b.txt"}')]).label, "write + edit · 编辑了 2 个文件");
+	assert.equal(toolRunSummary([call(0, "write", '{"path":"a.txt"}')]).label, "write · 编辑了 1 个文件");
+	assert.equal(toolRunSummary([call(0, "apply_patch", '{"path":"a.txt"}')]).label, "apply_patch · 编辑了 1 个文件");
 	for (const args of ["{", "null", "{}", '{"path":42}']) {
-		assert.equal(toolRunSummary([call(0, "edit", args)]).label, "edit · 执行了 1 次文件操作");
+		assert.equal(toolRunSummary([call(0, "edit", args)]).label, "edit · 编辑了 1 个文件");
 		assert.equal(toolTarget(call(0, "edit", args).block), undefined);
 	}
 	const failed = toolRunSummary([call(0, "edit", '{"path":"a.txt"}', true)]);
-	assert.equal(failed.label, "edit · 修改 1 个文件");
+	assert.equal(failed.label, "edit · 编辑了 1 个文件（1 失败）");
 	assert.equal(failed.error, true);
 	assert.equal(toolRunSummary([call(0, "custom", "{}")]).label, "custom · 调用了 1 次工具");
+});
+
+test("tool failures stay next to their action using the same units as the action total", () => {
+	const call = (key: number, name: string, path: string, isError?: boolean): ToolRunItem => ({ key, block: { kind: "tool", id: String(key), name, argsText: JSON.stringify({ path }), done: true }, result: isError === undefined ? undefined : { kind: "toolResult", name, text: "done", isError } });
+	const items = [call(0, "read", "a.md", false), call(1, "read", "b.md", true), call(2, "search", "", false), call(3, "bash", "", true), call(4, "custom", "", false)];
+	assert.deepEqual(toolActionSummaries(items), ["读取了 2 个文件（1 失败）", "执行了 2 条命令（1 失败）", "调用了 1 次工具"]);
+	assert.deepEqual(toolActionSummaries([call(0, "read", "a.md", true), call(1, "read", "a.md", true)]), ["读取了 2 个文件（2 失败）"]);
+	assert.deepEqual(toolActionSummaries([call(0, "read", "a.md", true), call(1, "read", "b.md")]), ["读取 2 个文件（1 失败）"]);
+	assert.deepEqual(toolActionSummaries([]), []);
+});
+
+test("discovery and directory tools join commands while expanded details preserve the underlying action", () => {
+	const call = (key: number, name: string, args: Record<string, unknown>, isError = false): ToolRunItem => ({ key, block: { kind: "tool", id: String(key), name, argsText: JSON.stringify(args), done: true }, result: { kind: "toolResult", name, text: "skills/demo/SKILL.md\nskills/other/SKILL.md", isError } });
+	const glob = call(0, "glob", { pattern: "**/SKILL.md", path: "." });
+	assert.equal(toolRunSummary([glob]).label, "glob · 执行了 1 条命令");
+	assert.equal(toolRunSummary([glob]).kind, "command");
+	assert.equal(toolCallSummary(glob).label, "glob · 查找了 1 次文件");
+	assert.equal(toolTarget(glob.block), "**/SKILL.md");
+	assert.equal(toolKind("GLOB"), "find");
+	assert.equal(toolKindLabel("find"), "查找文件");
+	for (const name of ["ls", "list", "tree"]) {
+		assert.equal(toolKind(name), "list");
+		assert.equal(toolRunSummary([call(0, name, { path: "skills" })]).label, `${name} · 执行了 1 条命令`);
+		assert.equal(toolCallSummary(call(0, name, { path: "skills" })).label, `${name} · 列举了 1 次目录`);
+	}
+	assert.deepEqual(toolActionSummaries([glob, call(1, "find", { pattern: "*.ts" }, true), call(2, "ls", { path: "." }), call(3, "read", { path: "skills/demo/SKILL.md" }), call(4, "edit", { path: "src/App.tsx" }), call(5, "grep", { pattern: "Settings", path: "src" }), call(6, "bash", { command: "pwd" })]), ["读取了 1 个文件", "编辑了 1 个文件", "执行了 5 条命令（1 失败）"]);
+	assert.equal(toolRunSummary([{ ...glob, result: undefined }]).label, "glob · 执行 1 条命令");
+	assert.equal(toolTarget(call(0, "grep", { pattern: "Settings", path: "src" }).block), "Settings");
+});
+
+test("summary action order stays fixed regardless of source order or streamed results", () => {
+	const items: ToolRunItem[] = ["web_search", "bash", "edit", "read", "write", "grep"].map((name, key) => ({ key, block: { kind: "tool", id: String(key), name, argsText: "{", done: true } }));
+	assert.deepEqual(toolActionSummaries(items), ["读取 1 个文件", "编辑 2 个文件", "执行 2 条命令", "联网搜索 1 次"]);
+	const settled = items.map((item) => ({ ...item, result: { kind: "toolResult" as const, name: item.block.name, text: "ok", isError: false } }));
+	assert.deepEqual(toolActionSummaries(settled.reverse()), ["读取了 1 个文件", "编辑了 2 个文件", "执行了 2 条命令", "联网搜索了 1 次"]);
+});
+
+test("local grep and find count as commands, separately from web searches and their failures", () => {
+	const items: ToolRunItem[] = ["grep", "find", "rg", "web_search", "WEB_SEARCH"].map((name, key) => ({ key, block: { kind: "tool", id: String(key), name, argsText: '{"pattern":"TODO","path":"src"}', done: true }, result: { kind: "toolResult", name, text: "ok", isError: key === 0 || key === 3 } }));
+	assert.deepEqual(toolActionSummaries(items), ["执行了 3 条命令（1 失败）", "联网搜索了 2 次（1 失败）"]);
+	assert.equal(toolCallSummary(items[0]).label, "grep · 搜索了 1 次（1 失败）");
+	assert.equal(toolRunSummary([items[0]]).kind, "command");
+	assert.equal(toolKindLabel("web_search"), "联网搜索");
 });
 
 test("consecutive assistant messages between user prompts fold as one turn", () => {

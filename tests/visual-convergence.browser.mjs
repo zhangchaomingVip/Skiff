@@ -152,12 +152,14 @@ try {
 		assert.equal(await send.isDisabled(), true);
 		assert.equal(await send.evaluate((el) => getComputedStyle(el).opacity), "1");
 		// Collapse/expand, including the reserved history-search reveal interface.
-		const fold = page.getByRole("button", { name: "收起本轮执行过程" }).first();
+		const fold = page.getByRole("button", { name: "展开本轮执行过程" }).first();
 		assert.equal(await fold.count(), 1);
 		if (await fold.count()) {
 			await fold.focus(); await fold.press("Enter");
-			const expand = page.getByRole("button", { name: "展开本轮执行过程" }).first();
-			await expand.press("Space");
+			const collapse = page.getByRole("button", { name: "收起本轮执行过程" }).first();
+			await collapse.press("Space");
+			assert.equal(await fold.getAttribute("aria-expanded"), "false");
+			await fold.press("Enter");
 			assert.equal(await page.locator(".turn-header").first().evaluate((el) => getComputedStyle(el).borderBottomWidth), "0px");
 		}
 		const summary = page.locator(".thinking > summary").first();

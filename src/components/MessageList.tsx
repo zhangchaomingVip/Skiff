@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ChatMessage, ModelInfo, SessionState } from "../chat/types";
 import { groupTurns, turnContentTails } from "../chat/turns";
 import { modelDisplay } from "../chat/modelDisplay";
@@ -6,6 +6,7 @@ import { MessageItem } from "./MessageItem";
 import { Icon } from "./Icon";
 import type { MessageReveal } from "../chat/useConversationSearch";
 import { WaitingReply } from "./WaitingReply";
+import { turnProcessPresentation, type ProcessCounts } from "../chat/turnProcess";
 
 /** Scrolling transcript with an auto-follow anchor at the bottom. */
 export function MessageList({ messages, pendingPrompt, activeTurnId, projectName, running, models, model, onSuggestion, followSignal, onEdit, onContinue, continuing, lastOutcome, readOnly = false, revealTurn, revealMessage }: { onEdit?: (message: ChatMessage) => void; onContinue?: () => void; continuing?: boolean; lastOutcome?: SessionState["lastOutcome"]; revealMessage?: MessageReveal; revealTurn?: { turnId: string; requestKey: string }; messages: ChatMessage[]; pendingPrompt?: SessionState["pendingPrompt"]; activeTurnId?: string; projectName?: string; running: boolean; models: ModelInfo[]; model?: ModelInfo; onSuggestion: (text: string) => void; followSignal: number; readOnly?: boolean }) {
@@ -13,9 +14,20 @@ export function MessageList({ messages, pendingPrompt, activeTurnId, projectName
 	const followingRef = useRef(true);
 	const [away, setAway] = useState(false);
 	const [unread, setUnread] = useState(false);
-	const [collapsedTurns, setCollapsedTurns] = useState<string[]>([]);
+	const [expandedGroups, setExpandedGroups] = useState<ReadonlySet<string>>(() => new Set());
+	const frozenProcessCounts = useRef(new Map<string, ProcessCounts>());
 	const displayMessages = useMemo(() => pendingPrompt?.userMessage ? [...messages, pendingPrompt.userMessage] : messages, [messages, pendingPrompt?.userMessage]);
 	const turns = useMemo(() => groupTurns(displayMessages), [displayMessages]);
+	const processTurnId = activeTurnId ?? (running ? turns[turns.length - 1]?.turnId : undefined);
+	const process = useMemo(() => turnProcessPresentation(displayMessages, { running, activeTurnId: processTurnId, frozenCounts: frozenProcessCounts.current }), [displayMessages, running, processTurnId]);
+	// Snapshot closed segments after committing the first reply token, never during render.
+	useLayoutEffect(() => { frozenProcessCounts.current = new Map(process.groups.filter((group) => group.closed).map((group) => [group.id, group.counts])); }, [process]);
+	const revealProcess = useCallback((turnId: string) => setExpandedGroups((list) => new Set([...list, ...process.groups.filter((group) => group.turnId === turnId).map((group) => group.id)])), [process]);
+	const setProcessExpanded = useCallback((id: string, expanded: boolean) => setExpandedGroups((list) => {
+		const next = new Set(list);
+		if (expanded) next.add(id); else next.delete(id);
+		return next;
+	}), []);
 	const messagesByTurn = useMemo(() => {
 		const grouped = new Map<string, ChatMessage[]>();
 		displayMessages.forEach((message, index) => {
@@ -32,8 +44,7 @@ export function MessageList({ messages, pendingPrompt, activeTurnId, projectName
 	const lastAssistant = turnTails.get(turns[turns.length - 1]?.turnId);
 	const waitingForAssistant = running && activeTurnId !== undefined && (pendingPrompt !== undefined || (displayMessages[displayMessages.length - 1]?.role === "user" && turns[turns.length - 1]?.turnId === activeTurnId));
 	// A new request key lets history search reveal the same turn again later.
-	useEffect(() => { if (revealTurn) setCollapsedTurns((list) => list.filter((id) => id !== revealTurn.turnId)); }, [revealTurn?.turnId, revealTurn?.requestKey]);
-	const toggleTurn = useCallback((turnId: string) => setCollapsedTurns((list) => list.includes(turnId) ? list.filter((id) => id !== turnId) : [...list, turnId]), []);
+	useEffect(() => { if (revealTurn) revealProcess(revealTurn.turnId); }, [revealTurn?.turnId, revealTurn?.requestKey]);
 	const scrollBottom = () => {
 		followingRef.current = true; setAway(false); setUnread(false);
 		const el = scrollRef.current;
@@ -53,7 +64,7 @@ export function MessageList({ messages, pendingPrompt, activeTurnId, projectName
 		const index = displayMessages.findIndex((message) => message.id === revealMessage.messageId);
 		if (index < 0) return;
 		followingRef.current = false;
-		setCollapsedTurns((list) => list.filter((id) => id !== turns[index].turnId));
+		revealProcess(turns[index].turnId);
 		const frame = requestAnimationFrame(() => scrollRef.current?.querySelector(`[data-message-id="${CSS.escape(revealMessage.messageId)}"]`)?.scrollIntoView({ block: "center" }));
 		return () => cancelAnimationFrame(frame);
 	}, [revealMessage?.requestKey]);
@@ -83,7 +94,7 @@ export function MessageList({ messages, pendingPrompt, activeTurnId, projectName
 		<div className="transcript">
 		<div className="messages" ref={scrollRef} onScroll={() => { const el = scrollRef.current; if (el) { followingRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80; setAway(!followingRef.current); if (followingRef.current) setUnread(false); } }}>
 			{displayMessages.map((message, index) => (
-				<MessageItem onEdit={onEdit} onContinue={onContinue} continuing={continuing} turnOutcome={(() => { const group = messagesByTurn.get(turns[index].turnId) ?? []; const final = [...group].reverse().find((entry) => entry.role === "assistant"); return group.find((entry) => entry.turnResult)?.turnResult ?? (lastOutcome?.turnId === turns[index].turnId ? lastOutcome.reason : final?.stopReason); })()} searchQuery={revealMessage?.messageId === message.id ? revealMessage.query : undefined} key={message.id} message={message} turnMessages={message.role === "assistant" && turnTails.get(turns[index].turnId) === index ? messagesByTurn.get(turns[index].turnId) : undefined} showRole={index === 0 || displayMessages[index - 1].role !== message.role} roleDisplay={message.role === "user" ? { label: "你" } : modelDisplay(message, models, model)} compact={message.role === "assistant" && displayMessages[index - 1]?.role === "assistant"} running={running} turnRunning={running && turns[index].turnId === activeTurnId} turnId={turns[index].turnId} turnHead={turns[index].head} turnSteps={turns[index].stepCount} turnDuration={turns[index].durationMs} turnOpen={!collapsedTurns.includes(turns[index].turnId)} onToggleTurn={toggleTurn} isLast={message.role === "assistant" ? index === lastAssistant && displayMessages[displayMessages.length - 1]?.role === "assistant" : index === displayMessages.length - 1} readOnly={readOnly} />
+				<MessageItem onEdit={onEdit} onContinue={onContinue} continuing={continuing} turnOutcome={(() => { const group = messagesByTurn.get(turns[index].turnId) ?? []; const final = [...group].reverse().find((entry) => entry.role === "assistant"); return group.find((entry) => entry.turnResult)?.turnResult ?? (lastOutcome?.turnId === turns[index].turnId ? lastOutcome.reason : final?.stopReason); })()} searchQuery={revealMessage?.messageId === message.id ? revealMessage.query : undefined} key={message.id} message={message} processPresentation={process.presentation.get(message.id)} expandedGroups={expandedGroups} onExpandedChange={setProcessExpanded} turnMessages={message.role === "assistant" && turnTails.get(turns[index].turnId) === index ? messagesByTurn.get(turns[index].turnId) : undefined} showRole={index === 0 || displayMessages[index - 1].role !== message.role} roleDisplay={message.role === "user" ? { label: "你" } : modelDisplay(message, models, model)} compact={message.role === "assistant" && displayMessages[index - 1]?.role === "assistant"} running={running} turnRunning={running && turns[index].turnId === processTurnId} turnHead={turns[index].head} isLast={message.role === "assistant" ? index === lastAssistant && displayMessages[displayMessages.length - 1]?.role === "assistant" : index === displayMessages.length - 1} readOnly={readOnly} />
 			))}
 			{waitingForAssistant && <WaitingReply turnId={activeTurnId} roleDisplay={modelDisplay({ id: "waiting", role: "assistant", blocks: [] }, models, model)} />}
 		</div>

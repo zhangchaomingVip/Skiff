@@ -3,12 +3,12 @@ import { Icon, type IconName } from "./Icon";
 
 type ProcessLabelProps = { icon: IconName; label: ReactNode; status?: ReactNode };
 
-function ProcessLabel({ icon, label, status }: ProcessLabelProps) {
+function ProcessLabel({ icon, label, status, labelId, statusId }: ProcessLabelProps & { labelId?: string; statusId?: string }) {
 	return <>
 		<span className="process-row-icon"><Icon name={icon} size={16} /></span>
-		<span className="process-row-label">{label}</span>
+		<span className="process-row-label" id={labelId}>{label}</span>
 		<span className="process-row-trailing">
-			<span className="process-row-status">{status}</span>
+			<span className="process-row-status" id={statusId}>{status}</span>
 			<span className="disclosure"><Icon name="chevron" size={14} /></span>
 		</span>
 	</>;
@@ -20,13 +20,17 @@ export function ProcessRow(props: ProcessLabelProps) {
 }
 
 /** Native keyboard behavior with the same icon, label, status and arrow slots for every process row. */
-export function ProcessDisclosure({ children, className = "", title, ...labelProps }: ProcessLabelProps & { children: ReactNode; className?: string; title?: string }) {
-	const [expanded, setExpanded] = useState(false);
+export function ProcessDisclosure({ children, className = "", title, summaryLabel, expanded: controlledExpanded, onExpandedChange, collapseOnSpace = false, ...labelProps }: ProcessLabelProps & { children: ReactNode; className?: string; title?: string; summaryLabel?: string; expanded?: boolean; onExpandedChange?: (expanded: boolean) => void; collapseOnSpace?: boolean }) {
+	const [localExpanded, setLocalExpanded] = useState(false);
+	const expanded = controlledExpanded ?? localExpanded;
+	const setExpanded = (value: boolean) => { setLocalExpanded(value); onExpandedChange?.(value); };
 	const contentId = useId();
 	return <details className={`process-details ${className}`} open={expanded} onToggle={(event) => {
-		if (event.target === event.currentTarget) setExpanded(event.currentTarget.open);
+		if (event.target === event.currentTarget && event.currentTarget.open !== expanded) setExpanded(event.currentTarget.open);
 	}}>
-		<summary className="process-row" title={title} aria-expanded={expanded} aria-controls={contentId}><ProcessLabel {...labelProps} /></summary>
+		<summary role="button" className="process-row" title={title} aria-label={summaryLabel} aria-describedby={summaryLabel ? `${contentId}-label ${contentId}-status` : undefined} aria-expanded={expanded} aria-controls={contentId} onClick={(event) => { event.preventDefault(); setExpanded(!expanded); }} onKeyDown={(event) => {
+			if (collapseOnSpace && event.key === " ") { event.preventDefault(); setExpanded(false); }
+		}}><ProcessLabel {...labelProps} labelId={summaryLabel ? `${contentId}-label` : undefined} statusId={summaryLabel ? `${contentId}-status` : undefined} /></summary>
 		<div className="process-detail-content" id={contentId}>{children}</div>
 	</details>;
 }

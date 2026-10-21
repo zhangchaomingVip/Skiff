@@ -4,7 +4,6 @@ import { SearchText } from "./SearchText";
 import { memo } from "react";
 import type { ChatMessage, ContentBlock } from "../chat/types";
 import { splitAttachments } from "../chat/textAttachments";
-import { TurnSummary } from "./TurnSummary";
 import { shouldShowThinking } from "../chat/thinking";
 import { turnReplyText } from "../chat/turns";
 import type { ModelDisplay } from "../chat/modelDisplay";
@@ -17,8 +16,10 @@ import { CopyButton } from "./CopyButton";
 import { TurnUsage } from "./TurnUsage";
 import { ImagePreview } from "./ImagePreview";
 import { BrandIcon } from "./BrandIcon";
-import { ProcessDisclosure, ProcessDisclosureButton, ProcessRow } from "./ProcessDisclosure";
+import { ProcessDisclosure } from "./ProcessDisclosure";
 import { TOOL_ICONS } from "./toolIcons";
+import { processBlocks, type ProcessPresentation } from "../chat/turnProcess";
+import { TurnProcessGroup } from "./TurnProcessGroup";
 
 /** Compact, locale-aware timestamp shown beside a message role. */
 const formatMessageTime = (ts?: number): string | undefined => {
@@ -30,33 +31,27 @@ const formatMessageTime = (ts?: number): string | undefined => {
 	return new Date(ts).toLocaleDateString([], { month: "numeric", day: "numeric" });
 };
 type Tool = Extract<ContentBlock, { kind: "tool" }>;
-type Result = Extract<ContentBlock, { kind: "toolResult" }>;
-
-export const MessageItem = memo(function MessageItem({ onEdit, onContinue, continuing, turnOutcome, searchQuery, message, turnMessages, showRole, roleDisplay, compact, running, turnRunning = false, turnId, turnHead, turnSteps, turnDuration, turnOpen, onToggleTurn, isLast, readOnly = false }: {
+export const MessageItem = memo(function MessageItem({ onEdit, onContinue, continuing, turnOutcome, searchQuery, message, processPresentation, turnMessages, showRole, roleDisplay, compact, running, turnRunning = false, turnHead, expandedGroups, onExpandedChange, isLast, readOnly = false }: {
+	processPresentation?: ProcessPresentation;
+	expandedGroups: ReadonlySet<string>; onExpandedChange: (id: string, expanded: boolean) => void;
 	onEdit?: (message: ChatMessage) => void; onContinue?: () => void; continuing?: boolean; turnOutcome?: string;
 	searchQuery?: string;
 	turnMessages?: ChatMessage[]; readOnly?: boolean;
 	turnRunning?: boolean;
-	message: ChatMessage; showRole: boolean; roleDisplay: ModelDisplay; compact: boolean; running: boolean; turnId: string; turnHead: boolean; turnSteps: number; turnDuration?: number; turnOpen: boolean; onToggleTurn: (turnId: string) => void; isLast: boolean;
+	message: ChatMessage; showRole: boolean; roleDisplay: ModelDisplay; compact: boolean; running: boolean; turnHead: boolean; isLast: boolean;
 }) {
 	const isUser = message.role === "user";
 	const text = message.blocks.filter((b) => b.kind === "text").map((b) => b.text).join("\n\n");
-	const results = message.blocks.filter((b): b is Result => b.kind === "toolResult");
-	const matched = new Set<Result>();
-	const rendered: { key: number; block: ContentBlock; result?: Result }[] = [];
-	message.blocks.forEach((block, index) => {
-		if (block.kind === "toolResult") return;
-		const result = block.kind === "tool" ? results.find((r) => !matched.has(r) && (r.id ? r.id === block.id : r.name === block.name)) : undefined;
-		if (result) matched.add(result);
-		rendered.push({ key: index, block, result });
-	});
-	results.forEach((result, index) => { if (!matched.has(result)) rendered.push({ key: message.blocks.length + index, block: result }); });
+	const rendered = processBlocks(message);
+	const showTyping = message.streaming && !processPresentation;
+	const renderProcess = (group: NonNullable<ProcessPresentation["head"]>) => <TurnProcessGroup key={group.id} group={group} running={turnRunning} outcome={turnOutcome} expanded={expandedGroups.has(group.id)} onExpandedChange={onExpandedChange} />;
 	const nodes = [];
 	for (let index = 0; index < rendered.length; index++) {
 		const entry = rendered[index];
 		const block = entry.block;
-		// A collapsed turn hides every step (reasoning and tool calls), keeping only the reply text.
-		if (!turnOpen && (block.kind === "thinking" || block.kind === "tool" || block.kind === "toolResult")) continue;
+		const group = processPresentation?.groups.get(entry.key);
+		if (group) { nodes.push(renderProcess(group)); continue; }
+		if (processPresentation?.hidden.has(entry.key)) continue;
 		if (block.kind === "tool") {
 			const group: ToolRunItem[] = [{ key: entry.key, block, result: entry.result }];
 			while (rendered[index + 1]?.block.kind === "tool") {
@@ -82,22 +77,22 @@ export const MessageItem = memo(function MessageItem({ onEdit, onContinue, conti
 	const copyText = isUser ? text : turnMessages ? turnReplyText(turnMessages) : "";
 	const canCopy = !!copyText.trim();
 	const showActions = canCopy || (isUser && !readOnly);
-	const showHeader = !isUser && turnHead && (turnSteps > 0 || turnRunning || !!outcomeLabel(turnOutcome));
+	const showHeader = !isUser && !!processPresentation?.head;
 	const showOutcome = (!turnRunning || turnOutcome === "length") && turnOutcome !== "manual" && !!outcomeLabel(turnOutcome);
 	const showUsage = !isUser && !turnRunning && !message.streaming && !(isLast && running) && turnMessages?.some((entry) => entry.usage);
 	// Intermediate process-only messages vanish when the turn is collapsed.
-	if (!nodes.length && !showHeader && !showUsage && !message.streaming && !showActions) return null;
-	const metadataOnly = !nodes.length && !showHeader && !message.streaming;
+	if (!nodes.length && !showHeader && !showUsage && !showTyping && !showActions) return null;
+	const metadataOnly = !nodes.length && !showHeader && !showTyping;
 	return <article data-message-id={message.id} data-search-hit={searchQuery ? "true" : undefined} className={`msg ${isUser ? "user" : "assistant"}${compact ? " compact" : ""}${metadataOnly ? " metadata-only" : ""}${searchQuery ? " search-message-hit" : ""}`} aria-label={isUser ? "你的消息" : "Skiff 的消息"}>
 		{showRole && <div className="msg-role">{roleDisplay.brand && <BrandIcon name={roleDisplay.brand} size={14} />}{roleDisplay.label}{message.timestamp !== undefined && <span className="msg-time">{formatMessageTime(message.timestamp)}</span>}</div>}
 		{searchQuery && <details open className="search-source"><summary>搜索命中原文</summary><pre><SearchText text={text} query={searchQuery} /></pre></details>}
 		{!metadataOnly && <div className="msg-body">
 			{isUser && message.turnResult === "manual" && <span className="turn-outcome manual">已手动停止{onContinue && <Button disabled={continuing} onClick={onContinue}>继续</Button>}</span>}
 			{showHeader && <div className="turn-header">
-				{turnSteps > 0 ? <ProcessDisclosureButton className="thinking-toggle" icon="clock" expanded={turnOpen} onClick={() => onToggleTurn(turnId)} aria-label={turnOpen ? "收起本轮执行过程" : "展开本轮执行过程"} title={turnOpen ? "收起本轮执行过程" : "展开本轮执行过程"} label={<TurnSummary turnId={turnId} durationMs={turnDuration} steps={turnSteps} />} status={showOutcome ? <span className={`turn-outcome ${turnOutcome ?? ""}`}>{outcomeLabel(turnOutcome)}</span> : undefined} /> : <ProcessRow icon="clock" label={<TurnSummary turnId={turnId} durationMs={turnDuration} steps={0} />} status={showOutcome ? <span className={`turn-outcome ${turnOutcome ?? ""}`}>{outcomeLabel(turnOutcome)}</span> : undefined} />}
-				{showOutcome && (turnOutcome === "length" || turnOutcome === "aborted") && !readOnly && onContinue && <Button disabled={continuing} onClick={onContinue}>继续</Button>}
+				{processPresentation?.head && renderProcess(processPresentation.head)}
+				{turnHead && showOutcome && (turnOutcome === "length" || turnOutcome === "aborted") && !readOnly && onContinue && <Button disabled={continuing} onClick={onContinue}>继续</Button>}
 			</div>}
-			{!nodes.length && message.streaming ? <span className="typing">正在思考…</span> : nodes}
+			{!nodes.length && showTyping ? <span className="typing">正在思考…</span> : nodes}
 		</div>}
 		{(showActions || showUsage) && <div className={`message-actions${showUsage ? " with-usage" : ""}`}>
 			{showActions && <div className="message-buttons">

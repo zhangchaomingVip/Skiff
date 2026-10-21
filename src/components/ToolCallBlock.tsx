@@ -1,7 +1,7 @@
 import { Button } from "./ui";
 import { useState } from "react";
 import type { ContentBlock } from "../chat/types";
-import { toolKind, toolRunSummary, toolTarget } from "../chat/toolRuns";
+import { toolKind, toolCallSummary, toolTarget } from "../chat/toolRuns";
 import { CopyButton } from "./CopyButton";
 import { Icon } from "./Icon";
 import { TOOL_ICONS } from "./toolIcons";
@@ -20,7 +20,7 @@ export function ToolCallBlock({ tool, result }: { tool: Tool; result?: Result })
 	} catch { /* Partial JSON while streaming. */ }
 	const command = typeof args.command === "string" ? args.command : undefined;
 	const target = toolTarget(tool);
-	const summary = toolRunSummary([{ key: 0, block: tool, result }]);
+	const summary = toolCallSummary({ key: 0, block: tool, result });
 	const output = result?.text ?? "";
 	const lines = output.split("\n");
 	const diff = !result?.isError ? result?.diff ?? (tool.name === "edit" && typeof args.oldText === "string" && typeof args.newText === "string" ? args.oldText.split("\n").map((line) => `-${line}`).concat(args.newText.split("\n").map((line) => `+${line}`)).join("\n") : tool.name === "write" && typeof args.content === "string" ? args.content.split("\n").map((line) => `+${line}`).join("\n") : undefined) : undefined;

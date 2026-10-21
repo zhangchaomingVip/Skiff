@@ -186,10 +186,10 @@ async function regressions() {
 	}
 	await clean();
 	await open("kind=tool");
-	await page.getByRole("button", { name: "收起本轮执行过程", exact: true }).first().click();
+	await page.getByRole("button", { name: "展开本轮执行过程", exact: true }).first().click();
 	await page.locator('.messages').evaluate((element) => element.scrollTo(0, 0));
 	await select(1); await ready("s1");
-	check(await page.getByRole("button", { name: "收起本轮执行过程", exact: true }).count() === 1 && await page.getByRole("button", { name: "回到底部", exact: true }).count() === 0, "跨会话执行折叠与滚动跟随状态隔离");
+	check(await page.getByRole("button", { name: "收起本轮执行过程", exact: true }).count() === 0 && await page.getByRole("button", { name: "展开本轮执行过程", exact: true }).count() > 0 && await page.getByRole("button", { name: "回到底部", exact: true }).count() === 0, "跨会话执行折叠与滚动跟随状态隔离");
 	await clean();
 	await open("empty=1"); await select(1); await ready("s1");
 	check(await page.locator('.empty').count() === 1 && await page.locator('[aria-label="正在加载会话"]').count() === 0, "空历史成功后展示空会话，结束加载");

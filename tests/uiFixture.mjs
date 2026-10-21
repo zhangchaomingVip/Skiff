@@ -1,6 +1,6 @@
 import { seedPolishPreview } from "./polishFixture.mjs";
 
-export const fixtures = ["launcher", "single", "multi", "unknown", "empty", "loading", "error", "chat", "long", "settings", "settings-info", "picker", "voyage", "voyage-output", "voyage-thinking", "voyage-fishing", "voyage-tool", "voyage-moored", "voyage-high", "authorization", "sidebar", "archive", "visual", "tool-spacing", "process-rows"];
+export const fixtures = ["launcher", "single", "multi", "unknown", "empty", "loading", "error", "chat", "long", "settings", "settings-info", "picker", "voyage", "voyage-output", "voyage-thinking", "voyage-tool", "voyage-moored", "voyage-high", "authorization", "sidebar", "archive", "visual", "tool-spacing", "process-rows", "repeated-process", "process-folding", "process-actions", "file-discovery"];
 
 // This entry runs only on the separate preview origin. It never uses real pi.
 export function preparePreview(target) {
@@ -59,9 +59,73 @@ export function preparePreview(target) {
 		}));
 		for (const chat of chats) if (chat.hasMessages) chat.selectedModel = { provider: "skiff-relay-r1-deepseek", id: "deepseek-chat", modelId: "deepseek-chat", routeId: "route-deepseek-r1", offerId: "route-deepseek-r1/deepseek-chat" };
 		storage.setItem("skiff.workspace.v1", JSON.stringify({ version: 1, projects: [project, otherProject], chats, activeId: "archive-active" }));
-	} else if (["chat", "long", "picker", "voyage", "authorization", "visual", "tool-spacing", "process-rows"].includes(fixture) || fixture.startsWith("voyage-")) {
+	} else if (["chat", "long", "picker", "voyage", "authorization", "visual", "tool-spacing", "process-rows", "repeated-process", "process-folding", "process-actions", "file-discovery"].includes(fixture) || fixture.startsWith("voyage-")) {
 		seedPolishPreview(storage, fixture === "long");
 		const sessions = JSON.parse(storage.getItem("skiff.test.sessions"));
+		if (fixture === "file-discovery") sessions["polish-preview.jsonl"] = [
+			{ role: "user", content: "汇总思考、读取、编辑、命令和联网搜索；grep、find 计入命令。" },
+			{ role: "assistant", content: [
+				{ type: "thinking", thinking: "先查找说明文件，再列举目录、读取正文，最后演示编辑结果。" },
+				{ type: "text", text: "先检查文件和目录，再读取、编辑，并搜索相关内容。" },
+				{ type: "thinking", thinking: "先查找说明文件，再列举目录、读取正文，最后演示编辑结果。" },
+				{ type: "toolCall", id: "discover-web", name: "web_search", arguments: { query: "示例项目说明" } },
+				{ type: "toolCall", id: "discover-glob", name: "glob", arguments: { pattern: "**/SKILL.md", path: "." } },
+				{ type: "toolCall", id: "discover-ls", name: "ls", arguments: { path: "skills" } },
+				{ type: "toolCall", id: "discover-read", name: "read", arguments: { path: "skills/demo/SKILL.md" } },
+				{ type: "toolCall", id: "discover-read-again", name: "read", arguments: { path: "skills/demo/SKILL.md" } },
+				{ type: "toolCall", id: "discover-write", name: "write", arguments: { path: "notes.md", content: "待检查" } },
+				{ type: "toolCall", id: "discover-edit", name: "edit", arguments: { path: "notes.md", oldText: "待检查", newText: "检查完成" } },
+				{ type: "toolCall", id: "discover-bash", name: "bash", arguments: { command: "pwd" } },
+				{ type: "toolCall", id: "discover-grep", name: "grep", arguments: { pattern: "示例", path: "skills" } },
+			] },
+			{ role: "toolResult", toolCallId: "discover-web", name: "web_search", content: "示例搜索服务暂不可用", isError: true },
+			{ role: "toolResult", toolCallId: "discover-glob", name: "glob", content: "skills/demo/SKILL.md\nskills/other/SKILL.md" },
+			{ role: "toolResult", toolCallId: "discover-ls", name: "ls", content: "demo/\nother/" },
+			{ role: "toolResult", toolCallId: "discover-read", name: "read", content: "# 示例技能\n这是技能说明的正文。" },
+			{ role: "toolResult", toolCallId: "discover-read-again", name: "read", content: "# 示例技能\n这是技能说明的正文。" },
+			{ role: "toolResult", toolCallId: "discover-write", name: "write", content: "已写入 notes.md" },
+			{ role: "toolResult", toolCallId: "discover-edit", name: "edit", content: "已更新 notes.md" },
+			{ role: "toolResult", toolCallId: "discover-bash", name: "bash", content: "D:/workspace/Skiff" },
+			{ role: "toolResult", toolCallId: "discover-grep", name: "grep", content: "skills/demo/SKILL.md:1:# 示例技能" },
+			{ role: "assistant", content: "检查完成。同一文件读取两次计为 2，写入和编辑合并计为 2；grep、查找文件、列目录和 bash 共计 4 条命令。web_search 单独显示为联网搜索，失败次数保留在对应类别旁。", stopReason: "stop" },
+		];
+		if (fixture === "process-actions") sessions["polish-preview.jsonl"] = [
+			{ role: "user", content: "检查项目说明与设置入口，确认读取失败时的展示效果。" },
+			{ role: "assistant", content: [
+				{ type: "thinking", thinking: "先梳理项目约定，再读取相关文件，核对设置入口。".repeat(90) },
+				{ type: "text", text: "先读取项目说明和设置文件，再搜索设置入口。" },
+				{ type: "toolCall", id: "action-read-1", name: "read", arguments: { path: "skills/README.md" } },
+				{ type: "toolCall", id: "action-read-2", name: "read", arguments: { path: "src/settings.ts" } },
+				{ type: "toolCall", id: "action-search", name: "grep", arguments: { pattern: "Settings", path: "src" } },
+			] },
+			{ role: "toolResult", toolCallId: "action-read-1", name: "read", content: "项目使用 React 和 TypeScript。" },
+			{ role: "toolResult", toolCallId: "action-read-2", name: "read", content: "文件不存在：src/settings.ts", isError: true },
+			{ role: "toolResult", toolCallId: "action-search", name: "grep", content: "src/components/Settings.tsx" },
+			{ role: "assistant", content: "找到了设置入口：`src/components/Settings.tsx`。其中一个候选路径不存在，读取失败已标在对应动作旁，详细输出保留在折叠组内。", stopReason: "stop", usage: { input: 1000, output: 120, totalTokens: 1120 } },
+		];
+		if (fixture === "repeated-process" || fixture === "process-folding") sessions["polish-preview.jsonl"] = [
+			{ role: "user", content: "检查命令连续执行时的展示效果。" },
+			...Array.from({ length: 12 }, (_, round) => [
+				{ role: "assistant", content: [
+					{ type: "thinking", thinking: `第 ${round + 1} 轮先分析上一次的结果，再选择接下来的检查命令。\n保留每轮思考与工具详情供展开查看。` },
+					...[0, 1].map((call) => ({ type: "toolCall", id: `repeat-${round}-${call}`, name: "bash", arguments: { command: call ? "node --version" : "pwd" } })),
+				] },
+				...[0, 1].map((call) => ({ role: "toolResult", toolCallId: `repeat-${round}-${call}`, toolName: "bash", isError: round === 8 && call === 1, content: round === 8 && call === 1 ? "示例失败：命令不可用。" : "检查完成。" })),
+			]).flat(),
+			{ role: "assistant", content: "检查结束。连续过程已归纳成一行，展开后可查看每轮的命令、思考和输出。", stopReason: "stop", durationMs: 15000, usage: { input: 4096, output: 234, totalTokens: 4330 } },
+		];
+		if (fixture === "process-folding") {
+			sessions["polish-preview.jsonl"].pop();
+			sessions["polish-preview.jsonl"].push(
+				{ role: "assistant", content: "### 先给结论\n\n首个正文之前的 12 轮过程已汇总在上方，回答默认可见。" },
+				{ role: "assistant", content: [
+					{ type: "thinking", thinking: "接下来核对正文中的细节，再继续给出说明。" },
+					{ type: "toolCall", id: "inline-check", name: "bash", arguments: { command: "npm test" } },
+				] },
+				{ role: "toolResult", toolCallId: "inline-check", name: "bash", content: "所有检查通过。" },
+				{ role: "assistant", content: "### 检查结果\n\n正文之间的工具调用以一行注脚展示。展开只推开后文，轮首计数保持不变。", stopReason: "stop", durationMs: 15000, usage: { input: 4096, output: 234, totalTokens: 4330 } },
+			);
+		}
 		if (fixture === "process-rows") sessions["polish-preview.jsonl"] = [
 			{ role: "user", content: "先检查环境，再写入与编辑文件，最后验证工具结果。" },
 			{ role: "assistant", content: [

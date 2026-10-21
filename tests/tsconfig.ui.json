@@ -1,1 +1,1 @@
-{ "extends": "../tsconfig.json", "compilerOptions": { "allowJs": true }, "include": ["../src", "./uiGallery.tsx", "./session-switch.preview.tsx", "./retrievability.preview.tsx"] }
+{ "extends": "../tsconfig.json", "compilerOptions": { "allowJs": true }, "include": ["../src", "./uiGallery.tsx", "./session-switch.preview.tsx", "./retrievability.preview.tsx", "./process-folding.preview.tsx"] }

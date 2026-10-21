@@ -40,9 +40,12 @@ try {
 	await first.locator(".usage-trigger").press("Escape");
 	assert.equal(await first.locator(".usage-trigger").getAttribute("aria-expanded"), "false");
 	assert.equal(await first.locator(".usage-trigger").evaluate((el) => el === document.activeElement), true);
-	await page.getByRole("button", { name: "收起本轮执行过程" }).click();
+	const process = page.locator(".turn-process-head > summary").first();
+	assert.equal(await process.getAttribute("aria-expanded"), "false");
+	await process.press("Enter");
+	await process.press("Space");
 	assert.equal(await page.locator(".usage-details").count(), 2);
-	assert.equal(await page.getByRole("button", { name: "展开本轮执行过程" }).count(), 1);
+	assert.equal(await process.getAttribute("aria-expanded"), "false");
 	await render({ messages, revealTurn: { turnId: "turn:history_0", requestKey: "search-1" } }, 2);
 	await page.getByRole("button", { name: "收起本轮执行过程" }).waitFor();
 	await page.getByRole("button", { name: "收起本轮执行过程" }).click();
