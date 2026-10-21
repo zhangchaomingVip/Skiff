@@ -7,9 +7,16 @@ function ProcessLabel({ icon, label, status }: ProcessLabelProps) {
 	return <>
 		<span className="process-row-icon"><Icon name={icon} size={16} /></span>
 		<span className="process-row-label">{label}</span>
-		<span className="process-row-status">{status}</span>
-		<span className="disclosure"><Icon name="chevron" size={14} /></span>
+		<span className="process-row-trailing">
+			<span className="process-row-status">{status}</span>
+			<span className="disclosure"><Icon name="chevron" size={14} /></span>
+		</span>
 	</>;
+}
+
+/** Non-interactive turn metadata keeps the same columns without a fold affordance. */
+export function ProcessRow(props: ProcessLabelProps) {
+	return <div className="process-row process-row-static"><ProcessLabel {...props} /></div>;
 }
 
 /** Native keyboard behavior with the same icon, label, status and arrow slots for every process row. */

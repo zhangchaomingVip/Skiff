@@ -5,8 +5,10 @@ import "./index.css";
 import "./voyage.css";
 import "./components/ui.css";
 import { syncNativeTheme } from "./theme";
+import { initTypography } from "./typography";
 
 syncNativeTheme();
+initTypography();
 
 // Note: no StrictMode — its dev double-mount would start `pi` twice.
 ReactDOM.createRoot(document.getElementById("root")!).render(<App />);

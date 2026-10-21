@@ -1,4 +1,5 @@
 const paths = {
+	type: "M4 5h16M12 5v16M8 21h8",
 	monitor: "M3 3h18v14H3ZM8 21h8m-4-4v4",
 	anchor: "M12 3v17m-5-9H3v3a9 9 0 0 0 18 0v-3h-4M9 6a3 3 0 1 0 6 0 3 3 0 0 0-6 0Z",
 	flag: "M5 21V3m0 0h14l-3 5 3 5H5",

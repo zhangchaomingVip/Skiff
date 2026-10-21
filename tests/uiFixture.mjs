@@ -7,7 +7,7 @@ export function preparePreview(target) {
 	const params = new URLSearchParams(target.location.search);
 	const fixture = params.get("fixture") || "launcher";
 	const storage = target.localStorage;
-	const preservedPreferences = params.get("persist") === "1" ? ["skiff.sidebar.width", "skiff.voyage.width", "skiff.sidebar.recent-expanded", "skiff.family-models.v1", "skiff.theme", "skiff.test.metadata.v1", "skiff.settings.providers-view.v1"].map((key) => [key, storage.getItem(key)]).filter((entry) => entry[1] !== null) : [];
+	const preservedPreferences = params.get("persist") === "1" ? ["skiff.sidebar.width", "skiff.voyage.width", "skiff.sidebar.recent-expanded", "skiff.family-models.v1", "skiff.theme", "skiff.typography.v1", "skiff.test.metadata.v1", "skiff.settings.providers-view.v1"].map((key) => [key, storage.getItem(key)]).filter((entry) => entry[1] !== null) : [];
 	for (let index = storage.length - 1; index >= 0; index--) {
 		const key = storage.key(index);
 		if (key?.startsWith("skiff.")) storage.removeItem(key);
@@ -65,7 +65,7 @@ export function preparePreview(target) {
 		if (fixture === "process-rows") sessions["polish-preview.jsonl"] = [
 			{ role: "user", content: "先检查环境，再写入与编辑文件，最后验证工具结果。" },
 			{ role: "assistant", content: [
-				{ type: "thinking", thinking: "先用三条命令检查目录、工作路径和运行环境。\n随后写入一个文件、编辑另一个文件，确认工具摘要区分文件数和调用次数。" },
+				{ type: "thinking", thinking: "先用三条命令检查目录、工作路径和运行环境。\n随后写入一个文件、编辑另一个文件，确认工具摘要区分文件数和调用次数。\n".repeat(52) },
 				...["ls", "pwd", "node --version"].map((command, index) => ({ type: "toolCall", id: `process-bash-${index}`, name: "bash", arguments: { command } })),
 			] },
 			...["Skiff", "D:/workspace/Skiff", "v24.19.0"].map((content, index) => ({ role: "toolResult", toolCallId: `process-bash-${index}`, toolName: "bash", content })),
@@ -80,12 +80,14 @@ export function preparePreview(target) {
 				{ type: "thinking", thinking: "两个文件已经更新，接下来读取并再次编辑同一个文件。\n这一组应分别显示读取一个文件和修改一个文件，避免把两次调用误写成两个文件。" },
 				{ type: "toolCall", id: "process-read", name: "read", arguments: { path: "notes.md" } },
 				{ type: "toolCall", id: "process-edit-note", name: "edit", arguments: { path: "notes.md", oldText: "# 工具检查", newText: "# 检查完成" } },
+				{ type: "toolCall", id: "process-mixed-command", name: "bash", arguments: { command: "node scripts/check-tools.mjs --verify-output --include-command-details --theme light --theme dark --report tool-check.json" } },
 			] },
 			{ role: "toolResult", toolCallId: "process-read", toolName: "read", content: "# 工具检查" },
 			{ role: "toolResult", toolCallId: "process-edit-note", toolName: "edit", content: "已更新 notes.md" },
+			{ role: "toolResult", toolCallId: "process-mixed-command", toolName: "bash", content: "混合工具摘要应分别显示文件数量和命令条数。" },
 			{ role: "assistant", content: [{ type: "toolCall", id: "process-check", name: "bash", arguments: { command: "node scripts/check-tools.mjs --verify-output --include-command-details --theme light --theme dark --report tool-check.json" } }] },
 			{ role: "toolResult", toolCallId: "process-check", toolName: "bash", isError: true, content: "演示失败状态：检查脚本不存在。" },
-			{ role: "assistant", content: "工具检查已收尾。失败的命令保留输入与输出，可展开复盘。", durationMs: 15000 },
+			{ role: "assistant", content: "失败的命令保留输入与输出，可展开复盘。回复已截断，可继续检查。", durationMs: 15000, stopReason: "length" },
 		];
 		if (fixture === "tool-spacing") sessions["polish-preview.jsonl"] = [
 			{ role: "user", content: "检查对话页面，收紧工具调用之间的间距。" },

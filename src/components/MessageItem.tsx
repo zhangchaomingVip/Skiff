@@ -17,7 +17,7 @@ import { CopyButton } from "./CopyButton";
 import { TurnUsage } from "./TurnUsage";
 import { ImagePreview } from "./ImagePreview";
 import { BrandIcon } from "./BrandIcon";
-import { ProcessDisclosure, ProcessDisclosureButton } from "./ProcessDisclosure";
+import { ProcessDisclosure, ProcessDisclosureButton, ProcessRow } from "./ProcessDisclosure";
 import { TOOL_ICONS } from "./toolIcons";
 
 /** Compact, locale-aware timestamp shown beside a message role. */
@@ -74,9 +74,9 @@ export const MessageItem = memo(function MessageItem({ onEdit, onContinue, conti
 		else if (block.kind === "thinking") {
 			// Short filler reasoning disappears once the turn settles.
 			if (!shouldShowThinking(block.text, !!message.streaming)) continue;
-			nodes.push(<ProcessDisclosure key={entry.key} className="thinking" icon="spark" label={<>思考过程 · <span className="thinking-size">{block.text.trim().length} 字</span></>}><pre>{block.text}</pre></ProcessDisclosure>);
+			nodes.push(<ProcessDisclosure key={entry.key} className="thinking" icon="spark" label={<span>思考过程 · <span className="thinking-size">{block.text.trim().length.toLocaleString("en-US")} 字</span></span>}><pre>{block.text}</pre></ProcessDisclosure>);
 		}
-		else nodes.push(<ProcessDisclosure key={entry.key} className={`tool-result ${block.isError ? "err" : ""}`} icon={TOOL_ICONS[toolKind(block.name)]} label={`${block.name} · 执行结果`} status={block.isError ? "执行失败" : "已完成"}><pre>{block.text}</pre></ProcessDisclosure>);
+		else nodes.push(<ProcessDisclosure key={entry.key} className={`tool-result ${block.isError ? "err" : ""}`} icon={TOOL_ICONS[toolKind(block.name)]} label="执行结果" status={block.isError ? undefined : "已完成"}>{block.isError && <div className="tool-output-heading">error</div>}<pre>{block.text}</pre></ProcessDisclosure>);
 	}
 	// Keep action buttons in the DOM so keyboard users can reach earlier replies.
 	const copyText = isUser ? text : turnMessages ? turnReplyText(turnMessages) : "";
@@ -94,7 +94,7 @@ export const MessageItem = memo(function MessageItem({ onEdit, onContinue, conti
 		{!metadataOnly && <div className="msg-body">
 			{isUser && message.turnResult === "manual" && <span className="turn-outcome manual">已手动停止{onContinue && <Button disabled={continuing} onClick={onContinue}>继续</Button>}</span>}
 			{showHeader && <div className="turn-header">
-				{turnSteps > 0 ? <ProcessDisclosureButton className="thinking-toggle" icon="clock" expanded={turnOpen} onClick={() => onToggleTurn(turnId)} aria-label={turnOpen ? "收起本轮执行过程" : "展开本轮执行过程"} title={turnOpen ? "收起本轮执行过程" : "展开本轮执行过程"} label={<TurnSummary turnId={turnId} durationMs={turnDuration} steps={turnSteps} />} status={showOutcome ? <span className={`turn-outcome ${turnOutcome ?? ""}`}>{outcomeLabel(turnOutcome)}</span> : undefined} /> : <><TurnSummary turnId={turnId} durationMs={turnDuration} steps={0} />{showOutcome && <span className={`turn-outcome ${turnOutcome ?? ""}`}>{outcomeLabel(turnOutcome)}</span>}</>}
+				{turnSteps > 0 ? <ProcessDisclosureButton className="thinking-toggle" icon="clock" expanded={turnOpen} onClick={() => onToggleTurn(turnId)} aria-label={turnOpen ? "收起本轮执行过程" : "展开本轮执行过程"} title={turnOpen ? "收起本轮执行过程" : "展开本轮执行过程"} label={<TurnSummary turnId={turnId} durationMs={turnDuration} steps={turnSteps} />} status={showOutcome ? <span className={`turn-outcome ${turnOutcome ?? ""}`}>{outcomeLabel(turnOutcome)}</span> : undefined} /> : <ProcessRow icon="clock" label={<TurnSummary turnId={turnId} durationMs={turnDuration} steps={0} />} status={showOutcome ? <span className={`turn-outcome ${turnOutcome ?? ""}`}>{outcomeLabel(turnOutcome)}</span> : undefined} />}
 				{showOutcome && (turnOutcome === "length" || turnOutcome === "aborted") && !readOnly && onContinue && <Button disabled={continuing} onClick={onContinue}>继续</Button>}
 			</div>}
 			{!nodes.length && message.streaming ? <span className="typing">正在思考…</span> : nodes}

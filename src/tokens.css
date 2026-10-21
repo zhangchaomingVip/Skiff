@@ -44,6 +44,8 @@
 		--radius-xl: 12px;
 		--radius-full: 999px;
 		--font-family-base: "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI", "PingFang SC", -apple-system, BlinkMacSystemFont, sans-serif;
+		--font-family-sans: "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+		--font-family-serif: "SimSun", "Songti SC", "Noto Serif CJK SC", serif;
 		--font-family-mono: "Cascadia Code", "Consolas", "Menlo", monospace;
 		--font-size-xs: 11px;
 		--font-size-sm: 12px;

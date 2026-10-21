@@ -12,6 +12,7 @@ import { isMacPlatform, settingsCategories, type SettingsCategory, type Settings
 import type { SettingsEditorHandle } from "./settingsEditor";
 import type { WebSearchControls } from "../chat/webSearch";
 import { WebSearchSettings } from "./WebSearchSettings";
+import { FontSettings } from "./FontSettings";
 
 export function SettingsDialog({ initialCategory, restrictions, prompt, providers, models, routes, archives, search, onRetryModels, onClose }: {
 	initialCategory: SettingsCategory;
@@ -49,6 +50,7 @@ export function SettingsDialog({ initialCategory, restrictions, prompt, provider
 			<nav className="settings-nav" aria-label="设置分类">{settingsCategories.map(({ id, label, icon }) => <Button key={id} variant="ghost" aria-pressed={category === id} disabled={navigationLocked || !!restrictions[id]} title={navigationLocked ? "请先返回列表或等待保存完成" : restrictions[id]} onClick={() => switchCategory(id)}><Icon name={icon} size={16} />{label}{category === id && <Icon name="check" size={14} />}</Button>)}
 			</nav>
 			<div className="settings-content">
+				{category === "fonts" && <FontSettings />}
 				{category === "appearance" && <section aria-labelledby="appearance-title"><h2 id="appearance-title">外观</h2><p className="muted">选择应用主题，立即生效。</p><div className="settings-themes" role="group" aria-label="应用主题">{([
 					["system", "跟随系统", "monitor"], ["light", "浅色", "sun"], ["dark", "深色", "moon"],
 				] as const).map(([value, label, icon]) => <Button key={value} variant="setting" aria-pressed={theme === value} onClick={() => setThemePreference(value)}><Icon name={icon} />{label}{theme === value && <Icon name="check" size={14} />}</Button>)}</div></section>}
