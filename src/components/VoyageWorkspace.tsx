@@ -77,9 +77,9 @@ export function VoyageWorkspace({ draftTarget, revealMessage, state, loading = f
 			<LiveTurnContext.Provider value={metrics.liveTurn}>
 				<StableChatView draftTarget={draftTarget} revealMessage={revealMessage} state={state} loading={loading} connected={connected} pending={pending} actions={actions} onSend={onSend} onReconnect={onReconnect} projectName={projectName} failover={failover} routeAuthorization={routeAuthorization} />
 			</LiveTurnContext.Provider>
-			<ContextUsage notice={modelNotice} metrics={metrics} expanded={visibleExpanded} onToggle={toggle} />
+			<ContextUsage notice={modelNotice} metrics={metrics} />
 		</div>
 		{visibleExpanded && !narrow && onRailWidth && onRailWidthCommit && <ResizeSeparator label="调整右侧航行台宽度" value={shownRailWidth} bounds={railBounds} direction={-1} onResize={onRailWidth} onCommit={onRailWidthCommit} />}
-		{narrow && expanded ? <Dialog className="voyage-dialog" aria-label="航行台详情" returnFocusSelector=".voyage-summary" onClose={() => setExpanded(false)}><VoyageRail metrics={metrics} expanded onToggle={toggle} /></Dialog> : <VoyageRail metrics={metrics} expanded={visibleExpanded} onToggle={toggle} />}
+		{narrow && expanded ? <Dialog className="voyage-dialog" aria-label="航行台详情" returnFocusSelector=".collapsed-toggle" onClose={() => setExpanded(false)}><VoyageRail metrics={metrics} expanded onToggle={toggle} /></Dialog> : <VoyageRail metrics={metrics} expanded={visibleExpanded} onToggle={toggle} />}
 	</div>;
 }

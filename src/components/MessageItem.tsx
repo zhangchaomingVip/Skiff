@@ -21,6 +21,7 @@ import { ProcessDisclosure } from "./ProcessDisclosure";
 import { TOOL_ICONS } from "./toolIcons";
 import { processBlocks, type ProcessPresentation } from "../chat/turnProcess";
 import { TurnProcessGroup } from "./TurnProcessGroup";
+import { processStatus } from "../chat/processStatus";
 import { ThinkingContent } from "./ThinkingContent";
 
 /** Compact, locale-aware timestamp shown inside a message bubble. */
@@ -79,8 +80,10 @@ export const MessageItem = memo(function MessageItem({ onEdit, onContinue, conti
 	const copyText = isUser ? text : turnMessages ? turnReplyText(turnMessages) : "";
 	const canCopy = !!copyText.trim();
 	const showActions = canCopy || (isUser && !readOnly);
-	const showHeader = !isUser && !!processPresentation?.head;
 	const showOutcome = (!turnRunning || turnOutcome === "length") && turnOutcome !== "manual" && !!outcomeLabel(turnOutcome);
+	const showContinue = turnHead && showOutcome && (turnOutcome === "length" || turnOutcome === "aborted") && !readOnly && !!onContinue;
+	const head = processPresentation?.head;
+	const showHeader = !isUser && !!head && (processStatus(head, turnRunning, turnOutcome).visible || showContinue);
 	const showUsage = !isUser && !turnRunning && !message.streaming && !(isLast && running) && turnMessages?.some((entry) => entry.usage);
 	// Intermediate process-only messages vanish when the turn is collapsed.
 	if (!nodes.length && !showHeader && !showUsage && !showTyping && !showActions) return null;
@@ -98,7 +101,7 @@ export const MessageItem = memo(function MessageItem({ onEdit, onContinue, conti
 			{isUser && message.turnResult === "manual" && <span className="turn-outcome manual">已手动停止{onContinue && <Button disabled={continuing} onClick={onContinue}>继续</Button>}</span>}
 			{showHeader && <div className="turn-header">
 				{processPresentation?.head && renderProcess(processPresentation.head)}
-				{turnHead && showOutcome && (turnOutcome === "length" || turnOutcome === "aborted") && !readOnly && onContinue && <Button disabled={continuing} onClick={onContinue}>继续</Button>}
+				{showContinue && <Button disabled={continuing} onClick={onContinue}>继续</Button>}
 			</div>}
 			{!nodes.length && showTyping ? <span className="typing">正在思考…</span> : nodes}
 		</div>}

@@ -96,7 +96,6 @@ export function Composer({
 	}, []);
 	const [imageError, setImageError] = useState<string>();
 	const [reading, setReading] = useState(false);
-	const [focused, setFocused] = useState(false);
 	const addingRef = useRef(false);
 	const canUseImages = model?.input?.includes("image") ?? false;
 	useEffect(() => { setImageError(undefined); }, [model?.provider, model?.id, canUseImages]);
@@ -149,16 +148,6 @@ export function Composer({
 		}
 	};
 
-	const hasDraft = !!text.trim() || images.length > 0 || files.length > 0;
-	// Only the shortcuts that apply right now: an idle composer shows two keys.
-	const hints = [
-		...(!focused ? [{ keys: "Ctrl K", action: "聚焦" }] : []),
-		...(editing
-			? [{ keys: "Esc", action: "取消编辑" }]
-			: hasDraft ? [{ keys: "Esc", action: "清空" }] : []),
-		...(streaming ? [{ keys: "Ctrl Shift Backspace", action: "停止" }] : []),
-	];
-
 	return (
 		<div className="composer-wrap">{streaming && <div className="delivery-control"><Select aria-label="投递时机" value={delivery} onChange={(event) => setDelivery(event.target.value as Delivery)}><option value="steer">插话</option><option value="follow_up">等本轮做完</option></Select><span>{delivery === "steer" ? "当前工具调用结束后、下一次模型请求前插入" : "本轮没有更多待处理工作时送达"}</span></div>}<div className="composer" onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); void addAttachments(Array.from(event.dataTransfer.files)); }}>
 			{editing && <div className="editing-banner">编辑提问 · 发送后替换本轮及后续消息<button disabled={disabled || reading || sendingRef.current} onClick={onCancelEdit} aria-label="取消编辑"><Icon name="close" size={14} /></button></div>}
@@ -177,8 +166,6 @@ export function Composer({
 				placeholder="描述任务… / 命令 · @文件路径"
 				aria-label="聊天消息"
 				onChange={(event) => onTextChange(event.target.value)}
-				onFocus={() => setFocused(true)}
-				onBlur={() => setFocused(false)}
 				onKeyDown={onKeyDown}
 				onPaste={(event) => { const selected = Array.from(event.clipboardData.files); if (selected.length) { event.preventDefault(); void addAttachments(selected); } }}
 			/>
@@ -194,6 +181,6 @@ export function Composer({
 					</IconButton>
 				)}
 			</div></div>
-		</div><p className="composer-hint"><span><kbd>Enter</kbd> 发送 · <kbd>Shift + Enter</kbd> 换行</span>{hints.length > 0 && <span>{hints.map((hint, index) => <span key={hint.keys}>{index > 0 && " · "}<kbd>{hint.keys}</kbd> {hint.action}</span>)}</span>}</p></div>
+		</div></div>
 	);
 }

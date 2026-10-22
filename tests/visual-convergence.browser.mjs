@@ -178,7 +178,7 @@ try {
 			});
 		}
 		if (width === 360) {
-			await page.locator(".voyage-summary").click();
+			await page.getByRole("button", { name: "展开航行台", exact: true }).click();
 			const dialog = page.getByRole("dialog", { name: "航行台详情" });
 			await dialog.waitFor();
 			assert.equal(await dialog.evaluate((el) => el.scrollWidth <= el.clientWidth), true);

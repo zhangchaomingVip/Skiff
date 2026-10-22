@@ -48,6 +48,7 @@
 	.ui-textarea { height: auto; padding: var(--space-2); line-height: var(--line-height-relaxed); resize: vertical; }
 	.ui-input[data-appearance=plain] { border: 0; background: transparent; padding-inline: var(--space-1); }
 	.ui-textarea[data-appearance=plain] { font-size: var(--font-size-md); resize: none; }
+	.ui-textarea.composer-input { padding-block: var(--space-0-5) var(--space-2); }
 	.ui-field { display: flex; flex-direction: column; gap: var(--space-2); }
 	.ui-field label, .ui-field-help { font-size: var(--font-size-sm); }
 	.ui-field-help { color: var(--secondary); }

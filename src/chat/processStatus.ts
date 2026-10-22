@@ -43,7 +43,7 @@ export function toolActivityLabel(tool: Tool): string {
 export function processActivity(group: TurnProcessGroup) {
 	const entries = group.entries;
 	const pending = entries.filter((entry) => entry.block.kind === "tool" && !entry.result);
-	let action = "正在等待模型响应";
+	let action = "正在思考";
 	let actionKey = `${group.id}:waiting`;
 	if (pending.length) {
 		const current = pending[pending.length - 1];
@@ -95,15 +95,25 @@ export function processStatus(group: TurnProcessGroup, running: boolean, outcome
 	const latest = group.entries[group.entries.length - 1];
 	const failedBatch = group.terminal && latest?.block.kind !== "thinking" ? group.entries.filter((entry) => entry.messageId === latest?.messageId && (entry.result?.isError || (entry.block.kind === "toolResult" && entry.block.isError))) : [];
 	const summaryGroup = { ...group, entries: group.entries.map((entry) => failedBatch.includes(entry) ? entry : { ...entry, result: entry.result && { ...entry.result, isError: false }, block: entry.block.kind === "toolResult" ? { ...entry.block, isError: false } : entry.block }) };
-	let label = active ? processActivity(group).label : processCountLabel(summaryGroup, false, error, true);
-	if (error) label += group.pending ? " · 工具执行失败（未收到结果）" : failedBatch.length ? "" : " · 模型响应失败";
-	else if (!running && !group.advanced && group.placement === "head") {
-		if (outcome === "manual" || outcome === "aborted") label += " · 已停止";
-		else if (outcome === "length") label += " · 输出已达长度上限";
-		else if (group.pending) label += " · 未收到工具结果";
-	}
-	const detailLabel = label;
 	const modelLabel = active ? processStepLabel(group) : undefined;
-	if (modelLabel) label = `${modelLabel} · ${label}`;
-	return { active, error, label, modelLabel, detailLabel, complete: !active && !error && !group.pending && outcome !== "manual" && outcome !== "aborted" };
+	const activity = active ? processActivity(group) : undefined;
+	let label = activity?.label ?? processCountLabel(summaryGroup, false, error, true);
+	// Keep real progress visible between model steps, without repeating narration
+	// or appending the initial placeholder to a thinking excerpt.
+	if (activity?.label === "正在思考") {
+		const progress = processCountLabel(summaryGroup, latest?.block.kind === "thinking" && group.counts.thinkingChars > 0, false, true);
+		label = modelLabel ? "" : progress || label;
+	}
+	let outcomeLabel = "";
+	if (error) outcomeLabel = group.pending ? "工具执行失败（未收到结果）" : failedBatch.length ? "" : "模型响应失败";
+	else if (!running && !group.advanced && group.placement === "head") {
+		if (outcome === "manual" || outcome === "aborted") outcomeLabel = "已停止";
+		else if (outcome === "length") outcomeLabel = "输出已达长度上限";
+		else if (group.pending) outcomeLabel = "未收到工具结果";
+	}
+	label = [label, outcomeLabel].filter(Boolean).join(" · ");
+	const detailLabel = label;
+	label = [modelLabel, detailLabel].filter(Boolean).join(" · ");
+	const visible = !!label;
+	return { active, error, label, modelLabel, detailLabel, visible, complete: !active && !error && !group.pending && outcome !== "manual" && outcome !== "aborted" };
 }

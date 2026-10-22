@@ -28,26 +28,47 @@ try {
 		await page.waitForFunction(() => window.turnUsageHarness);
 		await page.evaluate((value) => { document.documentElement.dataset.theme = value; }, theme);
 		const labels = () => page.locator(".turn-process > summary .process-row-label");
-		const render = async (messages, running) => {
-			await page.evaluate((props) => window.turnUsageHarness.render(props), { messages, running, activeTurnId: running ? "turn:history_0" : undefined });
-			await page.waitForFunction((count) => document.querySelectorAll(".turn-process > summary .process-row-label").length >= count, messages.some((message) => message === second) ? 2 : 1);
+		const render = async (messages, running, expectedRows = messages.includes(second) ? 2 : messages.includes(first) ? 1 : 0) => {
+			await page.evaluate(async (props) => {
+				window.turnUsageHarness.render(props);
+				await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+			}, { messages, running, activeTurnId: running ? "turn:history_0" : undefined });
+			await page.waitForFunction((count) => document.querySelectorAll(".turn-process > summary .process-row-label").length === count, expectedRows);
 		};
 		await render([user, first, result("bash-a", "bash")], true);
 		const liveLabel = await labels().first().textContent();
-		assert.match(liveLabel, /^核对 settings\.json 的读取/);
-		assert.match(liveLabel, /正在并行运行 2 个工具（1\/2）/);
+		assert.equal(liveLabel, "正在并行运行 2 个工具（1/2）");
 		assert.doesNotMatch(liveLabel, /[#*`]|3\. write|已执行/);
 		assert.match(await page.locator(".msg.assistant .md").first().textContent(), /第二行正文必须完整保留/);
 		await page.screenshot({ path: `${shots}/live-${theme}.png`, fullPage: true });
+		for (const width of [1200, 600, 360]) {
+			await page.setViewportSize({ width, height: 750 });
+			const layout = await page.locator(".process-count-label").evaluate((element) => ({
+				overflow: document.documentElement.scrollWidth > innerWidth,
+				singleLine: getComputedStyle(element).whiteSpace === "nowrap" && getComputedStyle(element).textOverflow === "ellipsis",
+			}));
+			assert.equal(layout.overflow, false);
+			assert.equal(layout.singleLine, true);
+			await labels().first().locator("..").focus();
+			await page.keyboard.press("Enter");
+			assert.equal(await page.locator(".turn-process").first().getAttribute("open"), "");
+			await page.keyboard.press("Space");
+			assert.equal(await page.locator(".turn-process").first().getAttribute("open"), null);
+		}
+		await page.setViewportSize({ width: 1100, height: 750 });
+		await render([user, first, result("bash-a", "bash"), result("web-a", "web_search")], true);
+		assert.equal(await labels().first().textContent(), "执行了 1 条命令 · 联网搜索了 1 次");
+		assert.equal(await page.locator(".turn-header").count(), 1);
+		assert.match(await page.locator(".msg.assistant .md").first().textContent(), /第二行正文必须完整保留/);
 
 		await render([user, first, result("bash-a", "bash"), body], true);
 		await page.waitForFunction(() => document.querySelector(".turn-process > summary .process-row-label")?.textContent?.startsWith("执行了 1 条命令"));
 		const frozen = await labels().first().textContent();
-		assert.match(frozen, /^执行了 1 条命令 · 联网搜索了 1 次 · 步骤 2/);
+		assert.equal(frozen, "执行了 1 条命令 · 联网搜索了 1 次");
 		assert.doesNotMatch(frozen, /核对 settings|正在并行|已执行/);
 		await render([user, first, result("bash-a", "bash"), result("web-a", "web_search"), body, second], true);
 		assert.equal(await labels().first().textContent(), frozen);
-		assert.match(await labels().nth(1).textContent(), /^接下来核对历史消息的解析顺序/);
+		assert.equal(await labels().nth(1).textContent(), "正在读取 README.md");
 		assert.deepEqual((await page.locator(".msg.assistant .md").allTextContents()).map((text) => text.trim()), ["3. write （创建文件）核对 settings.json 的读取方式，并检查回退规则。\n第二行正文必须完整保留。", "第一段正文完整保留。后面还会继续执行工具。", secondNarration]);
 		await page.screenshot({ path: `${shots}/next-segment-${theme}.png`, fullPage: true });
 
@@ -59,6 +80,13 @@ try {
 		assert.deepEqual(await labels().allTextContents(), settled);
 		assert.deepEqual(errors, []);
 		await page.screenshot({ path: `${shots}/settled-${theme}.png`, fullPage: true });
+		await render([user, assistant("直接回答，不需要过程摘要。", "stop")], false);
+		assert.equal(await labels().count(), 0);
+		assert.equal(await page.locator(".turn-header").count(), 0);
+		assert.doesNotMatch(await page.locator(".messages").textContent(), /步骤 \d|正在等待模型响应/);
+		await render([user, assistant([{ type: "thinking", thinking: "核对配置" }])], true, 1);
+		assert.equal(await labels().first().textContent(), "思考中（4 字）");
+		assert.equal(await page.locator(".assistant-reply").isVisible(), true);
 		console.log(`${theme}: live=${liveLabel}, frozen=${frozen}, settled=${settled.join(" | ")}`);
 		await page.close();
 	}

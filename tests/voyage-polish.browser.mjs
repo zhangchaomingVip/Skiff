@@ -56,8 +56,8 @@ try {
 	assert((await page.locator(".voyage-progress-caption").textContent()).includes("估算"));
 	assert.equal((await record())["思考 tokens"], "—");
 	await page.locator('[aria-label="收起航行台"]').click();
-	assert((await page.locator(".voyage-distance").textContent()).includes("估算"));
-	await page.locator(".voyage-summary").click();
+	assert.equal(await page.locator(".voyage-summary").count(), 0);
+	await page.getByRole("button", { name: "展开航行台", exact: true }).click();
 	state.messages[1].usage = usage(20); await render();
 	assert.equal((await read()).context, 40); assert.equal((await read()).contextEstimated, true);
 
@@ -100,7 +100,7 @@ try {
 		await page.locator(".voyage-turn").scrollIntoViewIfNeeded(); await capture(`${theme}-${width}-tokens.png`);
 		await page.locator('[aria-label="收起航行台"]').click();
 		assert.equal(await page.locator(".voyage-rail.expanded").count(), 0);
-		await page.locator(".voyage-summary").click();
+		await page.getByRole("button", { name: "展开航行台", exact: true }).click();
 		await page.locator(".voyage-rail.expanded").waitFor();
 	}
 	await page.emulateMedia({ reducedMotion: "reduce" });

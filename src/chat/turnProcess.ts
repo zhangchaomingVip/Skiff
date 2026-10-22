@@ -144,13 +144,12 @@ export function turnProcessPresentation(messages: ChatMessage[], { running = fal
 }
 
 export function processCountLabel(group: Pick<TurnProcessGroup, "placement" | "counts" | "entries">, thinking = false, includeFailures = true, settled = false): string {
-	const { thinkingSegments, thinkingChars, steps } = group.counts;
+	const { thinkingSegments, thinkingChars } = group.counts;
 	const format = (value: number) => value.toLocaleString("en-US");
 	const tools: ToolRunItem[] = group.entries.flatMap(({ key, block, result }) => block.kind === "tool" ? [{ key, block, result }] : block.kind === "toolResult" ? [{ key, block: { kind: "tool", id: block.id ?? `result:${key}`, name: block.name, argsText: "{}", done: true }, result: block }] : []);
 	const parts = [];
 	if (thinkingSegments || thinkingChars) parts.push(thinking && !thinkingSegments ? `思考中（${format(thinkingChars)} 字）` : `思考了 ${format(thinkingSegments)} 段（${format(thinkingChars)} 字）`);
 	parts.push(...toolActionSummaries(includeFailures ? tools : tools.map((item) => ({ ...item, result: item.result && { ...item.result, isError: false } })), settled));
 	if (!parts.length && thinking) parts.push("思考中");
-	if (group.placement === "head") parts.push(`步骤 ${format(steps)}`);
 	return parts.join(" · ");
 }

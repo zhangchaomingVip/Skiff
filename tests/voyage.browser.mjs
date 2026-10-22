@@ -73,7 +73,7 @@ try {
 	assert.equal((await read()).activity, "sailing");
 	state.messages[state.messages.length - 1] = { ...reply("历史思考".repeat(100) + "新文字"), streaming: false, blocks: [{ kind: "thinking", text: "历史思考".repeat(100) + "新文字" }, { kind: "tool", id: "call", name: "read", argsText: "", done: true }] };
 	await render(); await advance(800); assert.equal((await read()).status, "工具执行中");
-	assert(/工具执行中 · \d+s/.test(await page.locator(".voyage-summary").textContent()));
+	assert.equal(await page.locator(".voyage-gauge-label").textContent(), "工具执行中");
 	await advance(1000);
 	state.messages[state.messages.length - 1] = { ...state.messages[state.messages.length - 1], blocks: [
 		{ kind: "thinking", text: "历史思考".repeat(100) + "新文字" },
@@ -109,12 +109,13 @@ try {
 	for (const theme of ["light", "dark"]) for (const [width, height] of [[1200, 800], [900, 700], [600, 400]]) {
 		await page.setViewportSize({ width, height });
 		await page.goto(`${base}/tests/preview.html?fixture=voyage-high&theme=${theme}`);
-		await page.locator(".voyage-summary").waitFor();
+		await page.locator(".composer").waitFor();
+		assert.equal(await page.locator(".voyage-summary, .composer-hint").count(), 0);
 		await page.locator(".voyage-context-reminder").first().waitFor();
 		assert.equal(await page.locator('.voyage-context-reminder[role="status"]').count(), 1);
 		assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
 		await page.screenshot({ path: new URL(`${theme}-${width}-context.png`, screenshots).pathname.replace(/^\/(\w:)/, "$1"), fullPage: true, animations: "disabled" });
-		if (width < 1200) await page.locator(".voyage-summary").click();
+		if (width < 1200) await page.getByRole("button", { name: "展开航行台", exact: true }).click();
 		await page.locator(".voyage-rail.expanded .voyage-speed-stats").waitFor();
 		await page.waitForTimeout(200);
 		assert(await page.locator(".voyage-rail.expanded .voyage-speed-stats").evaluate((element) => element.scrollWidth <= element.clientWidth));

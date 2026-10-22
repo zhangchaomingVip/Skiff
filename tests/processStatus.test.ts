@@ -9,12 +9,121 @@ const tool = (id: string, name = "read", args = {}): Extract<ContentBlock, { kin
 const result = (id: string, isError = false): ContentBlock => ({ kind: "toolResult", id, name: "read", text: "output", isError });
 const groupFor = (blocks: ContentBlock[], running = true) => turnProcessPresentation([user, { id: "assistant", role: "assistant", blocks, streaming: running }], { running }).groups[0];
 
-test("live labels show only the current action or batch progress", () => {
+test("live labels show concrete activity and retain progress between actions", () => {
 	const group = groupFor([{ kind: "thinking", text: "分析" }, tool("one"), result("one"), tool("two", "bash", { command: "npm test --token sample-secret" })]);
 	assert.equal(processStatus(group, true).label, "正在并行运行 2 个工具（1/2）");
 	const thought = groupFor([...group.entries.flatMap((entry) => entry.result ? [entry.block, entry.result] : [entry.block]), result("two"), { kind: "thinking", text: "重试分析" }]);
-	assert.equal(processStatus(thought, true).label, "正在思考");
-	assert.doesNotMatch(processStatus(thought, true).label, /字|段|失败|读取了/);
+	assert.match(processStatus(thought, true).label, /思考了 1 段（6 字）/);
+	assert.doesNotMatch(processStatus(thought, true).label, /正在思考|失败/);
+});
+
+test("visible narration is not repeated in status and still suppresses generic waiting", () => {
+	const narration = "目录里有三个文件，接下来检查它们的内容，并核对项目说明和配置文件。";
+	const blocks: ContentBlock[] = [{ kind: "text", text: `${narration}\n第二行保留在正文里。` }, tool("one")];
+	const working = processStatus(groupFor(blocks), true);
+	assert.equal(working.modelLabel, undefined);
+	assert.equal(working.detailLabel, "正在读取文件");
+	assert.equal(working.label, "正在读取文件");
+	const waiting = processStatus(groupFor([...blocks, result("one")]), true);
+	assert.equal(waiting.detailLabel, "读取了 1 个文件");
+	assert.equal(waiting.label, "读取了 1 个文件");
+	assert.equal(waiting.modelLabel, undefined);
+	assert.equal(waiting.active, true);
+	assert.equal(waiting.visible, true);
+	assert.equal(processStatus(groupFor([tool("one"), result("one")]), true).label, "读取了 1 个文件");
+	assert.equal(processStatus(groupFor([]), true).label, "正在思考");
+});
+
+test("collapsed thinking folds multiline prose alongside concrete activity", () => {
+	const firstLine = "先核对模型配置与请求参数，确认不同协议的映射行为，再检查历史消息恢复与实时事件的顺序。";
+	const thinking: ContentBlock = { kind: "thinking", text: `**${firstLine}**\n更多推理细节。` };
+	const preview = `${firstLine} 更多推理细节。`;
+	const working = processStatus(groupFor([thinking, tool("one")]), true);
+	assert.equal(working.modelLabel, preview);
+	assert.equal(working.detailLabel, "正在读取文件");
+	const waiting = processStatus(groupFor([thinking, tool("one"), result("one")]), true);
+	assert.equal(waiting.label, preview);
+	assert.equal(waiting.detailLabel, "");
+	const active = processStatus(groupFor([thinking]), true);
+	assert.equal(active.detailLabel, "");
+	assert.equal(active.label, preview);
+	assert.doesNotMatch(active.label, /正在思考|·/);
+});
+
+test("thinking placeholder yields to the first content without reappearing after tools", () => {
+	for (const blocks of [[], [{ kind: "thinking", text: "" }]] as ContentBlock[][]) {
+		assert.equal(processStatus(groupFor(blocks), true).label, "正在思考");
+	}
+	const thinking: ContentBlock = { kind: "thinking", text: "核对配置" };
+	for (const blocks of [[thinking], [thinking, tool("one"), result("one")]]) {
+		const status = processStatus(groupFor(blocks), true);
+		assert.match(status.label, /思考(?:中|了 1 段)（4 字）/);
+		assert.doesNotMatch(status.label, /正在思考/);
+		assert.equal(status.active, true);
+		assert.equal(status.visible, true);
+	}
+	const reply = turnProcessPresentation([user, { id: "reply", role: "assistant", blocks: [{ kind: "text", text: "首个正文片段" }], streaming: true }], { running: true }).groups[0];
+	assert.equal(processStatus(reply, true).visible, false);
+});
+
+test("completed tools retain a nonempty summary while the model prepares its next response", () => {
+	const narration: ContentBlock = { kind: "text", text: "现在并行调用 grep 和 find，核对内容与文件名。" };
+	const blocks = [narration, tool("grep", "grep"), tool("find", "find")];
+	const working = processStatus(groupFor([...blocks, result("grep")]), true);
+	assert.equal(working.visible, true);
+	assert.equal(working.label, "正在并行运行 2 个工具（1/2）");
+	const completed = [...blocks, result("grep"), result("find")];
+	const waiting = processStatus(groupFor(completed), true);
+	assert.equal(waiting.label, "执行了 2 条命令");
+	assert.equal(waiting.visible, true);
+	const settled = processStatus(groupFor(completed, false), false);
+	assert.equal(settled.visible, true);
+	assert.match(settled.label, /执行了 2 条命令/);
+	assert.equal(waiting.label, settled.label);
+	const shortThinking: ContentBlock = { kind: "thinking", text: "核对配置" };
+	assert.equal(processStatus(groupFor([shortThinking]), true).label, "思考中（4 字）");
+	assert.equal(processStatus(groupFor([shortThinking], false), false).visible, true);
+});
+
+test("process rows remain visible from tool execution through waiting, next thinking and final text", () => {
+	const live = { running: true, activeTurnId: "turn:user" };
+	const earlier: ChatMessage = { id: "earlier", role: "assistant", blocks: [tool("previous"), result("previous"), { kind: "text", text: "第一批检查已经完成。" }] };
+	const timeline = (...messages: ChatMessage[]) => turnProcessPresentation([user, earlier, ...messages], live).groups;
+	const narration: ContentBlock = { kind: "text", text: "接下来检查配置文件，随后运行项目中的验证命令。" };
+	const first: ChatMessage = { id: "first", role: "assistant", blocks: [narration, tool("one")], streaming: true };
+	const working = timeline(first)[1];
+	const finished = { ...first, blocks: [...first.blocks, result("one")] };
+	const waiting = timeline(finished)[1];
+	const next: ChatMessage = { id: "next", role: "assistant", blocks: [{ kind: "thinking", text: "继续核对" }], streaming: true };
+	const thinking = timeline(finished, next)[1];
+	const reply: ChatMessage = { id: "reply", role: "assistant", blocks: [{ kind: "text", text: "检查完成。" }], streaming: true };
+	const finalGroups = timeline(finished, { ...next, streaming: false }, reply);
+	const answered = finalGroups[1];
+	assert.equal(working.placement, "inline");
+	assert.equal(processStatus(finalGroups[0], true).label, processStatus(timeline(first)[0], true).label);
+	for (const group of [working, waiting, thinking, answered]) {
+		assert.equal(group.id, working.id);
+		const status = processStatus(group, true);
+		assert.equal(status.visible, true);
+		assert.ok(status.label.trim());
+		assert.doesNotMatch(status.label, /正在思考|接下来检查配置文件/);
+	}
+	assert.equal(processStatus(waiting, true).label, "读取了 1 个文件");
+	assert.match(processStatus(thinking, true).label, /思考中（4 字）/);
+	assert.match(processStatus(answered, true).label, /思考了 1 段（4 字）/);
+});
+
+test("empty settled rows disappear while terminal outcomes remain visible without leading separators", () => {
+	const empty = groupFor([], false);
+	assert.equal(processStatus(empty, false).visible, false);
+	assert.equal(processStatus(empty, false).label, "");
+	for (const [outcome, expected] of [["error", "模型响应失败"], ["manual", "已停止"], ["aborted", "已停止"], ["length", "输出已达长度上限"]]) {
+		const status = processStatus(empty, false, outcome);
+		assert.equal(status.label, expected);
+		assert.equal(status.visible, true);
+	}
+	const reply = turnProcessPresentation([user, { id: "reply", role: "assistant", blocks: [{ kind: "text", text: "直接回答" }] }]).groups[0];
+	assert.equal(processStatus(reply, false).visible, false);
 });
 
 test("parallel denominator survives out-of-order completions and a single remaining tool", () => {
@@ -46,7 +155,7 @@ test("a following reply freezes its process row before the turn finishes", () =>
 	];
 	const group = turnProcessPresentation(messages).groups[0];
 	assert.equal(group.advanced, true);
-	assert.equal(processStatus(group, true).label, "读取了 1 个文件 · 步骤 1");
+	assert.equal(processStatus(group, true).label, "读取了 1 个文件");
 	const completed = processStatus(group, false, "stop");
 	assert.equal(completed.modelLabel, undefined);
 	assert.equal(completed.label, processStatus(group, true).label);
@@ -64,19 +173,19 @@ test("each narrated segment settles when the next content starts, including whil
 	const first: ChatMessage = { id: "first", role: "assistant", blocks: [{ kind: "text", text: firstText }, tool("one")], streaming: true };
 	const live = { running: true, activeTurnId: "turn:user" };
 	const initial = turnProcessPresentation([user, first], live).groups[0];
-	assert.match(processStatus(initial, true).label, /^先检查配置文件/);
+	assert.equal(processStatus(initial, true).label, "正在读取文件");
 	const next: ChatMessage = { id: "next", role: "assistant", blocks: [{ kind: "text", text: secondText }], streaming: true };
 	const afterText = turnProcessPresentation([user, first, next], live).groups[0];
 	assert.equal(afterText.pending, true);
 	assert.equal(afterText.advanced, true);
-	assert.equal(processStatus(afterText, true).label, "读取了 1 个文件 · 步骤 1");
+	assert.equal(processStatus(afterText, true).label, "读取了 1 个文件");
 	assert.equal(processStatus(afterText, true).modelLabel, undefined);
 	const frozenCounts = new Map([[afterText.id, afterText.counts]]);
 	const withTool = turnProcessPresentation([user, { ...first, blocks: [...first.blocks, result("one")] }, { ...next, blocks: [...next.blocks, tool("two", "bash")] }], { ...live, frozenCounts }).groups;
 	assert.equal(withTool[0].pending, false);
 	assert.deepEqual(withTool[0].counts, afterText.counts);
-	assert.equal(processStatus(withTool[0], true).label, "读取了 1 个文件 · 步骤 1");
-	assert.match(processStatus(withTool[1], true).label, /^继续运行测试命令/);
+	assert.equal(processStatus(withTool[0], true).label, "读取了 1 个文件");
+	assert.equal(processStatus(withTool[1], true).label, "正在运行命令");
 	assert.equal(processStatus(withTool[0], false, "stop").label, processStatus(withTool[0], true).label);
 	assert.equal(first.blocks[0].kind, "text");
 	assert.equal(next.blocks[0].kind, "text");

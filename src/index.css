@@ -188,6 +188,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .msg { position: relative; flex: none; width: 100%; max-width: var(--content-width); margin: 0 auto; }
 .messages > .assistant-reply, .messages > .waiting-reply { flex: none; max-width: var(--content-width); margin: var(--space-2) auto 0; }
 .assistant-reply > .msg + .msg { margin-top: var(--space-2); }
+.assistant-reply:empty { display: none; }
 .messages > .msg.user:not(:first-child) { margin-top: var(--space-8); }
 .message-bubble { position: relative; width: 100%; min-width: 0; padding: var(--space-3) var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-xl); background: var(--panel-2); }
 .msg-role { font-size: var(--font-size-sm); color: var(--chat-meta); margin-bottom: var(--space-1); font-weight: var(--font-weight-regular); display: flex; align-items: center; gap: var(--space-1); }
@@ -258,11 +259,14 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .process-details > .process-row .disclosure { order: -1; opacity: 0; }
 .process-details > .process-row:hover .disclosure, .process-details > .process-row:focus-visible .disclosure { opacity: 1; }
 .turn-process > .process-row .process-count-label, .waiting-reply .process-count-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.turn-process > .process-row .process-count-label.has-model-label { display: flex; gap: var(--space-1); text-overflow: clip; }
+.turn-process.has-model-label > .process-row .process-row-label { flex: 1 1 auto; }
+.turn-process.has-model-label > .process-row .process-row-trailing { flex: 0 0 auto; }
+.turn-process > .process-row .process-count-label.has-model-label { display: flex; flex: 1; gap: var(--space-1); text-overflow: clip; }
 .process-model-label, .process-meta-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.process-model-label { flex: 0 1 auto; max-width: 55%; }
-.process-meta-label { flex: 1 1 auto; }
+.process-model-label { flex: 0 1 auto; }
+.process-meta-label { flex: 0 0 auto; max-width: 65%; }
 .turn-process > .process-row .process-row-status, .waiting-reply .process-row-status { width: 2em; }
+.turn-process.has-model-label > .process-row .process-row-status:empty { display: none; }
 .turn-process.is-active > .process-row .process-row-icon { color: var(--accent); }
 .turn-process.is-active > .process-row .process-row-icon svg, .waiting-reply .process-row-icon svg { animation: process-star-turn 6s linear infinite, process-star-glow 2s ease-in-out infinite; transform-origin: center; }
 @keyframes process-star-turn { to { transform: rotate(360deg); } }
@@ -302,8 +306,6 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .composer-bottom { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
 .composer-context { display: flex; flex-wrap: wrap; min-width: 0; align-items: center; gap: var(--space-1-5); color: var(--muted); font-size: var(--font-size-sm); }
 .composer-actions { display: flex; flex-shrink: 0; align-items: center; gap: var(--space-3); min-width: 0; }
-.composer-hint { max-width: var(--content-width); margin: var(--space-1-5) auto 0; padding: 0 var(--space-2); display: flex; justify-content: space-between; gap: var(--space-3); font-size: var(--font-size-xs); color: var(--muted); }
-.composer-hint kbd { font-family: var(--font-family-mono); font-size: var(--font-size-xs); line-height: 1; padding: 2px 4px; border: 0; border-radius: var(--radius-base); background: var(--panel); color: var(--muted); }
 
 /* Project dialog */
 .project-dialog { width: min(460px, calc(100vw - 32px)); }
@@ -378,7 +380,6 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 
 
 	.header-title-row > span:first-child { max-width: 220px; }
-	.composer-hint > span { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { .dot.busy, .launcher-skeleton { animation: none; } .launcher-row, .launcher-recent-row, .launcher-group-chevron, .launcher-ws-chip { transition: none; } }
 
@@ -620,7 +621,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .text-attachment > pre { margin: 0; padding: 10px 12px; max-height: 320px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--font-size-sm); }
 
 /* Search, shortcuts and compact input */
-.composer { max-width: var(--content-width); margin: 0 auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-xl); padding: var(--space-4) var(--space-4) var(--space-3); position: relative; box-shadow: var(--shadow-xs); transition: border-color var(--transition-fast), box-shadow var(--transition-fast); }
+.composer { max-width: var(--content-width); margin: 0 auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-xl); padding: var(--space-2) var(--space-4) var(--space-3); position: relative; box-shadow: var(--shadow-xs); transition: border-color var(--transition-fast), box-shadow var(--transition-fast); }
 .composer-menu { position: absolute; bottom: calc(100% + 8px); left: 0; right: 0; max-height: 240px; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius-md); padding: 8px; background: var(--bg); box-shadow: 0 8px 28px var(--shadow-color); z-index: 5; }
 .composer-menu button { width: 100%; display: flex; flex-direction: column; text-align: left; padding: 8px 12px; gap: 3px; border: 0; background: transparent; border-radius: var(--radius-sm); }
 .composer-menu button.focused, .composer-menu button:hover { background: var(--selected); }
@@ -659,7 +660,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .sidebar-menu button.danger { color: var(--danger); }
 .rename-input { min-width: 0; width: 100%; border: 1px solid var(--accent); border-radius: var(--radius-xs); color: var(--text); background: var(--bg); padding: 5px; font-size: var(--font-size-base); }
 @media (hover: none) { .message-buttons, .sidebar-row-actions { opacity: 1; pointer-events: auto; } }
-@media (max-width: 760px) { .back-bottom { right: 20px; } .composer-hint { flex-wrap: wrap; gap: 4px; } }
+@media (max-width: 760px) { .back-bottom { right: 20px; } }
 @media (prefers-reduced-motion: reduce) { .message-buttons, .disclosure, .thinking-toggle svg, .project-chevron svg, .section-toggle svg, .sidebar-collapse { transition: none; } }
 
 /* Provider-grouped model picker */

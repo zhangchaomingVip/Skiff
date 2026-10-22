@@ -91,7 +91,7 @@ try {
 	await emit({ type: "agent_settled" }); await wait(() => !window.switchFixture.currentSession.state.isStreaming);
 	assert.match(await page.locator(".chat").innerText(), /输出已达长度上限/); await screenshot("truncated-light");
 	await page.getByRole("button", { name: "收起航行台", exact: true }).click();
-	assert.equal(await page.locator(".voyage-summary .voyage-speed").count(), 0);
+	assert.equal(await page.locator(".voyage-summary").count(), 0);
 	evidence.checks.push("Continue appends on same branch; length result visible after settled; agent_end does not unlock early; idle collapsed bar has no speed duplicate");
 	// FIFO, prefill and exactly one raw reply with the original id.
 	await emit({ type: "extension_ui_request", id: "editor-1", method: "editor", title: "Edit extension", prefill: "Line 1\nLine 2" });
