@@ -37,13 +37,13 @@ export function TurnUsage({ message, messages }: { message: ChatMessage; message
 		copyTimer.current = setTimeout(() => setCopyStatus(""), 2000);
 	};
 	return <div className="turn-usage">
-		<div className="usage-route-details">
-			<button type="button" className="usage-model" title={`完整线路：${relayName} · ${modelName} · ${account?.trim() ? `账户${account.trim()}` : "未知账户"}`} aria-label={`复制模型名 ${modelName}`} onClick={() => void copy(modelName, "模型名")}><span className="usage-model-label">{relayName} · {modelName}</span></button>
-		</div>
 		<div className="usage-tokens">
 			<div className="usage-details">
 				<button type="button" ref={trigger} className="usage-trigger" title={inputTitle} aria-label={`${inputTitle}，缓存命中率 ${cacheRate}，输出 ${usage.output.toLocaleString("zh-CN")}，展示本轮 Token 消耗明细`} aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? panelId : undefined} onClick={() => setOpen((value) => !value)}><span aria-hidden="true">⇣</span><span className="usage-input">{formatTokens(usage.inputTotal)}{showNewInput && <span className="usage-new">(+{formatTokens(newInput)})</span>}</span><span className="usage-cache" title={`缓存命中率 ${(usage.hitRate * 100).toFixed(1)}%`}>⚡ {cacheRate}</span><span className="usage-output" title={`输出 Token ${usage.output.toLocaleString("zh-CN")}`}>⇡ {formatTokens(usage.output)}</span></button>
 				{open && <Popover anchor={trigger} onClose={close} id={panelId} className="usage-popover" aria-label="本轮 Token 消耗明细">
+					<div className="usage-route-details">
+						<button type="button" className="usage-model" title={`完整线路：${relayName} · ${modelName} · ${account?.trim() ? `账户${account.trim()}` : "未知账户"}`} aria-label={`复制模型名 ${modelName}`} onClick={() => void copy(modelName, "模型名")}><span className="usage-model-label">{relayName} · {modelName}</span></button>
+					</div>
 					<div className="usage-heading"><strong>本轮 Token 消耗</strong><span>新增输入 <b className="usage-new">{formatTokens(newInput)}</b></span></div>
 					<dl><div className="usage-row"><dt><i className="swatch input" />输入（发给模型）</dt><dd>{formatTokens(usage.inputTotal)}</dd></div>
 						<div className="usage-row sub"><dt><i className="swatch hit" />缓存命中</dt><dd>{formatTokens(usage.cacheRead)}</dd></div>
@@ -62,7 +62,7 @@ export function TurnUsage({ message, messages }: { message: ChatMessage; message
 			</div>
 		</div>
 		<button type="button" className="usage-cost" title={preciseCost === "—" ? costTooltip(cost) : `精确费用 ${preciseCost}（按 6 位原始值）`} aria-label={preciseCost === "—" ? costTooltip(cost) : "复制费用"} disabled={preciseCost === "—"} onClick={() => void copy(preciseCost, "费用")}>{preciseCost === "—" ? costTooltip(cost) : formatCosts(cost, 5)}</button>
-		{message.timestamp !== undefined && <span className="usage-time" title={completedAtTooltip(message.timestamp)}>🕒 {formatCompletedAt(message.timestamp)}</span>}
+		{message.timestamp !== undefined && <time className="usage-time" dateTime={new Date(message.timestamp).toISOString()} title={completedAtTooltip(message.timestamp)}>{formatCompletedAt(message.timestamp)}</time>}
 		<span className="sr-only" role="status">{copyStatus}</span>
 	</div>;
 }

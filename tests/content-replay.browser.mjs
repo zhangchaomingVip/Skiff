@@ -27,6 +27,8 @@ try {
 			page.on("pageerror", (error) => errors.push(error.message));
 			await page.goto(`${base}/tests/preview.html?fixture=${fixture}&theme=${theme}&static=1`);
 			await page.locator(".msg.assistant .md").first().waitFor();
+			assert.equal(await page.locator(".assistant-reply").count(), 1, `${fixture} ${theme}: all tool steps share one reply container`);
+			assert.equal(await page.locator(".assistant-reply .message-bubble").count(), 0, `${fixture} ${theme}: no separate bubbles around pi fragments`);
 			const bodyTexts = await page.locator(".msg.assistant .msg-body > .md").allTextContents();
 			assert.deepEqual(bodyTexts.map((text) => text.trim()), texts, `${fixture} ${theme}: every content block remains in reply order`);
 			const labels = await page.locator(".msg.assistant .turn-process > summary .process-row-label").allTextContents();

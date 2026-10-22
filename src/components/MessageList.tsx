@@ -20,6 +20,26 @@ export function MessageList({ retryAttempts, messages, pendingPrompt, activeTurn
 	const frozenProcessCounts = useRef(new Map<string, ProcessCounts>());
 	const displayMessages = useMemo(() => pendingPrompt?.userMessage ? [...messages, pendingPrompt.userMessage] : messages, [messages, pendingPrompt?.userMessage]);
 	const turns = useMemo(() => groupTurns(displayMessages), [displayMessages]);
+	// Tool calls produce multiple pi messages, but their reply shares one visual container.
+	const replyRows = useMemo(() => {
+		const rows: { key: string; assistant: boolean; indices: number[] }[] = [];
+		displayMessages.forEach((message, index) => {
+			const previous = rows[rows.length - 1];
+			if (message.role === "assistant" && previous?.assistant && previous.key === turns[index].turnId) previous.indices.push(index);
+			else rows.push({ key: message.role === "user" ? message.id : turns[index].turnId, assistant: message.role === "assistant", indices: [index] });
+		});
+		return rows;
+	}, [displayMessages, turns]);
+	const speakerLabels = useMemo(() => {
+		let previous: string | undefined;
+		return displayMessages.map((message) => {
+			if (message.role !== "assistant") return false;
+			const identity = JSON.stringify([message.provider ?? model?.provider, message.model ?? model?.id]);
+			const changed = identity !== previous;
+			previous = identity;
+			return changed;
+		});
+	}, [displayMessages, model?.provider, model?.id]);
 	const processTurnId = activeTurnId ?? (running ? turns[turns.length - 1]?.turnId : undefined);
 	const process = useMemo(() => turnProcessPresentation(displayMessages, { running, activeTurnId: processTurnId, frozenCounts: frozenProcessCounts.current }), [displayMessages, running, processTurnId]);
 	// Snapshot closed segments after committing the first reply token, never during render.
@@ -44,6 +64,8 @@ export function MessageList({ retryAttempts, messages, pendingPrompt, activeTurn
 	// Keep its footer on the last content step so it does not create a separate row.
 	const turnTails = useMemo(() => turnContentTails(displayMessages, turns), [displayMessages, turns]);
 	const lastAssistant = turnTails.get(turns[turns.length - 1]?.turnId);
+	const previousAssistant = useMemo(() => [...displayMessages].reverse().find((message) => message.role === "assistant"), [displayMessages]);
+	const showWaitingRole = !previousAssistant || (previousAssistant.provider ?? model?.provider) !== model?.provider || (previousAssistant.model ?? model?.id) !== model?.id;
 	const waitingForAssistant = running && activeTurnId !== undefined && (pendingPrompt !== undefined || (displayMessages[displayMessages.length - 1]?.role === "user" && turns[turns.length - 1]?.turnId === activeTurnId));
 	// A new request key lets history search reveal the same turn again later.
 	useEffect(() => { if (revealTurn) revealProcess(revealTurn.turnId); }, [revealTurn?.turnId, revealTurn?.requestKey]);
@@ -92,17 +114,20 @@ export function MessageList({ retryAttempts, messages, pendingPrompt, activeTurn
 		);
 	}
 
+	const messageItems = displayMessages.map((message, index) => (
+		<Fragment key={message.id}><MessageItem onEdit={onEdit} onContinue={onContinue} continuing={continuing} turnOutcome={(() => { const group = messagesByTurn.get(turns[index].turnId) ?? []; const final = [...group].reverse().find((entry) => entry.role === "assistant"); return group.find((entry) => entry.turnResult)?.turnResult ?? (lastOutcome?.turnId === turns[index].turnId ? lastOutcome.reason : final?.stopReason); })()} searchQuery={revealMessage?.messageId === message.id ? revealMessage.query : undefined} key={message.id} message={message} processPresentation={process.presentation.get(message.id)} expandedGroups={expandedGroups} onExpandedChange={setProcessExpanded} turnMessages={message.role === "assistant" && turnTails.get(turns[index].turnId) === index ? messagesByTurn.get(turns[index].turnId) : undefined} showRole={speakerLabels[index]} roleDisplay={message.role === "user" ? { label: "你" } : modelDisplay(message, models, model)} compact={message.role === "assistant" && displayMessages[index - 1]?.role === "assistant"} running={running} turnRunning={running && turns[index].turnId === processTurnId} turnHead={turns[index].head} isLast={message.role === "assistant" ? index === lastAssistant && displayMessages[displayMessages.length - 1]?.role === "assistant" : index === displayMessages.length - 1} readOnly={readOnly} />
+		{retryAttempts?.filter((retry) => retry.afterMessageId === message.id).map((retry) => <div key={retry.id} className="retry-progress" role="status"><ProcessRow icon="wifi" label={`${retryReason(retry.error)}，正在重新连接 ${retry.attempt}/${retry.maxAttempts}`} /></div>)}
+		</Fragment>
+	));
 	return (
 		<div className="transcript">
 		<div className="messages" ref={scrollRef} onScroll={() => { const el = scrollRef.current; if (el) { followingRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80; setAway(!followingRef.current); if (followingRef.current) setUnread(false); } }}>
-			{displayMessages.map((message, index) => (
-				<Fragment key={message.id}><MessageItem onEdit={onEdit} onContinue={onContinue} continuing={continuing} turnOutcome={(() => { const group = messagesByTurn.get(turns[index].turnId) ?? []; const final = [...group].reverse().find((entry) => entry.role === "assistant"); return group.find((entry) => entry.turnResult)?.turnResult ?? (lastOutcome?.turnId === turns[index].turnId ? lastOutcome.reason : final?.stopReason); })()} searchQuery={revealMessage?.messageId === message.id ? revealMessage.query : undefined} key={message.id} message={message} processPresentation={process.presentation.get(message.id)} expandedGroups={expandedGroups} onExpandedChange={setProcessExpanded} turnMessages={message.role === "assistant" && turnTails.get(turns[index].turnId) === index ? messagesByTurn.get(turns[index].turnId) : undefined} showRole={index === 0 || displayMessages[index - 1].role !== message.role} roleDisplay={message.role === "user" ? { label: "你" } : modelDisplay(message, models, model)} compact={message.role === "assistant" && displayMessages[index - 1]?.role === "assistant"} running={running} turnRunning={running && turns[index].turnId === processTurnId} turnHead={turns[index].head} isLast={message.role === "assistant" ? index === lastAssistant && displayMessages[displayMessages.length - 1]?.role === "assistant" : index === displayMessages.length - 1} readOnly={readOnly} />
-				{retryAttempts?.filter((retry) => retry.afterMessageId === message.id).map((retry) => <div key={retry.id} className="retry-progress" role="status"><ProcessRow icon="wifi" label={`${retryReason(retry.error)}，正在重新连接 ${retry.attempt}/${retry.maxAttempts}`} /></div>)}
-				</Fragment>
-			))}
-			{waitingForAssistant && <WaitingReply turnId={activeTurnId} roleDisplay={modelDisplay({ id: "waiting", role: "assistant", blocks: [] }, models, model)} />}
+			{replyRows.map((row) => row.assistant
+				? <article key={row.key} className="assistant-reply message-bubble" data-turn-id={row.key} aria-label="Skiff 的消息">{row.indices.map((index) => messageItems[index])}</article>
+				: <Fragment key={row.key}>{row.indices.map((index) => messageItems[index])}</Fragment>)}
+			{waitingForAssistant && <WaitingReply turnId={activeTurnId} showRole={showWaitingRole} roleDisplay={modelDisplay({ id: "waiting", role: "assistant", blocks: [] }, models, model)} />}
 		</div>
-		{away && <button className="back-bottom" aria-label="回到底部" onClick={scrollBottom}><Icon name="down" size={15} />{unread ? "有新内容 · 回到底部" : "回到底部"}</button>}
+		{away && <button className={`back-bottom${unread ? " has-unread" : ""}`} aria-label="回到底部" title={unread ? "有新内容 · 回到底部" : "回到底部"} onClick={scrollBottom}><Icon name="down" size={20} /><span className="sr-only">{unread ? "有新内容 · 回到底部" : "回到底部"}</span></button>}
 		<span className="sr-only" role="status">{running ? "Skiff 正在生成回复" : "回复已就绪"}</span>
 		</div>
 	);

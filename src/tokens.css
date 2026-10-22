@@ -60,6 +60,7 @@
 		--chat-gutter: var(--space-10);
 		--chat-message-gap: var(--space-5);
 		--chat-block-gap: var(--space-2);
+		--chat-meta: #9ca3af;
 		--gauge-track: var(--boundary);
 		--bubble-bg: var(--panel);
 		--bubble-border: var(--boundary);
@@ -145,6 +146,7 @@
 		--color-text-secondary: #48566b;
 		--color-text-tertiary: #55647a;
 		--color-text-disabled: #bbb;
+		--chat-meta: #646e7d;
 		--color-accent: #2458be;
 		--color-accent-hover: #1d4ca8;
 		--color-accent-active: #183e8a;

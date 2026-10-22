@@ -16,13 +16,14 @@ import { CopyButton } from "./CopyButton";
 import { TurnUsage } from "./TurnUsage";
 import { ImagePreview } from "./ImagePreview";
 import { BrandIcon } from "./BrandIcon";
+import { Icon } from "./Icon";
 import { ProcessDisclosure } from "./ProcessDisclosure";
 import { TOOL_ICONS } from "./toolIcons";
 import { processBlocks, type ProcessPresentation } from "../chat/turnProcess";
 import { TurnProcessGroup } from "./TurnProcessGroup";
 import { ThinkingContent } from "./ThinkingContent";
 
-/** Compact, locale-aware timestamp shown beside a message role. */
+/** Compact, locale-aware timestamp shown inside a message bubble. */
 const formatMessageTime = (ts?: number): string | undefined => {
 	if (!ts) return undefined;
 	const diff = Date.now() - ts;
@@ -84,8 +85,14 @@ export const MessageItem = memo(function MessageItem({ onEdit, onContinue, conti
 	// Intermediate process-only messages vanish when the turn is collapsed.
 	if (!nodes.length && !showHeader && !showUsage && !showTyping && !showActions) return null;
 	const metadataOnly = !nodes.length && !showHeader && !showTyping;
-	return <article data-message-id={message.id} data-search-hit={searchQuery ? "true" : undefined} className={`msg ${isUser ? "user" : "assistant"}${compact ? " compact" : ""}${metadataOnly ? " metadata-only" : ""}${searchQuery ? " search-message-hit" : ""}`} aria-label={isUser ? "你的消息" : "Skiff 的消息"}>
-		{showRole && <div className="msg-role">{roleDisplay.brand && <BrandIcon name={roleDisplay.brand} size={14} />}{roleDisplay.label}{message.timestamp !== undefined && <span className="msg-time">{formatMessageTime(message.timestamp)}</span>}</div>}
+	const showTime = message.timestamp !== undefined && !showUsage && (isUser || !!turnMessages);
+	const MessageTag = isUser ? "article" : "div";
+	return <MessageTag data-message-id={message.id} data-search-hit={searchQuery ? "true" : undefined} className={`msg ${isUser ? "user" : "assistant"}${compact ? " compact" : ""}${metadataOnly ? " metadata-only" : ""}${searchQuery ? " search-message-hit" : ""}`} aria-label={isUser ? "你的消息" : undefined}>
+		<div className={isUser ? "message-bubble" : "message-segment"}>
+		{!isUser && (showRole || turnHead) && <div className={`msg-role${showRole ? "" : " is-compact"}`} title={roleDisplay.label}>
+			{roleDisplay.brand ? <BrandIcon name={roleDisplay.brand} size={14} /> : <Icon name="spark" size={14} />}
+			<span className={showRole ? undefined : "sr-only"}>{roleDisplay.label}</span>
+		</div>}
 		{searchQuery && <details open className="search-source"><summary>搜索命中原文</summary><pre><SearchText text={text} query={searchQuery} /></pre></details>}
 		{!metadataOnly && <div className="msg-body">
 			{isUser && message.turnResult === "manual" && <span className="turn-outcome manual">已手动停止{onContinue && <Button disabled={continuing} onClick={onContinue}>继续</Button>}</span>}
@@ -95,12 +102,14 @@ export const MessageItem = memo(function MessageItem({ onEdit, onContinue, conti
 			</div>}
 			{!nodes.length && showTyping ? <span className="typing">正在思考…</span> : nodes}
 		</div>}
-		{(showActions || showUsage) && <div className={`message-actions${showUsage ? " with-usage" : ""}`}>
+		{(showActions || showUsage || showTime) && <div className={`message-actions${showUsage ? " with-usage" : ""}`}>
 			{showActions && <div className="message-buttons">
 				{canCopy && <CopyButton text={copyText} label="复制消息" />}
-				{!readOnly && isUser && <Button variant="ghost" disabled={!onEdit || running} onClick={() => onEdit?.(message)}>编辑并重发</Button>}
+				{!readOnly && isUser && <Button size="compact" variant="ghost" disabled={!onEdit || running} onClick={() => onEdit?.(message)}>编辑并重发</Button>}
 			</div>}
 			{showUsage && <TurnUsage message={[...(turnMessages ?? [])].reverse().find((entry) => entry.role === "assistant") ?? message} messages={turnMessages} />}
+			{showTime && <time className="msg-time" dateTime={new Date(message.timestamp!).toISOString()} title={new Date(message.timestamp!).toLocaleString()}>{formatMessageTime(message.timestamp)}</time>}
 		</div>}
-	</article>;
+		</div>
+	</MessageTag>;
 });
