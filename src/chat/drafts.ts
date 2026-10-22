@@ -33,6 +33,9 @@ const validEdit = (edit: DraftRecord["edit"]) => !edit || (typeof edit.branchVer
 /** One application-side owner of writes; tombstones and revisions guard late saves. */
 export class DraftStore {
 	private records = new Map<string, DraftRecord>();
+	/** Hydrated content can announce one actual application, never a later in-memory save. */
+	private recovered = new Set<string>();
+	consumeRecovery(id: string) { const recovered = this.recovered.has(id); this.recovered.delete(id); return recovered; }
 	private statuses = new Map<string, DraftStatus>();
 	private allowed = new Set<string>();
 	private revisions = new Map<string, number>();
@@ -72,7 +75,7 @@ export class DraftStore {
 					if (!draft || typeof draft.chatId !== "string" || typeof draft.cwd !== "string" || typeof draft.text !== "string" || !Number.isSafeInteger(draft.revision) || !Array.isArray(draft.attachments) || !draft.attachments.every((item) => item && typeof item.id === "string" && typeof item.name === "string" && (item.kind === "image" || item.kind === "text") && (item.body === undefined || typeof item.body === "string"))) { this.loadError = true; continue; }
 					if (!validEdit(draft.edit)) { draft.edit = undefined; this.loadError = true; }
 					this.persistedSizes.set(draft.chatId, persistedAttachmentBytes(draft));
-					if (this.allowed.has(draft.chatId) && !this.records.has(draft.chatId) && !this.revisions.has(draft.chatId) && typeof draft.text === "string" && Array.isArray(draft.attachments)) { this.records.set(draft.chatId, draft); this.revisions.set(draft.chatId, draft.revision); }
+					if (this.allowed.has(draft.chatId) && !this.records.has(draft.chatId) && !this.revisions.has(draft.chatId) && typeof draft.text === "string" && Array.isArray(draft.attachments)) { this.records.set(draft.chatId, draft); this.recovered.add(draft.chatId); this.revisions.set(draft.chatId, draft.revision); }
 					else if (!this.allowed.has(draft.chatId)) await this.deletePersisted(draft.chatId);
 				}
 			} catch { this.loadError = true; }
@@ -87,6 +90,7 @@ export class DraftStore {
 	}
 	save(draft: Omit<DraftRecord, "revision">) {
 		if (!this.allowed.has(draft.chatId)) return;
+		this.recovered.delete(draft.chatId);
 		const revision = (this.revisions.get(draft.chatId) ?? 0) + 1;
 		this.revisions.set(draft.chatId, revision);
 		this.records.set(draft.chatId, { ...draft, revision });
@@ -154,6 +158,7 @@ export class DraftStore {
 	}
 	private async deletePersisted(id: string) { const database = await this.open(); await new Promise<void>((resolve, reject) => { const transaction = database.transaction("drafts", "readwrite"); transaction.objectStore("drafts").delete(id); transaction.oncomplete = () => { this.persistedSizes.delete(id); resolve(); }; transaction.onerror = () => reject(transaction.error); }); }
 	remove(id: string) {
+		this.recovered.delete(id);
 		this.allowed.delete(id);
 		clearTimeout(this.timers.get(id)); this.timers.delete(id);
 		this.revisions.set(id, (this.revisions.get(id) ?? 0) + 1);

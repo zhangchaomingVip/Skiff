@@ -36,7 +36,9 @@ export function Composer({
 	onCancelEdit,
 	getCommands,
 	onAttachmentsChange,
+	recoveryNotice,
 }: {
+	recoveryNotice?: string;
 	disabled: boolean;
 	streaming: boolean;
 	stopping?: boolean;
@@ -151,6 +153,7 @@ export function Composer({
 	return (
 		<div className="composer-wrap">{streaming && <div className="delivery-control"><Select aria-label="投递时机" value={delivery} onChange={(event) => setDelivery(event.target.value as Delivery)}><option value="steer">插话</option><option value="follow_up">等本轮做完</option></Select><span>{delivery === "steer" ? "当前工具调用结束后、下一次模型请求前插入" : "本轮没有更多待处理工作时送达"}</span></div>}<div className="composer" onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); void addAttachments(Array.from(event.dataTransfer.files)); }}>
 			{editing && <div className="editing-banner">编辑提问 · 发送后替换本轮及后续消息<button disabled={disabled || reading || sendingRef.current} onClick={onCancelEdit} aria-label="取消编辑"><Icon name="close" size={14} /></button></div>}
+			{recoveryNotice && <span className="draft-restored" role="status" aria-live="polite">{recoveryNotice}</span>}
 			{menuOpen && <div className="composer-menu" aria-label={slash ? "命令面板" : "文件引用"}>
 				{slash ? <>{options.map((command, index) => <button key={command.name} className={index === activeOption ? "focused" : ""} onClick={() => { onTextChange(`/${command.name} `); inputRef.current?.focus(); }} aria-label={`使用命令 ${command.name}`}><strong>/{command.name}</strong><span>{command.description}</span></button>)}{!options.length && <p>{commandError ? "无法读取 pi 命令，请重新连接后重试" : "暂无匹配命令"}</p>}</> : <p>输入项目相对路径，按 Enter 引用。<br />例如 @src/App.tsx · 外部文件可通过 + 添加文本或 Word 文件。</p>}
 			</div>}

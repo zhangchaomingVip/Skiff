@@ -28,7 +28,7 @@ function CodeBlock({ children, streaming }: { children?: ReactNode; streaming: b
 
 const plugins = [remarkGfm, remarkBreaks];
 
-export const Markdown = memo(function Markdown({ text, streaming = false }: { text: string; streaming?: boolean }) {
+export const Markdown = memo(function Markdown({ text, streaming = false, replyKey }: { text: string; streaming?: boolean; replyKey?: string }) {
 	const components = useMemo<Components>(() => ({
 		pre: ({ children }) => <CodeBlock streaming={streaming}>{children}</CodeBlock>,
 		code: ({ children, className }) => <code className={className ?? "inline-code"}>{children}</code>,
@@ -38,7 +38,11 @@ export const Markdown = memo(function Markdown({ text, streaming = false }: { te
 			return <a className={isBareUrl ? "citation-chip" : undefined} href={href} title={href} target="_blank" rel="noreferrer">{isBareUrl ? `来源 · ${label}` : children}</a>;
 		},
 		img: ({ src, alt }) => src ? <ImagePreview src={src} alt={alt || "回复中的图片"} /> : null,
+		td: ({ children }) => {
+			const label = typeof children === "string" ? children : isValidElement<{ children?: ReactNode }>(children) ? children.props.children : undefined;
+			return <td className={typeof label === "string" && /^[a-zA-Z][a-zA-Z0-9_-]{0,31}$/.test(label) ? "table-identifier" : undefined}>{children}</td>;
+		},
 		table: ({ children }) => <div className="table-scroll"><table>{children}</table></div>,
 	}), [streaming]);
-	return <div className={`md${streaming ? " is-streaming" : ""}`}><ReactMarkdown remarkPlugins={plugins} components={components}>{text}</ReactMarkdown></div>;
+	return <div data-reply-text={replyKey} className={`md${streaming ? " is-streaming" : ""}`}><ReactMarkdown remarkPlugins={plugins} components={components}>{text}</ReactMarkdown></div>;
 });

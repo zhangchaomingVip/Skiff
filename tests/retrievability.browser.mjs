@@ -8,7 +8,7 @@ const require = createRequire(import.meta.url);
 const { chromium } = require(process.env.SKIFF_PLAYWRIGHT_DIR || "playwright");
 const browser = await chromium.launch({ headless: true, channel: "msedge" });
 const base = process.argv[2] ?? "http://127.0.0.1:1424";
-const output = new URL("../features/019-session-retrievability/", import.meta.url);
+const output = new URL(process.argv[3] ? `${process.argv[3].replace(/\\/g, "/")}/` : "../features/019-session-retrievability/", import.meta.url);
 await fs.mkdir(new URL("screenshots/", output), { recursive: true });
 const page = await browser.newPage({ viewport: { width: 1440, height: 960 }, reducedMotion: "reduce" });
 const errors = [], evidence = { mode: "Vite development; headless Edge; no CPU throttling; browser bridge simulated", browser: browser.version(), platform: os.platform(), cpu: os.cpus()[0].model, logicalCpus: os.cpus().length, checks: [] };
@@ -87,7 +87,7 @@ try {
 	assert.equal((await persisted("s0")).attachments[0].body, "附件内容保持完整");
 	await page.goto(`${base}/tests/retrievability.html?restore=1`); await ready();
 	assert.equal(await message().inputValue(), "未发送的正文草稿");
-	assert.match(await page.locator(".draft-notice").first().innerText(), /已恢复草稿/);
+	assert.match(await page.locator(".draft-restored").first().innerText(), /已恢复上次输入/);
 	await message().fill("即刻重载的草稿");
 	await page.goto(`${base}/tests/retrievability.html?restore=1`); await ready();
 	assert.equal(await message().inputValue(), "即刻重载的草稿");

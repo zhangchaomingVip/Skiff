@@ -136,7 +136,7 @@ export function ChatView({
 
 	return (
 		<section className="chat">
-			{loading ? <div className="session-loading" role="status" aria-label="正在加载会话"><span className="dot busy" />正在加载会话…</div> : <MessageList retryAttempts={state.retryAttempts} messages={state.messages} pendingPrompt={state.pendingPrompt} activeTurnId={state.activeRun?.turnId} projectName={projectName} running={state.isStreaming} models={state.availableModels} model={state.model} onSuggestion={(text) => { setDraft(text); setFocusSignal((n) => n + 1); }} followSignal={followSignal} revealMessage={revealMessage} onEdit={canEdit ? beginEdit : undefined} onContinue={continueRun} continuing={continuing} lastOutcome={state.lastOutcome} />}
+			{loading ? <div className="session-loading" role="status" aria-label="正在加载会话"><span className="dot busy" />正在加载会话…</div> : <MessageList runStartedAt={state.activeRun?.startedAt} retryAttempts={state.retryAttempts} messages={state.messages} pendingPrompt={state.pendingPrompt} activeTurnId={state.activeRun?.turnId} projectName={projectName} running={state.isStreaming} models={state.availableModels} model={state.model} onSuggestion={(text) => { setDraft(text); setFocusSignal((n) => n + 1); }} followSignal={followSignal} revealMessage={revealMessage} onEdit={canEdit ? beginEdit : undefined} onContinue={continueRun} continuing={continuing} lastOutcome={state.lastOutcome} />}
 			{alerts.length > 0 && (
 				<div className="notices">
 					{alerts.slice(-3).map((notice) => (
@@ -183,6 +183,7 @@ export function ChatView({
 				stopping={state.stopping}
 				onSend={send}
 				onAbort={actions.abort}
+				recoveryNotice={draftTarget ? storedDraft.recoveryNotice : undefined}
 				text={draft}
 				onTextChange={setDraft}
 				models={state.availableModels}

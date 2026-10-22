@@ -126,6 +126,7 @@
 		--syn-meta: #61afef;
 		--shadow: var(--shadow-elevation-2);
 		--content-width: 900px;
+		--chat-content-width: 760px;
 		--color-window-close: #b52b37;
 		--diff-add-bg: color-mix(in srgb, var(--color-success) 8%, transparent);
 		--diff-remove-bg: color-mix(in srgb, var(--danger) 8%, transparent);

@@ -1,6 +1,5 @@
 import { toolKind } from "./toolRuns";
 import { processCountLabel, type TurnProcessGroup } from "./turnProcess";
-import { processStepLabel } from "./processStepLabel";
 import type { ContentBlock } from "./types";
 
 type Tool = Extract<ContentBlock, { kind: "tool" }>;
@@ -92,28 +91,17 @@ export function processStatus(group: TurnProcessGroup, running: boolean, outcome
 	// Later content has already frozen this row. Only the terminal open segment
 	// receives the turn's final failure state.
 	const error = failed && !!group.terminal && !group.advanced;
-	const latest = group.entries[group.entries.length - 1];
-	const failedBatch = group.terminal && latest?.block.kind !== "thinking" ? group.entries.filter((entry) => entry.messageId === latest?.messageId && (entry.result?.isError || (entry.block.kind === "toolResult" && entry.block.isError))) : [];
-	const summaryGroup = { ...group, entries: group.entries.map((entry) => failedBatch.includes(entry) ? entry : { ...entry, result: entry.result && { ...entry.result, isError: false }, block: entry.block.kind === "toolResult" ? { ...entry.block, isError: false } : entry.block }) };
-	const modelLabel = active ? processStepLabel(group) : undefined;
 	const activity = active ? processActivity(group) : undefined;
-	let label = activity?.label ?? processCountLabel(summaryGroup, false, error, true);
-	// Keep real progress visible between model steps, without repeating narration
-	// or appending the initial placeholder to a thinking excerpt.
-	if (activity?.label === "正在思考") {
-		const progress = processCountLabel(summaryGroup, latest?.block.kind === "thinking" && group.counts.thinkingChars > 0, false, true);
-		label = modelLabel ? "" : progress || label;
+	const latest = group.entries[group.entries.length - 1];
+	let label = activity?.label === "正在思考" && latest?.block.kind !== "thinking" && group.entries.length ? processCountLabel(group, false, true, true) : activity?.label ?? processCountLabel(group, false, true, true);
+	const outcomes: string[] = [];
+	if (group.error) outcomes.push("有调用失败，查看详情");
+	if (!active && group.pending) outcomes.push(running ? "等待结果" : "未收到工具结果");
+	if (error) outcomes.push("模型响应失败");
+	if (!running && !group.advanced && group.placement === "head") {
+		if (outcome === "manual" || outcome === "aborted") outcomes.push("已停止");
+		else if (outcome === "length") outcomes.push("输出已达长度上限");
 	}
-	let outcomeLabel = "";
-	if (error) outcomeLabel = group.pending ? "工具执行失败（未收到结果）" : failedBatch.length ? "" : "模型响应失败";
-	else if (!running && !group.advanced && group.placement === "head") {
-		if (outcome === "manual" || outcome === "aborted") outcomeLabel = "已停止";
-		else if (outcome === "length") outcomeLabel = "输出已达长度上限";
-		else if (group.pending) outcomeLabel = "未收到工具结果";
-	}
-	label = [label, outcomeLabel].filter(Boolean).join(" · ");
-	const detailLabel = label;
-	label = [modelLabel, detailLabel].filter(Boolean).join(" · ");
-	const visible = !!label;
-	return { active, error, label, modelLabel, detailLabel, visible, complete: !active && !error && !group.pending && outcome !== "manual" && outcome !== "aborted" };
+	label = [label, ...outcomes].filter(Boolean).join(" · ");
+	return { active, error: error || group.error, label, detailLabel: label, visible: !!label, complete: !active && !error && !group.error && !group.pending && outcome !== "manual" && outcome !== "aborted" };
 }

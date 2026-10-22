@@ -37,11 +37,12 @@ window.__TAURI_INTERNALS__.invoke = async (command, args) => {
 const noop = () => {};
 const send = (text, images) => latest.actions.prompt(text, images);
 const intervals = new Set();
+const displayIntervals = new Set();
 const originalInterval = window.setInterval;
 const originalClear = window.clearInterval;
 // Track the unified voyage clock separately from Vite's WebSocket heartbeat.
-window.setInterval = (...args) => { const id = originalInterval(...args); if (args[1] === 100) intervals.add(id); return id; };
-window.clearInterval = (id) => { intervals.delete(id); originalClear(id); };
+window.setInterval = (...args) => { const id = originalInterval(...args); if (args[1] === 100) intervals.add(id); if (args[1] === 1000) displayIntervals.add(id); return id; };
+window.clearInterval = (id) => { intervals.delete(id); displayIntervals.delete(id); originalClear(id); };
 
 function Harness() {
 	latest = usePiSession(target);
@@ -52,13 +53,13 @@ function assert(value, message) { if (!value) throw new Error(message); }
 function delay(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
 async function until(check, message) {
 	const deadline = performance.now() + 5000;
-	while (!check()) { if (performance.now() > deadline) throw new Error(message); await delay(10); }
+	while (!check()) { if (performance.now() > deadline) throw new Error(`${message}; pending=${latest?.pending}, streaming=${latest?.state.isStreaming}, intervals=${intervals.size}, displayIntervals=${displayIntervals.size}`); await delay(10); }
 }
 function record(message) { results.push(`PASS ${message}`); output.textContent = results.join("\n"); }
 function emit(event) { mock.emit([...mock.processes.keys()][0], event); }
-function header() { return [...document.querySelectorAll(".turn-header")].at(-1)?.textContent; }
+function header() { return [...document.querySelectorAll(".turn-process > summary .process-count-label")].at(-1)?.textContent; }
 function rail() { return document.querySelector(".voyage-turn dd")?.textContent; }
-async function advance(ms) { now += ms; await delay(150); }
+async function advance(ms) { now += ms; await delay(1100); }
 const idleThinking = "这是没有后续消息到达的长时间思考过程。";
 function begin() {
 	emit({ type: "agent_start" });
@@ -111,24 +112,24 @@ try {
 	await until(waiting, "Missing immediate assistant placeholder");
 	assert(document.querySelectorAll(".msg.user").length === 1 && document.querySelectorAll(".msg.assistant").length === 1, "Optimistic rows missing");
 	assert(latest.state.messages.length === 0 && rail() === "0s", "Optimistic rows entered history or clock missing");
-	assert(document.querySelector(".msg.assistant .msg-role").textContent.includes(latest.state.model.name), "Placeholder model label missing");
+	assert(!document.querySelector(".msg.assistant .msg-role"), "Placeholder leaked model identity");
 	assert(!document.querySelector(".msg.assistant").textContent.includes("0 步"), "Placeholder invented steps");
 	await advance(2200);
-	assert(rail() === "2s" && document.querySelector(".msg.assistant").textContent.includes("正在思考"), "Pre-agent clock did not advance");
+	assert(rail() === "2s" && document.querySelector(".msg.assistant").textContent.includes("用时 2 秒"), "Pre-agent clock did not advance");
 	confirmUser(sent.held);
 	await until(() => latest.state.pendingPrompt?.userMessage === undefined, "User confirmation did not reconcile");
 	assert(document.querySelectorAll(".msg.user").length === 1 && waiting(), "User confirmation duplicated a bubble");
 	await advance(1000);
 	emit({ type: "message_start", message: { role: "assistant" } });
-	await until(() => !waiting() && header()?.includes("正在思考"), "Empty assistant did not expose its live process summary");
+	await until(() => !waiting() && header() === "用时 3 秒", "Empty assistant did not expose its live process summary");
 	assert(document.querySelectorAll(".msg.assistant").length === 1 && !document.querySelector(".thinking-toggle"), "Empty assistant duplicated or offered an empty fold");
 	await advance(1100);
 	emit({ type: "message_update", assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: "纯文本回复" } });
-	await until(() => !header() && document.querySelector(".msg.assistant .md")?.textContent.includes("纯文本回复"), "Pure-text reply left an empty process summary");
+	await until(() => header() === "用时 4 秒" && document.querySelector(".msg.assistant .md")?.textContent.includes("纯文本回复"), "Pure-text reply lost its continuous duration");
 	await finishReply(sent.held, "纯文本回复");
 	assert(await sent.task, "Successful prompt rejected");
 	assert(latest.state.messages.at(-1).durationMs === 4300 && latest.elapsedMs === 4300, "Send latency missing from final duration");
-	record("发送立即显示用户行、模型占位和计时；延迟确认、空回复及纯文本接续不重复、不归零");
+	record("发送立即显示用户行、用时占位和计时；延迟确认、空回复及纯文本接续不重复、不归零");
 	// The footer no longer exposes continue / regenerate / delete buttons; copy is the only action.
 	// Re-send and follow-up continuation are now driven from the composer by the user.
 	setDraft("失败后保留草稿"); await delay(30);
@@ -197,7 +198,7 @@ try {
 	await until(() => rail() === "0s", "Missing duration before first assistant");
 	assert(intervals.size === 1, "Expected exactly one clock interval");
 	begin();
-	await until(() => header() === idleThinking, "Thinking content did not replace its placeholder");
+	await until(() => header() === "用时 0 秒", "Thinking content did not replace its placeholder");
 	// Let the initial message-follow animation frame finish before watching clock-only updates.
 	await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 	const messages = latest.state.messages;
@@ -210,18 +211,18 @@ try {
 	const originalScroll = scroller.scrollTo;
 	scroller.scrollTo = () => scrollCalls++;
 	await advance(3100);
-	assert(rail() === "3s" && header() === idleThinking, "Quiet reasoning clock changed or thinking placeholder reappeared");
+	assert(rail() === "3s" && header() === "用时 3 秒", "Quiet reasoning clock changed or thinking placeholder reappeared");
 	assert(latest.state.messages === messages && mutations === 0 && scrollCalls === 0, `Clock mutated transcript, body or scroll: messages=${latest.state.messages === messages}, mutations=${mutations}, scroll=${scrollCalls}`);
 	observer.disconnect(); scroller.scrollTo = originalScroll;
 	record("无消息事件时，航行台耗时增长；过程计数、正文、消息数组和滚动不变");
 	emit({ type: "message_end", message: { role: "assistant", content: [{ type: "thinking", thinking: "继续处理" }, { type: "toolCall", id: "read", name: "read", arguments: { path: "README.md" } }] } });
 	await until(() => !latest.state.messages.at(-1).streaming, "Message did not finalize");
 	await advance(2000);
-	assert(rail() === "5s" && header()?.includes("正在读取 README.md"), "Tool wait stopped the clock");
+	assert(rail() === "5s" && header() === "用时 5 秒", "Tool wait stopped the clock");
 	emit({ type: "message_start", message: { role: "assistant" } });
 	emit({ type: "message_update", assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: "最终回复" } });
 	await advance(1000);
-	assert(rail() === "6s" && header()?.includes("读取了 1 个文件"), "New assistant step reset the clock");
+	assert(rail() === "6s" && header() === "用时 6 秒", "New assistant step reset the clock");
 	record("工具等待和下一条流式回复沿用同一个起点");
 	emit({ type: "agent_end" });
 	await until(() => !latest.state.isStreaming && intervals.size === 0, "Completion did not stop the interval");
@@ -229,7 +230,7 @@ try {
 	await advance(2000);
 	emit({ type: "agent_settled" });
 	await delay(30);
-	assert(rail() === "6s" && header()?.includes("读取了 1 个文件") && latest.elapsedMs === 6100, "Settled duration changed or accumulated twice");
+	assert(rail() === "6s" && header() === "用时 6 秒" && latest.elapsedMs === 6100, "Settled duration changed or accumulated twice");
 	record("结束后固定实测耗时，重复结束事件不重复累计");
 	const oldHeader = header();
 	emit({ type: "agent_start" });
@@ -245,14 +246,14 @@ try {
 	await advance(2400);
 	document.querySelector('[aria-label="停止生成"]').click();
 	await until(() => intervals.size === 0, "Abort did not stop the clock");
-	assert(rail() === "2s" && header()?.includes("读取了 1 个文件"), "Abort duration missing");
+	assert(rail() === "2s" && header() === "用时 2 秒", "Abort duration missing");
 	assert(document.querySelector('.voyage-tool-log .tool-interrupted[data-tool-id="abort-tool"]'), "Explicit abort without stopReason lost the tool's terminal state");
 	record("中止后计时停止并固定读数");
 	begin();
 	await advance(1200);
 	emit({ type: "bridge_exit", message: "simulated pi exit" });
 	await until(() => intervals.size === 0 && !latest.connected, "Bridge exit did not stop");
-	assert(rail() === "1s" && header()?.includes("思考了 1 段") && !latest.state.messages.at(-1).streaming, "Bridge exit did not settle the current turn");
+	assert(rail() === "1s" && header() === "用时 1 秒" && !latest.state.messages.at(-1).streaming, "Bridge exit did not settle the current turn");
 	record("进程退出也结算当前轮并清理流式状态");
 	latest.reconnect();
 	await until(() => latest.connected, "Reconnect failed");
@@ -273,7 +274,7 @@ try {
 		assert(latest.state.activeRun.startedAt === startedAt, "Restoration chose the wrong start time");
 		await advance(1000);
 		const seconds = withTimestamp ? "5s" : "1s";
-		assert(rail() === seconds && header()?.includes("思考了 1 段"), "Restored clock or process summary missing");
+		assert(rail() === seconds && header() === `用时 ${parseInt(seconds)} 秒`, "Restored clock or process summary missing");
 		emit({ type: "agent_end" });
 		await until(() => intervals.size === 0, "Restored run did not stop");
 		assert(latest.state.messages.at(-1).durationMs === now - startedAt, "Restored final duration used a different origin");
@@ -283,7 +284,7 @@ try {
 	await until(() => intervals.size === 1, "Clock not restarted");
 	root.unmount();
 	await delay(30);
-	assert(intervals.size === 0, "Unmount leaked clock interval");
+	assert(intervals.size === 0 && displayIntervals.size === 0, "Unmount leaked clock interval");
 	record("重连、切换聊天、StrictMode 和卸载无遗留计时器");
 	output.dataset.status = "passed";
 } catch (error) {

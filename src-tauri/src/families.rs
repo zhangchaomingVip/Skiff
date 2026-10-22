@@ -728,6 +728,11 @@ fn is_managed_key(key: &str) -> bool {
 pub fn prepare_runtime(dir: &Path, cmd: &mut std::process::Command) -> Result<(), String> {
 	let _guard = providers::CONFIG_LOCK.lock().map_err(|_| "配置锁异常")?;
 	let config = load_plain(dir)?;
+	// A pi agent can write files in its workspace, including models.json. Restore
+	// Skiff-owned provider entries before pi reads its config so a model editing
+	// that file cannot leave the next connection with stale or missing routes.
+	// `project` preserves providers and fields that Skiff does not own.
+	project(dir, &config)?;
 	prepare_retry(dir)?;
 	let mut routes = Vec::new();
 	for relay in &config.relays {

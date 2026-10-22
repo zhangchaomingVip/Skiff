@@ -17,6 +17,7 @@ export type TurnProcessGroup = {
 	pending: boolean;
 	error: boolean;
 	terminal?: boolean;
+	activeKind?: ContentBlock["kind"];
 };
 export type ProcessPresentation = { head?: TurnProcessGroup; groups: Map<number, TurnProcessGroup>; hidden: Set<number> };
 
@@ -144,12 +145,46 @@ export function turnProcessPresentation(messages: ChatMessage[], { running = fal
 }
 
 export function processCountLabel(group: Pick<TurnProcessGroup, "placement" | "counts" | "entries">, thinking = false, includeFailures = true, settled = false): string {
-	const { thinkingSegments, thinkingChars } = group.counts;
-	const format = (value: number) => value.toLocaleString("en-US");
 	const tools: ToolRunItem[] = group.entries.flatMap(({ key, block, result }) => block.kind === "tool" ? [{ key, block, result }] : block.kind === "toolResult" ? [{ key, block: { kind: "tool", id: block.id ?? `result:${key}`, name: block.name, argsText: "{}", done: true }, result: block }] : []);
-	const parts = [];
-	if (thinkingSegments || thinkingChars) parts.push(thinking && !thinkingSegments ? `思考中（${format(thinkingChars)} 字）` : `思考了 ${format(thinkingSegments)} 段（${format(thinkingChars)} 字）`);
-	parts.push(...toolActionSummaries(includeFailures ? tools : tools.map((item) => ({ ...item, result: item.result && { ...item.result, isError: false } })), settled));
-	if (!parts.length && thinking) parts.push("思考中");
+	const parts = toolActionSummaries(includeFailures ? tools : tools.map((item) => ({ ...item, result: item.result && { ...item.result, isError: false } })), settled);
+	if (!parts.length && group.entries.some((entry) => entry.block.kind === "thinking")) parts.push(thinking ? "正在思考…" : "查看思考过程");
 	return parts.join(" · ");
+}
+
+/** One stable disclosure owns thinking, tools and prose proven to precede a tool. */
+export function aggregateTurnProcess(messages: ChatMessage[], options: { running?: boolean; activeTurnId?: string } = {}) {
+	const presentation = new Map<string, ProcessPresentation>();
+	const byTurn = new Map<string, TurnProcessGroup>();
+	const turnMessages = new Map<string, ChatMessage[]>();
+	let currentTurn = "";
+	for (const message of messages) {
+		if (message.role === "user" || !currentTurn) currentTurn = `turn:${message.id}`;
+		if (message.role !== "assistant") continue;
+		const list = turnMessages.get(currentTurn) ?? [];
+		list.push(message);
+		turnMessages.set(currentTurn, list);
+	}
+	const active = options.activeTurnId ?? [...turnMessages.keys()][turnMessages.size - 1];
+	for (const [turnId, assistants] of turnMessages) {
+		const entries = assistants.flatMap((message) => processBlocks(message).map((entry) => ({ ...entry, messageId: message.id, thinkingComplete: !message.streaming || message.blocks.slice(entry.key + 1).some((block) => block.kind !== "toolResult" && (block.kind !== "text" || block.text.length > 0)) })));
+		let lastTool = -1;
+		entries.forEach((entry, index) => { if (entry.block.kind === "tool") lastTool = index; });
+		const processEntries = entries.filter((entry, index) => entry.block.kind !== "image" && (entry.block.kind !== "text" || index < lastTool));
+		const turn: TurnProcessGroup = { id: `${turnId}:head`, turnId, placement: "head", entries: processEntries, narrationTexts: [], counts: countProcess(processEntries), closed: !options.running || turnId !== active, advanced: false, terminal: true, pending: processEntries.some((entry) => entry.block.kind === "tool" && !entry.result), error: processEntries.some((entry) => entry.result?.isError || (entry.block.kind === "toolResult" && entry.block.isError)), activeKind: [...entries].reverse().find((entry) => entry.block.kind !== "toolResult" && (entry.block.kind !== "text" || entry.block.text.length > 0))?.block.kind };
+		byTurn.set(turnId, turn);
+		for (const message of assistants) {
+			presentation.set(message.id, { head: message === assistants[0] ? turn : undefined, groups: new Map(), hidden: new Set(processEntries.filter((entry) => entry.messageId === message.id).map((entry) => entry.key)) });
+		}
+	}
+	return { presentation, groups: [...byTurn.values()] };
+}
+
+/** Measured runtime wins. Timestamps only describe an approximate historical interval. */
+export function turnDurationLabel(messages: ChatMessage[]): string {
+	const measured = [...messages].reverse().find((message) => message.role === "assistant" && typeof message.durationMs === "number" && Number.isFinite(message.durationMs) && message.durationMs >= 0)?.durationMs;
+	const start = messages.find((message) => message.role === "user")?.timestamp;
+	const end = [...messages].reverse().find((message) => message.role === "assistant")?.timestamp;
+	const estimated = measured === undefined && start !== undefined && end !== undefined && Number.isFinite(start) && Number.isFinite(end) && end >= start ? end - start : undefined;
+	const duration = measured ?? estimated;
+	return duration === undefined ? "用时未记录" : `用时${measured === undefined ? "约" : ""} ${Math.round(duration / 1000)} 秒`;
 }

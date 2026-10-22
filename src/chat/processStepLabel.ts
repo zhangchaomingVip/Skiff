@@ -53,3 +53,24 @@ export function processStepLabel(group: Pick<TurnProcessGroup, "entries">): stri
 	}
 	return undefined;
 }
+
+/** Only the current latest block may supply a live preview, never an earlier thought. */
+export function latestThinkingLabel(group: Pick<TurnProcessGroup, "entries">): string | undefined {
+	const latest = group.entries[group.entries.length - 1]?.block;
+	if (latest?.kind !== "thinking") return undefined;
+	let fence: string | undefined;
+	const prose: string[] = [];
+	for (const line of latest.text.split(/\r?\n/)) {
+		const marker = /^\s*(`{3,}|~{3,})/.exec(line);
+		if (marker) { if (!fence) fence = marker[1][0]; else if (marker[1][0] === fence) fence = undefined; continue; }
+		if (fence) continue;
+		const clean = candidateLine(line);
+		if (clean && Array.from(clean).length >= MIN_LENGTH) prose.push(clean);
+	}
+	const line = prose[prose.length - 1];
+	if (!line) return undefined;
+	const sentences = line.split(/(?<=[。！？])|(?<=[.!?])\s+/u).filter((part) => Array.from(part.trim()).length >= MIN_LENGTH);
+	const tail = sentences[sentences.length - 1]?.trim() ?? line;
+	const chars = Array.from(tail);
+	return chars.length > 120 ? `…${chars.slice(-120).join("")}` : tail;
+}

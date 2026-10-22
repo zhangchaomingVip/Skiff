@@ -1,11 +1,11 @@
 import { useId, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
 import { Icon, type IconName } from "./Icon";
 
-type ProcessLabelProps = { icon: IconName; label: ReactNode; status?: ReactNode };
+type ProcessLabelProps = { icon?: IconName; label: ReactNode; status?: ReactNode };
 
 function ProcessLabel({ icon, label, status, labelId, statusId }: ProcessLabelProps & { labelId?: string; statusId?: string }) {
 	return <>
-		<span className="process-row-icon"><Icon name={icon} size={16} /></span>
+		{icon && <span className="process-row-icon"><Icon name={icon} size={16} /></span>}
 		<span className="process-row-label" id={labelId}>{label}</span>
 		<span className="process-row-trailing">
 			<span className="process-row-status" id={statusId}>{status}</span>
@@ -29,7 +29,7 @@ export function ProcessDisclosure({ children, className = "", summaryLabel, expa
 		if (event.target === event.currentTarget && event.currentTarget.open !== expanded) setExpanded(event.currentTarget.open);
 	}}>
 		<summary role="button" className="process-row" aria-label={summaryLabel} aria-describedby={summaryLabel ? `${contentId}-label ${contentId}-status` : undefined} aria-expanded={expanded} aria-controls={contentId} onClick={(event) => { event.preventDefault(); setExpanded(!expanded); }} onKeyDown={(event) => {
-			if (collapseOnSpace && event.key === " ") { event.preventDefault(); setExpanded(false); }
+			if (collapseOnSpace && event.key === " ") { event.preventDefault(); setExpanded(!expanded); }
 		}}><ProcessLabel {...labelProps} labelId={summaryLabel ? `${contentId}-label` : undefined} statusId={summaryLabel ? `${contentId}-status` : undefined} /></summary>
 		<div className="process-detail-content" id={contentId}>{children}</div>
 	</details>;

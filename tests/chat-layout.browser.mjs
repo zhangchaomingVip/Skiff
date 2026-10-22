@@ -25,7 +25,7 @@ try {
 		const page = await browser.newPage({ viewport: { width: 1100, height: 960 }, reducedMotion: "reduce" });
 		page.on("pageerror", (error) => errors.push(error.message));
 		await page.goto(`${base}/tests/preview.html?fixture=chat&theme=${theme}`);
-		await page.locator(".assistant-reply.message-bubble").first().waitFor();
+		await page.locator(".assistant-reply").first().waitFor();
 		if (output) await page.screenshot({ path: `${output}/app-${theme}.png` });
 		await page.goto(`${base}/tests/turn-usage.html`);
 		await page.waitForFunction(() => window.turnUsageHarness);
@@ -39,7 +39,7 @@ try {
 		assert.ok(Math.abs(bounds.x + bounds.width - row.x - row.width) < 1, "User bubble aligns right");
 		assert.equal(await user.locator(".msg-role").count(), 0);
 		assert.equal(await user.locator("time").count(), 1);
-		assert.equal(await page.locator(".msg-role:not(.is-compact)").count(), 2, "Only model changes show the full label");
+		assert.equal(await page.locator(".msg-role:not(.is-compact)").count(), 0, "Assistant identity is available only in details");
 		assert.equal(await page.locator(".usage-model").count(), 0, "Route names stay inside usage details");
 		assert.equal(await page.locator(".turn-process[open]").count(), 0, "Reasoning defaults to collapsed");
 		for (const selector of [".msg-role", ".msg-time", ".usage-time", ".usage-trigger", ".usage-cost", ".turn-process > summary"]) {
@@ -60,6 +60,7 @@ try {
 		const rects = await page.locator(".messages > .msg, .messages > .assistant-reply").evaluateAll((nodes) => nodes.map((node) => { const r = node.getBoundingClientRect(); return { top: r.top, bottom: r.bottom }; }));
 		assert.equal(Math.round(rects[1].top - rects[0].bottom), 8);
 		assert.equal(Math.round(rects[2].top - rects[1].bottom), 32);
+		await page.locator(".usage-toggle").first().click();
 		await page.locator(".usage-trigger").first().click();
 		assert.equal(await page.locator(".usage-model-label").textContent(), "mock · glm-5.3-flash");
 		await page.keyboard.press("Escape");
@@ -69,7 +70,7 @@ try {
 			await page.setViewportSize({ width, height: 1200 });
 			assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth && document.querySelector(".messages").scrollWidth <= document.querySelector(".messages").clientWidth), true, `No horizontal overflow at ${width}px`);
 			assert.ok((await page.locator(".msg-role").evaluateAll((nodes) => nodes.map((node) => node.getBoundingClientRect().left))).every((left) => left >= 0), "AI icons stay within the viewport");
-			assert.ok(await page.locator(".messages").evaluate((el) => parseFloat(getComputedStyle(el).paddingBottom) >= 64));
+			assert.ok(await page.locator(".messages").evaluate((el) => parseFloat(getComputedStyle(el).paddingBottom) >= 8));
 			await page.evaluate(() => { document.querySelector(".messages").scrollTop = 0; });
 			if (output) await page.screenshot({ path: `${output}/conversation-${theme}-${width}.png` });
 		}
@@ -82,12 +83,12 @@ try {
 		await back.waitFor();
 		const size = await back.boundingBox(); assert.equal(size.width, size.height);
 		assert.equal(await back.evaluate((el) => getComputedStyle(el).backdropFilter), "blur(12px)");
-		assert.ok(await page.locator(".messages").evaluate((el) => parseFloat(getComputedStyle(el).paddingBottom) >= 64));
+		assert.ok(await page.locator(".messages").evaluate((el) => parseFloat(getComputedStyle(el).paddingBottom) >= 8));
 		await back.click(); await back.waitFor({ state: "detached" });
-		assert.ok(await page.locator(".messages").evaluate((el) => { const last = el.lastElementChild.getBoundingClientRect(); return el.getBoundingClientRect().bottom - last.bottom >= 63; }));
+		assert.ok(await page.locator(".messages").evaluate((el) => { const last = el.lastElementChild.getBoundingClientRect(); return el.getBoundingClientRect().bottom - last.bottom >= 7; }));
 		await page.evaluate(({ messages, models }) => window.turnUsageHarness.render({ messages, models, current: models[1], running: true, activeTurnId: "turn:pending", pendingPrompt: { id: "pending", userMessage: { id: "pending-user", role: "user", blocks: [{ kind: "text", text: "再检查一次" }] } } }), { messages, models });
 		await page.locator(".waiting-reply").waitFor();
-		assert.equal(await page.locator(".waiting-reply .msg-role.is-compact").count(), 1, "Waiting replies also avoid repeating the unchanged model");
+		assert.equal(await page.locator(".waiting-reply .msg-role.is-compact").count(), 0, "Waiting replies omit model identity");
 		// One pi run spans text/tool/result messages; it must remain one reply bubble.
 		const toolReply = [
 			{ role: "user", content: "演示工具调用并汇总结果", timestamp },
@@ -98,6 +99,7 @@ try {
 			await page.evaluate(({ entries, models, running }) => window.turnUsageHarness.render({ messages: entries, models, current: models[0], running, activeTurnId: "turn:history_0" }), { entries, models, running });
 		};
 		await renderReply(toolReply, true);
+		await page.locator(".turn-process > summary").click();
 		await page.getByText("第一步：先检查文件，再运行命令。", { exact: true }).waitFor();
 		await page.evaluate(() => { window.replyContainer = document.querySelector(".assistant-reply"); });
 		toolReply.push(assistant([{ type: "text", text: "第二步：文件已读取，继续验证配置。" }, { type: "toolCall", id: "bash", name: "bash", arguments: { command: "echo ok" } }]), { role: "toolResult", toolCallId: "bash", toolName: "bash", content: "ok" });
@@ -110,14 +112,14 @@ try {
 		await page.locator(".assistant-reply .usage-details").waitFor();
 		assert.equal(await page.locator(".assistant-reply").count(), 1);
 		assert.equal(await page.locator(".assistant-reply .message-bubble").count(), 0, "Segments never create nested bubbles");
-		assert.deepEqual(await page.locator(".assistant-reply .msg-body > .md").allTextContents(), ["第一步：先检查文件，再运行命令。", "第二步：文件已读取，继续验证配置。", "检查完成，所有结果均已核对。"]);
+		assert.deepEqual(await page.locator(".assistant-reply .msg-body > .md").allTextContents(), ["检查完成，所有结果均已核对。"]);
 		assert.equal(await page.locator(".assistant-reply time").count(), 1, "Only the final timestamp is shown");
 		assert.equal(await page.locator(".assistant-reply .message-buttons").count(), 1, "One copy action covers the full reply");
 		const replyCopy = page.locator(".assistant-reply .message-buttons");
 		await page.mouse.move(0, 0);
 		await page.evaluate(() => document.activeElement.blur());
 		assert.equal(await replyCopy.evaluate((el) => getComputedStyle(el).opacity), "0");
-		await page.locator(".assistant-reply .md").first().hover();
+		await page.locator(".assistant-reply .msg-body > .md").first().hover();
 		assert.equal(await replyCopy.evaluate((el) => getComputedStyle(el).opacity), "1", "Hovering any step reveals the reply action");
 		await page.setViewportSize({ width: 1100, height: 960 });
 		await page.mouse.move(0, 0);

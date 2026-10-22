@@ -19,14 +19,6 @@ const KIND_BY_NAME: Record<string, ToolKind> = {
 
 const RUNNING_PHRASES: Record<ToolKind, string> = { read: "读取文件", write: "编辑文件", find: "查找文件", list: "列举目录", command: "执行命令", search: "搜索内容", web: "联网搜索", other: "调用工具" };
 
-type SummaryKind = Exclude<ToolKind, "find" | "list" | "search">;
-const SUMMARY_ORDER: SummaryKind[] = ["read", "write", "command", "web", "other"];
-
-function summaryKind(name: string): SummaryKind {
-	const kind = toolKind(name);
-	return kind === "find" || kind === "list" || kind === "search" ? "command" : kind;
-}
-
 export function toolKind(name: string): ToolKind {
 	return KIND_BY_NAME[name.toLowerCase()] ?? "other";
 }
@@ -66,31 +58,16 @@ export interface ToolRunSummary {
 	steps: number;
 }
 
-function actionSummary(kind: ToolKind, items: ToolRunItem[], settled = false): string {
-	const completed = settled || items.every((item) => item.result);
-	const suffix = completed ? "了" : "";
-	if (kind === "read") return `读取${suffix} ${items.length} 个文件`;
-	if (kind === "write") return `编辑${suffix} ${items.length} 个文件`;
-	if (kind === "command") return `执行${suffix} ${items.length} 条命令`;
-	if (kind === "search") return `搜索${suffix} ${items.length} 次`;
-	if (kind === "web") return `联网搜索${suffix} ${items.length} 次`;
-	// These totals count calls, not matched files or the number of directory entries returned.
-	if (kind === "find") return `查找${suffix} ${items.length} 次文件`;
-	if (kind === "list") return `列举${suffix} ${items.length} 次目录`;
-	return `调用${suffix} ${items.length} 次工具`;
-}
-
-function actionLabel(kind: ToolKind, items: ToolRunItem[], settled = false): string {
+function actionLabel(kind: ToolKind, items: ToolRunItem[], _settled = false): string {
 	const failures = items.filter((item) => item.result?.isError).length;
-	return `${actionSummary(kind, items, settled)}${failures ? `（${failures.toLocaleString("en-US")} 失败）` : ""}`;
+	const action = kind === "other" && new Set(items.map((item) => item.block.name)).size === 1 ? items[0].block.name : RUNNING_PHRASES[kind];
+	return `${action} ${items.length} 次${failures ? `（${failures} 失败）` : ""}`;
 }
 
-/** Count tool calls in a fixed order; local lookup joins commands, web_search stays separate. */
-export function toolActionSummaries(items: ToolRunItem[], settled = false): string[] {
-	return SUMMARY_ORDER.flatMap((kind) => {
-		const actions = items.filter((item) => summaryKind(item.block.name) === kind);
-		return actions.length ? [actionLabel(kind, actions, settled)] : [];
-	});
+/** Totals count calls, never unique files or successful outcomes. */
+export function toolActionSummaries(items: ToolRunItem[], _settled = false): string[] {
+	const kinds = [...new Set(items.map((item) => toolKind(item.block.name)))];
+	return kinds.length > 2 ? [`查看 ${items.length} 次工具调用`] : kinds.map((kind) => actionLabel(kind, items.filter((item) => toolKind(item.block.name) === kind)));
 }
 
 /** Compact Codex-style summary of a (possibly mixed) run of consecutive tool calls. */
@@ -98,7 +75,7 @@ export function toolRunSummary(items: ToolRunItem[]): ToolRunSummary {
 	const running = items.some((item) => !item.result);
 	const kinds: ToolKind[] = [];
 	for (const item of items) {
-		const kind = summaryKind(item.block.name);
+		const kind = toolKind(item.block.name);
 		if (!kinds.includes(kind)) kinds.push(kind);
 	}
 	const kind = kinds.length === 1 ? kinds[0] : "other";
