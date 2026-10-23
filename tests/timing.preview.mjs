@@ -44,9 +44,12 @@ const originalClear = window.clearInterval;
 window.setInterval = (...args) => { const id = originalInterval(...args); if (args[1] === 100) intervals.add(id); if (args[1] === 1000) displayIntervals.add(id); return id; };
 window.clearInterval = (id) => { intervals.delete(id); displayIntervals.delete(id); originalClear(id); };
 
+const panel = { toggle: noop };
 function Harness() {
 	latest = usePiSession(target);
-	return React.createElement(VoyageWorkspace, { key: `${latest.owner.id ?? "loading"}:${latest.owner.cwd ?? ""}`, state: latest.state, connected: latest.connected, pending: latest.pending, actions: latest.actions, onSend: send, onReconnect: latest.reconnect });
+	const [expanded, setExpanded] = React.useState(false);
+	panel.toggle = () => setExpanded((value) => !value);
+	return React.createElement(VoyageWorkspace, { key: `${latest.owner.id ?? "loading"}:${latest.owner.cwd ?? ""}`, state: latest.state, connected: latest.connected, pending: latest.pending, actions: latest.actions, onSend: send, onReconnect: latest.reconnect, expanded, onToggle: panel.toggle });
 }
 function render() { root.render(React.createElement(StrictMode, null, React.createElement(Harness))); }
 function assert(value, message) { if (!value) throw new Error(message); }
@@ -105,7 +108,7 @@ function setDraft(text) {
 try {
 	render();
 	await until(() => latest?.connected, "Session did not connect");
-	document.querySelector('[aria-label="展开航行台"]')?.click();
+	panel.toggle();
 	await until(() => document.querySelector(".voyage-turn"), "Rail did not expand");
 	holdPrompts = true;
 	const sent = await takePrompt(() => latest.actions.prompt("慢速请求"));

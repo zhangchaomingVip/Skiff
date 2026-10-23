@@ -33,6 +33,8 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 		metadata.tests.push({ relayId, modelId: ticket.modelId, configVersion: entry.version, completedAt: ticket.completedAt, ok: ticket.result.ok, latencyMs: ticket.result.latencyMs, status: ticket.result.status, errorCategory: ticket.result.ok ? null : "HTTP 请求失败", configChanged: false }); persistMetadata();
 	};
 	let historyTargets = [];
+	// Tests can simulate a native folder picker result instead of a cancel.
+	let dialogPath = null;
 	const histories = new Map();
 	let sequence = 0;
 	let failSend = false;
@@ -136,6 +138,7 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 			commands.push({ command, args: command === "discover_relay_models" ? { baseUrl: args.baseUrl } : command === "test_settings_connection" ? { ...args, relay: { ...args.relay, apiKey: "[redacted]" } } : command === "test_provider_connection" || command === "probe_relay_endpoint" ? { ...args, apiKey: "[redacted]" } : args });
 			if (command === "plugin:event|listen") { const id = ++sequence; listeners.set(id, args); return id; }
 			if (command === "plugin:event|unlisten") return;
+			if (command === "plugin:dialog|open") return dialogPath;
 			if (command === "set_history_workspace") { historyTargets = args.targets; return; }
 			if (command === "read_session_history") {
 				if (!historyTargets.some((item) => item.chatId === args.chatId && item.sessionFile === args.sessionFile)) throw new Error("Not indexed");
@@ -144,6 +147,14 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 				const projection = messages.filter((message) => message.role === "user" || message.role === "assistant").map((message, index) => ({ entryId: message.entryId ?? `mock:${index}`, role: message.role, timestamp: message.timestamp, text: typeof message.content === "string" ? message.content : (message.content ?? []).filter((block) => block.type === "text").map((block) => block.text).join("\n\n") }));
 				const version = JSON.stringify(projection);
 				return { version, unchanged: args.knownVersion === version, messages: args.knownVersion === version ? [] : projection };
+			}
+			if (command === "delete_session_file") {
+				// Mirrors the shell: deleting an already absent transcript is a no-op.
+				const file = args.sessionFile;
+				histories.delete(file);
+				delete saved[file];
+				persist();
+				return;
 			}
 			if (command === "get_workspace_directory") return { name: "Skiff", path: "D:\\workspace\\Skiff" };
 			if (command === "list_model_families") {
@@ -401,5 +412,5 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 			}
 		},
 	};
-	return { relays, families, metadata, failNextOrder: () => { failOrder = true; }, failNextBatch: () => { failBatch = true; }, histories, saved, commands, processes, listeners, callbacks, emit, testRequests, pendingTests, deferTests: (value) => { deferTests = value; }, failNextSend: () => { failSend = true; } };
+	return { relays, families, metadata, failNextOrder: () => { failOrder = true; }, failNextBatch: () => { failBatch = true; }, histories, saved, commands, processes, listeners, callbacks, emit, testRequests, pendingTests, deferTests: (value) => { deferTests = value; }, failNextSend: () => { failSend = true; }, setDialogPath: (value) => { dialogPath = value; } };
 }

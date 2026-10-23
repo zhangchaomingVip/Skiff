@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { normalizeRouteEvents } from "../src/chat/routeAudit.ts";
-import { archiveConversation, deleteConversation, isArchived, normalizeRouteSnapshots, normalizeSelectedModel, normalizeWorkspace, persistableConversations, restoreConversation, visibleConversations, type Conversation, type Workspace } from "../src/chat/workspace.ts";
+import { archiveConversation, deleteConversation, hideProject, isArchived, isHiddenProject, normalizeRouteSnapshots, normalizeSelectedModel, normalizeWorkspace, persistableConversations, restoreConversation, unhideProject, visibleConversations, visibleProjects, type Conversation, type Workspace } from "../src/chat/workspace.ts";
 
 test("selected model keeps legacy provider/id and optional pinned offer identity", () => {
 	assert.deepEqual(normalizeSelectedModel({ provider: "skiff-relay-r1-kimi", id: "kimi-k3" }), { provider: "skiff-relay-r1-kimi", id: "kimi-k3" });
@@ -71,6 +71,40 @@ test("deleting an archived chat removes only its workspace index entry", () => {
 	const next = deleteConversation(workspace, archived.id);
 	assert.equal(next.chats.some((chat) => chat.id === archived.id), false);
 	assert.equal(archived.sessionFile, "kept.jsonl");
+});
+
+test("hiding a project keeps its chats and drafts so re-adding the path restores them", () => {
+	const chat = (id: string, projectId: string, updatedAt: number): Conversation => ({ id, projectId, title: id, updatedAt, hasMessages: true, sessionFile: `${id}.jsonl` });
+	const workspace: Workspace = {
+		version: 1,
+		projects: [{ id: "a", name: "A", path: "C:/a" }, { id: "b", name: "B", path: "C:/b" }],
+		chats: [chat("a1", "a", 1), chat("b1", "b", 2)],
+		activeId: "a1",
+	};
+	const hidden = hideProject(workspace, "a", 10);
+	assert.equal(isHiddenProject(hidden.projects[0]), true);
+	assert.deepEqual(visibleProjects(hidden.projects).map((project) => project.id), ["b"]);
+	assert.deepEqual(hidden.chats.map((item) => item.id), ["a1", "b1"], "hiding must keep every chat and its session file");
+	assert.equal(hidden.chats[0].sessionFile, "a1.jsonl");
+	assert.equal(hidden.activeId, "b1", "the active chat must leave the hidden project");
+	assert.equal(persistableConversations(hidden.chats, hidden.activeId).some((item) => item.id === "a1"), true);
+	const restored = unhideProject(hidden, "a");
+	assert.equal(isHiddenProject(restored.projects[0]), false);
+	assert.equal(restored.activeId, "a1", "re-adding the path must focus the newest surviving chat");
+	assert.equal(restored.chats.length, 2);
+	// The last visible project stays, mirroring the permanent-delete guard.
+	const single: Workspace = { version: 1, projects: [workspace.projects[0]], chats: [workspace.chats[0]], activeId: "a1" };
+	assert.equal(hideProject(single, "a"), single);
+});
+
+test("malformed hidden project metadata is ignored", () => {
+	const normalized = normalizeWorkspace({
+		version: 1,
+		projects: [{ id: "p", name: "Project", path: "C:/project", hiddenAt: "later" }],
+		chats: [{ id: "c", projectId: "p", title: "Chat", updatedAt: 1, hasMessages: false }],
+		activeId: "c",
+	});
+	assert.equal(normalized?.projects[0].hiddenAt, undefined);
 });
 
 test("malformed optional archive metadata is ignored", () => {

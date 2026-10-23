@@ -59,5 +59,5 @@ export function ResizeSeparator({ label, value, bounds, direction = 1, onResize,
 		onCommit(next);
 	};
 
-	return <div className={`resize-separator${dragging ? " dragging" : ""}`} role="separator" aria-orientation="vertical" aria-label={label} aria-valuemin={bounds.min} aria-valuemax={bounds.max} aria-valuenow={value} tabIndex={0} onPointerDown={onPointerDown} onPointerMove={(event) => { if (drag.current?.pointerId === event.pointerId) move(event.clientX); }} onPointerUp={(event) => { if (drag.current?.pointerId === event.pointerId) { move(event.clientX); finish(); } }} onPointerCancel={finish} onLostPointerCapture={finish} onKeyDown={onKeyDown} />;
+	return <div className={`resize-separator${dragging ? " dragging" : ""}`} data-direction={direction === -1 ? "end" : "start"} role="separator" aria-orientation="vertical" aria-label={label} aria-valuemin={bounds.min} aria-valuemax={bounds.max} aria-valuenow={value} tabIndex={0} onPointerDown={onPointerDown} onPointerMove={(event) => { if (drag.current?.pointerId === event.pointerId) move(event.clientX); }} onPointerUp={(event) => { if (drag.current?.pointerId === event.pointerId) { move(event.clientX); finish(); } }} onPointerCancel={finish} onLostPointerCapture={finish} onKeyDown={onKeyDown} />;
 }

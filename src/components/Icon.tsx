@@ -17,6 +17,7 @@ const paths = {
 	plus: "M12 5v14M5 12h14",
 	edit: "m16 3 5 5-12 12-6 1 1-6L16 3ZM14 5l5 5",
 	folder: "M3 7V5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z",
+	folderPlus: "M3 7V5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7ZM12 11v6M9 14h6",
 	chevron: "m9 5 7 7-7 7",
 	panel: "M9 3v18M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z",
 	arrow: "M12 19V5m-6 6 6-6 6 6",

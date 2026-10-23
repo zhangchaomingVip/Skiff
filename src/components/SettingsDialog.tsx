@@ -44,7 +44,7 @@ export function SettingsDialog({ initialCategory, restrictions, prompt, provider
 	const modifier = isMacPlatform() ? "Cmd" : "Ctrl";
 	const close = () => { if (!editor.current?.pending) onClose(); };
 	const escape = () => { if (editor.current?.pending) return; if (editor.current?.editing) editor.current.back(); else close(); };
-	return <Dialog className="settings-dialog" aria-labelledby="settings-title" onClose={close} onEscape={escape} pending={pending} returnFocusSelector=".chat-header .header-settings, .settings-trigger">
+	return <Dialog className="settings-dialog" aria-labelledby="settings-title" onClose={close} onEscape={escape} pending={pending} returnFocusSelector=".titlebar-tools .settings-trigger">
 		<div className="settings-heading"><h1 id="settings-title">设置</h1><IconButton aria-label="关闭设置" disabled={pending} onClick={close}><Icon name="close" /></IconButton></div>
 		<div className="settings-layout">
 			<nav className="settings-nav" aria-label="设置分类">{settingsCategories.map(({ id, label, icon }) => <Button key={id} variant="ghost" aria-pressed={category === id} disabled={navigationLocked || !!restrictions[id]} title={navigationLocked ? "请先返回列表或等待保存完成" : restrictions[id]} onClick={() => switchCategory(id)}><Icon name={icon} size={16} />{label}{category === id && <Icon name="check" size={14} />}</Button>)}

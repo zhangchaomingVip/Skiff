@@ -9,6 +9,8 @@ export interface Project {
 	id: string;
 	name: string;
 	path: string;
+	/** Hidden projects keep their chats and drafts so re-adding the path restores them. */
+	hiddenAt?: number;
 }
 
 export interface Conversation {
@@ -83,6 +85,7 @@ export function normalizeWorkspace(value: unknown): Workspace | null {
 		if (!workspace.projects.length || !workspace.projects.every((p) => p && typeof p.id === "string" && typeof p.name === "string" && typeof p.path === "string")) return null;
 		if (!workspace.chats.every((c) => c && typeof c.id === "string" && typeof c.title === "string" && typeof c.updatedAt === "number" && typeof c.hasMessages === "boolean" && (c.sessionFile === undefined || typeof c.sessionFile === "string") && workspace.projects.some((p) => p.id === c.projectId))) return null;
 		if (!workspace.chats.some((c) => c.id === workspace.activeId)) return null;
+		for (const project of workspace.projects) if (project.hiddenAt !== undefined && (typeof project.hiddenAt !== "number" || !Number.isFinite(project.hiddenAt))) delete project.hiddenAt;
 		for (const chat of workspace.chats) {
 			const selected = normalizeSelectedModel(chat.selectedModel);
 			if (selected) chat.selectedModel = selected; else delete chat.selectedModel;
@@ -110,6 +113,14 @@ export function visibleConversations(chats: Conversation[]): Conversation[] {
 	return chats.filter((chat) => !isArchived(chat));
 }
 
+export function isHiddenProject(project: Project): boolean {
+	return typeof project.hiddenAt === "number" && Number.isFinite(project.hiddenAt);
+}
+
+export function visibleProjects(projects: Project[]): Project[] {
+	return projects.filter((project) => !isHiddenProject(project));
+}
+
 export function persistableConversations(chats: Conversation[], activeId: string): Conversation[] {
 	return chats.filter((chat) => chat.hasMessages || chat.hasDraft || chat.id === activeId || isArchived(chat));
 }
@@ -134,6 +145,33 @@ export function restoreConversation(workspace: Workspace, id: string): Workspace
 		delete restored.archivedAt;
 		return restored;
 	}), activeId: id };
+}
+
+/**
+ * Hides a project while keeping every chat, session file reference and draft.
+ * Re-adding the same folder later restores the whole group.
+ */
+export function hideProject(workspace: Workspace, id: string, hiddenAt = Date.now(), makeDraft = newChat): Workspace {
+	const target = workspace.projects.find((project) => project.id === id);
+	if (!target || isHiddenProject(target) || visibleProjects(workspace.projects).length <= 1) return workspace;
+	const projects = workspace.projects.map((project) => project.id === id ? { ...project, hiddenAt } : project);
+	const active = workspace.chats.find((chat) => chat.id === workspace.activeId);
+	if (active?.projectId !== id) return { ...workspace, projects };
+	const next = workspace.chats.filter((chat) => chat.projectId !== id && !isArchived(chat)).sort((a, b) => b.updatedAt - a.updatedAt)[0];
+	if (next) return { ...workspace, projects, activeId: next.id };
+	const draft = makeDraft(visibleProjects(projects)[0].id);
+	return { ...workspace, projects, chats: [...workspace.chats, draft], activeId: draft.id };
+}
+
+/** Undoes `hideProject` and focuses the newest chat that survived the hiding. */
+export function unhideProject(workspace: Workspace, id: string, makeDraft = newChat): Workspace {
+	const target = workspace.projects.find((project) => project.id === id);
+	if (!target || !isHiddenProject(target)) return workspace;
+	const restored = { ...target };
+	delete restored.hiddenAt;
+	const projects = workspace.projects.map((project) => project.id === id ? restored : project);
+	const latest = workspace.chats.filter((chat) => chat.projectId === id && !isArchived(chat)).sort((a, b) => b.updatedAt - a.updatedAt)[0] ?? makeDraft(id);
+	return { ...workspace, projects, chats: workspace.chats.includes(latest) ? workspace.chats : [...workspace.chats, latest], activeId: latest.id };
 }
 
 export function deleteConversation(workspace: Workspace, id: string, makeDraft = newChat): Workspace {
@@ -230,13 +268,19 @@ export function useWorkspace() {
 		if (latest) setWorkspace((w) => w && w.activeId !== latest.id ? { ...w, activeId: latest.id } : w);
 		else createChat(id);
 	};
-	const addProject = async (path: string) => {
+	const addProject = async (path: string, name?: string) => {
 		void drafts.flush();
 		const directory = await invoke<{ name: string; path: string }>("validate_project_directory", { path: path.trim() });
 		const pathKey = (value: string) => /^[a-z]:\\|^\\\\/i.test(value) ? value.toLowerCase() : value;
 		const existing = workspace?.projects.find((p) => pathKey(p.path) === pathKey(directory.path));
-		if (existing) { selectProject(existing.id); return; }
-		const project = { ...directory, id: crypto.randomUUID() };
+		if (existing) {
+			// A hidden project keeps its chats, so re-adding the folder restores them.
+			if (isHiddenProject(existing)) setWorkspace((w) => w ? unhideProject(w, existing.id) : w);
+			else selectProject(existing.id);
+			return;
+		}
+		// The dialog's name field wins; an empty name keeps the folder's own name.
+		const project = { name: name?.trim() ? name.trim().slice(0, 100) : directory.name, path: directory.path, id: crypto.randomUUID() };
 		const chat = newChat(project.id);
 		setWorkspace((w) => w ? { ...w, projects: [...w.projects, project], chats: [...w.chats, chat], activeId: chat.id } : { version: 1, projects: [project], chats: [chat], activeId: chat.id });
 	};
@@ -258,6 +302,7 @@ export function useWorkspace() {
 		renameChat: (id: string, title: string) => { if (title.trim()) updateChat(id, { title: title.trim().slice(0, 100), customTitle: true }); },
 		renameProject: (id: string, name: string) => setWorkspace((w) => w && name.trim() ? { ...w, projects: w.projects.map((p) => p.id === id ? { ...p, name: name.trim().slice(0, 100) } : p) } : w),
 		deleteChat: (id: string) => { drafts.remove(id); setWorkspace((w) => w ? deleteConversation(w, id) : w); },
+		hideProject: (id: string) => setWorkspace((w) => w ? hideProject(w, id) : w),
 		deleteProject: (id: string) => {
 			if (!workspace || workspace.projects.length <= 1) return;
 			for (const chat of workspace.chats.filter((chat) => chat.projectId === id)) drafts.remove(chat.id);

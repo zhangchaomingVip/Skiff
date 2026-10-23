@@ -17,7 +17,7 @@ const bridge = (command, args) => page.evaluate(({ command, args }) => window.__
 const config = () => bridge("list_model_families");
 const metadata = () => bridge("list_settings_metadata");
 const shot = (name) => page.screenshot({ animations: "disabled", path: new URL(`management-${name}.png`, output).pathname.replace(/^\/([A-Z]:)/, "$1") });
-const ready = () => page.waitForFunction(() => document.querySelector(".settings-trigger")?.textContent.includes("pi 已连接"));
+const ready = () => page.waitForFunction(() => document.querySelector(".sidebar-footer")?.textContent.includes("pi 已连接"));
 const open = async () => { await ready(); await page.keyboard.press("Control+Comma"); await settings().waitFor(); };
 const select = (name) => settings().getByRole("checkbox", { name: `选择 ${name}`, exact: true });
 const confirm = (title) => page.getByRole("dialog", { name: title, exact: true });

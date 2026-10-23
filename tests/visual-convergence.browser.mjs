@@ -171,14 +171,15 @@ try {
 			assert.equal(await summary.evaluate((el) => el.parentElement.open), false);
 		}
 		if (width === 2200) {
-			await page.getByRole("button", { name: "收起航行台", exact: true }).click();
+			await page.getByRole("button", { name: "航行台", exact: true }).click();
+			await page.getByRole("button", { name: "航行台", exact: true }).click();
 			await page.waitForFunction(() => {
 				const header = document.querySelector(".chat-header"), composer = document.querySelector(".composer");
 				return Math.abs(header.getBoundingClientRect().left + parseFloat(getComputedStyle(header).paddingLeft) - composer.getBoundingClientRect().left) < 1;
 			});
 		}
 		if (width === 360) {
-			await page.getByRole("button", { name: "展开航行台", exact: true }).click();
+			await page.getByRole("button", { name: "航行台", exact: true }).click();
 			const dialog = page.getByRole("dialog", { name: "航行台详情" });
 			await dialog.waitFor();
 			assert.equal(await dialog.evaluate((el) => el.scrollWidth <= el.clientWidth), true);

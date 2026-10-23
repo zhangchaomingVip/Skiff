@@ -23,7 +23,7 @@ const assertNoDisabledFrame = async (element) => {
 };
 const wait = (fn, arg) => page.waitForFunction(fn, arg);
 const shot = (name) => page.screenshot({ animations: "disabled", path: new URL(`settings-${name}.png`, output).pathname.replace(/^\/([A-Z]:)/, "$1") });
-const ready = () => wait(() => document.querySelector(".settings-trigger")?.textContent.includes("pi 已连接"));
+const ready = () => wait(() => document.querySelector(".sidebar-footer")?.textContent.includes("pi 已连接"));
 const open = async () => { await page.keyboard.press("Control+Comma"); await dialog().waitFor(); };
 const close = async () => { await button("关闭设置").click(); await dialog().waitFor({ state: "detached" }); };
 const checkLayout = async () => {
@@ -39,8 +39,7 @@ try {
 	await ready();
 	assert.equal(await page.locator(".chat-header button[aria-label='诊断日志']").count(), 0, "Header must not expose the raw log drawer");
 	assert.equal(await page.locator(".chat-header button[aria-haspopup='dialog']").count(), 0, "Header must not expose background sessions");
-	await page.getByRole("button", { name: "分享对话", exact: true }).click();
-	assert.match(await page.getByRole("textbox", { name: "对话分享内容" }).inputValue(), /当前会话/);
+	assert.equal(await page.locator(".chat-header button[aria-label='分享对话']").count(), 0, "Header must not expose a share entry");
 	await page.keyboard.press("Control+Comma"); assert.equal(await dialog().count(), 0);
 	await page.keyboard.press("Escape");
 	assert.equal(await page.locator(".chat-header button[aria-label='系统提示词']").count(), 0, "Prompt entry must live in settings only");
@@ -205,10 +204,10 @@ try {
 	await page.locator(".settings-trigger").click();
 	await page.getByRole("button", { name: "归档会话", exact: true }).click();
 	await page.setViewportSize({ width: 600, height: 400 });
-	await wait(() => !document.querySelector(".settings-trigger"));
+	assert.equal(await page.locator('.ui-dialog[data-variant="drawer"][open]').count(), 0, "Resize must not open a drawer above settings");
 	assert.equal(await page.locator("dialog[open]").count(), 1, "Resize must not open a drawer above settings");
 	await close();
-	assert.equal(await page.locator(".header-settings").evaluate((el) => el === document.activeElement), true);
+	assert.equal(await page.locator(".settings-trigger").evaluate((el) => el === document.activeElement), true);
 	await page.setViewportSize({ width: 1100, height: 750 });
 	await page.getByRole("button", { name: "展开侧栏", exact: true }).click();
 	await page.keyboard.press("Control+k");
@@ -226,10 +225,11 @@ try {
 	await button("编辑 官方直连").waitFor();
 	await close();
 	await page.getByRole("button", { name: "收起侧栏", exact: true }).click();
-	await page.locator(".header-settings").click();
+	await page.locator(".settings-trigger").click();
+	await page.getByRole("button", { name: "外观", exact: true }).click();
 	await button("跟随系统").waitFor();
 	await close();
-	assert.equal(await page.locator(".header-settings").evaluate((el) => el === document.activeElement), true);
+	assert.equal(await page.locator(".settings-trigger").evaluate((el) => el === document.activeElement), true);
 
 	// Minimum window and the layout equivalent of 200% at 1100x750.
 	for (const [width, height, name] of [[600, 400, "minimum"], [550, 375, "zoom-200-layout"]]) {
@@ -250,7 +250,7 @@ try {
 		await page.keyboard.press("Escape");
 		await button("快捷键").click(); await checkLayout();
 		await close();
-		assert.equal(await page.locator(".header-settings").evaluate((el) => el === document.activeElement), true, "Narrow return target must be visible header settings");
+		assert.equal(await page.locator(".settings-trigger").evaluate((el) => el === document.activeElement), true, "Narrow return target must be the title bar settings entry");
 	}
 
 	// Active generation allows appearance/help while protecting configuration.

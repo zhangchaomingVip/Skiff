@@ -515,6 +515,8 @@ pub fn run() {
 	tauri::Builder::default()
 		.manage(AppState::default())
 		.manage(history::HistoryWorkspace::default())
+		// Native folder picker for the add-project dialog.
+		.plugin(tauri_plugin_dialog::init())
 		.invoke_handler(tauri::generate_handler![
 			rpc_start,
 			rpc_send,
@@ -524,7 +526,7 @@ pub fn run() {
 			validate_project_directory,
 			get_workspace_directory,
 			read_system_prompt,
-			history::set_history_workspace, history::read_session_history,
+			history::set_history_workspace, history::read_session_history, history::delete_session_file,
 			families::list_model_families, families::list_model_runtime,
 			families::save_relay, families::delete_relay, families::set_relay_enabled,
 			families::preview_relay_batch, families::batch_relays, families::test_settings_connection,

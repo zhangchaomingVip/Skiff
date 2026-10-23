@@ -115,7 +115,7 @@ try {
 		assert.equal(await page.locator('.voyage-context-reminder[role="status"]').count(), 1);
 		assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
 		await page.screenshot({ path: new URL(`${theme}-${width}-context.png`, screenshots).pathname.replace(/^\/(\w:)/, "$1"), fullPage: true, animations: "disabled" });
-		if (width < 1200) await page.getByRole("button", { name: "展开航行台", exact: true }).click();
+		if (!(await page.locator(".voyage-rail.expanded").count())) await page.getByRole("button", { name: "航行台", exact: true }).click();
 		await page.locator(".voyage-rail.expanded .voyage-speed-stats").waitFor();
 		await page.waitForTimeout(200);
 		assert(await page.locator(".voyage-rail.expanded .voyage-speed-stats").evaluate((element) => element.scrollWidth <= element.clientWidth));

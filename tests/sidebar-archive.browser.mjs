@@ -30,7 +30,9 @@ const title = () => page.locator(".header-title-row > span:first-child").textCon
 try {
 	await page.goto(`${origin}/tests/preview.html?fixture=archive&theme=light&persist=1`);
 	await waitUntil(() => document.querySelector(".sidebar-footer")?.textContent.includes("pi 已连接"), "Active pi fixture did not connect");
-	await waitUntil(() => document.querySelector(".voyage-rail.expanded"), "Desktop rail did not expand on initial load");
+	await page.getByRole("button", { name: "航行台", exact: true }).waitFor();
+	await page.getByRole("button", { name: "航行台", exact: true }).click();
+	await waitUntil(() => document.querySelector(".voyage-rail.expanded"), "Title bar toggle did not open the voyage rail");
 	assert.match((await title())?.trim(), /^当前会话/);
 	assert.equal(await page.getByRole("separator", { name: "调整左侧导航宽度" }).getAttribute("aria-valuenow"), "240", "Invalid left width should use its default");
 	assert.equal(await page.getByRole("separator", { name: "调整右侧航行台宽度" }).getAttribute("aria-valuenow"), "260", "Invalid right width should use its default");
@@ -48,6 +50,23 @@ try {
 	await page.keyboard.press("Escape");
 	await chatMenu.waitFor({ state: "detached" });
 
+	// Hover keeps only pin and archive; destructive actions live in the context menu.
+	const purgedRow = page.locator(".project-chats .chat-row").filter({ hasText: "其他项目会话" });
+	assert.equal(await purgedRow.locator(".sidebar-row-actions button").count(), 2, "Row hover should expose pin and archive only");
+	await purgedRow.click({ button: "right" });
+	const purgeMenu = page.getByRole("menu");
+	await purgeMenu.getByRole("button", { name: "永久删除", exact: true }).click();
+	await page.getByText(/将直接删除 pi 会话目录中的对话文件，无法恢复/).waitFor();
+	await page.getByRole("button", { name: "确认删除" }).click();
+	await waitUntil(() => ![...document.querySelectorAll(".chat-row")].some((row) => row.textContent.includes("其他项目会话")), "Permanently deleted chat remained in the sidebar");
+	const purge = await page.evaluate(() => ({
+		logged: window.skiffPreview.commands.filter((item) => item.command === "delete_session_file").map((item) => item.args.sessionFile),
+		files: Object.keys(JSON.parse(localStorage.getItem("skiff.test.sessions"))),
+	}));
+	assert.deepEqual(purge.logged, ["archive-other.jsonl"], "Permanent delete must ask the shell to remove the pi session file");
+	assert.ok(!purge.files.includes("archive-other.jsonl"), "Permanent delete must remove the pi session file");
+	assert.ok(purge.files.includes("archive-record.jsonl"), "Permanent delete must leave other session files untouched");
+
 
 	const baselineProcesses = await countPreviewProcesses();
 	const baselineListeners = await countPreviewListeners();
@@ -55,6 +74,17 @@ try {
 		const workspace = JSON.parse(localStorage.getItem("skiff.workspace.v1"));
 		return { activeId: workspace.activeId, model: workspace.chats.find((chat) => chat.id === workspace.activeId)?.selectedModel };
 	});
+	// The create-project dialog picks its source folder through the native picker.
+	await page.getByRole("button", { name: "添加项目", exact: true }).click();
+	const addDialog = page.getByRole("dialog", { name: "创建项目", exact: true });
+	assert.equal(await addDialog.getByRole("button", { name: "创建项目", exact: true }).isDisabled(), true, "Create stays disabled until a folder is picked");
+	await addDialog.getByRole("button", { name: "添加源文件夹", exact: true }).click();
+	const picker = await page.evaluate(() => window.skiffPreview.commands.filter((item) => item.command === "plugin:dialog|open").map((item) => item.args.options));
+	assert.deepEqual(picker, [{ directory: true, multiple: false, title: "选择源文件夹" }], "Add must open the native directory picker");
+	assert.equal(await addDialog.locator(".project-source-selected").count(), 0, "A cancelled picker must not invent a folder");
+	await addDialog.getByRole("button", { name: "取消", exact: true }).click();
+	await addDialog.waitFor({ state: "detached" });
+
 	await openSettings();
 	assert.equal(await page.locator(".archive-session-row").count(), 3);
 	const archiveSearch = page.getByRole("textbox", { name: "搜索归档会话和项目" });
@@ -196,6 +226,9 @@ try {
 
 	await page.reload();
 	await waitUntil(() => document.querySelector(".sidebar-footer")?.textContent.includes("pi 已连接"), "Reloaded preview did not reconnect");
+	await page.getByRole("button", { name: "航行台", exact: true }).waitFor();
+	await page.getByRole("button", { name: "航行台", exact: true }).click();
+	await waitUntil(() => document.querySelector(".voyage-rail.expanded"), "Title bar toggle did not reopen the voyage rail after reload");
 	assert.equal(await page.getByRole("separator", { name: "调整左侧导航宽度" }).getAttribute("aria-valuenow"), String(keyboardWidth));
 	assert.equal(await page.getByRole("separator", { name: "调整右侧航行台宽度" }).getAttribute("aria-valuenow"), String(rightWidth));
 

@@ -55,6 +55,10 @@ function MetricsView({ state }) {
 	const toggle = () => setExpanded((value) => !value);
 	return React.createElement("div", { className: `chat-and-rail ${expanded ? "rail-expanded" : "rail-collapsed"}`, style: { height: "100vh" } },
 		React.createElement("div", { className: "chat-column" }, React.createElement("div", { style: { flex: 1 } }), React.createElement(ContextUsage, { metrics, notice: "模型已切换，当前使用预览线路。" })),
-		narrow && expanded ? React.createElement(Dialog, { className: "voyage-dialog", "aria-label": "航行台详情", returnFocusSelector: ".collapsed-toggle", onClose: toggle }, React.createElement(VoyageRail, { metrics, expanded, onToggle: toggle })) : React.createElement(VoyageRail, { metrics, expanded, onToggle: toggle }));
+		expanded
+			? narrow
+				? React.createElement(Dialog, { className: "voyage-dialog", "aria-label": "航行台详情", returnFocusSelector: ".collapsed-toggle", onClose: toggle }, React.createElement(VoyageRail, { metrics, onCollapse: toggle }))
+				: React.createElement(VoyageRail, { metrics, onCollapse: toggle })
+			: React.createElement("button", { type: "button", className: "collapsed-toggle", "aria-label": "展开航行台", onClick: toggle }));
 }
 root.render(React.createElement(StrictMode, null, React.createElement(Harness)));

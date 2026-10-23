@@ -21,7 +21,7 @@ const open = async (theme = "light", { reset = false, persist = false } = {}) =>
 	await page.goto(`${origin}/tests/preview.html?fixture=archive&theme=${theme}${persist ? "&persist=1" : ""}`);
 	if (reset) await page.evaluate(() => localStorage.removeItem("skiff.family-models.v1"));
 	await page.reload();
-	await page.waitForFunction(() => document.querySelector(".settings-trigger")?.textContent.includes("pi 已连接"));
+	await page.waitForFunction(() => document.querySelector(".sidebar-footer")?.textContent.includes("pi 已连接"));
 	await page.keyboard.press("Control+Comma");
 	await dialog().waitFor();
 	await button("模型").click();
@@ -115,7 +115,7 @@ try {
 	await close();
 	await page.evaluate(() => localStorage.removeItem("skiff.family-models.v1"));
 	await page.goto(`${origin}/tests/preview.html?fixture=empty&theme=light`);
-	await page.waitForFunction(() => document.querySelector(".settings-trigger")?.textContent.includes("pi 已连接"));
+	await page.waitForFunction(() => document.querySelector(".sidebar-footer")?.textContent.includes("pi 已连接"));
 	await page.keyboard.press("Control+Comma");
 	await button("模型").click();
 	const links = await dialog().getByRole("button", { name: "未接路线，去配置" }).count();

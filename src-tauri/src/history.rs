@@ -29,6 +29,31 @@ pub async fn read_session_history(state: tauri::State<'_, HistoryWorkspace>, cha
 	tauri::async_runtime::spawn_blocking(move || read_history(&root, &target, known_version.as_deref())).await.map_err(|_| "历史读取任务失败")?
 }
 
+/// Permanently removes one pi session file. There is no trash or undo, so the
+/// target must stay inside the pi sessions directory and keep the `.jsonl`
+/// shape pi writes; anything else (relative escapes, symlinks, folders) is
+/// rejected before touching the disk.
+#[tauri::command]
+pub fn delete_session_file(session_file: String) -> Result<(), String> {
+	let root = crate::get_pi_agent_dir().ok_or("无法定位 pi 数据目录")?.join("sessions");
+	purge_session_file(&root, &session_file)
+}
+
+fn purge_session_file(root: &Path, session_file: &str) -> Result<(), String> {
+	let root = root.canonicalize().map_err(|_| "pi 会话目录不存在")?;
+	let candidate = PathBuf::from(session_file);
+	let candidate = if candidate.is_absolute() { candidate } else { root.join(candidate) };
+	// Deleting is idempotent: a transcript that pi already pruned is still a
+	// successful permanent delete, otherwise one stale index entry would block
+	// removing a whole project.
+	let Ok(file) = candidate.canonicalize() else { return Ok(()) };
+	// Canonicalizing first resolves symlinks, so the containment check below
+	// also rejects links that point outside the sessions directory.
+	if !file.starts_with(&root) || file.extension().and_then(|v| v.to_str()) != Some("jsonl") { return Err("会话文件超出允许目录或格式不受支持".into()); }
+	if !file.is_file() { return Err("会话路径不是文件".into()); }
+	fs::remove_file(&file).map_err(|error| format!("删除会话文件失败：{error}"))
+}
+
 fn stamp(meta: &fs::Metadata) -> String { format!("{}:{:?}:{:?}", meta.len(), meta.modified().ok(), meta.created().ok()) }
 fn digest(bytes: &[u8]) -> String { let mut hash = std::collections::hash_map::DefaultHasher::new(); bytes.hash(&mut hash); format!("{:016x}", hash.finish()) }
 
@@ -165,6 +190,24 @@ mod tests {
 		assert!(read_history(&sessions, &target, None).is_err());
 		target.session_file = sessions.join("missing.jsonl").to_string_lossy().into(); assert!(read_history(&sessions, &target, None).is_err());
 		target.session_file = sessions.to_string_lossy().into(); assert!(read_history(&sessions, &target, None).is_err());
+		fs::remove_dir_all(dir).unwrap();
+	}
+	#[test]
+	fn permanent_delete_is_confined_to_the_sessions_directory() {
+		let (dir, sessions, _) = fixture();
+		let inside = sessions.join("purge.jsonl"); fs::write(&inside, b"{}\n").unwrap();
+		purge_session_file(&sessions, &inside.to_string_lossy()).unwrap();
+		assert!(!inside.exists(), "an indexed session file must be removed");
+		let outside = dir.join("outside.jsonl"); fs::write(&outside, b"{}\n").unwrap();
+		assert!(purge_session_file(&sessions, &outside.to_string_lossy()).is_err());
+		assert!(outside.exists(), "files outside the sessions directory must survive");
+		let wrong_format = sessions.join("notes.txt"); fs::write(&wrong_format, b"x").unwrap();
+		assert!(purge_session_file(&sessions, &wrong_format.to_string_lossy()).is_err());
+		assert!(wrong_format.exists());
+		assert!(purge_session_file(&sessions, &sessions.join("missing.jsonl").to_string_lossy()).is_ok(), "an already removed transcript must not block the delete");
+		assert!(purge_session_file(&sessions, &sessions.to_string_lossy()).is_err());
+		assert!(purge_session_file(&sessions, &format!("../{}", outside.file_name().unwrap().to_string_lossy())).is_err());
+		assert!(outside.exists(), "relative escapes must not reach files outside the sessions directory");
 		fs::remove_dir_all(dir).unwrap();
 	}
 	#[test]

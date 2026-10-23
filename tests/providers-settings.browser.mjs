@@ -34,7 +34,7 @@ try {
 		Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async (value) => window.copiedValues.push(value) } });
 	});
 	await page.goto(`${origin}/tests/preview.html?fixture=archive&theme=light`);
-	await page.waitForFunction(() => document.querySelector(".settings-trigger")?.textContent.includes("pi 已连接"));
+	await page.waitForFunction(() => document.querySelector(".sidebar-footer")?.textContent.includes("pi 已连接"));
 	await open();
 
 	// 1. 供应商 is an entry of its own: providers only, no route rows.

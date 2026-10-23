@@ -9,5 +9,5 @@ export function SidebarPresentation({ children, onClose }: { children: ReactNode
 		query.addEventListener("change", change);
 		return () => query.removeEventListener("change", change);
 	}, []);
-	return narrow ? <Dialog variant="drawer" onClose={onClose} returnFocusSelector=".chat-header button[aria-label='展开侧栏']" aria-label="项目与聊天导航">{children}</Dialog> : <>{children}</>;
+	return narrow ? <Dialog variant="drawer" onClose={onClose} returnFocusSelector=".titlebar-nav button[aria-label='展开侧栏']" aria-label="项目与聊天导航">{children}</Dialog> : <>{children}</>;
 }
