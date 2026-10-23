@@ -19,15 +19,14 @@ const messages = [
 ];
 const render = async (props, count) => {
 	await page.evaluate(async (props) => { window.turnUsageHarness.render(props); await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))); }, props);
-	await page.waitForFunction((count) => document.querySelectorAll(".usage-details").length === count, count);
-	while (await page.locator(".usage-toggle[aria-expanded=false]").count()) await page.locator(".usage-toggle[aria-expanded=false]").first().evaluate((button) => button.click());
+	await page.waitForFunction((count) => document.querySelectorAll(".usage-trigger").length === count, count);
 };
 const totals = async () => {
 	const values = [];
 	for (const trigger of await page.locator(".usage-trigger").all()) {
 		const wasOpen = await trigger.getAttribute("aria-expanded") === "true";
 		if (!wasOpen) await trigger.evaluate((button) => button.click());
-		values.push(await page.locator(".usage-row dd").first().textContent());
+		values.push(await page.locator(".usage-turn .usage-group-head b").textContent());
 		if (!wasOpen) await page.keyboard.press("Escape");
 	}
 	return values;
@@ -37,23 +36,23 @@ try {
 	await page.goto(`${process.argv[2] ?? "http://127.0.0.1:1424"}/tests/turn-usage.html`);
 	await page.waitForFunction(() => window.turnUsageHarness);
 	await render({ messages }, 2);
-	assert.deepEqual(await totals(), ["205", "250"]);
+	assert.deepEqual(await totals(), ["260 tok", "300 tok"]);
 
 	// The footer no longer ships continue / regenerate / delete buttons; only copy remains.
 	assert.equal(await page.locator(".continue-btn").count(), 0);
-	const first = page.locator(".usage-details").first();
-	await first.locator(".usage-trigger").evaluate((button) => button.click());
-	assert.equal(await first.locator(".usage-heading strong").textContent(), "本轮 Token 消耗");
-	assert.deepEqual(await first.locator(".usage-row dd").allTextContents(), ["205", "35", "160", "10", "55", "15", "40", "260"]);
-	assert.equal(await first.locator(".usage-rate b").textContent(), "17.1%");
-	await first.locator(".usage-trigger").press("Escape");
-	assert.equal(await first.locator(".usage-trigger").getAttribute("aria-expanded"), "false");
-	assert.equal(await first.locator(".usage-trigger").evaluate((el) => el === document.activeElement), true);
+	const first = page.locator(".usage-trigger").first();
+	await first.evaluate((button) => button.click());
+	assert.equal(await page.locator(".usage-turn .usage-group-head b").textContent(), "260 tok");
+	assert.deepEqual(await page.locator(".usage-turn .usage-metric dd").allTextContents(), ["+170", "55", "17.1%"]);
+	assert.deepEqual(await page.locator(".usage-system .usage-metric dt").allTextContents(), ["模型名称", "预估费用"]);
+	await first.press("Escape");
+	assert.equal(await first.getAttribute("aria-expanded"), "false");
+	assert.equal(await first.evaluate((el) => el === document.activeElement), true);
 	const processSummary = page.locator(".turn-process-head > summary").first();
 	assert.equal(await processSummary.getAttribute("aria-expanded"), "false");
 	await processSummary.press("Enter");
 	await processSummary.press("Space");
-	assert.equal(await page.locator(".usage-details").count(), 2);
+	assert.equal(await page.locator(".usage-trigger").count(), 2);
 	assert.equal(await processSummary.getAttribute("aria-expanded"), "false");
 	await render({ messages, revealTurn: { turnId: "turn:history_0", requestKey: "search-1" } }, 2);
 	await page.getByRole("button", { name: "收起本轮执行过程" }).waitFor();
@@ -67,24 +66,24 @@ try {
 	assert.equal(await page.locator(".continue-btn").count(), 0);
 	const active = [...messages, { role: "user", content: "第三轮" }, { role: "assistant", content: "工具执行中", usage: usage(500, 0, 0, 10, 0) }];
 	await render({ messages: active, running: true, activeTurnId: "turn:history_6" }, 2);
-	assert.deepEqual(await totals(), ["205", "250"]);
+	assert.deepEqual(await totals(), ["260 tok", "300 tok"]);
 	await render({ messages: active, running: false }, 3);
 
 
 	// A final entry without usage still displays usage from the turn's earlier requests.
 	await render({ messages: [...messages.slice(0, 3), { role: "assistant", content: "没有 usage 的最终消息" }, ...messages.slice(4)], readOnly: true }, 2);
-	assert.deepEqual(await totals(), ["125", "250"]);
+	assert.deepEqual(await totals(), ["155 tok", "300 tok"]);
 	assert.equal(await page.locator(".continue-btn").count(), 0);
 	await render({ messages: [{ role: "user", content: "未上报用量" }, { role: "assistant", content: "回复" }] }, 1);
 	await page.locator(".usage-trigger").click();
-	assert.equal(await page.locator(".usage-popover").textContent().then((value) => value.includes("用量未记录")), true);
+	assert.equal(await page.locator(".usage-popover").textContent().then((value) => value.includes("未记录")), true);
 	assert.equal(await page.locator(".usage-model-label").textContent(), "未知渠道 · 未知模型");
 	await page.keyboard.press("Escape");
 
 	// A centred first turn used to clip the upward-opening panel inside .messages.
 	await render({ messages: [{ role: "user", content: "你好" }, { role: "assistant", content: "你好，有什么可以帮你？", usage: usage(128, 1400, 0, 462) }] }, 1);
 
-	assert.deepEqual(await totals(), ["1.53k"]);
+	assert.deepEqual(await totals(), ["1.99k tok"]);
 	const chip = page.locator(".usage-trigger");
 	const panel = page.locator(".usage-popover");
 	await chip.hover();
@@ -111,7 +110,8 @@ try {
 		if (viewport.height === 240) {
 			assert.equal(await panel.evaluate((el) => el.scrollHeight > el.clientHeight), true);
 			await panel.evaluate((el) => { el.scrollTop = el.scrollHeight; });
-			assert.equal(await panel.locator(".menu-hint").evaluate((el) => {
+			// The cost group closes the panel, so its last row must stay reachable.
+			assert.equal(await panel.locator(".usage-system .usage-metric").last().evaluate((el) => {
 				const rect = el.getBoundingClientRect();
 				const parent = el.closest(".usage-popover").getBoundingClientRect();
 				return rect.top >= parent.top && rect.bottom <= parent.bottom;
@@ -135,16 +135,16 @@ try {
 	assert.equal(await page.locator(".usage-model-label").textContent(), "基元律动 · deepseek-flash");
 	assert.equal(await page.locator(".usage-model").getAttribute("title"), "完整线路：基元律动 · deepseek-flash · 账户xxx");
 	assert.equal(await page.locator(".message-route").count(), 0);
-	assert.deepEqual(await totals(), ["1.99k"]);
+	assert.deepEqual(await totals(), ["2.18k tok"]);
 
-	assert.equal(await page.locator(".usage-rate b").textContent(), "96.3%");
+	assert.equal(await page.locator(".usage-turn .usage-metric dd").last().textContent(), "96.3%");
 
 	assert.equal(await page.getByRole("button", { name: "重新生成", exact: true }).count(), 0);
 	assert.equal(await page.locator(".msg.assistant .message-actions > :first-child").getAttribute("class"), "message-buttons");
 	assert.equal(await page.locator(".usage-popover .usage-model").count(), 1, "Route details belong to the usage panel");
 
 
-	assert.equal(await page.locator(".usage-cost").textContent(), "¥0.00214");
+	assert.equal(await page.locator(".usage-cost").textContent(), "¥0.0021");
 	assert.equal(await page.locator(".usage-cost").getAttribute("title"), "精确费用 ¥0.002137（按 6 位原始值）");
 	assert.equal(await page.locator(".usage-time").textContent(), "12:31");
 	assert.equal(await page.locator(".usage-time").getAttribute("title"), "2026-10-13 周二 12:31");
@@ -169,24 +169,25 @@ try {
 		}
 	}
 	// Cache boundaries stay exact inside the details.
-	for (const input of [usage(0, 1990, 0, 190), usage(1990, 0, 0, 190)]) {
-		await render({ messages: [{ role: "user", content: "边界" }, { ...completed, usage: input }] }, 1);
+	for (const sample of [usage(0, 1990, 0, 190), usage(1990, 0, 0, 190)]) {
+		await render({ messages: [{ role: "user", content: "边界" }, { ...completed, usage: sample }] }, 1);
 
-		assert.deepEqual(await totals(), ["1.99k"]);
+		assert.deepEqual(await totals(), ["2.18k tok"]);
 		await chip.click();
-		assert.equal(await page.locator(".usage-popover .usage-new").textContent(), input.input === 0 ? "0" : "1.99k");
+		assert.equal(await page.locator(".usage-turn .usage-metric dd").first().textContent(), sample.input === 0 ? "+0" : "+1.99k");
 		await page.keyboard.press("Escape");
 	}
 	// Cache writes count as new input, while output never enters the parentheses.
 	await render({ messages: [{ role: "user", content: "缓存写入" }, { ...completed, usage: usage(50, 1900, 40, 500) }] }, 1);
 
-	assert.deepEqual(await totals(), ["1.99k"]);
+	assert.deepEqual(await totals(), ["2.49k tok"]);
 	await chip.click();
-	assert.equal(await page.locator(".usage-popover .usage-new").textContent(), "90");
+	assert.equal(await page.locator(".usage-turn .usage-metric dd").first().textContent(), "+90");
 	await page.keyboard.press("Escape");
 	// Missing prices remain explicit; route details are available in the popover.
 	await render({ messages: [{ role: "user", content: "未配置价格" }, { ...completed, routeSnapshot: { ...snapshot, inputCost: 0, outputCost: 0 } }] }, 1);
 	assert.equal(await page.locator(".usage-cost").count(), 0);
+	assert.equal(await page.locator(".usage-amount").count(), 0, "Unpriced turns hide the footer amount");
 	await chip.click();
 	assert.equal(await page.locator(".usage-cost").textContent(), "未配置单价");
 	assert.equal(await page.locator(".usage-model").isVisible(), true);
@@ -197,11 +198,12 @@ try {
 	assert.equal(await chip.textContent(), "消息详情");
 	await chip.press("Enter");
 	assert.equal(await page.locator(".usage-model-label").textContent(), "基元律动 · deepseek-flash");
-	assert.equal(await page.locator(".usage-row").count(), 0, "Unrecorded usage must not imply zero consumption");
+	assert.equal(await page.locator(".usage-turn .usage-group-head b").textContent(), "未记录");
+	assert.equal(await page.locator(".usage-turn .usage-metric").count(), 0, "Unrecorded usage must not imply zero consumption");
 	await page.keyboard.press("Escape");
 	assert.equal(await chip.evaluate((node) => node === document.activeElement), true);
 	assert.deepEqual(errors, []);
-	console.log("PASS: time/details footer, route details, explicit missing prices, route snapshots, exact cost/model copying, full date titles, new input boundaries, tool aggregation, folding, pending/history turns, click/keyboard dismissal and small-window popovers");
+	console.log("PASS: footer copy/amount/usage order, grouped usage panel, route details, explicit missing prices, route snapshots, exact cost/model copying, full date titles, new input boundaries, tool aggregation, folding, pending/history turns, click/keyboard dismissal and small-window popovers");
 } finally {
 	await browser.close();
 }

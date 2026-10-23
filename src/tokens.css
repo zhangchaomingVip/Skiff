@@ -83,6 +83,7 @@
 		--shadow-elevation-1: 0 1px 3px rgba(0, 0, 0, 0.2);
 		--shadow-elevation-2: 0 4px 12px rgba(0, 0, 0, 0.3);
 		--shadow-elevation-3: 0 8px 20px rgba(0, 0, 0, 0.35);
+		--shadow-elevation-up: 0 -6px 20px rgba(0, 0, 0, 0.3);
 		--transition-fast: 150ms;
 		--transition-base: 200ms;
 		--transition-slow: 200ms;
@@ -96,6 +97,8 @@
 		--action-active: #183e8a;
 		--action-foreground: #ffffff;
 		--selected: #263e62;
+		--scrollbar-thumb: rgba(255, 255, 255, .16);
+		--scrollbar-thumb-hover: rgba(255, 255, 255, .3);
 		--overlay: rgb(0 0 0 / .5);
 		--control-compact: 28px;
 		--control-regular: 32px;
@@ -140,8 +143,8 @@
 		--color-bg-primary: #fafbfc;
 		--color-bg-secondary: #ffffff;
 		--color-bg-tertiary: #edf1f6;
-		--color-bg-hover: #e1e8f2;
-		--color-sidebar-bg: #f0f3f7;
+		--color-bg-hover: #e9ecf1;
+		--color-sidebar-bg: #f5f6f8;
 		--color-sidebar-border: #e2e2e2;
 		--color-text-primary: #192333;
 		--color-text-secondary: #48566b;
@@ -156,7 +159,9 @@
 		--color-success: #176a3d;
 		--color-warning: #805600;
 		--color-error: #b52b37;
-		--selected: #dce8ff;
+		--selected: #e9f1fc;
+		--scrollbar-thumb: rgba(16, 25, 40, .14);
+		--scrollbar-thumb-hover: rgba(16, 25, 40, .28);
 		--overlay: rgb(16 25 40 / .35);
 		--error-bg: #fef2f2;
 		--selection: #c9d8ff;
@@ -176,6 +181,7 @@
 		--shadow-elevation-1: 0 1px 3px rgba(0, 0, 0, .06);
 		--shadow-elevation-2: 0 4px 12px rgba(0, 0, 0, .08);
 		--shadow-elevation-3: 0 8px 20px rgba(0, 0, 0, .1);
+		--shadow-elevation-up: 0 -6px 20px rgba(0, 0, 0, .08);
 	}
 
 }

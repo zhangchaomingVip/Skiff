@@ -76,7 +76,7 @@ export function Dialog({ onClose, onEscape, pending, initialFocus, returnFocusSe
 const popovers: symbol[] = [];
 const popoverClosers = new Map<symbol, () => void>();
 export const dismissPopovers = () => { for (const close of popoverClosers.values()) close(); };
-export function Popover({ anchor, onClose, className = "", children, ...props }: HTMLAttributes<HTMLDivElement> & { anchor: RefObject<HTMLElement>; onClose: () => void }) {
+export function Popover({ anchor, onClose, className = "", gap = 6, children, ...props }: HTMLAttributes<HTMLDivElement> & { anchor: RefObject<HTMLElement>; onClose: () => void; gap?: number }) {
 	const ref = useRef<HTMLDivElement>(null);
 	const closeRef = useRef(onClose);
 	closeRef.current = onClose;
@@ -89,15 +89,15 @@ export function Popover({ anchor, onClose, className = "", children, ...props }:
 			const width = Math.min(360, window.innerWidth - 24);
 			const below = window.innerHeight - rect.bottom - 12;
 			const above = rect.top - 12;
-			const maxHeight = Math.max(0, Math.min(window.innerHeight - 24, Math.max(above, below) - 6));
+			const maxHeight = Math.max(0, Math.min(window.innerHeight - 24, Math.max(above, below) - gap));
 			const height = Math.min(panel.scrollHeight, maxHeight);
-			const top = Math.max(12, Math.min(window.innerHeight - height - 12, below >= height ? rect.bottom + 6 : rect.top - height - 6));
+			const top = Math.max(12, Math.min(window.innerHeight - height - 12, below >= height ? rect.bottom + gap : rect.top - height - gap));
 			setPosition({ left: Math.max(12, Math.min(rect.left, window.innerWidth - width - 12)), top, maxHeight });
 		};
 		align(); window.addEventListener("resize", align); window.addEventListener("scroll", align, true);
 		const resize = new ResizeObserver(align); if (ref.current) resize.observe(ref.current);
 		return () => { resize.disconnect(); window.removeEventListener("resize", align); window.removeEventListener("scroll", align, true); };
-	}, [anchor]);
+	}, [anchor, gap]);
 	useEffect(() => {
 		const id = Symbol(); popovers.push(id);
 		popoverClosers.set(id, () => closeRef.current());

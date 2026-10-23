@@ -75,9 +75,13 @@ try {
 		assert.equal(await historicalActions.evaluate((el) => getComputedStyle(el).opacity), "0", "Historical reply metadata defaults to hidden");
 		assert.equal(await latestActions.locator(".message-buttons").evaluate((el) => getComputedStyle(el).opacity), "1", "Latest reply copy action stays visible");
 		assert.deepEqual(await latestActions.locator(":scope > *").evaluateAll((nodes) => nodes.map((node) => node.className)), ["message-buttons", "turn-usage"], "Reply footer order is copy, usage, time");
+		const replyText = await page.locator(".assistant-reply").last().locator(".msg-body > .md > *").first().boundingBox();
+		const copyIcon = await latestActions.locator(".message-buttons .copy-btn svg").boundingBox();
+		assert.ok(Math.abs(copyIcon.x - replyText.x) <= 2, "Copy icon lines up with the answer text");
+		const usageBox = await latestActions.locator(".turn-usage").boundingBox();
+		assert.ok(usageBox.x - replyText.x <= 48, "Reply footer clusters on the left instead of drifting right");
 		await page.locator(".assistant-reply").first().hover();
 		assert.equal(await historicalActions.evaluate((el) => getComputedStyle(el).opacity), "1", "Hover reveals historical reply metadata");
-		await page.locator(".usage-toggle").first().click();
 		await page.locator(".usage-trigger").first().click();
 		assert.equal(await page.locator(".usage-model-label").textContent(), "mock · glm-5.3-flash");
 		await page.keyboard.press("Escape");
@@ -85,10 +89,9 @@ try {
 		await page.mouse.move(0, 0);
 		const latestTime = latestActions.locator(".usage-time");
 		const collapsedTimeX = await latestTime.evaluate((node) => node.getBoundingClientRect().x);
-		await latestActions.locator(".usage-toggle").click();
-		const expandedTimeX = await latestTime.evaluate((node) => node.getBoundingClientRect().x);
-		assert.ok(expandedTimeX > collapsedTimeX, "Expanding usage pushes the following time to the right");
-		await latestActions.locator(".usage-toggle").click();
+		await latestActions.locator(".usage-trigger").click();
+		assert.equal(await latestTime.evaluate((node) => node.getBoundingClientRect().x), collapsedTimeX, "Opening usage must not shift the footer row");
+		await page.keyboard.press("Escape");
 		for (const width of [1100, 520, 360]) {
 			await page.setViewportSize({ width, height: 1200 });
 			assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth && document.querySelector(".messages").scrollWidth <= document.querySelector(".messages").clientWidth), true, `No horizontal overflow at ${width}px`);
