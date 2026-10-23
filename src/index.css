@@ -12,8 +12,6 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 ::-webkit-scrollbar-thumb { background: var(--selected); border-radius: var(--radius-base); }
 }
 @layer pages {
-.delivery-control { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-2); color: var(--secondary); font-size: var(--font-size-sm); }
-.delivery-control select { width: auto; flex-shrink: 0; }
 .queue-panel { flex-shrink: 0; margin: var(--space-2) var(--space-4); padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-base); background: var(--surface); font-size: var(--font-size-sm); max-height: min(220px, 28vh); overflow: auto; }
 .queue-panel ul { padding-left: var(--space-4); }
 .queue-panel li, .queue-panel pre { white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -297,13 +295,21 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 
 /* Floating composer */
 .composer-wrap { width: 100%; padding: var(--space-3) var(--chat-gutter) var(--space-2); flex-shrink: 0; }
-.composer:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent), var(--shadow-xs); }
+.composer:focus-within { border-color: color-mix(in srgb, var(--accent) 42%, var(--border)); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 8%, transparent), var(--shadow-xs); }
 .composer-input { display: block; width: 100%; min-height: 36px; max-height: 200px; resize: none; padding: var(--space-0-5) var(--space-1) var(--space-2); background: transparent; color: var(--text); border: none; font: inherit; line-height: 1.65; outline: none; scrollbar-width: none; }
 .composer-input::-webkit-scrollbar { display: none; }
 .composer-input::placeholder { color: var(--muted); }
 .composer-bottom { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
 .composer-context { display: flex; flex-wrap: wrap; min-width: 0; align-items: center; gap: var(--space-1-5); color: var(--muted); font-size: var(--font-size-sm); }
 .composer-actions { display: flex; flex-shrink: 0; align-items: center; gap: var(--space-3); min-width: 0; }
+.queued-messages { display: flex; flex-direction: column; flex-shrink: 0; gap: var(--space-1); width: calc(100% - 2 * var(--chat-gutter)); max-width: var(--chat-content-width); max-height: min(220px, 28vh); margin: var(--space-2) auto 0; overflow-y: auto; }
+.queued-message { display: flex; align-items: center; gap: var(--space-3); min-height: 48px; padding: var(--space-2) var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--shadow-xs); }
+.queued-message-icon { display: grid; place-items: center; flex: 0 0 20px; color: var(--secondary); }
+.queued-message-text { flex: 1; min-width: 0; overflow: hidden; white-space: pre-wrap; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
+.queued-message > .ui-textarea { flex: 1; min-width: 0; max-height: 120px; padding: var(--space-1) var(--space-2); resize: vertical; }
+.queued-message-actions { display: flex; align-items: center; flex-shrink: 0; gap: var(--space-1); }
+.queued-message-actions .ui-button { color: var(--secondary); }
+.queued-message-actions .ui-button:hover:not(:disabled) { color: var(--text); }
 
 /* Project dialog */
 .project-dialog { width: min(520px, calc(100vw - 32px)); }
@@ -406,7 +412,6 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 
 /* Token accounting */
 .turn-usage { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-1) var(--space-3); min-width: 0; font-size: var(--font-size-sm); }
-.turn-usage .usage-time { margin-left: auto; }
 .usage-route-details { min-width: 0; max-width: 100%; }
 .usage-tokens { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
 .usage-details { position: relative; }
@@ -530,9 +535,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .msg-role svg { flex: none; }
 .message-actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-1) var(--space-3); margin-top: var(--space-1); color: var(--chat-meta); }
 .message-actions:has(> .message-buttons:only-child) { margin-top: 0; }
-.msg.assistant .turn-usage { flex: 1; }
-.msg.user .message-actions { justify-content: flex-end; }
+.msg.user .message-actions { justify-content: flex-end; margin-top: 0; }
 .message-buttons { position: absolute; right: var(--space-3); bottom: calc(-1 * var(--control-compact) / 2); z-index: 1; display: flex; align-items: center; gap: var(--space-0-5); padding: var(--space-0-5); border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--panel-2); box-shadow: var(--shadow-xs); transition: opacity var(--transition-fast); }
+.msg.user:has(.message-buttons) { padding-bottom: calc(var(--control-compact) + var(--space-1)); }
+.msg.user .message-buttons { top: 100%; right: 0; bottom: auto; gap: var(--space-2); padding: var(--space-1) 0 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.msg.user .message-buttons .copy-btn { padding-inline: 0; }
 .message-actions button, .copy-btn, .code-header button, .editing-banner button, .text-attachments button { display: inline-flex; align-items: center; gap: 5px; padding: 4px 6px; border: 0; border-radius: var(--radius-xs); background: transparent; font-size: var(--font-size-sm); color: var(--secondary); }
 .message-actions button:hover, .copy-btn:hover, .code-header button:hover { color: var(--text); background: var(--hover); }
 .message-actions .turn-usage button { gap: var(--space-1); padding: var(--space-0-5) 0; font-size: var(--font-size-sm); color: var(--chat-meta); }

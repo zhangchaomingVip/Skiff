@@ -20,14 +20,10 @@ import { processBlocks, type ProcessPresentation } from "../chat/turnProcess";
 import { TurnProcessGroup } from "./TurnProcessGroup";
 import { ThinkingContent } from "./ThinkingContent";
 
-/** Compact, locale-aware timestamp shown inside a message bubble. */
+/** Stable completion clock shown beside a user message. */
 const formatMessageTime = (ts?: number): string | undefined => {
 	if (!ts) return undefined;
-	const diff = Date.now() - ts;
-	if (diff < 60_000) return "刚刚";
-	if (diff < 3_600_000) return `${Math.floor(diff / 60_000)} 分钟前`;
-	if (diff < 86_400_000) return new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-	return new Date(ts).toLocaleDateString([], { month: "numeric", day: "numeric" });
+	return new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 };
 type Tool = Extract<ContentBlock, { kind: "tool" }>;
 export const MessageItem = memo(function MessageItem({ runStartedAt, onEdit, onContinue, continuing, turnOutcome, searchQuery, message, processPresentation, processDuration, turnMessages, compact, running, turnRunning = false, turnHead, expandedGroups, onExpandedChange, isLast, readOnly = false }: {
@@ -77,7 +73,7 @@ export const MessageItem = memo(function MessageItem({ runStartedAt, onEdit, onC
 	// Keep action buttons in the DOM so keyboard users can reach earlier replies.
 	const copyText = isUser ? text : turnMessages ? turnReplyText(turnMessages) : "";
 	const canCopy = !!copyText.trim();
-	const showActions = canCopy || (isUser && !readOnly);
+	const showActions = canCopy;
 	const showOutcome = (!turnRunning || turnOutcome === "length") && turnOutcome !== "manual" && !!outcomeLabel(turnOutcome);
 	const showContinue = turnHead && showOutcome && (turnOutcome === "length" || turnOutcome === "aborted") && !readOnly && !!onContinue;
 	const head = processPresentation?.head;
@@ -99,13 +95,14 @@ export const MessageItem = memo(function MessageItem({ runStartedAt, onEdit, onC
 			</div>}
 			{!nodes.length && showTyping ? <span className="typing">正在思考…</span> : nodes}
 		</div>}
-		{(showActions || showUsage || showTime) && <div className={`message-actions${showUsage ? " with-usage" : ""}`}>
-			{showUsage && <TurnUsage message={[...(turnMessages ?? [])].reverse().find((entry) => entry.role === "assistant") ?? message} messages={turnMessages} />}
-			{showActions && <div className="message-buttons">
-				{canCopy && <CopyButton text={copyText} label="复制消息" />}
-				{!readOnly && isUser && <Button size="compact" variant="ghost" disabled={!onEdit || running} onClick={() => onEdit?.(message)}>编辑并重发</Button>}
+		{(showActions || showUsage || showTime) && <div className={`message-actions${showUsage ? " with-usage" : ""}${!isUser && !isLast ? " is-historical" : ""}`}>
+			{(showActions || (isUser && showTime)) && <div className="message-buttons">
+				{isUser && showTime && <time className="msg-time" dateTime={new Date(message.timestamp!).toISOString()}>{formatMessageTime(message.timestamp)}</time>}
+				{canCopy && <CopyButton text={copyText} label="复制消息" iconOnly />}
 			</div>}
-			{showTime && <time className="msg-time" dateTime={new Date(message.timestamp!).toISOString()} title={new Date(message.timestamp!).toLocaleString()}>{formatMessageTime(message.timestamp)}</time>}
+			{!readOnly && isUser && <Button className="edit-message-btn sr-only" disabled={!onEdit || running} onClick={() => onEdit?.(message)}>编辑并重发</Button>}
+			{showUsage && <TurnUsage message={[...(turnMessages ?? [])].reverse().find((entry) => entry.role === "assistant") ?? message} messages={turnMessages} />}
+			{!isUser && showTime && <time className="msg-time" dateTime={new Date(message.timestamp!).toISOString()} title={new Date(message.timestamp!).toLocaleString()}>{formatMessageTime(message.timestamp)}</time>}
 		</div>}
 		</div>
 	</MessageTag>;

@@ -38,6 +38,7 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 	const histories = new Map();
 	let sequence = 0;
 	let failSend = false;
+	let settleOnNextClearQueue = false;
 	const providerKey = (familyId, relayId) => `skiff-relay-${relayId}-${familyId}`;
 	// Families ship with two DeepSeek routes (over two relays) so QA can exercise the switcher.
 	const relays = [
@@ -353,7 +354,20 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 				}
 				case "set_model": session.model = familyModels().find((m) => m.id === request.modelId && m.provider === request.provider) ?? { provider: request.provider, id: request.modelId, name: request.modelId }; if (!session.model.reasoning) session.thinkingLevel = "off"; respond(session.model); break;
 				case "extension_ui_response": break;
-				case "clear_queue": { const removed = session.queue; session.queue = { steering: [], followUp: [] }; emit(args.instanceId, { type: "queue_update", ...session.queue }); respond(removed); break; }
+				case "clear_queue": {
+					const removed = session.queue;
+					session.queue = { steering: [], followUp: [] };
+					emit(args.instanceId, { type: "queue_update", ...session.queue });
+					if (settleOnNextClearQueue) {
+						settleOnNextClearQueue = false;
+						target.clearTimeout(session.timer);
+						session.isStreaming = false;
+						emit(args.instanceId, { type: "agent_end" });
+						emit(args.instanceId, { type: "agent_settled" });
+					}
+					respond(removed);
+					break;
+				}
 				case "steer":
 				case "follow_up": {
 					if (String(request.message).startsWith("/review")) { respond("Extension command cannot be queued", false); break; }
@@ -362,6 +376,13 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 				}
 				case "prompt": {
 					if (String(request.message).startsWith("/review")) { emit(args.instanceId, { type: "extension_ui_request", id: crypto.randomUUID(), method: "notify", message: "Review handled" }); respond({ disposition: "handled" }); break; }
+					if (session.isStreaming && request.streamingBehavior) {
+						const field = request.streamingBehavior === "steer" ? "steering" : "followUp";
+						session.queue[field].push(request.message);
+						emit(args.instanceId, { type: "queue_update", ...session.queue });
+						respond({ disposition: "queued" });
+						break;
+					}
 					const user = { role: "user", content: request.images?.length ? [...(request.message ? [{ type: "text", text: request.message }] : []), ...request.images] : request.message };
 					session.messages.push(user);
 					saved[session.file] = session.messages;
@@ -412,5 +433,5 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 			}
 		},
 	};
-	return { relays, families, metadata, failNextOrder: () => { failOrder = true; }, failNextBatch: () => { failBatch = true; }, histories, saved, commands, processes, listeners, callbacks, emit, testRequests, pendingTests, deferTests: (value) => { deferTests = value; }, failNextSend: () => { failSend = true; }, setDialogPath: (value) => { dialogPath = value; } };
+	return { relays, families, metadata, failNextOrder: () => { failOrder = true; }, failNextBatch: () => { failBatch = true; }, histories, saved, commands, processes, listeners, callbacks, emit, testRequests, pendingTests, deferTests: (value) => { deferTests = value; }, failNextSend: () => { failSend = true; }, settleOnNextClearQueue: () => { settleOnNextClearQueue = true; }, setDialogPath: (value) => { dialogPath = value; } };
 }

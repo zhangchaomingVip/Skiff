@@ -14,6 +14,7 @@ import type { PiSessionActions } from "../chat/usePiSession";
 import { useDraft, type DraftTarget } from "../chat/useDraft";
 import type { MessageReveal } from "../chat/useConversationSearch";
 import { Composer } from "./Composer";
+import { QueuedMessages } from "./QueuedMessages";
 import { MessageList } from "./MessageList";
 import { billingAccountLabel, type RouteAuthorizationChoice, type RouteAuthorizationRequest } from "../chat/routeAuthorization";
 
@@ -172,7 +173,7 @@ export function ChatView({
 			{connected && !loading && !pending && !state.isStreaming && state.availableModels.length > 0 && !state.model && <div className="notice model-notice" role="alert"><span>当前会话未加载到有效模型，pi 可能未注册 provider。</span><Button variant="ghost" onClick={onReconnect}>重新连接</Button></div>}
 			{state.dialogs?.[0] && (deferredDialog === state.dialogs[0].id ? <div className="queue-panel" role="status">扩展等待确认 · {state.dialogs.length} 项<Button onClick={() => setDeferredDialog(undefined)}>处理</Button></div> : <ExtensionDialog key={state.dialogs[0].id} request={state.dialogs[0]} onReply={actions.replyDialog} onReconnect={onReconnect} onDefer={() => setDeferredDialog(state.dialogs?.[0]?.id)} />)}
 			{editNotice && <p className="draft-notice" role="status">{editNotice}</p>}
-			{queueSize(state.queue) > 0 && <div className="queue-panel" aria-label="待发送队列"><strong>待发送 {queueSize(state.queue)} 条</strong><p>插话模式：{state.steeringMode ?? "待读取"} · 追加模式：{state.followUpMode ?? "待读取"}</p><ul>{state.queue?.steering.map((text, index) => <li key={`s${index}`}>工具调用结束后插入：{text}</li>)}{state.queue?.followUp.map((text, index) => <li key={`f${index}`}>等本轮做完：{text}</li>)}</ul><Button disabled={state.stopping} onClick={() => void actions.clearQueue()}>撤回全部</Button></div>}
+			{queueSize(state.queue) > 0 && state.queue && <QueuedMessages queue={state.queue} disabled={state.stopping} onChange={actions.updateQueuedMessage} />}
 			{queueSize(state.withdrawn) > 0 && <div className="queue-panel" aria-label="已撤回输入"><strong>已撤回的文字（不含图片）</strong><pre>{[...(state.withdrawn?.steering ?? []), ...(state.withdrawn?.followUp ?? [])].join("\n\n")}</pre><CopyButton text={[...(state.withdrawn?.steering ?? []), ...(state.withdrawn?.followUp ?? [])].join("\n\n")} label="复制撤回文字" /><Button onClick={() => { setDraft([draft, ...(state.withdrawn?.steering ?? []), ...(state.withdrawn?.followUp ?? [])].filter(Boolean).join("\n\n")); setFocusSignal((n) => n + 1); }}>追加到草稿</Button></div>}
 			{state.lastOutcome?.reason === "manual" && !state.messages.some((message) => message.role === "user" && `turn:${message.id}` === state.lastOutcome?.turnId) && <div className="turn-outcome manual" role="status">{outcomeLabel("manual")}<Button disabled={continuing || state.stopping} onClick={() => void continueRun()}>继续</Button></div>}
 			{draftTarget && storedDraft.notice && <p className="draft-notice" role="status">{storedDraft.notice}</p>}

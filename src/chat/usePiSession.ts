@@ -1,5 +1,5 @@
 import { fingerprint, locateMessage, runtimeHistory, type MessageLocation } from "./historySearch";
-import { DialogRuntime, emptyQueue, extensionDialog, queueSize, type Delivery, type DialogReply } from "./interactions";
+import { DialogRuntime, emptyQueue, extensionDialog, queueSize, queueSnapshot, type Delivery, type DialogReply, type QueueSnapshot } from "./interactions";
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { PiRpc, type RpcEvent } from "../rpc/RpcClient";
@@ -36,12 +36,29 @@ export interface PiSessionActions {
 	prompt: (text: string, images?: ImageAttachment[], delivery?: Delivery) => Promise<boolean>;
 	abort: () => Promise<void>;
 	clearQueue: () => Promise<void>;
+	updateQueuedMessage: (delivery: Delivery, index: number, update?: { text: string; delivery: Delivery }) => Promise<boolean>;
 	replyDialog: (id: string, reply: DialogReply) => Promise<boolean>;
 	setModel: (model: ModelInfo) => Promise<boolean>;
 	setThinkingLevel: (level: string) => Promise<void>;
 	/** Toggles the pi extension's `web_search` tool via its `/web` command. */
 	setWebSearch: (enabled: boolean) => Promise<void>;
 	clearError: () => void;
+}
+
+type QueuedPayload = { text: string; images: ImageAttachment[] };
+type QueuePayloads = { steering: Array<QueuedPayload | undefined>; followUp: Array<QueuedPayload | undefined> };
+const emptyQueuePayloads = (): QueuePayloads => ({ steering: [], followUp: [] });
+const queueField = (delivery: Delivery): keyof QueueSnapshot => delivery === "steer" ? "steering" : "followUp";
+
+function alignQueuePayloads(before: string[], after: string[], payloads: Array<QueuedPayload | undefined>, pending: QueuedPayload[] = []): Array<QueuedPayload | undefined> {
+	const used = new Set<number>();
+	return after.map((text) => {
+		const match = before.findIndex((candidate, index) => candidate === text && !used.has(index));
+		if (match >= 0) { used.add(match); return payloads[match]; }
+		const pendingIndex = pending.findIndex((payload) => payload.text === text);
+		if (pendingIndex < 0) return undefined;
+		return pending.splice(pendingIndex, 1)[0];
+	});
 }
 
 function parseCommands(raw: unknown): PiCommand[] {
@@ -112,6 +129,9 @@ export function usePiSession(target?: SessionTarget, runtimeOffers: readonly Run
 	const startsRef = useRef(0);
 	const dialogsRef = useRef<DialogRuntime>();
 	const queueRef = useRef(emptyQueue());
+	const queuePayloadsRef = useRef<QueuePayloads>(emptyQueuePayloads());
+	const pendingQueuePayloadsRef = useRef<{ steering: QueuedPayload[]; followUp: QueuedPayload[] }>({ steering: [], followUp: [] });
+	const queueMutationRef = useRef(false);
 	const [revision, setRevision] = useState(0);
 	const runStarted = useRef<number>();
 	const contextVersionRef = useRef(0);
@@ -219,6 +239,9 @@ export function usePiSession(target?: SessionTarget, runtimeOffers: readonly Run
 		stoppingRef.current = false;
 		submissionsRef.current = 0;
 		queueRef.current = emptyQueue();
+		queuePayloadsRef.current = emptyQueuePayloads();
+		pendingQueuePayloadsRef.current = { steering: [], followUp: [] };
+		queueMutationRef.current = false;
 		const dispatch = (event: RpcEvent) => setState((s) => reduce(s, event, { offers: runtimeOffersRef.current }));
 		const dialogs = new DialogRuntime((command) => rpc.sendCommand(command), dispatch);
 		dialogsRef.current = dialogs;
@@ -252,7 +275,18 @@ export function usePiSession(target?: SessionTarget, runtimeOffers: readonly Run
 			}
 			const now = Date.now();
 			if (extensionDialog(event, now) && !dialogs.add(event)) return;
-			if (event.type === "queue_update") queueRef.current = { steering: Array.isArray(event.steering) ? event.steering as string[] : [], followUp: Array.isArray(event.followUp) ? event.followUp as string[] : [] };
+			if (event.type === "queue_update") {
+				const previous = queueRef.current;
+				const next = queueSnapshot(event);
+				queuePayloadsRef.current = {
+					steering: alignQueuePayloads(previous.steering, next.steering, queuePayloadsRef.current.steering, pendingQueuePayloadsRef.current.steering),
+					followUp: alignQueuePayloads(previous.followUp, next.followUp, queuePayloadsRef.current.followUp, pendingQueuePayloadsRef.current.followUp),
+				};
+				queueRef.current = next;
+				// A per-item edit rebuilds the native queue. Keep the last confirmed UI
+				// snapshot visible until replay completes instead of flashing an empty list.
+				if (queueMutationRef.current) return;
+			}
 			if (event.type === "agent_start") { startsRef.current++; lifecycle++; clearTimeout(fallbackTimer); }
 			if (event.type === "agent_settled") { if (!event.synthetic) hasSettled = true; lifecycle++; clearTimeout(fallbackTimer); }
 			if (event.type === "auto_retry_start" || event.type === "auto_compaction_start") { maintenance = true; lifecycle++; clearTimeout(fallbackTimer); }
@@ -452,9 +486,9 @@ export function usePiSession(target?: SessionTarget, runtimeOffers: readonly Run
 			}
 			finally { if (ownsRpc(rpc)) { busyRef.current = false; setPending(false); } }
 		},
-		prompt: async (text, images = [], delivery = "steer") => {
+		prompt: async (text, images = [], delivery = "follow_up") => {
 			const rpc = rpcRef.current;
-			if (!connected || !ownsRpc(rpc) || !rpc || busyRef.current || stoppingRef.current || (!text.trim() && !images.length)) return false;
+			if (!connected || !ownsRpc(rpc) || !rpc || busyRef.current || stoppingRef.current || queueMutationRef.current || (!text.trim() && !images.length)) return false;
 			const running = streamingRef.current || runStarted.current !== undefined;
 			const startVersion = startsRef.current;
 			// Reserve the run synchronously so rapid subsequent submissions queue.
@@ -477,6 +511,15 @@ export function usePiSession(target?: SessionTarget, runtimeOffers: readonly Run
 				if (!ownsRpc(rpc) || stoppingRef.current) return false;
 				const result = await rpc.request<{ disposition?: string }>({ type, message: text.trim(), ...(running && type === "prompt" ? { streamingBehavior: delivery } : {}), ...(images.length ? { images: images.map(({ data, mimeType }) => ({ type: "image", data, mimeType })) } : {}) });
 				if (!ownsRpc(rpc)) return false;
+				if (running && result?.disposition !== "handled") {
+					const field = queueField(delivery);
+					const payload = { text: text.trim(), images };
+					const texts = queueRef.current[field], payloads = queuePayloadsRef.current[field];
+					let payloadIndex = -1;
+					for (let index = texts.length - 1; index >= 0; index--) if (texts[index] === payload.text && !payloads[index]) { payloadIndex = index; break; }
+					if (payloadIndex >= 0) payloads[payloadIndex] = payload;
+					else pendingQueuePayloadsRef.current[field].push(payload);
+				}
 				if (result?.disposition === "handled") {
 					if (!running) { runStarted.current = undefined; streamingRef.current = false; }
 					setState((s) => ({ ...(running ? s : reduce(s, { type: "prompt_cancel", promptId: prompt.id })), notices: [...s.notices, { id: prompt.id, kind: "info", text: "输入已由扩展处理。" }] }));
@@ -506,6 +549,68 @@ export function usePiSession(target?: SessionTarget, runtimeOffers: readonly Run
 			if (!connected || !rpc || !ownsRpc(rpc) || stoppingRef.current) return;
 			try { const result = await rpc.request<Record<string, unknown>>({ type: "clear_queue" }); if (ownsRpc(rpc)) setState((s) => reduce(s, { type: "queue_withdrawn", ...result })); }
 			catch (error) { if (ownsRpc(rpc)) fail(error); }
+		},
+		updateQueuedMessage: async (delivery, index, update) => {
+			const rpc = rpcRef.current;
+			if (!connected || !rpc || !ownsRpc(rpc) || stoppingRef.current || queueMutationRef.current) return false;
+			const field = queueField(delivery);
+			const expected = queueRef.current;
+			const expectedText = expected[field][index];
+			if (expectedText === undefined) return false;
+			const savedPayloads: QueuePayloads = { steering: [...queuePayloadsRef.current.steering], followUp: [...queuePayloadsRef.current.followUp] };
+			queueMutationRef.current = true;
+			try {
+				const removed = queueSnapshot(await rpc.request<Record<string, unknown>>({ type: "clear_queue" }));
+				if (!ownsRpc(rpc)) return false;
+				const payloads: QueuePayloads = {
+					steering: alignQueuePayloads(expected.steering, removed.steering, savedPayloads.steering),
+					followUp: alignQueuePayloads(expected.followUp, removed.followUp, savedPayloads.followUp),
+				};
+				const actualIndex = removed[field][index] === expectedText ? index : removed[field].findIndex((text) => text === expectedText);
+				const originalPayload = actualIndex < 0 ? undefined : payloads[field][actualIndex];
+				if (actualIndex >= 0) {
+					removed[field].splice(actualIndex, 1);
+					payloads[field].splice(actualIndex, 1);
+				}
+				if (update && actualIndex >= 0) {
+					const targetField = queueField(update.delivery);
+					const targetIndex = update.delivery === delivery ? actualIndex : removed[targetField].length;
+					removed[targetField].splice(targetIndex, 0, update.text);
+					payloads[targetField].splice(targetIndex, 0, { text: update.text, images: originalPayload?.images ?? [] });
+				}
+				pendingQueuePayloadsRef.current = { steering: [], followUp: [] };
+				for (const nextDelivery of ["steer", "follow_up"] as const) {
+					const nextField = queueField(nextDelivery);
+					for (let itemIndex = 0; itemIndex < removed[nextField].length; itemIndex++) {
+						const message = removed[nextField][itemIndex];
+						const payload = payloads[nextField][itemIndex] ?? { text: message, images: [] };
+						pendingQueuePayloadsRef.current[nextField].push(payload);
+						const result = await rpc.request<{ disposition?: string }>({
+							type: "prompt",
+							message,
+							streamingBehavior: nextDelivery === "steer" ? "steer" : "followUp",
+							...(payload.images.length ? { images: payload.images.map(({ data, mimeType }) => ({ type: "image", data, mimeType })) } : {}),
+						});
+						// prompt + streamingBehavior is atomic on pi's side: it queues while a
+						// run is active, or starts the message if the run settled after clear_queue.
+						if (result.disposition !== "queued") pendingQueuePayloadsRef.current[nextField].pop();
+						if (!ownsRpc(rpc)) return false;
+					}
+				}
+				if (actualIndex < 0) {
+					fail("排队消息已经变化，已保留服务端当前队列，请重试。");
+					return false;
+				}
+				return true;
+			} catch (error) {
+				if (ownsRpc(rpc)) fail(`无法更新排队消息：${error instanceof Error ? error.message : String(error)}`);
+				return false;
+			} finally {
+				if (ownsRpc(rpc)) {
+					queueMutationRef.current = false;
+					setState((s) => reduce(s, { type: "queue_update", ...queueRef.current }));
+				}
+			}
 		},
 		replyDialog: async (id, reply) => await dialogsRef.current?.reply(id, reply) ?? false,
 		abort: async () => {

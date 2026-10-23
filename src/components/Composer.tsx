@@ -1,5 +1,5 @@
 import type { Delivery } from "../chat/interactions";
-import { TextArea, IconButton, Button, Select } from "./ui";
+import { TextArea, IconButton } from "./ui";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import type { ImageAttachment, ModelInfo } from "../chat/types";
 import { readImages } from "../chat/images";
@@ -64,7 +64,6 @@ export function Composer({
 }) {
 	const inputRef = useRef<HTMLTextAreaElement>(null);
 	const sendingRef = useRef(false);
-	const [delivery, setDelivery] = useState<Delivery>("steer");
 	const textRef = useRef(text);
 	textRef.current = text;
 	const fileRef = useRef<HTMLInputElement>(null);
@@ -100,6 +99,7 @@ export function Composer({
 	const [reading, setReading] = useState(false);
 	const addingRef = useRef(false);
 	const canUseImages = model?.input?.includes("image") ?? false;
+	const hasContent = !!text.trim() || images.length > 0 || files.length > 0;
 	useEffect(() => { setImageError(undefined); }, [model?.provider, model?.id, canUseImages]);
 	const addAttachments = async (selected: File[]) => {
 		if (!selected.length || addingRef.current || sendingRef.current ) return;
@@ -127,7 +127,7 @@ export function Composer({
 		sendingRef.current = true;
 		const sentIds = new Set(images.map((image) => image.id));
 		const sentFiles = new Set(files.map((file) => file.id));
-		try { if (await onSend(appendTextFiles(trimmed, files), images, delivery)) { if (textRef.current === text) onTextChange(""); updateAttachments(attachmentsRef.current.images.filter((image) => !sentIds.has(image.id)), attachmentsRef.current.files.filter((file) => !sentFiles.has(file.id))); } } finally { sendingRef.current = false; }
+		try { if (await onSend(appendTextFiles(trimmed, files), images, "follow_up")) { if (textRef.current === text) onTextChange(""); updateAttachments(attachmentsRef.current.images.filter((image) => !sentIds.has(image.id)), attachmentsRef.current.files.filter((file) => !sentFiles.has(file.id))); } } finally { sendingRef.current = false; }
 	};
 
 	const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -151,7 +151,7 @@ export function Composer({
 	};
 
 	return (
-		<div className="composer-wrap">{streaming && <div className="delivery-control"><Select aria-label="投递时机" value={delivery} onChange={(event) => setDelivery(event.target.value as Delivery)}><option value="steer">插话</option><option value="follow_up">等本轮做完</option></Select><span>{delivery === "steer" ? "当前工具调用结束后、下一次模型请求前插入" : "本轮没有更多待处理工作时送达"}</span></div>}<div className="composer" onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); void addAttachments(Array.from(event.dataTransfer.files)); }}>
+		<div className="composer-wrap"><div className="composer" onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); void addAttachments(Array.from(event.dataTransfer.files)); }}>
 			{editing && <div className="editing-banner">编辑提问 · 发送后替换本轮及后续消息<button disabled={disabled || reading || sendingRef.current} onClick={onCancelEdit} aria-label="取消编辑"><Icon name="close" size={14} /></button></div>}
 			{recoveryNotice && <span className="draft-restored" role="status" aria-live="polite">{recoveryNotice}</span>}
 			{menuOpen && <div className="composer-menu" aria-label={slash ? "命令面板" : "文件引用"}>
@@ -173,13 +173,12 @@ export function Composer({
 				onPaste={(event) => { const selected = Array.from(event.clipboardData.files); if (selected.length) { event.preventDefault(); void addAttachments(selected); } }}
 			/>
 			<div className="composer-bottom"><span className="composer-context"><IconButton  onClick={() => fileRef.current?.click()} disabled={disabled || reading || sendingRef.current} aria-label="添加图片、文本或 Word 文件" title="添加图片、UTF-8 文本或 Word（.docx）文件（支持拖放或粘贴）；Word 提取正文，单个最大 10 MiB"><Icon name="plus" size={20} /></IconButton><ModelMenu models={models} model={model} onModel={onSelectModel} disabled={!connected || modelDisabled} /><ReasoningChip level={thinkingLevel} levels={thinkingLevels} disabled={!connected || modelDisabled} onLevel={onThinkingLevel} />{reading && <span>读取中…</span>}</span><input ref={fileRef} type="file" hidden multiple accept="image/png,image/jpeg,image/webp,image/gif,text/*,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx,.log,.json,.ts,.tsx,.js,.rs,.py,.yaml,.yml,.toml" onChange={(event) => { void addAttachments(Array.from(event.target.files ?? [])); event.target.value = ""; }} /><div className="composer-actions">
-				{streaming && <><Button variant="primary" disabled={disabled || reading || (!text.trim() && !images.length && !files.length)} onClick={() => void submit()}>{delivery === "steer" ? "插话" : "排队发送"}</Button></>}
-				{streaming ? (
+				{streaming && !hasContent ? (
 					<IconButton className="send-btn" variant="primary" size="primary" onClick={onAbort} disabled={stopping || !connected} aria-label="停止生成" title="停止生成（Ctrl+Shift+Backspace）">
 						<Icon name="stop" size={17} />
 					</IconButton>
 				) : (
-					<IconButton className="send-btn" variant="primary" size="primary" onClick={() => void submit()} disabled={disabled || reading || (!text.trim() && !images.length && !files.length) || (images.length > 0 && !canUseImages)} aria-label="发送消息" title="发送消息（Enter）">
+					<IconButton className="send-btn" variant="primary" size="primary" onClick={() => void submit()} disabled={disabled || reading || !hasContent || (images.length > 0 && !canUseImages)} aria-label={streaming ? "发送并排队" : "发送消息"} title={streaming ? "发送并排队（Enter）" : "发送消息（Enter）"}>
 						<Icon name="arrow" size={19} />
 					</IconButton>
 				)}

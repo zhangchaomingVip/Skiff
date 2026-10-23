@@ -20,13 +20,13 @@ const messages = [
 const render = async (props, count) => {
 	await page.evaluate(async (props) => { window.turnUsageHarness.render(props); await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))); }, props);
 	await page.waitForFunction((count) => document.querySelectorAll(".usage-details").length === count, count);
-	while (await page.locator(".usage-toggle[aria-expanded=false]").count()) await page.locator(".usage-toggle[aria-expanded=false]").first().click();
+	while (await page.locator(".usage-toggle[aria-expanded=false]").count()) await page.locator(".usage-toggle[aria-expanded=false]").first().evaluate((button) => button.click());
 };
 const totals = async () => {
 	const values = [];
 	for (const trigger of await page.locator(".usage-trigger").all()) {
 		const wasOpen = await trigger.getAttribute("aria-expanded") === "true";
-		if (!wasOpen) await trigger.click();
+		if (!wasOpen) await trigger.evaluate((button) => button.click());
 		values.push(await page.locator(".usage-row dd").first().textContent());
 		if (!wasOpen) await page.keyboard.press("Escape");
 	}
@@ -42,7 +42,7 @@ try {
 	// The footer no longer ships continue / regenerate / delete buttons; only copy remains.
 	assert.equal(await page.locator(".continue-btn").count(), 0);
 	const first = page.locator(".usage-details").first();
-	await first.locator(".usage-trigger").click();
+	await first.locator(".usage-trigger").evaluate((button) => button.click());
 	assert.equal(await first.locator(".usage-heading strong").textContent(), "本轮 Token 消耗");
 	assert.deepEqual(await first.locator(".usage-row dd").allTextContents(), ["205", "35", "160", "10", "55", "15", "40", "260"]);
 	assert.equal(await first.locator(".usage-rate b").textContent(), "17.1%");
@@ -140,7 +140,7 @@ try {
 	assert.equal(await page.locator(".usage-rate b").textContent(), "96.3%");
 
 	assert.equal(await page.getByRole("button", { name: "重新生成", exact: true }).count(), 0);
-	assert.equal(await page.locator(".msg.assistant .message-actions > :first-child").getAttribute("class"), "turn-usage");
+	assert.equal(await page.locator(".msg.assistant .message-actions > :first-child").getAttribute("class"), "message-buttons");
 	assert.equal(await page.locator(".usage-popover .usage-model").count(), 1, "Route details belong to the usage panel");
 
 

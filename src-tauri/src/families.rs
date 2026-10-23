@@ -734,6 +734,7 @@ pub fn prepare_runtime(dir: &Path, cmd: &mut std::process::Command) -> Result<()
 	// `project` preserves providers and fields that Skiff does not own.
 	project(dir, &config)?;
 	prepare_retry(dir)?;
+	prepare_shell_prefix(dir)?;
 	let mut routes = Vec::new();
 	for relay in &config.relays {
 		if relay_models(&config, &relay.id).is_empty() {
@@ -792,6 +793,32 @@ fn prepare_retry(dir: &Path) -> Result<(), String> {
 	settings["retry"]["enabled"] = json!(true);
 	settings["retry"]["maxRetries"] = json!(5);
 	if settings != original { providers::atomic_write(&path, &settings)?; }
+	Ok(())
+}
+
+/// Windows native commands (`ping`, `ipconfig`, `systeminfo`) write their
+/// console code page, which is GBK on a Chinese system. pi decodes child output
+/// as UTF-8, so those bytes turn into U+FFFD replacement characters before
+/// Skiff ever sees them. Switching the shell's console to UTF-8 first makes the
+/// bytes match pi's decoder; Windows then falls back to English messages for
+/// commands whose resources have no 65001 table.
+#[cfg(windows)]
+const SHELL_COMMAND_PREFIX: Option<&str> = Some("chcp.com 65001 >/dev/null 2>&1");
+#[cfg(not(windows))]
+const SHELL_COMMAND_PREFIX: Option<&str> = None;
+
+/// A prefix the user set themselves wins: it may already switch code pages or
+/// prepare the shell in a way that matters to their workflows.
+fn prepare_shell_prefix(dir: &Path) -> Result<(), String> {
+	let Some(prefix) = SHELL_COMMAND_PREFIX else { return Ok(()); };
+	let path = dir.join("settings.json");
+	let original = providers::read_config(&path)?;
+	if original["shellCommandPrefix"].is_string() {
+		return Ok(());
+	}
+	let mut settings = original.clone();
+	settings["shellCommandPrefix"] = json!(prefix);
+	providers::atomic_write(&path, &settings)?;
 	Ok(())
 }
 
@@ -1200,6 +1227,28 @@ mod tests {
 		std::fs::write(&path, "invalid json").unwrap();
 		assert!(prepare_retry(&dir).is_err());
 		assert_eq!(std::fs::read_to_string(&path).unwrap(), "invalid json");
+		std::fs::remove_dir_all(dir).unwrap();
+	}
+
+	#[test]
+	fn shell_prefix_switches_console_to_utf8_without_touching_other_settings() {
+		let dir = std::env::temp_dir().join(format!("skiff-shell-prefix-{}", next_id()));
+		std::fs::create_dir_all(&dir).unwrap();
+		let path = dir.join("settings.json");
+		providers::atomic_write(&path, &json!({ "theme": "dark", "retry": { "enabled": true } })).unwrap();
+		prepare_shell_prefix(&dir).unwrap();
+		let written = providers::read_config(&path).unwrap();
+		assert_eq!(written["theme"], json!("dark"));
+		assert_eq!(written["retry"]["enabled"], json!(true));
+		#[cfg(windows)]
+		assert_eq!(written["shellCommandPrefix"], json!("chcp.com 65001 >/dev/null 2>&1"));
+		prepare_shell_prefix(&dir).unwrap();
+		assert_eq!(providers::read_config(&path).unwrap(), written);
+		providers::atomic_write(&path, &json!({ "shellCommandPrefix": "set -e" })).unwrap();
+		prepare_shell_prefix(&dir).unwrap();
+		assert_eq!(providers::read_config(&path).unwrap()["shellCommandPrefix"], json!("set -e"));
+		std::fs::write(&path, "invalid json").unwrap();
+		assert!(prepare_shell_prefix(&dir).is_err());
 		std::fs::remove_dir_all(dir).unwrap();
 	}
 

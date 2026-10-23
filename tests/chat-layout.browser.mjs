@@ -39,6 +39,9 @@ try {
 		assert.ok(Math.abs(bounds.x + bounds.width - row.x - row.width) < 1, "User bubble aligns right");
 		assert.equal(await user.locator(".msg-role").count(), 0);
 		assert.equal(await user.locator("time").count(), 1);
+		assert.equal(await user.locator(".message-buttons > .msg-time").count(), 1, "User time joins the hover actions");
+		assert.match(await user.locator(".msg-time").textContent(), /^\d{2}:\d{2}$/, "User time stays an exact hour and minute");
+		assert.equal(await user.locator(".msg-time").getAttribute("title"), null, "User time has no hover tooltip");
 		assert.equal(await page.locator(".msg-role:not(.is-compact)").count(), 0, "Assistant identity is available only in details");
 		assert.equal(await page.locator(".usage-model").count(), 0, "Route names stay inside usage details");
 		assert.equal(await page.locator(".turn-process[open]").count(), 0, "Reasoning defaults to collapsed");
@@ -46,9 +49,15 @@ try {
 			assert.ok((await page.locator(selector).evaluateAll((nodes) => nodes.map((node) => getComputedStyle(node).fontSize))).every((size) => size === "12px"), `${selector} uses 12px metadata`);
 		}
 		const buttons = user.locator(".message-buttons");
+		assert.equal(await buttons.locator(".copy-btn .sr-only").count(), 1, "Message copy uses an icon-only control");
+		assert.equal(await buttons.locator(".copy-btn").getAttribute("title"), null, "Icon-only copy has no hover tooltip");
+		assert.equal(await buttons.locator(":scope > *").count(), 2, "User hover row contains only time and copy");
 		assert.equal(await buttons.evaluate((el) => getComputedStyle(el).opacity), "0");
 		await bubble.hover();
 		assert.equal(await buttons.evaluate((el) => getComputedStyle(el).opacity), "1");
+		assert.deepEqual(await buttons.evaluate((el) => { const style = getComputedStyle(el); return { border: style.borderWidth, background: style.backgroundColor, shadow: style.boxShadow }; }), { border: "0px", background: "rgba(0, 0, 0, 0)", shadow: "none" }, "User hover row is plain metadata, not a floating panel");
+		await buttons.locator(".copy-btn").hover();
+		assert.equal(await buttons.locator(".copy-btn").evaluate((el) => getComputedStyle(el).backgroundColor), "rgba(0, 0, 0, 0)", "User copy icon has no hover surface");
 		assert.deepEqual(await bubble.boundingBox(), bounds, "Hover actions never move the message");
 		const toolbar = await buttons.boundingBox();
 		assert.ok(Math.abs(toolbar.x + toolbar.width - bounds.x - bounds.width) < 24);
@@ -60,12 +69,26 @@ try {
 		const rects = await page.locator(".messages > .msg, .messages > .assistant-reply").evaluateAll((nodes) => nodes.map((node) => { const r = node.getBoundingClientRect(); return { top: r.top, bottom: r.bottom }; }));
 		assert.equal(Math.round(rects[1].top - rects[0].bottom), 8);
 		assert.equal(Math.round(rects[2].top - rects[1].bottom), 32);
+		const historicalActions = page.locator(".assistant-reply").first().locator(".message-actions.is-historical");
+		const latestActions = page.locator(".assistant-reply").last().locator(".message-actions");
+		await page.mouse.move(0, 0);
+		assert.equal(await historicalActions.evaluate((el) => getComputedStyle(el).opacity), "0", "Historical reply metadata defaults to hidden");
+		assert.equal(await latestActions.locator(".message-buttons").evaluate((el) => getComputedStyle(el).opacity), "1", "Latest reply copy action stays visible");
+		assert.deepEqual(await latestActions.locator(":scope > *").evaluateAll((nodes) => nodes.map((node) => node.className)), ["message-buttons", "turn-usage"], "Reply footer order is copy, usage, time");
+		await page.locator(".assistant-reply").first().hover();
+		assert.equal(await historicalActions.evaluate((el) => getComputedStyle(el).opacity), "1", "Hover reveals historical reply metadata");
 		await page.locator(".usage-toggle").first().click();
 		await page.locator(".usage-trigger").first().click();
 		assert.equal(await page.locator(".usage-model-label").textContent(), "mock · glm-5.3-flash");
 		await page.keyboard.press("Escape");
 		await page.evaluate(() => { document.activeElement.blur(); window.getSelection()?.removeAllRanges(); });
 		await page.mouse.move(0, 0);
+		const latestTime = latestActions.locator(".usage-time");
+		const collapsedTimeX = await latestTime.evaluate((node) => node.getBoundingClientRect().x);
+		await latestActions.locator(".usage-toggle").click();
+		const expandedTimeX = await latestTime.evaluate((node) => node.getBoundingClientRect().x);
+		assert.ok(expandedTimeX > collapsedTimeX, "Expanding usage pushes the following time to the right");
+		await latestActions.locator(".usage-toggle").click();
 		for (const width of [1100, 520, 360]) {
 			await page.setViewportSize({ width, height: 1200 });
 			assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth && document.querySelector(".messages").scrollWidth <= document.querySelector(".messages").clientWidth), true, `No horizontal overflow at ${width}px`);
@@ -118,7 +141,7 @@ try {
 		const replyCopy = page.locator(".assistant-reply .message-buttons");
 		await page.mouse.move(0, 0);
 		await page.evaluate(() => document.activeElement.blur());
-		assert.equal(await replyCopy.evaluate((el) => getComputedStyle(el).opacity), "0");
+		assert.equal(await replyCopy.evaluate((el) => getComputedStyle(el).opacity), "1", "Latest reply action remains visible");
 		await page.locator(".assistant-reply .msg-body > .md").first().hover();
 		assert.equal(await replyCopy.evaluate((el) => getComputedStyle(el).opacity), "1", "Hovering any step reveals the reply action");
 		await page.setViewportSize({ width: 1100, height: 960 });

@@ -1,8 +1,10 @@
 @layer components {
 .msg .message-buttons { opacity: 0; pointer-events: none; }
+.msg.assistant .message-actions:not(.is-historical) .message-buttons { opacity: 1; pointer-events: auto; }
+.msg.assistant .message-actions.is-historical { opacity: 0; pointer-events: none; transition: opacity var(--transition-fast); }
+.assistant-reply:hover .message-actions.is-historical, .assistant-reply:focus-within .message-actions.is-historical { opacity: 1; pointer-events: auto; }
 .message-bubble:hover .message-buttons, .message-bubble:focus-within .message-buttons, .assistant-reply:hover .message-buttons, .assistant-reply:focus-within .message-buttons { opacity: 1; pointer-events: auto; }
-@media (hover: none) { .msg .message-buttons { opacity: 1; pointer-events: auto; } }
-.delivery-control > .ui-input { width: auto; max-width: 50%; flex: 0 0 auto; }
+@media (hover: none) { .msg .message-buttons, .msg.assistant .message-actions.is-historical { opacity: 1; pointer-events: auto; } }
 .extension-dialog { width: min(520px, calc(100vw - 32px)); padding: var(--space-5); display: flex; flex-direction: column; gap: var(--space-4); }
 .extension-dialog p { white-space: pre-wrap; overflow-wrap: anywhere; }
 .extension-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-2); }
