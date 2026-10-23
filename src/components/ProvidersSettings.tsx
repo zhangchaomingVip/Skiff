@@ -264,7 +264,7 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 		}
 	};
 	// Discovery only returns ids; matched catalog entries arrive with official
-	// prices already converted to CNY at the configured rate.
+	// prices already rendered in CNY (native lists untouched, USD converted).
 	const fillFromCatalog = (modelId: string): ModelSpec => {
 		const entry = catalog.find((item) => modelIdMatchesCatalog(modelId, item));
 		const blank = blankModel();
@@ -278,6 +278,9 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 			vision: priced.vision,
 			inputCost: priced.inputCost,
 			outputCost: priced.outputCost,
+			// 0 means "no published cache price"; saving falls back to the input price.
+			cacheReadCost: priced.cacheReadCost,
+			cacheWriteCost: priced.cacheWriteCost,
 			currency: "CNY",
 			contextWindow,
 			maxTokens: priced.maxTokens ? Math.min(priced.maxTokens, contextWindow) : Math.min(blank.maxTokens, contextWindow),

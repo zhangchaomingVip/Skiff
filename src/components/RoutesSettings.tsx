@@ -105,7 +105,7 @@ export const RoutesSettingsContent = forwardRef<SettingsEditorHandle, RoutesSett
 		patchRoute({ models });
 	};
 	// Discovery only returns ids; matched catalog entries arrive with official
-	// prices already converted to CNY at the configured rate.
+	// prices already rendered in CNY (native lists untouched, USD converted).
 	const fillFromCatalog = (modelId: string): ModelSpec => {
 		const entry = catalog.find((item) => modelIdMatchesCatalog(modelId, item));
 		const blank = blankModel();
@@ -119,6 +119,9 @@ export const RoutesSettingsContent = forwardRef<SettingsEditorHandle, RoutesSett
 			vision: priced.vision,
 			inputCost: priced.inputCost,
 			outputCost: priced.outputCost,
+			// 0 means "no published cache price"; saving falls back to the input price.
+			cacheReadCost: priced.cacheReadCost,
+			cacheWriteCost: priced.cacheWriteCost,
 			currency: "CNY",
 			contextWindow,
 			maxTokens: priced.maxTokens ? Math.min(priced.maxTokens, contextWindow) : Math.min(blank.maxTokens, contextWindow),
@@ -148,6 +151,9 @@ export const RoutesSettingsContent = forwardRef<SettingsEditorHandle, RoutesSett
 				const contextWindow = item.contextWindow ?? models[index].contextWindow;
 				models[index] = {
 					...models[index], inputCost: item.inputCost, outputCost: item.outputCost, currency: item.currency,
+					// A source without cache columns reports 0; keep what the row already has.
+					cacheReadCost: item.cacheReadCost > 0 ? item.cacheReadCost : models[index].cacheReadCost,
+					cacheWriteCost: item.cacheWriteCost > 0 ? item.cacheWriteCost : models[index].cacheWriteCost,
 					vision: models[index].vision ?? item.vision,
 					contextWindow, maxTokens: item.maxTokens ? Math.min(item.maxTokens, contextWindow) : models[index].maxTokens,
 				};
@@ -156,6 +162,7 @@ export const RoutesSettingsContent = forwardRef<SettingsEditorHandle, RoutesSett
 				const contextWindow = item.contextWindow ?? blank.contextWindow;
 				models.push({
 					...blank, modelId: item.modelId, vision: item.vision, inputCost: item.inputCost, outputCost: item.outputCost, currency: item.currency,
+					cacheReadCost: item.cacheReadCost, cacheWriteCost: item.cacheWriteCost,
 					contextWindow, maxTokens: item.maxTokens ? Math.min(item.maxTokens, contextWindow) : blank.maxTokens,
 				});
 			}

@@ -134,6 +134,45 @@ test("pasted markdown tables skip the separator row", () => {
 	assert.equal(errors.length, 0);
 });
 
+test("kimi's split cache-hit / cache-miss input columns map to cache read", () => {
+	const md = [
+		"| 模型 | 计费单位 | 输入价格（缓存命中） | 输入价格（缓存未命中） | 输出价格 | 上下文窗口 |",
+		"| --- | --- | --- | --- | --- | --- |",
+		"| kimi-k2.7-code | 1M tokens | ¥1.30 | ¥6.50 | ¥27.00 | 262,144 tokens |",
+		"| kimi-k2.7-code-highspeed | 1M tokens | ¥2.60 | ¥13.00 | ¥54.00 | 262,144 tokens |",
+	].join("\n");
+	const { models, errors } = parsePricedTable(md);
+	assert.equal(errors.length, 0);
+	assert.deepEqual(models.map((model) => model.modelId), ["kimi-k2.7-code", "kimi-k2.7-code-highspeed"]);
+	// Cache-miss is the billed input price; the hit column becomes the cache read price.
+	assert.equal(models[0].inputCost, 6.5);
+	assert.equal(models[0].outputCost, 27);
+	assert.equal(models[0].cacheReadCost, 1.3);
+	assert.equal(models[0].contextWindow, 262144);
+	assert.equal(models[1].inputCost, 13);
+	assert.equal(models[1].cacheReadCost, 2.6);
+});
+
+test("explicit cache read and write columns are imported", () => {
+	const tsv = ["模型ID\t输入单价\t输出单价\t缓存读取单价\t缓存写入单价\t币种\t上下文窗口\t最大输出", "kimi-k2.7-code\t6.5\t27\t1.3\t6.5\tCNY\t262144\t262144", "glm-4.6\t4\t12\t\t\tCNY\t200K\t"].join("\n");
+	const { models } = parsePricedTable(tsv);
+	assert.equal(models[0].cacheReadCost, 1.3);
+	assert.equal(models[0].cacheWriteCost, 6.5);
+	// Missing cache columns stay 0 so saving can fall back to the input price.
+	assert.equal(models[1].cacheReadCost, 0);
+	assert.equal(models[1].cacheWriteCost, 0);
+});
+
+test("models.dev-style JSON keeps cache prices", () => {
+	const payload = { data: [{ id: "kimi-k2.7-code", cost: { input: 0.9711, output: 4.0337, cache_read: 0.1942, cache_write: 0.9711 }, context: 262144 }] };
+	const models = parseJsonModels(JSON.stringify(payload));
+	assert.equal(models.length, 1);
+	assert.equal(models[0].inputCost, 0.9711);
+	assert.equal(models[0].cacheReadCost, 0.1942);
+	assert.equal(models[0].cacheWriteCost, 0.9711);
+	assert.equal(models[0].contextWindow, 262144);
+});
+
 test("fenced AI output is unwrapped before parsing", () => {
 	const fenced = ["以下是你要的表格：", "```tsv", "deepseek-chat\t2\t8", "glm-4.6\t4\t12", "```", "希望对你有帮助。"].join("\n");
 	const { models } = parsePricedTable(fenced);
@@ -172,6 +211,26 @@ test("catalog entries convert to CNY at the configured rate", () => {
 	assert.equal(priced.note, "官方牌价");
 	const deprecated = catalogEntryToPriced({ ...entry, status: "deprecated" }, 7.2);
 	assert.equal(deprecated.note, "已弃用");
+});
+
+test("catalog cache prices follow the entry currency", () => {
+	const usd = { provider: "deepseek", modelId: "deepseek-flash", inputCost: 0.15, outputCost: 0.6, cacheReadCost: 0.003, cacheWriteCost: 0.15, currency: "USD", contextWindow: 1000000, maxTokens: 8192, vision: false, tools: true, reasoning: false, status: null };
+	const converted = catalogEntryToPriced(usd, 7.2);
+	assert.equal(converted.inputCost, 1.08);
+	assert.equal(converted.cacheReadCost, 0.0216);
+	assert.equal(converted.cacheWriteCost, 1.08);
+	// CNY-pinned entries already are人民币牌价; applying the rate would double-convert.
+	const native = { ...usd, provider: "moonshotai", modelId: "kimi-k2.7-code", inputCost: 6.5, outputCost: 27, cacheReadCost: 1.3, cacheWriteCost: 6.5, currency: "CNY" };
+	const passed = catalogEntryToPriced(native, 7.2);
+	assert.equal(passed.inputCost, 6.5);
+	assert.equal(passed.outputCost, 27);
+	assert.equal(passed.cacheReadCost, 1.3);
+	assert.equal(passed.cacheWriteCost, 6.5);
+	assert.equal(passed.currency, "CNY");
+	// Old cache files carry no currency or cache columns at all.
+	const legacy = catalogEntryToPriced({ ...usd, cacheReadCost: null, cacheWriteCost: null, currency: undefined }, 7.2);
+	assert.equal(legacy.inputCost, 1.08);
+	assert.equal(legacy.cacheReadCost, 0);
 });
 
 test("catalog filters by family providers with CN first", () => {

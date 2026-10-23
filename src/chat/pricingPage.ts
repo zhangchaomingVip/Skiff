@@ -12,6 +12,10 @@ export interface PricedModel {
 	modelId: string;
 	inputCost: number;
 	outputCost: number;
+	/** Cache-hit input price; 0 when the source has no such column. */
+	cacheReadCost: number;
+	/** Cache-write/creation price; 0 when the source has no such column. */
+	cacheWriteCost: number;
 	currency: Currency;
 	contextWindow: number | null;
 	maxTokens: number | null;
@@ -27,6 +31,8 @@ const isRecord = (value: unknown): value is Record<string, unknown> => typeof va
 const ID_KEYS = ["id", "modelId", "model_id", "model", "slug", "name"];
 const INPUT_KEYS = ["inputPrice", "inputCost", "input", "input_cost", "inputPricePerMillion", "promptPrice", "prompt_price", "prompt", "inPrice"];
 const OUTPUT_KEYS = ["outputPrice", "outputCost", "output", "output_cost", "outputPricePerMillion", "completionPrice", "completion_price", "completion", "outPrice"];
+const CACHE_READ_KEYS = ["cacheRead", "cacheReadPrice", "cacheReadCost", "cache_read", "cachedInput", "cached_input", "cacheHit", "cache_hit", "inputCacheRead"];
+const CACHE_WRITE_KEYS = ["cacheWrite", "cacheWritePrice", "cacheWriteCost", "cache_write", "cacheCreation", "cache_creation", "inputCacheWrite"];
 const NESTED_PRICE_KEYS = ["pricing", "prices", "price", "cost", "costs"];
 const CURRENCY_KEYS = ["currency", "currencyCode", "unitCurrency"];
 const BILLING_UNIT_KEYS = ["billingUnit", "unitTokens", "tokensPerUnit"];
@@ -34,6 +40,27 @@ const CONTEXT_KEYS = ["contextWindow", "contextLength", "context_length", "maxCo
 const MAX_TOKENS_KEYS = ["maxOutputTokens", "max_output_tokens", "max_tokens", "maxCompletionTokens", "maxTokens", "maxOutput"];
 const WRAP_KEYS = ["data", "models", "list", "items", "results", "records", "rows", "result"];
 const NON_CHAT_TYPE = /embed|video|audio|image-gen|image_gen|tts|rerank|moderation|moderate|moderations/;
+
+/** Headers that mark a cache-hit column, a cache-miss column, and cache prices. */
+const CACHE_HIT_HEADER = /命中|\bhit\b|cached/i;
+const CACHE_MISS_HEADER = /未命中|\bmiss\b|uncach/i;
+const CACHE_READ_HEADER = /缓存(读取|读|命中)|cache[ _-]?(read|hit)|cached/i;
+const CACHE_WRITE_HEADER = /缓存(写入|写|创建)|cache[ _-]?(write|creation)/i;
+
+/**
+ * Splits the input-ish price columns of a header row into the one billed as
+ * normal input (the cache-miss column, when vendors split the two) and the
+ * cache-hit column. -1 means the header has no such column.
+ */
+function inputColumnIndexes(header: string[]): { input: number; cacheRead: number } {
+	const inputs = header.map((cell, index) => (/输入|input|prompt/.test(cell) ? index : -1)).filter((index) => index >= 0);
+	const hit = inputs.find((index) => CACHE_HIT_HEADER.test(header[index]));
+	const miss = inputs.find((index) => CACHE_MISS_HEADER.test(header[index])) ?? inputs.find((index) => !CACHE_HIT_HEADER.test(header[index]));
+	// A lone cache-hit column still prices input; it is only a separate cache
+	// tier when the header also splits out the cache-miss column.
+	const input = miss ?? (inputs.length === 1 ? inputs[0] : -1);
+	return { input, cacheRead: hit !== undefined && hit !== input ? hit : -1 };
+}
 
 const STATUS_NOTES: Record<string, string> = {
 	testing: "测试中",
@@ -126,6 +153,8 @@ function entryToModel(entry: Record<string, unknown>): PricedModel | undefined {
 
 	let input = firstNumber(entry, INPUT_KEYS);
 	let output = firstNumber(entry, OUTPUT_KEYS);
+	let cacheRead = firstNumber(entry, CACHE_READ_KEYS);
+	let cacheWrite = firstNumber(entry, CACHE_WRITE_KEYS);
 	let currency: Currency | undefined;
 	for (const key of NESTED_PRICE_KEYS) {
 		if (input !== undefined && output !== undefined && currency !== undefined) break;
@@ -133,6 +162,8 @@ function entryToModel(entry: Record<string, unknown>): PricedModel | undefined {
 		if (!isRecord(nested)) continue;
 		input ??= firstNumber(nested, INPUT_KEYS);
 		output ??= firstNumber(nested, OUTPUT_KEYS);
+		cacheRead ??= firstNumber(nested, CACHE_READ_KEYS);
+		cacheWrite ??= firstNumber(nested, CACHE_WRITE_KEYS);
 		currency ??= normalizeCurrency(firstString(nested, CURRENCY_KEYS));
 	}
 	currency ??= normalizeCurrency(firstString(entry, CURRENCY_KEYS)) ?? "CNY";
@@ -145,15 +176,22 @@ function entryToModel(entry: Record<string, unknown>): PricedModel | undefined {
 	const scale = (value: number) => (unit && unit > 0 ? (value / unit) * 1_000_000 : value);
 	let inputCost = input === undefined ? 0 : scale(input);
 	let outputCost = output === undefined ? 0 : scale(output);
+	let cacheReadCost = cacheRead === undefined ? 0 : scale(cacheRead);
+	let cacheWriteCost = cacheWrite === undefined ? 0 : scale(cacheWrite);
 	if (!(unit && unit > 0)) {
 		const present = [inputCost, outputCost].filter((value) => value > 0);
 		if (present.length && present.every((value) => value < 0.01)) {
 			inputCost *= 1_000_000;
 			outputCost *= 1_000_000;
+			cacheReadCost *= 1_000_000;
+			cacheWriteCost *= 1_000_000;
 		}
 	}
-	inputCost = Math.max(0, Number(inputCost.toFixed(6)));
-	outputCost = Math.max(0, Number(outputCost.toFixed(6)));
+	const money = (value: number) => Math.max(0, Number(value.toFixed(6)));
+	inputCost = money(inputCost);
+	outputCost = money(outputCost);
+	cacheReadCost = money(cacheReadCost);
+	cacheWriteCost = money(cacheWriteCost);
 
 	const status = firstString(entry, ["status", "state"])?.toLowerCase() ?? "";
 	const note = status && !/online|active|stable|live/.test(status) ? STATUS_NOTES[status] ?? status : null;
@@ -161,6 +199,8 @@ function entryToModel(entry: Record<string, unknown>): PricedModel | undefined {
 		modelId,
 		inputCost,
 		outputCost,
+		cacheReadCost,
+		cacheWriteCost,
 		currency,
 		contextWindow: countNumber(entry, CONTEXT_KEYS) ?? null,
 		maxTokens: countNumber(entry, MAX_TOKENS_KEYS) ?? null,
@@ -268,8 +308,10 @@ export function parseHtmlTables(html: string): PricedModel[] {
 		if (matrix.length < 2) continue;
 		const header = matrix[0].map((cell) => cell.toLowerCase());
 		const idIdx = header.findIndex((cell) => /模型|model|^id$|名称/.test(cell));
-		const inIdx = header.findIndex((cell) => /输入|input|prompt/.test(cell));
+		const { input: inIdx, cacheRead: hitIdx } = inputColumnIndexes(header);
 		const outIdx = header.findIndex((cell) => /输出|output|completion/.test(cell));
+		const readIdx = hitIdx >= 0 ? hitIdx : header.findIndex((cell) => CACHE_READ_HEADER.test(cell));
+		const writeIdx = header.findIndex((cell) => CACHE_WRITE_HEADER.test(cell));
 		const hasHeader = idIdx >= 0 && (inIdx >= 0 || outIdx >= 0);
 		const dataRows = hasHeader ? matrix.slice(1) : matrix;
 		const guess = !hasHeader;
@@ -281,10 +323,16 @@ export function parseHtmlTables(html: string): PricedModel[] {
 			const input = inCell ? priceFromCell(inCell) : undefined;
 			const output = outCell ? priceFromCell(outCell) : undefined;
 			if (!input && !output) continue;
+			const readCell = readIdx >= 0 ? cells[readIdx] : undefined;
+			const writeCell = writeIdx >= 0 ? cells[writeIdx] : undefined;
+			const cacheRead = readCell ? priceFromCell(readCell) : undefined;
+			const cacheWrite = writeCell ? priceFromCell(writeCell) : undefined;
 			models.push({
 				modelId,
 				inputCost: input?.cost ?? output?.cost ?? 0,
 				outputCost: output?.cost ?? input?.cost ?? 0,
+				cacheReadCost: cacheRead?.cost ?? 0,
+				cacheWriteCost: cacheWrite?.cost ?? 0,
 				currency: input?.currency ?? output?.currency ?? "CNY",
 				contextWindow: null,
 				maxTokens: null,
@@ -365,14 +413,16 @@ export async function importPricedModels(pageUrl: string, fetchPage: (url: strin
 export const PRICING_IMPORT_PROMPT = `请把模型价格截图转成制表符分隔的表格（TSV），输出在一个代码块中，不要输出任何解释或其他文字。
 
 表头必须恰好是：
-模型ID\t输入单价\t输出单价\t币种\t上下文窗口\t最大输出
+模型ID\t输入单价\t输出单价\t缓存读取单价\t缓存写入单价\t币种\t上下文窗口\t最大输出
 
 规则：
 1. 单价必须是「每百万令牌」的价格，只填数字，禁止千分位逗号；
-2. 币种只填 CNY 或 USD，认不出就留空；
-3. 模型 ID 逐字符照抄（大小写、点、横线都要保留），每个模型一行，不要遗漏、不要编造；
-4. 上下文窗口和最大输出支持 200K 这种写法，认不出就留空；
-5. 看不清的行把对应字段留空，不要猜测数字。`;
+2. 输入单价填「缓存未命中」那一列；表格里分「缓存命中 / 缓存未命中」两个输入价时，命中价填到缓存读取单价；
+3. 缓存读取单价填「缓存命中」价，缓存写入单价填「缓存写入/创建」价；截图里没有这一列就留空，不要用输入价顶替；
+4. 币种只填 CNY 或 USD，认不出就留空；
+5. 模型 ID 逐字符照抄（大小写、点、横线都要保留），每个模型一行，不要遗漏、不要编造；
+6. 上下文窗口和最大输出支持 200K 这种写法，认不出就留空；
+7. 看不清的行把对应字段留空，不要猜测数字。`;
 
 export interface TableRowError {
 	/** 1-based line number in the pasted text. */
@@ -385,6 +435,8 @@ const HEADER_PATTERNS = {
 	id: /模型|^id$|model|名称/i,
 	input: /输入|input|prompt/i,
 	output: /输出|output|completion/i,
+	cacheRead: CACHE_READ_HEADER,
+	cacheWrite: CACHE_WRITE_HEADER,
 	currency: /币种|currency/i,
 	context: /上下文|context/i,
 	maxTokens: /最大输出|max[ _-]?tokens|输出上限/i,
@@ -404,7 +456,8 @@ function tableCells(line: string): string[] | undefined {
 
 function countFromCell(text: string | undefined): number | null {
 	if (!text) return null;
-	const match = text.trim().match(/^(\d+(?:\.\d+)?)\s*([kKmM])?$/);
+	// Vendor tables write "262,144 tokens" / "1M tokens"; take the leading count.
+	const match = text.replace(/[,，]/g, "").trim().match(/^(\d+(?:\.\d+)?)\s*([kKmM])?/);
 	if (!match) return null;
 	const base = Number(match[1]);
 	const scale = match[2]?.toLowerCase() === "m" ? 1_000_000 : match[2]?.toLowerCase() === "k" ? 1_000 : 1;
@@ -450,14 +503,17 @@ export function parsePricedTable(text: string): { models: PricedModel[]; errors:
 	const first = rows[0].cells.map((cell) => cell.toLowerCase());
 	const indexOf = (pattern: RegExp) => first.findIndex((cell) => pattern.test(cell));
 	let idIdx = indexOf(HEADER_PATTERNS.id);
-	const inIdx = indexOf(HEADER_PATTERNS.input);
+	const inputIdx = inputColumnIndexes(first);
 	const outIdx = indexOf(HEADER_PATTERNS.output);
-	const hasHeader = idIdx >= 0 && (inIdx >= 0 || outIdx >= 0);
+	const hasHeader = idIdx >= 0 && (inputIdx.input >= 0 || outIdx >= 0);
 	let start = 1;
 	if (!hasHeader) {
 		idIdx = 0;
 		start = 0;
 	}
+	const inIdx = inputIdx.input;
+	const readIdx = hasHeader ? (inputIdx.cacheRead >= 0 ? inputIdx.cacheRead : indexOf(HEADER_PATTERNS.cacheRead)) : -1;
+	const writeIdx = hasHeader ? indexOf(HEADER_PATTERNS.cacheWrite) : -1;
 	const currencyIdx = hasHeader ? indexOf(HEADER_PATTERNS.currency) : 3;
 	const contextIdx = hasHeader ? indexOf(HEADER_PATTERNS.context) : 4;
 	const maxIdx = hasHeader ? indexOf(HEADER_PATTERNS.maxTokens) : 5;
@@ -489,6 +545,8 @@ export function parsePricedTable(text: string): { models: PricedModel[]; errors:
 			modelId,
 			inputCost: input ?? output ?? 0,
 			outputCost: output ?? input ?? 0,
+			cacheReadCost: looseNumber(at(readIdx) ?? "") ?? 0,
+			cacheWriteCost: looseNumber(at(writeIdx) ?? "") ?? 0,
 			currency: normalizeCurrency(at(currencyIdx)) ?? "CNY",
 			contextWindow: countFromCell(at(contextIdx)),
 			maxTokens: countFromCell(at(maxIdx)),
@@ -520,8 +578,12 @@ export const FAMILY_CATALOG_PROVIDERS: Record<string, string[]> = {
 export interface CatalogEntryLike {
 	provider: string;
 	modelId: string;
+	/** In `currency`: USD unless the entry is pinned to a CNY price list. */
 	inputCost: number;
 	outputCost: number;
+	cacheReadCost?: number | null;
+	cacheWriteCost?: number | null;
+	currency?: string;
 	contextWindow: number;
 	maxTokens: number;
 	vision: boolean;
@@ -535,13 +597,22 @@ export function catalogForFamily<T extends CatalogEntryLike>(catalog: T[], famil
 	return providers.length ? catalog.filter((entry) => providers.includes(entry.provider)) : [];
 }
 
-/** Official USD prices converted to CNY at the user's rate for unified bookkeeping. */
+/**
+ * Official prices rendered in CNY. USD entries are converted at the user's
+ * rate; CNY-pinned entries (vendors whose CNY list we ship, e.g. Kimi) pass
+ * through untouched, because models.dev already converted that list to USD —
+ * converting it back at our own rate double-counts the exchange and inflates
+ * every price by ~7%.
+ */
 export function catalogEntryToPriced(entry: CatalogEntryLike, usdCnyRate: number): PricedModel {
-	const convert = (value: number) => Math.max(0, Number((value * usdCnyRate).toFixed(6)));
+	const native = entry.currency === "CNY";
+	const convert = (value: number) => Math.max(0, Number((native ? value : value * usdCnyRate).toFixed(6)));
 	return {
 		modelId: entry.modelId,
 		inputCost: convert(entry.inputCost),
 		outputCost: convert(entry.outputCost),
+		cacheReadCost: convert(entry.cacheReadCost ?? 0),
+		cacheWriteCost: convert(entry.cacheWriteCost ?? 0),
 		currency: "CNY",
 		contextWindow: entry.contextWindow > 0 ? entry.contextWindow : null,
 		maxTokens: entry.maxTokens > 0 ? entry.maxTokens : null,

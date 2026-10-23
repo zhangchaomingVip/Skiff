@@ -274,7 +274,9 @@ pub(crate) async fn extract_pricing_table(base: &str, key: &str, model_id: &str,
 	})
 }
 
-/// One official-price entry pruned from the models.dev catalog, USD per 1M tokens.
+/// One official-price entry pruned from the models.dev catalog, per 1M tokens.
+/// `currency` names the unit the numbers are already in: entries with a native
+/// CNY list keep CNY (no rate applied), everything else stays USD.
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct CatalogModel {
@@ -283,6 +285,14 @@ pub(crate) struct CatalogModel {
 	pub name: String,
 	pub input_cost: f64,
 	pub output_cost: f64,
+	/// Cache-hit input price; `None` when the catalog has no such column.
+	#[serde(default)]
+	pub cache_read_cost: Option<f64>,
+	/// Cache-write/creation price; `None` when the catalog has no such column.
+	#[serde(default)]
+	pub cache_write_cost: Option<f64>,
+	#[serde(default = "default_catalog_currency")]
+	pub currency: String,
 	pub context_window: u64,
 	pub max_tokens: u64,
 	pub vision: bool,
@@ -290,6 +300,11 @@ pub(crate) struct CatalogModel {
 	pub reasoning: bool,
 	pub status: Option<String>,
 	pub updated: Option<String>,
+}
+
+/// Caches written before entries carried a currency were pure USD.
+fn default_catalog_currency() -> String {
+	"USD".to_string()
 }
 
 #[derive(serde::Serialize)]
@@ -303,14 +318,46 @@ pub(crate) struct CatalogResponse {
 
 #[derive(serde::Serialize, serde::Deserialize)]
 struct CatalogCache {
+	/// Bumped whenever the pruned shape or the price semantics change, so a
+	/// cache written by an older build is refetched instead of served.
+	#[serde(default)]
+	version: u32,
 	fetched_at: i64,
 	models: Vec<CatalogModel>,
 }
 
 const CATALOG_URL: &str = "https://models.dev/api.json";
 const CATALOG_TTL_SECS: i64 = 24 * 60 * 60;
+/// v2 added cache prices and per-entry currency (CNY-pinned lists).
+const CATALOG_CACHE_VERSION: u32 = 2;
 /// Keep CN moonshot before the global twin so dedupe prefers it.
 const CATALOG_PROVIDERS: [&str; 4] = ["deepseek", "moonshotai-cn", "moonshotai", "zhipuai"];
+
+/// A published CNY price for one model, per 1M tokens.
+struct CnyPrice {
+	input: f64,
+	output: f64,
+	cache_read: f64,
+	cache_write: f64,
+}
+
+/// Kimi publishes its list price in CNY, and models.dev converts that list to
+/// USD at its own fx (¥6.50 → $0.9711). Re-converting those USD numbers with
+/// the user's rate therefore round-trips the exchange and inflates every price
+/// (¥6.50 → ¥6.99 at 7.2). Models with a verified CNY list are pinned here and
+/// shipped as CNY, so no rate touches them. Cache writes bill at the input
+/// (cache-miss) price; cache reads bill at the published cache-hit rate.
+/// Source: https://platform.moonshot.cn/docs/pricing/chat (checked 2026-10).
+const CNY_PRICES: [(&str, CnyPrice); 4] = [
+	("kimi-k2.6", CnyPrice { input: 6.50, output: 27.00, cache_read: 1.10, cache_write: 6.50 }),
+	("kimi-k2.7-code", CnyPrice { input: 6.50, output: 27.00, cache_read: 1.30, cache_write: 6.50 }),
+	("kimi-k2.7-code-highspeed", CnyPrice { input: 13.00, output: 54.00, cache_read: 2.60, cache_write: 13.00 }),
+	("kimi-k3", CnyPrice { input: 20.00, output: 100.00, cache_read: 2.00, cache_write: 20.00 }),
+];
+
+fn cny_price(model_id: &str) -> Option<&'static CnyPrice> {
+	CNY_PRICES.iter().find(|(id, _)| *id == model_id).map(|(_, price)| price)
+}
 
 fn prune_catalog(value: &Value) -> Vec<CatalogModel> {
 	let mut models: Vec<CatalogModel> = Vec::new();
@@ -322,13 +369,21 @@ fn prune_catalog(value: &Value) -> Vec<CatalogModel> {
 			if !seen.insert(id.to_lowercase()) { continue }
 			let cost = &model["cost"];
 			let (Some(input), Some(output)) = (cost["input"].as_f64(), cost["output"].as_f64()) else { continue };
+			let published = cny_price(id);
+			let (input_cost, output_cost, cache_read_cost, cache_write_cost, currency) = match published {
+				Some(price) => (price.input, price.output, Some(price.cache_read), Some(price.cache_write), "CNY"),
+				None => (input, output, cost["cache_read"].as_f64(), cost["cache_write"].as_f64(), "USD"),
+			};
 			let modalities = model["modalities"]["input"].as_array().map(|items| items.iter().filter_map(|item| item.as_str()).collect::<Vec<_>>()).unwrap_or_default();
 			models.push(CatalogModel {
 				provider: short.to_string(),
 				model_id: id.clone(),
 				name: model["name"].as_str().unwrap_or(id).to_string(),
-				input_cost: input,
-				output_cost: output,
+				input_cost,
+				output_cost,
+				cache_read_cost,
+				cache_write_cost,
+				currency: currency.to_string(),
 				context_window: model["limit"]["context"].as_u64().unwrap_or(0),
 				max_tokens: model["limit"]["output"].as_u64().unwrap_or(0),
 				vision: modalities.iter().any(|item| *item == "image"),
@@ -348,7 +403,8 @@ fn catalog_cache_path(dir: &Path) -> std::path::PathBuf {
 
 fn read_catalog_cache(path: &Path) -> Option<CatalogCache> {
 	let bytes = std::fs::read(path).ok()?;
-	serde_json::from_slice(&bytes).ok()
+	let cache: CatalogCache = serde_json::from_slice(&bytes).ok()?;
+	(cache.version == CATALOG_CACHE_VERSION).then_some(cache)
 }
 
 fn now_unix() -> i64 {
@@ -376,7 +432,7 @@ pub(crate) async fn public_catalog(dir: &Path, refresh: bool) -> Result<CatalogR
 				return Err("公共目录未包含可用模型".into());
 			}
 			let fetched_at = now_unix();
-			let cache = CatalogCache { fetched_at, models: models.clone() };
+			let cache = CatalogCache { version: CATALOG_CACHE_VERSION, fetched_at, models: models.clone() };
 			if let Ok(bytes) = serde_json::to_vec(&cache) {
 				let _ = std::fs::write(&cache_path, bytes);
 			}
@@ -575,7 +631,9 @@ mod tests {
 				"no-price": { "name": "Skipped" }
 			}},
 			"moonshotai-cn": { "models": {
-				"kimi-k2.6": { "cost": { "input": 0.95, "output": 4 }, "limit": { "context": 256000 }, "modalities": { "input": ["text", "image"] }, "reasoning": true }
+				"kimi-k2.6": { "cost": { "input": 0.9711, "output": 4.0337, "cache_read": 0.1643 }, "limit": { "context": 262144 }, "modalities": { "input": ["text", "image"] }, "reasoning": true },
+				"kimi-k2.7-code-highspeed": { "cost": { "input": 1.9421, "output": 8.0673, "cache_read": 0.3884 }, "limit": { "context": 262144 } },
+				"kimi-k2.5": { "cost": { "input": 0.95, "output": 4, "cache_read": 0.19, "cache_write": 0.95 }, "limit": { "context": 256000 } }
 			}},
 			"moonshotai": { "models": {
 				"kimi-k2.6": { "cost": { "input": 999, "output": 999 } }
@@ -586,18 +644,49 @@ mod tests {
 			"openai": { "models": { "gpt-x": { "cost": { "input": 1, "output": 1 } } }}
 		});
 		let models = prune_catalog(&value);
-		assert_eq!(models.len(), 3);
+		assert_eq!(models.len(), 5);
 		let flash = models.iter().find(|model| model.model_id == "deepseek-flash").unwrap();
 		assert_eq!(flash.provider, "deepseek");
 		assert_eq!(flash.input_cost, 0.15);
+		assert_eq!(flash.cache_read_cost, Some(0.003));
+		assert_eq!(flash.cache_write_cost, None);
+		assert_eq!(flash.currency, "USD");
 		assert_eq!(flash.context_window, 1_000_000);
 		assert!(flash.tools && !flash.vision && !flash.reasoning);
+		// CNY-published models keep the Chinese list price instead of the
+		// USD numbers models.dev derived from it.
 		let kimi = models.iter().find(|model| model.model_id == "kimi-k2.6").unwrap();
 		assert_eq!(kimi.provider, "moonshotai");
-		assert_eq!(kimi.input_cost, 0.95);
+		assert_eq!((kimi.input_cost, kimi.output_cost), (6.50, 27.00));
+		assert_eq!((kimi.cache_read_cost, kimi.cache_write_cost), (Some(1.10), Some(6.50)));
+		assert_eq!(kimi.currency, "CNY");
 		assert!(kimi.vision && kimi.reasoning);
+		let highspeed = models.iter().find(|model| model.model_id == "kimi-k2.7-code-highspeed").unwrap();
+		assert_eq!((highspeed.input_cost, highspeed.output_cost), (13.00, 54.00));
+		assert_eq!(highspeed.cache_read_cost, Some(2.60));
+		// Models without a verified CNY list keep the USD numbers for conversion.
+		let legacy = models.iter().find(|model| model.model_id == "kimi-k2.5").unwrap();
+		assert_eq!((legacy.input_cost, legacy.output_cost), (0.95, 4.0));
+		assert_eq!((legacy.cache_read_cost, legacy.cache_write_cost), (Some(0.19), Some(0.95)));
+		assert_eq!(legacy.currency, "USD");
 		assert!(models.iter().any(|model| model.model_id == "glm-old" && model.status.as_deref() == Some("deprecated")));
 		assert!(!models.iter().any(|model| model.model_id == "gpt-x" || model.model_id == "no-price"));
+	}
+	#[test]
+	fn catalog_cache_from_older_builds_is_discarded() {
+		let dir = std::env::temp_dir().join(format!("skiff-catalog-cache-{}", std::process::id()));
+		std::fs::create_dir_all(&dir).unwrap();
+		let path = dir.join("public-catalog.json");
+		let entry = r#"{"provider":"deepseek","modelId":"deepseek-flash","name":"Flash","inputCost":0.15,"outputCost":0.6,"contextWindow":1000000,"maxTokens":8192,"vision":false,"tools":true,"reasoning":false,"status":null,"updated":null}"#;
+		// Older builds wrote no version, cache prices or currency: refetch instead
+		// of serving prices that were never checked for double conversion.
+		std::fs::write(&path, format!(r#"{{"fetched_at":1,"models":[{entry}]}}"#)).unwrap();
+		assert!(read_catalog_cache(&path).is_none());
+		std::fs::write(&path, format!(r#"{{"version":{CATALOG_CACHE_VERSION},"fetched_at":1,"models":[{entry}]}}"#)).unwrap();
+		let cache = read_catalog_cache(&path).unwrap();
+		assert_eq!(cache.models[0].currency, "USD");
+		assert_eq!(cache.models[0].cache_read_cost, None);
+		let _ = std::fs::remove_dir_all(&dir);
 	}
 	#[test]
 	fn rejects_unsafe_urls_and_keys() {

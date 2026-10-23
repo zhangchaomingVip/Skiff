@@ -28,8 +28,12 @@ export interface CatalogEntry {
 	provider: string;
 	modelId: string;
 	name: string;
+	/** In `currency`: USD unless the vendor ships a native CNY price list. */
 	inputCost: number;
 	outputCost: number;
+	cacheReadCost: number | null;
+	cacheWriteCost: number | null;
+	currency: "USD" | "CNY";
 	contextWindow: number;
 	maxTokens: number;
 	vision: boolean;

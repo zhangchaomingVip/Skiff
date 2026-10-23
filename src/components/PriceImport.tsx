@@ -287,7 +287,7 @@ export function PriceImport({ familyId, addedIds, extractors, catalog, catalogSt
 				<div className="price-import-row">
 					<small className="price-import-hint">1 USD =</small>
 					<Input type="number" className="price-import-rate" min={0.01} max={100} step={0.1} aria-label="美元兑人民币汇率" value={rateDraft} onChange={(event) => setRateDraft(event.target.value)} disabled={disabled || savingRate} />
-					<small className="price-import-hint">CNY，官方牌价按此折算</small>
+					<small className="price-import-hint">CNY，美元牌价按此折算；人民币牌价直接采用</small>
 					<Button type="button" variant="ghost" size="compact" onClick={() => void saveRate()} disabled={disabled || savingRate || !rateDirty}>{rateSaved ? "已保存" : "保存"}</Button>
 				</div>
 				<div className="price-import-row">
@@ -324,7 +324,7 @@ export function PriceImport({ familyId, addedIds, extractors, catalog, catalogSt
 			</div>
 			<div className="price-import-section">
 				<span className="price-import-label">粘贴识别结果<span className="price-import-free-flag">免费</span></span>
-				<TextArea className="price-import-paste" rows={4} placeholder={"模型ID\t输入单价\t输出单价\t币种\t上下文窗口\t最大输出"} aria-label="识别结果" value={pasted} onChange={(event) => setPasted(event.target.value)} disabled={disabled} />
+				<TextArea className="price-import-paste" rows={4} placeholder={"模型ID\t输入单价\t输出单价\t缓存读取单价\t缓存写入单价\t币种\t上下文窗口\t最大输出"} aria-label="识别结果" value={pasted} onChange={(event) => setPasted(event.target.value)} disabled={disabled} />
 				<div className="price-import-row">
 					<details className="price-import-prompt">
 						<summary>没有现成表格？复制提示词，把截图发给任意 AI</summary>
@@ -343,7 +343,7 @@ export function PriceImport({ familyId, addedIds, extractors, catalog, catalogSt
 					return <label className={`price-import-option${isAdded ? " disabled" : ""}`} key={model.modelId}>
 						<input type="checkbox" checked={selected.includes(model.modelId)} disabled={disabled || isAdded} onChange={() => toggle(model.modelId)} />
 						<span className="price-import-id">{model.modelId}{model.note && <span className="provider-tag muted-tag">{model.note}</span>}{isAdded && <span className="provider-tag">已添加</span>}</span>
-						<small>入 {formatCost(model.inputCost)} / 出 {formatCost(model.outputCost)} · {model.currency}{model.contextWindow ? ` · 上下文 ${formatContext(model.contextWindow)}` : ""}</small>
+						<small>入 {formatCost(model.inputCost)} / 出 {formatCost(model.outputCost)}{model.cacheReadCost > 0 ? ` / 缓存读 ${formatCost(model.cacheReadCost)}` : ""} · {model.currency}{model.contextWindow ? ` · 上下文 ${formatContext(model.contextWindow)}` : ""}</small>
 					</label>;
 				})}
 				{!filtered.length && <p className="model-discovery-empty" role="status">没有匹配的模型</p>}
