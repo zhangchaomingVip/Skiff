@@ -50,6 +50,9 @@ export default function App() {
 	}, [allChats, shownProjects]);
 	const archivedChats = useMemo(() => allChats.filter((chat) => isArchived(chat) && shownProjects.some((project) => project.id === chat.projectId)), [allChats, shownProjects]);
 	const [view, setView] = useState<AppView>();
+	// Sidebar highlight: set by a project click, cleared as soon as a chat (or
+	// home) is opened, so an open chat never keeps its project looking selected.
+	const [selectedProjectId, setSelectedProjectId] = useState<string>();
 	useEffect(() => {
 		if (view === undefined && library.workspace && library.draftsReady) setView((activeChat?.hasMessages || activeChat?.hasDraft) ? "chat" : "launcher");
 	}, [activeChat?.hasMessages, activeChat?.hasDraft, library.workspace, library.draftsReady, view]);
@@ -207,20 +210,23 @@ export default function App() {
 	}, [actions, session.isCurrent, validOfferIds]);
 	const displayState = { ...state, model: displayModel, availableModels: displayModels };
 
-	const openLauncher = useCallback(() => { void drafts.flush(); if (library.workspace) { setView("launcher"); if (window.innerWidth <= 760) setSidebarOpen(false); } }, [library.workspace]);
+	const openLauncher = useCallback(() => { void drafts.flush(); setSelectedProjectId(undefined); if (library.workspace) { setView("launcher"); if (window.innerWidth <= 760) setSidebarOpen(false); } }, [library.workspace]);
 	const resumeChat = useCallback(() => { if (activeChat) setView("chat"); }, [activeChat]);
 	const selectChat = useCallback((id: string) => {
 		if (navigationDisabled) return;
+		setSelectedProjectId(undefined);
 		library.selectChat(id); setView("chat"); if (window.innerWidth <= 760) setSidebarOpen(false);
 	}, [library, navigationDisabled]);
 	const selectProject = useCallback((id: string) => {
 		if (navigationDisabled) return;
+		setSelectedProjectId(id);
 		library.selectProject(id);
 	}, [library, navigationDisabled]);
 	const retrieval = useConversationSearch(visibleChats, library.workspace?.projects ?? [], pool.messages, activeChat?.id, session.loading ? undefined : session.owner.id, selectChat);
 	const newDraft = useCallback(() => {
 		if (navigationDisabled || !activeProject) return;
 		void drafts.flush();
+		setSelectedProjectId(undefined);
 		// A saved chat can refer to a route that was removed or renamed since it
 		// was last opened. New chats should inherit the model that is actually
 		// active in the current session, rather than replaying that stale ID and
@@ -245,6 +251,7 @@ export default function App() {
 	const startLauncherChat = useCallback(async (offer: RuntimeOffer) => {
 		if (navigationDisabled || modelFamilies.loading) return;
 		if (!activeProject) { setModelNotice("请先选择一个项目后再开始聊天"); return; }
+		setSelectedProjectId(undefined);
 		const selected = { provider: offer.providerKey, id: offer.modelId, modelId: offer.modelId, ...(offer.routeId ? { routeId: offer.routeId } : {}), ...(offer.offerId ? { offerId: offer.offerId } : {}) };
 		// Reusing the active empty draft keeps its pi process alive. Apply the
 		// explicitly chosen offer there before entering chat, just as the picker does.
@@ -336,7 +343,7 @@ export default function App() {
 		<div className={`app ${sidebarOpen ? "with-sidebar" : ""}`}>
 			<TitleBar nav={<TitleBarNav sidebarOpen={sidebarOpen} onToggleSidebar={() => setSidebarOpen((value) => !value)} onNewChat={newDraft} onHome={openLauncher} onAddProject={() => setProjectDialogOpen(true)} onOpenSettings={openSettings} messages={state.messages} />} voyageOpen={voyageExpanded} onToggleVoyage={currentView === "chat" ? toggleVoyagePanel : undefined}><SettingsMenu restrictions={settingsRestrictions} onOpen={openSettings} /></TitleBar>
 			<div className="app-body" style={{ "--sidebar-width": `${shownSidebarWidth}px` } as CSSProperties}>
-			{sidebarOpen && !(narrowViewport && settingsCategory) && <SidebarPresentation onClose={() => setSidebarOpen(false)}><Sidebar projects={shownProjects} chats={visibleChats} activeId={activeChat?.id} activeProjectId={activeProject?.id} homeActive={currentView === "launcher"} disabled={navigationDisabled} runningIds={pool.runningIds} canCloseChat={pool.canClose} navigationDisabled={navigationDisabled} connected={connected} onHome={openLauncher} onNewChat={newDraft} statuses={pool.statuses} searchProgress={retrieval.progress} searchQuery={retrieval.query} onSearch={retrieval.setQuery} onSearchMatch={retrieval.openMatch} onSelectChat={selectChat} onSelectProject={selectProject} onAddProject={() => setProjectDialogOpen(true)} onRenameChat={library.renameChat} onRenameProject={library.renameProject} onDeleteChat={deleteArchivedChat} onHideProject={hideProject} onPurgeProject={purgeProject} onArchiveChat={archiveChat} onPurgeChat={purgeChat} onTogglePinChat={(id, pinned) => library.updateChat(id, { pinned })} /></SidebarPresentation>}
+			{sidebarOpen && !(narrowViewport && settingsCategory) && <SidebarPresentation onClose={() => setSidebarOpen(false)}><Sidebar projects={shownProjects} chats={visibleChats} activeId={activeChat?.id} selectedProjectId={selectedProjectId} homeActive={currentView === "launcher"} disabled={navigationDisabled} runningIds={pool.runningIds} canCloseChat={pool.canClose} navigationDisabled={navigationDisabled} connected={connected} onHome={openLauncher} onNewChat={newDraft} statuses={pool.statuses} searchProgress={retrieval.progress} searchQuery={retrieval.query} onSearch={retrieval.setQuery} onSearchMatch={retrieval.openMatch} onSelectChat={selectChat} onSelectProject={selectProject} onAddProject={() => setProjectDialogOpen(true)} onRenameChat={library.renameChat} onRenameProject={library.renameProject} onDeleteChat={deleteArchivedChat} onHideProject={hideProject} onPurgeProject={purgeProject} onArchiveChat={archiveChat} onPurgeChat={purgeChat} onTogglePinChat={(id, pinned) => library.updateChat(id, { pinned })} /></SidebarPresentation>}
 			{desktopSidebarOpen && <ResizeSeparator label="调整左侧导航宽度" value={shownSidebarWidth} bounds={sidebarBounds} onResize={setSidebarWidthFromDrag} onCommit={commitSidebarWidth} />}
 			<main className="workspace">
 				{currentView === "launcher" ? <>{chatHeader}{workspaceAlerts}<div className="body"><LauncherView activeChat={activeChat} activeProject={activeProject} projects={shownProjects} chats={visibleChats} offers={modelFamilies.offers} recentOfferIds={recentOfferIds} disabled={navigationDisabled || modelFamilies.loading} navigationDisabled={navigationDisabled} loading={modelFamilies.loading} error={modelFamilies.error} onResume={resumeChat} onSelectProject={selectProject} onAddProject={() => setProjectDialogOpen(true)} onManageProviders={() => openSettings("providers")} onRetryModels={modelFamilies.refresh} onStartChat={startLauncherChat} onOpenChat={selectChat} /></div></> : <VoyageWorkspace topBar={<>{chatHeader}{workspaceAlerts}</>} draftTarget={activeChat && activeProject ? { chatId: activeChat.id, cwd: activeProject.path, sessionFile: activeChat.hasMessages ? activeChat.sessionFile : undefined } : undefined} revealMessage={retrieval.reveal} modelNotice={modelNotice} key={`${session.owner.id ?? "loading"}:${session.owner.cwd ?? ""}`} state={displayState} loading={session.loading} connected={connected} pending={session.pending} actions={actions} onSend={send} onReconnect={session.reconnect} projectName={activeProject?.name} failover={failover} routeAuthorization={routeAuthorizationPrompt} railWidth={shownVoyageWidth} availableWidth={workspaceWidth} onRailWidth={setVoyageWidthFromDrag} onRailWidthCommit={commitVoyageWidth} expanded={voyageExpanded} onToggle={toggleVoyagePanel} />}

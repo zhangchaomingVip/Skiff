@@ -63,16 +63,34 @@ try {
 		const before = counters();
 		const button = [...document.querySelectorAll(".project-select")].find((item) => item.textContent.startsWith(project));
 		assert(button, `Missing project ${project}`); button.click();
-		await until(() => count("rpc_start") > before[0] && ready(), `${project} not connected`);
-		await delay(60);
+		await until(ready, `${project} not connected`);
+		await delay(80);
 		const delta = counters().map((value, index) => value - before[index]);
-		assert(delta.every((value) => value === 1), `Duplicate work: ${delta}`);
+		// usePiSessions keeps one process per open chat, so a chat that was already
+		// opened is projected back with no RPC at all. A chat that needs a process
+		// spawns at most once and must restore plus read its history exactly once.
+		assert(delta[0] <= 1, `Duplicate start: ${delta}`);
+		assert(delta[1] <= 1, `Duplicate stop: ${delta}`);
+		if (delta[0] === 1) {
+			assert(delta[2] === 1, `Duplicate session restore: ${delta}`);
+			assert(delta[3] === 1, `Duplicate history read: ${delta}`);
+		} else {
+			assert(delta[2] === 0 && delta[3] === 0, `Reused session did extra work: ${delta}`);
+		}
 		assert(document.querySelector('[aria-label="你的消息"]')?.textContent && document.querySelector('[aria-label="Skiff 的消息"]')?.textContent.includes("预览任务已完成"), "History missing");
 		assert(document.querySelector(".model-trigger")?.title.includes("deepseek-chat"), "Selected model changed");
-		record(`切换到 ${project}：启动/停止/恢复/读取历史各 1 次`);
+		record(`切换到 ${project}：${delta[0] === 1 ? "新建 1 个会话，恢复与读取历史各 1 次" : "复用已打开的会话，无重复进程与 RPC"}`);
 	}
 	click('[aria-label="展开Skiff"]');
-	await until(() => document.querySelectorAll(".project-chats .chat-row").length === 22, "Project did not expand");
+	await until(() => document.querySelectorAll(".project-chats .chat-row").length === 5, "Project did not expand to the first page");
+	// 展开显示 pages in five chats at a time and only offers 收起 on the last page.
+	for (let page = 0; page < 10; page += 1) {
+		const more = document.querySelector(".project-chats .chat-more");
+		if (!more || more.textContent === "收起") break;
+		more.click();
+		await delay(60);
+	}
+	await until(() => document.querySelectorAll(".project-chats .chat-row").length === 22, "Chat preview did not expand");
 	await delay(250);
 	const expandedHeight = document.querySelector(".project-chats").parentElement.parentElement.getBoundingClientRect().height;
 	click('[aria-label="收起Skiff"]');
@@ -105,18 +123,34 @@ try {
 	reducedMotion.remove();
 	record("禁用动画时也能卸载隐藏内容");
 	const beforeConfig = count("rpc_start");
-	click('[aria-label="配置提供商"]');
-	await until(() => document.querySelector('dialog[open]'), "Settings not open");
-	const modelTab = [...document.querySelectorAll('[role="tab"]')].find((item) => item.textContent.includes("模型选择"));
-	assert(modelTab, "Model tab missing"); modelTab.click();
-	await until(() => [...document.querySelectorAll("label")].some((item) => item.textContent.includes("失败时自动切换")), "Model settings not shown");
+	// Every chat with a live process restarts once on a configuration change.
+	const liveSessions = mock.processes.size;
+	// Settings live behind the title bar menu now: pick a category, then navigate
+	// inside the dialog with the aria-pressed nav buttons.
+	const openSettings = async (label) => {
+		if (!document.querySelector("dialog[open]")) {
+			click('[aria-label="设置"]');
+			await until(() => document.querySelector(".settings-menu"), "Settings menu not open");
+			const entry = [...document.querySelectorAll(".settings-menu button")].find((item) => item.textContent.trim() === label);
+			assert(entry, `Settings menu entry ${label} missing`);
+			entry.click();
+		} else {
+			const nav = [...document.querySelectorAll(".settings-nav button")].find((item) => item.textContent.trim() === label);
+			assert(nav, `Settings nav entry ${label} missing`);
+			nav.click();
+		}
+		await until(() => document.querySelector('dialog[open]'), "Settings not open");
+	};
+	// The failover toggle lives in 路线 (routes), next to the family cards.
+	await openSettings("路线");
+	await until(() => [...document.querySelectorAll("label")].some((item) => item.textContent.includes("失败时自动切换")), "Route settings not shown");
 	[...document.querySelectorAll("label")].find((item) => item.textContent.includes("失败时自动切换")).querySelector("input").click();
-	await until(() => count("rpc_start") > beforeConfig && ready(), "Config edit not applied");
-	await delay(80);
-	assert(count("rpc_start") === beforeConfig + 1, "Config edit restarted more than once");
-	record("配置修改仍刷新会话，且只重启 1 次");
-	const relayTab = [...document.querySelectorAll('[role="tab"]')].find((item) => item.textContent.includes("供应商"));
-	relayTab.click();
+	await until(() => count("rpc_start") >= beforeConfig + liveSessions && ready(), "Config edit not applied");
+	await delay(120);
+	const restarts = count("rpc_start") - beforeConfig;
+	assert(restarts === liveSessions, `Config edit restarted ${restarts} sessions, expected ${liveSessions}`);
+	record(`配置修改重启每个打开的会话 1 次（共 ${liveSessions} 个）`);
+	await openSettings("供应商");
 	await until(() => document.querySelector('[aria-label="停用 官方直连"]'), "Relay toggle missing");
 	const beforeRemoval = count("rpc_start");
 	click('[aria-label="停用 官方直连"]');

@@ -28,6 +28,16 @@ const persisted = (id) => page.evaluate(async (id) => {
 try {
 	await page.goto(`${base}/tests/retrievability.html`); await ready();
 	assert.equal(await page.locator(".sidebar-recent").count(), 0);
+	// Each project previews five chats at a time; page every project to the end first.
+	await page.evaluate(async () => {
+		const wait = () => new Promise((resolve) => setTimeout(resolve, 60));
+		for (let page = 0; page < 60; page += 1) {
+			const before = document.querySelectorAll(".chat-row").length;
+			document.querySelectorAll(".chat-more").forEach((button) => { if (button.textContent !== "收起") button.click(); });
+			await wait();
+			if (document.querySelectorAll(".chat-row").length === before) break;
+		}
+	});
 	assert.equal(await page.locator(".chat-row").count(), 100);
 	assert.ok((await page.locator(".chat-group-label").allTextContents()).every((label) => /· \d+$/.test(label)));
 	const processes = await page.evaluate(() => window.retrievalFixture.mock.processes.size);

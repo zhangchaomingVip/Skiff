@@ -20,6 +20,9 @@ const highlight = (text: string, query: string) => {
 
 const readOrder = (): string[] => { try { const value = JSON.parse(localStorage.getItem("skiff.sidebar.order") ?? "[]"); return Array.isArray(value) ? value.filter((id) => typeof id === "string") : []; } catch { return []; } };
 
+/** How many of a project's chats the sidebar previews before offering 展开显示. */
+const CHAT_PREVIEW_LIMIT = 5;
+
 export function SidebarCollapse({ open, id, children }: { open: boolean; id?: string; children: () => ReactNode }) {
 	const [retained, setRetained] = useState(open);
 	const container = useRef<HTMLDivElement>(null);
@@ -44,11 +47,12 @@ export function SidebarCollapse({ open, id, children }: { open: boolean; id?: st
 	</div>;
 }
 
-export function Sidebar({ projects, chats, activeId, activeProjectId, homeActive, disabled, navigationDisabled = disabled, runningIds, statuses, searchProgress, searchQuery, onSearch, onSearchMatch, canCloseChat, connected, onHome, onNewChat, onSelectChat, onSelectProject, onAddProject, onRenameChat, onRenameProject, onDeleteChat, onHideProject, onPurgeProject, onArchiveChat, onPurgeChat, onTogglePinChat }: {
+export function Sidebar({ projects, chats, activeId, selectedProjectId, homeActive, disabled, navigationDisabled = disabled, runningIds, statuses, searchProgress, searchQuery, onSearch, onSearchMatch, canCloseChat, connected, onHome, onNewChat, onSelectChat, onSelectProject, onAddProject, onRenameChat, onRenameProject, onDeleteChat, onHideProject, onPurgeProject, onArchiveChat, onPurgeChat, onTogglePinChat }: {
 	projects: Project[];
 	chats: Conversation[];
 	activeId?: string;
-	activeProjectId?: string;
+	/** Set by a project click and cleared by any chat selection, so a chat never highlights its project. */
+	selectedProjectId?: string;
 	homeActive: boolean;
 	disabled: boolean;
 	navigationDisabled?: boolean;
@@ -82,6 +86,11 @@ export function Sidebar({ projects, chats, activeId, activeProjectId, homeActive
 	useEffect(() => { try { localStorage.setItem("skiff.sidebar.projects-expanded", String(projectsExpanded)); } catch { /* Optional layout preference. */ } }, [projectsExpanded]);
 	const [collapsed, setCollapsed] = useState<Set<string>>(() => { try { const ids = JSON.parse(localStorage.getItem("skiff.sidebar.collapsed") ?? "[]"); return new Set(Array.isArray(ids) ? ids.filter((id) => typeof id === "string") : []); } catch { return new Set(); } });
 	useEffect(() => { try { localStorage.setItem("skiff.sidebar.collapsed", JSON.stringify([...collapsed])); } catch { /* Optional layout preference. */ } }, [collapsed]);
+	// Per-project preview window: 5 chats at a time, 收起 resets it to the first page.
+	const [chatLimits, setChatLimits] = useState<Map<string, number>>(new Map());
+	const [recentExpanded, setRecentExpanded] = useState(() => { try { return localStorage.getItem("skiff.sidebar.recent-expanded") !== "false"; } catch { return true; } });
+	useEffect(() => { try { localStorage.setItem("skiff.sidebar.recent-expanded", String(recentExpanded)); } catch { /* Optional layout preference. */ } }, [recentExpanded]);
+	const recentListId = useId();
 	const [resultLimit, setResultLimit] = useState(200);
 	const [searchOpen, setSearchOpen] = useState(!!searchQuery?.trim());
 	const [order, setOrder] = useState<string[]>(readOrder);
@@ -159,6 +168,22 @@ export function Sidebar({ projects, chats, activeId, activeProjectId, homeActive
 		return { histories, recent };
 	}, [sortedChats, projects, search, activeId]);
 
+	// A chat opened from 最近 or search can sit past the preview window; grow its
+	// project's page until the selection is visible instead of leaving it hidden.
+	useEffect(() => {
+		if (!activeId) return;
+		const projectId = chats.find((chat) => chat.id === activeId)?.projectId;
+		if (!projectId) return;
+		const list = projectHistory.histories.get(projectId) ?? [];
+		const index = list.findIndex((chat) => chat.id === activeId);
+		if (index < 0) return;
+		const needed = Math.min(list.length, Math.ceil((index + 1) / CHAT_PREVIEW_LIMIT) * CHAT_PREVIEW_LIMIT);
+		setChatLimits((previous) => {
+			if ((previous.get(projectId) ?? CHAT_PREVIEW_LIMIT) >= needed) return previous;
+			return new Map(previous).set(projectId, needed);
+		});
+	}, [activeId, chats, projectHistory]);
+
 	const menuPoint = (event: ReactMouseEvent) => ({ x: Math.min(event.clientX, window.innerWidth - 170), y: Math.min(event.clientY, window.innerHeight - 264) });
 	const openChatMenu = (event: ReactMouseEvent, chat: Conversation, scope: string) => {
 		if (navigationDisabled) return;
@@ -233,29 +258,30 @@ export function Sidebar({ projects, chats, activeId, activeProjectId, homeActive
 							const history = projectHistory.histories.get(project.id) ?? [];
 							const renderRows = () => {
 								if (search) return history.map((chat) => renderChatRow(chat, history));
+								// Newest first, pinned on top, then a flat preview: no date
+								// buckets, because 今天/昨天 headers made short lists read as
+								// navigation rather than chats. 展开显示 pages in another five
+								// rows at a time and only becomes 收起 on the last page.
+								const limit = chatLimits.get(project.id) ?? CHAT_PREVIEW_LIMIT;
+								const shown = history.slice(0, limit);
+								const complete = shown.length >= history.length;
 								const rows: ReactNode[] = [];
 								const pinnedChats = history.filter((chat) => chat.pinned);
-								if (pinnedChats.length) {
-									rows.push(<div className="chat-group-label" key="pinned">已固定 · {pinnedChats.length}</div>);
-									rows.push(...pinnedChats.map((chat) => renderChatRow(chat, history)));
-								}
-								const groups = new Map<string, Conversation[]>();
-								for (const chat of history.filter((item) => !item.pinned)) {
-									const label = calendarGroup(chat.updatedAt);
-									const bucket = groups.get(label);
-									if (bucket) bucket.push(chat);
-									else groups.set(label, [chat]);
-								}
-								for (const [label, items] of groups) {
-									rows.push(<div className="chat-group-label" key={label}>{label} · {items.length}</div>);
-									rows.push(...items.map((chat) => renderChatRow(chat, history)));
-								}
+								if (pinnedChats.length) rows.push(<div className="chat-group-label" key="pinned">已固定 · {pinnedChats.length}</div>);
+								rows.push(...shown.map((chat) => renderChatRow(chat, history)));
+								if (history.length > CHAT_PREVIEW_LIMIT) rows.push(<button type="button" key="more-chats" className="chat-more" aria-expanded={complete} title={`共 ${history.length} 条对话`} onClick={() => setChatLimits((previous) => {
+									const next = new Map(previous);
+									if (complete) next.delete(project.id);
+									else next.set(project.id, limit + CHAT_PREVIEW_LIMIT);
+									return next;
+								})}>{complete ? "收起" : "展开显示"}</button>);
 								return rows;
 							};
+							const isSelected = project.id === selectedProjectId;
 							return <div className="project-group" key={project.id}>
-								<div className={`project-row ${project.id === activeProjectId ? "current" : ""}`} onContextMenu={(event) => openProjectMenu(event, project)}>
+								<div className={`project-row ${isSelected ? "selected" : ""}`} onContextMenu={(event) => openProjectMenu(event, project)}>
 									<IconButton size="compact" className={`project-chevron ${!isCollapsed || search ? "expanded" : ""}`} onClick={() => setCollapsed((previous) => { const next = new Set(previous); if (next.has(project.id)) next.delete(project.id); else next.add(project.id); return next; })} aria-label={`${!isCollapsed || search ? "收起" : "展开"}${project.name}`} aria-expanded={!isCollapsed || !!search} aria-controls={`${projectsListId}-${project.id}`}><Icon name="chevron" size={13} /></IconButton>
-									{editing?.id === project.id ? renameInput() : <button className="project-select" disabled={navigationDisabled} onClick={() => onSelectProject(project.id)} title={project.path}><Icon name="folder" size={15} /><span>{project.name}</span></button>}
+									{editing?.id === project.id ? renameInput() : <button className="project-select" disabled={navigationDisabled} onClick={() => onSelectProject(project.id)} aria-current={isSelected ? "true" : undefined} title={project.path}><Icon name="folder" size={15} /><span>{project.name}</span></button>}
 								</div>
 								<SidebarCollapse open={!isCollapsed || !!search} id={`${projectsListId}-${project.id}`}>
 									{() => <div className="project-chats">
@@ -268,8 +294,8 @@ export function Sidebar({ projects, chats, activeId, activeProjectId, homeActive
 					</nav>}
 				</SidebarCollapse>
 				{!!recentChats.length && <section className="sidebar-recent" aria-label="最近会话">
-					<div className="section-label">最近</div>
-					{recentChats.map((chat) => renderChatRow(chat, [], chat.projectId))}
+					<div className="section-label"><button type="button" className="section-name" onClick={() => setRecentExpanded((expanded) => !expanded)} aria-expanded={recentExpanded} aria-controls={recentListId} title={recentExpanded ? "收起最近" : "展开最近"}>最近<span className={`section-toggle ${recentExpanded ? "expanded" : ""}`}><Icon name="chevron" size={13} /></span></button></div>
+					<SidebarCollapse open={recentExpanded} id={recentListId}>{() => <>{recentChats.map((chat) => renderChatRow(chat, [], chat.projectId))}</>}</SidebarCollapse>
 				</section>}
 				</>}
 			</div>

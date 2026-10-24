@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { candidateApiUrls, catalogEntryToPriced, catalogForFamily, estimateVisionTokens, importPricedModels, parseHtmlTables, parseJsonModels, parsePricedTable, type FetchedPage } from "../src/chat/pricingPage.ts";
+import { candidateApiUrls, catalogEntryToPriced, catalogForFamily, estimateVisionTokens, importPricedModels, parseHtmlTables, parseJsonModels, parsePricedTable, syncModelPrices, type FetchedPage } from "../src/chat/pricingPage.ts";
 
 const tokenrhythmEntry = (overrides: Record<string, unknown>) => ({
 	id: "glm-5.1",
@@ -231,6 +231,38 @@ test("catalog cache prices follow the entry currency", () => {
 	const legacy = catalogEntryToPriced({ ...usd, cacheReadCost: null, cacheWriteCost: null, currency: undefined }, 7.2);
 	assert.equal(legacy.inputCost, 1.08);
 	assert.equal(legacy.cacheReadCost, 0);
+});
+
+test("price sync refills only the price fields of catalog-known models", () => {
+	const catalog = [
+		{ provider: "moonshotai", modelId: "kimi-k2.7-code", inputCost: 6.5, outputCost: 27, cacheReadCost: 1.3, cacheWriteCost: 6.5, currency: "CNY", contextWindow: 262144, maxTokens: 262144, vision: true, tools: true, reasoning: true, status: null },
+		{ provider: "deepseek", modelId: "deepseek-flash", inputCost: 0.15, outputCost: 0.6, cacheReadCost: 0.003, cacheWriteCost: null, currency: "USD", contextWindow: 1000000, maxTokens: 8192, vision: false, tools: true, reasoning: false, status: null },
+	];
+	const stale = { modelId: "kimi-k2.7-code", alias: "", inputCost: 6.84, outputCost: 28.8, cacheReadCost: 6.84, cacheWriteCost: 6.84, currency: "CNY" as const, contextWindow: 131072, maxTokens: 8192, vision: false };
+	const entries = [
+		{ familyId: "kimi", model: stale },
+		{ familyId: "deepseek", model: { ...stale, modelId: "deepseek-flash" } },
+		{ familyId: "glm", model: { ...stale, modelId: "glm-5.1" } },
+		{ familyId: "kimi", model: { ...stale, modelId: "  " } },
+	];
+	const synced = syncModelPrices(entries, catalog, 7.2);
+	assert.deepEqual(synced.matched, ["kimi-k2.7-code", "deepseek-flash"]);
+	assert.deepEqual(synced.missing, ["glm-5.1"]);
+	// CNY-pinned prices pass through; USD entries are converted.
+	assert.equal(synced.entries[0].model.inputCost, 6.5);
+	assert.equal(synced.entries[0].model.cacheReadCost, 1.3);
+	assert.equal(synced.entries[1].model.inputCost, 1.08);
+	assert.equal(synced.entries[1].model.cacheReadCost, 0.0216);
+	// A source without a cache-write price leaves the tier at 0 (billing falls back to input).
+	assert.equal(synced.entries[1].model.cacheWriteCost, 0);
+	// Everything except prices stays as configured.
+	assert.equal(synced.entries[0].model.contextWindow, 131072);
+	assert.equal(synced.entries[0].model.maxTokens, 8192);
+	assert.equal(synced.entries[0].model.vision, false);
+	assert.equal(synced.entries[0].model.alias, "");
+	// Unknown models and empty rows are returned untouched.
+	assert.equal(synced.entries[2].model.inputCost, 6.84);
+	assert.equal(synced.entries[3].model.modelId, "  ");
 });
 
 test("catalog filters by family providers with CN first", () => {

@@ -5,7 +5,7 @@ import { useSettingsMetadata } from "../chat/useSettingsMetadata";
 import { ProviderBatchDialog } from "./ProviderBatchDialog";
 import type { DiscoveredModel } from "../rpc/modelDiscovery";
 import { probeRelayEndpoint } from "../rpc/modelDiscovery";
-import { catalogEntryToPriced } from "../chat/pricingPage";
+import { catalogEntryToPriced, syncModelPrices } from "../chat/pricingPage";
 import { catalogVision } from "../chat/modelVision";
 import { slowOrFailedModels, testModelsConcurrently } from "../chat/providerConnection";
 import { filterPresets, hostOf, matchPreset, PRESET_KINDS, type ProviderPreset } from "../chat/providerPresets";
@@ -93,7 +93,7 @@ export type ProvidersSettingsProps = {
 };
 
 export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, ProvidersSettingsProps>(function ProvidersSettingsContent({ relays, families, usdCnyRate, configError, onPreviewBatch, onBatch, onSaveRelay, onDeleteRelay, onSetRelayEnabled, onTest, onCancelTest, onDiscover, onOpenRoutes, onLockChange }, ref) {
-	const { catalog } = useModelCatalog();
+	const { catalog, catalogStale } = useModelCatalog();
 	const [query, setQuery] = useState("");
 	const [listQuery, setListQuery] = useState("");
 	const [sourceFilter, setSourceFilter] = useState<ProviderSourceTabId>("all");
@@ -121,6 +121,7 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 	const [copyStatus, setCopyStatus] = useState<{ relayId: string; state: "copied" | "failed" }>();
 	const copyFeedbackTimer = useRef<number>();
 	const [providerModels, setProviderModels] = useState<ProviderModelDraft[]>([]);
+	const [priceSyncNotice, setPriceSyncNotice] = useState<string>();
 	const originalEditorState = useRef<string>();
 	const [discoveringModels, setDiscoveringModels] = useState(false);
 	const [modelListNotice, setModelListNotice] = useState<string>();
@@ -168,6 +169,9 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 	};
 	const { draft, dirty, setDraft, pending, setPending, error, setError, removing, setRemoving, contentRef, closeDraft, mutate, rememberEditorTrigger } = useSettingsEditor<Draft>({ ref, onLockChange, onClose: resetConnectionTest, isDirty: (current) => current.kind === "relay" && providerEditorSnapshot(current.relay, providerModels) !== originalEditorState.current });
 	useSettingsListFocus(contentRef, !!draft);
+	// Sync feedback belongs to the provider being edited; drop it when switching.
+	const editingRelayId = draft?.kind === "relay" ? draft.relay.id : "";
+	useEffect(() => { setPriceSyncNotice(undefined); }, [editingRelayId]);
 
 	const excludedTestModels = draft?.kind === "relay" ? draft.relay.excludedModelIds ?? [] : [];
 	const connectionPassed = testResults.some((item) => item.ok && !excludedTestModels.includes(item.modelId) && providerModels.some((entry) => entry.model.modelId.trim() === item.modelId));
@@ -285,6 +289,19 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 			contextWindow,
 			maxTokens: priced.maxTokens ? Math.min(priced.maxTokens, contextWindow) : Math.min(blank.maxTokens, contextWindow),
 		};
+	};
+
+	// Prices live on the family routes, so the catalog is the only official
+	// source for them. One click refills the input/output/cache tiers from it;
+	// context windows and capability flags are left alone.
+	const syncCatalogPrices = () => {
+		if (pending || !providerModels.length) return;
+		if (!catalog.length) { setPriceSyncNotice("官方目录尚未加载完成，请稍后重试"); return; }
+		const { entries, matched, missing } = syncModelPrices(providerModels, catalog, usdCnyRate);
+		setProviderModels(entries);
+		const skipped = missing.length ? `；${missing.length} 个未收录（${missing.join("、")}），保留原价` : "";
+		const stale = catalogStale ? "（目录为本地缓存）" : "";
+		setPriceSyncNotice(matched.length ? `已按官方牌价同步 ${matched.length} 个模型${skipped}${stale}` : `官方目录未收录这些模型：${missing.join("、")}${stale}`);
 	};
 
 	const restoreProviderModels = (models: string[]) => {
@@ -730,7 +747,11 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 									<small id="relay-price-multiplier-hint">实际单价 = 官方单价 × 倍率。0.5 表示五折，1 表示原价。留空时按路线中配置的价格计费。</small>
 								</div>
 							</div>
-							<p className="provider-price-note">以下为只读价格预览，已应用全局倍率。在路线中填写官方价后显示预览；未配置价格以「—」表示。</p>
+							<div className="provider-price-sync">
+								<p className="provider-price-note">以下为只读价格预览，已应用全局倍率。同步会按官方牌价回填输入、输出与缓存单价（人民币牌价直接采用，美元牌价按汇率折算），不改动上下文与能力设置；未配置价格以「—」表示。</p>
+								<Button type="button" variant="ghost" size="compact" onClick={syncCatalogPrices} disabled={pending || !providerModels.length || !catalog.length}>同步官方牌价</Button>
+							</div>
+							{priceSyncNotice && <small className="provider-price-sync-notice" role="status">{priceSyncNotice}</small>}
 							{providerModels.length > 0 ? priceCurrencies.map((currency) => <div className="provider-price-table-wrap" key={currency}><table className="provider-price-table"><caption>{currency} / 百万 token</caption><thead><tr><th>模型</th><th>输入</th><th>输出</th><th>缓存（写入 / 读取）</th></tr></thead><tbody>{providerModels.filter(({ model }) => model.currency === currency).map(({ model }, index) => {
 								const multiplier = relay.priceMultiplier ?? 1;
 								const hasPrice = [model.inputCost, model.outputCost, model.cacheWriteCost, model.cacheReadCost].some((value) => value > 0);

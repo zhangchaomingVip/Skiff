@@ -1,4 +1,5 @@
 import type { Currency } from "./types";
+import { modelIdMatchesCatalog } from "./latestModels";
 
 /** A page fetched by the Rust side: final URL after redirects plus the raw body. */
 export interface FetchedPage {
@@ -622,4 +623,50 @@ export function catalogEntryToPriced(entry: CatalogEntryLike, usdCnyRate: number
 		reasoning: entry.reasoning,
 		note: entry.status && /deprecated|retired/i.test(entry.status) ? "已弃用" : "官方牌价",
 	};
+}
+
+/** The price fields a catalog sync is allowed to overwrite. */
+export interface SyncableModel {
+	modelId: string;
+	inputCost: number;
+	outputCost: number;
+	cacheReadCost: number;
+	cacheWriteCost: number;
+	currency: Currency;
+}
+
+/**
+ * Refills a provider's model prices from the official catalog, resolving each
+ * row against its own family. Only the four price fields move: context windows
+ * and capability flags stay as configured, so a stale catalog entry can never
+ * invalidate a route that already works. Reports the ids that matched and the
+ * ones the catalog does not know.
+ */
+export function syncModelPrices<P extends SyncableModel>(
+	entries: { familyId?: string; model: P }[],
+	catalog: CatalogEntryLike[],
+	usdCnyRate: number,
+): { entries: { familyId?: string; model: P }[]; matched: string[]; missing: string[] } {
+	const matched: string[] = [];
+	const missing: string[] = [];
+	const synced = entries.map((entry) => {
+		const modelId = entry.model.modelId.trim();
+		if (!modelId) return entry;
+		const found = catalogForFamily(catalog, entry.familyId ?? "").find((item) => modelIdMatchesCatalog(modelId, item));
+		if (!found) {
+			missing.push(modelId);
+			return entry;
+		}
+		const priced = catalogEntryToPriced(found, usdCnyRate);
+		matched.push(modelId);
+		return {
+			...entry,
+			model: {
+				...entry.model, currency: priced.currency,
+				inputCost: priced.inputCost, outputCost: priced.outputCost,
+				cacheReadCost: priced.cacheReadCost, cacheWriteCost: priced.cacheWriteCost,
+			},
+		};
+	});
+	return { entries: synced, matched, missing };
 }
