@@ -9,6 +9,7 @@ import type { MessageLocation, SearchProgress } from "../chat/historySearch";
 import { SearchText } from "./SearchText";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { ProjectRemoveDialog } from "./ProjectRemoveDialog";
+import { isMacPlatform } from "./settingsNavigation";
 
 
 const highlight = (text: string, query: string) => {
@@ -245,7 +246,7 @@ export function Sidebar({ projects, chats, activeId, selectedProjectId, homeActi
 		<aside className="sidebar" aria-label="项目与聊天导航">
 			{deleting && <ConfirmDialog title={deleting.kind === "purge" ? "永久删除聊天" : "删除聊天"} description={deleting.kind === "purge" ? `永久删除 ${deleting.name}？${deleting.hasFile ? "将直接删除 pi 会话目录中的对话文件，无法恢复。" : "该聊天还没有 pi 会话文件，只会移除侧栏索引。"}` : `从侧栏删除 ${deleting.name}，pi 会话文件会保留。`} onConfirm={() => { if (deleting.kind === "purge") void onPurgeChat?.(deleting.id); else onDeleteChat(deleting.id); }} onClose={() => setDeleting(undefined)} />}
 			{removingProject && <ProjectRemoveDialog name={removingProject.name} chatCount={removingProject.chatCount} sessionCount={removingProject.sessionCount} onHide={() => onHideProject(removingProject.id)} onPurge={() => void onPurgeProject(removingProject.id)} onClose={() => setRemovingProject(undefined)} />}
-			<button className="new-chat" onClick={onNewChat} disabled={!projects.length}><Icon name="edit" /><span>新聊天</span><span className="shortcut">Ctrl N</span></button>
+			<button className="new-chat" onClick={onNewChat} disabled={!projects.length}><Icon name="edit" /><span>新聊天</span><span className="shortcut">{isMacPlatform() ? "Cmd+N" : "Ctrl+N"}</span></button>
 			<button className={`home-nav ${homeActive ? "active" : ""}`} onClick={onHome} disabled={!projects.length} aria-current={homeActive ? "page" : undefined}><Icon name="home" /><span>主页</span></button>
 			{searchOpen && <div className="sidebar-search"><Icon name="search" size={14} /><Input autoFocus aria-label="搜索项目与聊天" placeholder="搜索项目与聊天" value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); setSearch(""); setSearchOpen(false); } }} /><IconButton size="compact"  onClick={() => { setSearch(""); setSearchOpen(false); }} aria-label="关闭搜索" title="关闭搜索"><Icon name="close" size={13} /></IconButton></div>}
 			<div className="sidebar-scroll" ref={scrollRef} onScroll={updateScrollFades} onTransitionEnd={updateScrollFades}>

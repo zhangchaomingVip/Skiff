@@ -23,7 +23,7 @@ const paths = {
 	arrow: "M12 19V5m-6 6 6-6 6 6",
 	stop: "M6 6h12v12H6Z",
 	close: "m6 6 12 12M6 18 18 6",
-	minimize: "M5 19h14",
+	minimize: "M5 12h14",
 	maximize: "M4 4h16v16H4Z",
 	code: "m8 7-5 5 5 5m8-10 5 5-5 5m-3-14-2 18",
 	check: "m5 12 4 4L19 6",

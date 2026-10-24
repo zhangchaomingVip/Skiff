@@ -86,7 +86,7 @@ export function Popover({ anchor, onClose, className = "", gap = 6, children, ..
 			const rect = anchor.current?.getBoundingClientRect();
 			const panel = ref.current;
 			if (!rect || !panel) return;
-			const width = Math.min(360, window.innerWidth - 24);
+			const width = Math.min(panel.offsetWidth || 360, window.innerWidth - 24);
 			const below = window.innerHeight - rect.bottom - 12;
 			const above = rect.top - 12;
 			const maxHeight = Math.max(0, Math.min(window.innerHeight - 24, Math.max(above, below) - gap));

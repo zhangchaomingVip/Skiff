@@ -35,8 +35,6 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .titlebar-brand { padding-right: var(--space-2); font-size: var(--font-size-md); font-weight: var(--font-weight-label); letter-spacing: -.2px; }
 .titlebar-menu-trigger { height: var(--control-compact); padding: 0 var(--space-2); border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--secondary); font-size: var(--font-size-md); cursor: pointer; }
 .titlebar-menu-trigger:hover, .titlebar-menu-trigger[aria-expanded="true"] { background: var(--hover); color: var(--text); }
-.titlebar-menu .ui-button { width: 100%; justify-content: space-between; gap: var(--space-4); padding: var(--space-2) var(--space-3); font-size: var(--font-size-md); }
-.titlebar-menu .shortcut { color: var(--muted); font-size: var(--font-size-xs); }
 .about-dialog { width: min(420px, calc(100vw - 32px)); }
 .about-dialog p { margin: var(--space-2) 0 0; color: var(--secondary); font-size: var(--font-size-sm); line-height: 1.6; }
 .about-dialog .brand-mark { width: 48px; height: 48px; flex: 0 0 48px; margin: var(--space-2) 0 var(--space-3); }
@@ -1301,4 +1299,21 @@ span.provider-mark.generic { display: inline-flex; align-items: center; justify-
 @layer accessibility {
 /* The wrapper draws the focus ring; the inner input must not draw a second one. */
 .project-name-field > .ui-input:focus-visible { outline: none; }
+}
+
+@layer components {
+/* Titlebar dropdown menus. These overrides must outrank the ghost-variant
+   and .ui-popover rules in ui.css, which loads after this file; matching its
+   selectors keeps that true within the shared components layer. */
+.ui-popover.titlebar-menu { width: max-content; min-width: 220px; max-width: calc(100vw - 24px); padding: var(--space-1-5); }
+.ui-popover.titlebar-menu > [role="menu"] { display: flex; flex-direction: column; gap: var(--space-0-5); }
+.ui-popover.titlebar-menu .ui-button { width: 100%; padding: 0 var(--space-2-5); border-radius: var(--radius-md); font-size: var(--font-size-md); font-weight: var(--font-weight-regular); }
+.ui-popover.titlebar-menu .ui-button[data-variant=ghost] { color: var(--foreground); }
+.ui-popover.titlebar-menu .ui-button-content { flex: 1; justify-content: space-between; gap: var(--space-6); }
+.ui-popover.titlebar-menu .shortcut { margin: 0; padding: 0; background: transparent; color: var(--muted); font-size: var(--font-size-sm); letter-spacing: 0; }
+.ui-popover .titlebar-menu-separator { flex: none; height: 1px; margin: var(--space-0-5) calc(-1 * var(--space-1)); background: var(--border); }
+}
+
+@layer accessibility {
+.titlebar-menu .ui-button:disabled { border-color: transparent; background: transparent; color: var(--muted); }
 }
