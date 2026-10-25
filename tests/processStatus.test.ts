@@ -25,12 +25,12 @@ test("visible narration is not repeated in status and still suppresses generic w
 	assert.equal(working.detailLabel, "正在读取文件");
 	assert.equal(working.label, "正在读取文件");
 	const waiting = processStatus(groupFor([...blocks, result("one")]), true);
-	assert.equal(waiting.detailLabel, "读取文件 1 次");
-	assert.equal(waiting.label, "读取文件 1 次");
+	assert.equal(waiting.detailLabel, "读取了 1 个文件");
+	assert.equal(waiting.label, "读取了 1 个文件");
 	assert.equal(waiting.modelLabel, undefined);
 	assert.equal(waiting.active, true);
 	assert.equal(waiting.visible, true);
-	assert.equal(processStatus(groupFor([tool("one"), result("one")]), true).label, "读取文件 1 次");
+	assert.equal(processStatus(groupFor([tool("one"), result("one")]), true).label, "读取了 1 个文件");
 	assert.equal(processStatus(groupFor([]), true).label, "正在思考");
 });
 
@@ -42,8 +42,8 @@ test("collapsed thinking keeps prose in details and prioritizes concrete activit
 	assert.equal(working.modelLabel, undefined);
 	assert.equal(working.detailLabel, "正在读取文件");
 	const waiting = processStatus(groupFor([thinking, tool("one"), result("one")]), true);
-	assert.equal(waiting.label, "读取文件 1 次");
-	assert.equal(waiting.detailLabel, "读取文件 1 次");
+	assert.equal(waiting.label, "读取了 1 个文件");
+	assert.equal(waiting.detailLabel, "读取了 1 个文件");
 	const active = processStatus(groupFor([thinking]), true);
 	assert.equal(active.detailLabel, "正在思考");
 	assert.equal(active.label, "正在思考");
@@ -57,7 +57,7 @@ test("thinking placeholder yields to the first content without reappearing after
 	const thinking: ContentBlock = { kind: "thinking", text: "核对配置" };
 	for (const blocks of [[thinking], [thinking, tool("one"), result("one")]]) {
 		const status = processStatus(groupFor(blocks), true);
-		assert.match(status.label, /正在思考|读取文件 1 次/);
+		assert.match(status.label, /正在思考|读取了 1 个文件/);
 		assert.doesNotMatch(status.label, /字|段/);
 		assert.equal(status.active, true);
 		assert.equal(status.visible, true);
@@ -74,11 +74,11 @@ test("completed tools retain a nonempty summary while the model prepares its nex
 	assert.equal(working.label, "正在并行运行 2 个工具（1/2）");
 	const completed = [...blocks, result("grep"), result("find")];
 	const waiting = processStatus(groupFor(completed), true);
-	assert.equal(waiting.label, "搜索内容 1 次 · 查找文件 1 次");
+	assert.equal(waiting.label, "搜索了 1 次 · 查找了 1 个文件");
 	assert.equal(waiting.visible, true);
 	const settled = processStatus(groupFor(completed, false), false);
 	assert.equal(settled.visible, true);
-	assert.match(settled.label, /搜索内容 1 次 · 查找文件 1 次/);
+	assert.match(settled.label, /搜索了 1 次 · 查找了 1 个文件/);
 	assert.equal(waiting.label, settled.label);
 	const shortThinking: ContentBlock = { kind: "thinking", text: "核对配置" };
 	assert.equal(processStatus(groupFor([shortThinking]), true).label, "正在思考");
@@ -108,9 +108,9 @@ test("process rows remain visible from tool execution through waiting, next thin
 		assert.ok(status.label.trim());
 		assert.doesNotMatch(status.label, /接下来检查配置文件/);
 	}
-	assert.equal(processStatus(waiting, true).label, "读取文件 1 次");
+	assert.equal(processStatus(waiting, true).label, "读取了 1 个文件");
 	assert.match(processStatus(thinking, true).label, /正在思考/);
-	assert.match(processStatus(answered, true).label, /读取文件 1 次/);
+	assert.match(processStatus(answered, true).label, /读取了 1 个文件/);
 });
 
 test("empty settled rows disappear while terminal outcomes remain visible without leading separators", () => {
@@ -142,7 +142,7 @@ test("unrelated later successes never clear collapsed failure signals", () => {
 		const state = processStatus(group, running, outcome);
 		assert.equal(state.error, true);
 		assert.match(state.label, /有调用失败/);
-		assert.match(state.label, /读取文件 2 次/);
+		assert.match(state.label, /读取了 2 个文件/);
 	}
 	assert.equal(group.entries[0].result?.isError, true);
 });
@@ -155,7 +155,7 @@ test("a following reply freezes its process row before the turn finishes", () =>
 	];
 	const group = turnProcessPresentation(messages).groups[0];
 	assert.equal(group.advanced, true);
-	assert.equal(processStatus(group, true).label, "读取文件 1 次");
+	assert.equal(processStatus(group, true).label, "读取了 1 个文件");
 	const completed = processStatus(group, false, "stop");
 	assert.equal(completed.modelLabel, undefined);
 	assert.equal(completed.label, processStatus(group, true).label);
@@ -178,13 +178,13 @@ test("each narrated segment settles when the next content starts, including whil
 	const afterText = turnProcessPresentation([user, first, next], live).groups[0];
 	assert.equal(afterText.pending, true);
 	assert.equal(afterText.advanced, true);
-	assert.equal(processStatus(afterText, true).label, "读取文件 1 次 · 等待结果");
+	assert.equal(processStatus(afterText, true).label, "读取了 1 个文件 · 等待结果");
 	assert.equal(processStatus(afterText, true).modelLabel, undefined);
 	const frozenCounts = new Map([[afterText.id, afterText.counts]]);
 	const withTool = turnProcessPresentation([user, { ...first, blocks: [...first.blocks, result("one")] }, { ...next, blocks: [...next.blocks, tool("two", "bash")] }], { ...live, frozenCounts }).groups;
 	assert.equal(withTool[0].pending, false);
 	assert.deepEqual(withTool[0].counts, afterText.counts);
-	assert.equal(processStatus(withTool[0], true).label, "读取文件 1 次");
+	assert.equal(processStatus(withTool[0], true).label, "读取了 1 个文件");
 	assert.equal(processStatus(withTool[1], true).label, "正在运行命令");
 	assert.equal(processStatus(withTool[0], false, "stop").label, processStatus(withTool[0], true).label);
 	assert.equal(first.blocks[0].kind, "text");
@@ -193,14 +193,14 @@ test("each narrated segment settles when the next content starts, including whil
 
 test("a stopped tool sequence settles to counts even without final reply", () => {
 	const group = groupFor([{ kind: "text", text: "先读取配置文件，确认各模型的连接状态。" }, tool("read")], false);
-	assert.match(processStatus(group, false, "stop").label, /^读取文件 1 次/);
+	assert.match(processStatus(group, false, "stop").label, /^读取了 1 个文件/);
 	assert.equal(processStatus(group, false, "stop").modelLabel, undefined);
 });
 
 test("terminal failures identify tools or model response, and stopped work never claims success", () => {
 	const failed = processStatus(groupFor([tool("bad"), result("bad", true)], false), false, "error");
 	assert.equal(failed.error, true);
-	assert.match(failed.label, /读取文件 1 次（1 失败）/);
+	assert.match(failed.label, /读取了 1 个文件（1 失败）/);
 	assert.match(processStatus(groupFor([tool("missing")], false), false, "error").label, /未收到工具结果/);
 	assert.match(processStatus(groupFor([{ kind: "thinking", text: "分析" }], false), false, "error").label, /模型响应失败/);
 	for (const outcome of ["manual", "aborted"]) {

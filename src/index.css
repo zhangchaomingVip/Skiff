@@ -1293,7 +1293,10 @@ span.provider-mark.generic { display: inline-flex; align-items: center; justify-
 }
 
 @layer components {
-.turn-process-head { margin-bottom: var(--space-2); border-bottom: 1px solid var(--border); }
+.turn-process-head { margin-bottom: var(--space-2); }
+/* The divider tracks the summary row so it stays under the header whether the fold is open or closed. */
+.turn-process-head > .process-row { border-bottom: 1px solid var(--border); }
+.turn-process-head[open] > .process-detail-content { padding-top: var(--space-2); }
 .turn-process-head > .process-row .process-row-label { flex: 0 1 auto; min-height: var(--space-5); }
 .turn-process-head > .process-row .process-row-trailing { flex: 0 0 auto; margin-left: var(--space-2); gap: var(--space-2); }
 .turn-process-head > .process-row .process-row-trailing .disclosure { order: 1; }

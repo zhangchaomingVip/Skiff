@@ -37,11 +37,11 @@ test("thinking size and steps update during streaming, completion counts at a fo
 test("tool actions expose pending calls live and include non-command categories", () => {
 	const blocks = [thought(), call("one"), call("two"), result("two")];
 	let group = turnProcessPresentation([user, assistant("a", blocks)], live).groups[0];
-	assert.match(processCountLabel(group), /执行命令 2 次/);
+	assert.match(processCountLabel(group), /执行 2 条命令/);
 	assert.equal(group.pending, true);
 	group = turnProcessPresentation([user, assistant("a", [...blocks, result("one"), call("read", "read"), result("read")])], live).groups[0];
 	assert.deepEqual(group.counts, { thinkingSegments: 1, thinkingChars: 2, steps: 4 });
-	assert.match(processCountLabel(group), /执行命令 2 次 · 读取文件 1 次/);
+	assert.match(processCountLabel(group), /执行 2 条命令 · 读取 1 个文件/);
 	assert.equal(group.pending, false);
 });
 
@@ -51,7 +51,7 @@ test("all alternating process steps before the first reply collapse across messa
 	const { groups, presentation } = turnProcessPresentation(messages);
 	assert.equal(groups.length, 1);
 	assert.deepEqual(groups[0].counts, { thinkingSegments: 30, thinkingChars: 60, steps: 60 });
-	assert.match(processCountLabel(groups[0]), /执行命令 30 次/);
+	assert.match(processCountLabel(groups[0]), /执行 30 条命令/);
 	assert.equal(presentation.get("a0")!.head, groups[0]);
 	assert.equal(presentation.get("a1")!.head, undefined);
 	assert.deepEqual([...presentation.get("a29")!.hidden], [0, 1]);
@@ -76,7 +76,7 @@ test("reply interruptions keep every text visible while labeling following tool 
 	assert.equal(groups[0].counts.thinkingChars, 2);
 	assert.equal(presentation.get("a")!.groups.get(2), groups[1]);
 	assert.equal(presentation.get("a")!.groups.get(6), groups[2]);
-	assert.equal(processCountLabel(groups[1]), "执行命令 1 次");
+	assert.equal(processCountLabel(groups[1]), "执行 1 条命令");
 	assert.deepEqual(groups[2].narrationTexts, ["第二段"]);
 	for (const key of [1, 5, 8]) assert.equal(presentation.get("a")!.hidden.has(key), false);
 });
@@ -91,8 +91,8 @@ test("frozen counters survive later result updates while status and process deta
 	assert.equal(groups[0].pending, false);
 	assert.equal(groups[0].error, true);
 	assert.equal(groups[0].entries[1].result?.text, "输出 one");
-	assert.match(processCountLabel(groups[0]), /执行命令 1 次（1 失败）/);
-	assert.match(processCountLabel(groups[1]), /执行命令 1 次/);
+	assert.match(processCountLabel(groups[0]), /执行 1 条命令（1 失败）/);
+	assert.match(processCountLabel(groups[1]), /执行 1 条命令/);
 });
 
 test("a group ID stays stable through streamed arguments, completions and further messages", () => {
@@ -126,7 +126,7 @@ test("restored results pair out of order and empty usage receipts do not create 
 	]);
 	const { groups } = turnProcessPresentation(restored);
 	assert.equal(groups.length, 1);
-	assert.match(processCountLabel(groups[0]), /执行命令 2 次/);
+	assert.match(processCountLabel(groups[0]), /执行 2 条命令/);
 	assert.equal(processBlocks(restored[1])[1].result?.text, "第一条输出");
 });
 
@@ -158,7 +158,7 @@ test("optional active IDs and resuming a prelude keep counters live until actual
 test("thinking-only groups omit zero tool actions and tool-only groups omit zero thinking", () => {
 	const { groups } = turnProcessPresentation([user, assistant("a", [thought("分析一下"), text("正文"), thought("继续"), { kind: "tool", id: "read", name: "read", argsText: '{"path":"skills/README.md"}', done: true }, result("read"), text("回答")])]);
 	assert.equal(processCountLabel(groups[0]), "查看思考过程");
-	assert.equal(processCountLabel(groups[1]), "读取文件 1 次");
+	assert.equal(processCountLabel(groups[1]), "读取 1 个文件");
 });
 
 test("mixed actions and failures aggregate across messages without branding successful actions failed", () => {
@@ -167,7 +167,7 @@ test("mixed actions and failures aggregate across messages without branding succ
 		assistant("a", [read("a", "a.md"), result("a"), read("b", "b.md"), result("b", true)]),
 		assistant("b", [call("s", "search"), result("s"), call("c"), result("c"), text("完成")]),
 	]);
-	assert.equal(processCountLabel(groups[0]), "查看 4 次工具调用");
+	assert.equal(processCountLabel(groups[0]), "调用 4 次工具");
 });
 
 test("reasoning omits counts and yields to tools in compact summaries", () => {
@@ -177,7 +177,7 @@ test("reasoning omits counts and yields to tools in compact summaries", () => {
 		call("web", "web_search"), result("web"), text("结论"),
 	])]);
 	assert.equal(processCountLabel(groups[0]), "查看思考过程");
-	assert.equal(processCountLabel(groups[1]), "查看 3 次工具调用");
+	assert.equal(processCountLabel(groups[1]), "调用 3 次工具");
 	assert.doesNotMatch(processCountLabel(groups[1]), /思考过程|段思考/);
 	const liveGroup = turnProcessPresentation([user, assistant("a", [thought("分析".repeat(600))], true)], live).groups[0];
 	assert.equal(processCountLabel(liveGroup, true), "正在思考…");
@@ -185,7 +185,7 @@ test("reasoning omits counts and yields to tools in compact summaries", () => {
 
 test("orphan failures remain visible in collapsed process summaries", () => {
 	const { groups } = turnProcessPresentation([user, assistant("a", [text("正文"), { kind: "toolResult", id: "orphan", name: "read", text: "无法读取", isError: true }])]);
-	assert.equal(processCountLabel(groups[1]), "读取文件 1 次（1 失败）");
+	assert.equal(processCountLabel(groups[1]), "读取 1 个文件（1 失败）");
 });
 
 test("file discovery preserves its own category without inflating file-read totals", () => {
@@ -195,7 +195,7 @@ test("file discovery preserves its own category without inflating file-read tota
 		{ kind: "toolResult", id: "glob", name: "glob", text: "skills/demo/SKILL.md\nskills/other/SKILL.md", isError: false },
 		text("找到了说明文件。"),
 	])]);
-	assert.equal(processCountLabel(groups[0]), "查找文件 1 次");
+	assert.equal(processCountLabel(groups[0]), "查找 1 个文件");
 });
 
 test("tool-adjacent narration stays in the reply without also labeling its process group", () => {
@@ -210,7 +210,7 @@ test("tool-adjacent narration stays in the reply without also labeling its proce
 	assert.equal(processStepLabel(groups[1]), undefined);
 	assert.equal(processStepLabel(groups[2]), undefined);
 	assert.equal(processStepLabel(groups[0]), "先检查项目中的配置和测试入口，明确后续修改范围。");
-	assert.match(processStatus(groups[1], false).label, /读取文件 1 次/);
+	assert.match(processStatus(groups[1], false).label, /读取了 1 个文件/);
 	assert.equal(presentation.get("a")!.hidden.has(1), false);
 	assert.equal(presentation.get("b")!.hidden.has(2), false);
 	assert.equal(presentation.get("b")!.hidden.has(3), false);
@@ -250,7 +250,7 @@ test("long thinking stays available while tools take priority in summaries", () 
 	const reasoning = "先核对模型配置与请求参数，确认不同协议的映射行为。然后检查历史消息恢复和实时事件的顺序，定位可能丢失旁白的环节。";
 	const group = turnProcessPresentation([user, assistant("a", [thought(reasoning), call("read", "read"), result("read")])]).groups[0];
 	assert.equal(processStepLabel(group), reasoning);
-	assert.match(processStatus(group, false).label, /读取文件 1 次/);
+	assert.match(processStatus(group, false).label, /读取了 1 个文件/);
 	assert.equal(group.counts.steps, 2);
 });
 
