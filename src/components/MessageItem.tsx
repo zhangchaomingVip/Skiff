@@ -1,7 +1,7 @@
 import { outcomeLabel } from "../chat/interactions";
 import { Button } from "./ui";
 import { SearchText } from "./SearchText";
-import { memo } from "react";
+import { memo, useMemo } from "react";
 import type { ChatMessage, ContentBlock } from "../chat/types";
 import { splitAttachments } from "../chat/textAttachments";
 import { shouldShowThinking } from "../chat/thinking";
@@ -17,8 +17,10 @@ import { ImagePreview } from "./ImagePreview";
 import { ProcessDisclosure } from "./ProcessDisclosure";
 import { TOOL_ICONS } from "./toolIcons";
 import { processBlocks, type ProcessPresentation } from "../chat/turnProcess";
+import { turnFileOps } from "../chat/turnResults";
 import { TurnProcessGroup } from "./TurnProcessGroup";
 import { ThinkingContent } from "./ThinkingContent";
+import { ResultCards } from "./ResultCards";
 
 /** Stable completion clock shown beside a user message. */
 const formatMessageTime = (ts?: number): string | undefined => {
@@ -79,22 +81,27 @@ export const MessageItem = memo(function MessageItem({ runStartedAt, onEdit, onC
 	const head = processPresentation?.head;
 	const showHeader = !isUser && (!!head || showContinue);
 	const showUsage = !isUser && !turnRunning && !message.streaming && !(isLast && running) && !!turnMessages;
+	// Structured file outcomes ride on the turn's tail message once the turn settles,
+	// so cards never appear mid-stream ahead of the final body.
+	const fileOps = useMemo(() => (turnMessages ? turnFileOps(turnMessages) : []), [turnMessages]);
+	const showCards = !!turnMessages && !turnRunning && !message.streaming && fileOps.length > 0;
 	// Intermediate process-only messages vanish when the turn is collapsed.
-	if (!nodes.length && !showHeader && !showUsage && !showTyping && !showActions && !searchQuery) return null;
-	const metadataOnly = !nodes.length && !showHeader && !showTyping;
+	if (!nodes.length && !showHeader && !showUsage && !showTyping && !showActions && !showCards && !searchQuery) return null;
+	const metadataOnly = !nodes.length && !showHeader && !showTyping && !showCards;
 	const showTime = message.timestamp !== undefined && !showUsage && (isUser || !!turnMessages);
 	const MessageTag = isUser ? "article" : "div";
 	return <MessageTag data-message-id={message.id} data-search-hit={searchQuery ? "true" : undefined} className={`msg ${isUser ? "user" : "assistant"}${compact ? " compact" : ""}${metadataOnly ? " metadata-only" : ""}${searchQuery ? " search-message-hit" : ""}`} aria-label={isUser ? "你的消息" : undefined}>
 		<div className={isUser ? "message-bubble" : "message-segment"}>
 		{searchQuery && <details open className="search-source"><summary>搜索命中原文</summary><pre><SearchText text={text} query={searchQuery} /></pre></details>}
-		{!metadataOnly && <div className="msg-body">
-			{isUser && message.turnResult === "manual" && <span className="turn-outcome manual">已手动停止{onContinue && <Button disabled={continuing} onClick={onContinue}>继续</Button>}</span>}
-			{showHeader && <div className="turn-header">
-				{processPresentation?.head && renderProcess(processPresentation.head)}
-				{showContinue && <Button disabled={continuing} onClick={onContinue}>继续</Button>}
+			{!metadataOnly && <div className="msg-body">
+				{isUser && message.turnResult === "manual" && <span className="turn-outcome manual">已手动停止{onContinue && <Button disabled={continuing} onClick={onContinue}>继续</Button>}</span>}
+				{showHeader && <div className="turn-header">
+					{processPresentation?.head && renderProcess(processPresentation.head)}
+					{showContinue && <Button disabled={continuing} onClick={onContinue}>继续</Button>}
+				</div>}
+				{!nodes.length && showTyping ? <span className="typing">正在思考…</span> : nodes}
 			</div>}
-			{!nodes.length && showTyping ? <span className="typing">正在思考…</span> : nodes}
-		</div>}
+			{showCards && <ResultCards ops={fileOps} />}
 		{(showActions || showUsage || showTime) && <div className={`message-actions${showUsage ? " with-usage" : ""}${!isUser && !isLast ? " is-historical" : ""}`}>
 			{(showActions || (isUser && showTime)) && <div className="message-buttons">
 				{isUser && showTime && <time className="msg-time" dateTime={new Date(message.timestamp!).toISOString()}>{formatMessageTime(message.timestamp)}</time>}

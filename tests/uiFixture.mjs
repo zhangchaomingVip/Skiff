@@ -1,6 +1,6 @@
 import { seedPolishPreview } from "./polishFixture.mjs";
 
-export const fixtures = ["launcher", "single", "multi", "unknown", "empty", "loading", "error", "chat", "long", "settings", "settings-info", "picker", "voyage", "voyage-output", "voyage-thinking", "voyage-tool", "voyage-moored", "voyage-high", "authorization", "sidebar", "archive", "visual", "tool-spacing", "process-rows", "repeated-process", "process-folding", "process-actions", "file-discovery", "content-replay-a", "content-replay-b"];
+export const fixtures = ["launcher", "single", "multi", "unknown", "empty", "loading", "error", "chat", "long", "settings", "settings-info", "picker", "voyage", "voyage-output", "voyage-thinking", "voyage-tool", "voyage-moored", "voyage-high", "authorization", "sidebar", "archive", "visual", "tool-spacing", "process-rows", "repeated-process", "process-folding", "process-actions", "file-discovery", "content-replay-a", "content-replay-b", "chat-polish-031"];
 
 // This entry runs only on the separate preview origin. It never uses real pi.
 export function preparePreview(target) {
@@ -59,7 +59,7 @@ export function preparePreview(target) {
 		}));
 		for (const chat of chats) if (chat.hasMessages) chat.selectedModel = { provider: "skiff-relay-r1-deepseek", id: "deepseek-chat", modelId: "deepseek-chat", routeId: "route-deepseek-r1", offerId: "route-deepseek-r1/deepseek-chat" };
 		storage.setItem("skiff.workspace.v1", JSON.stringify({ version: 1, projects: [project, otherProject], chats, activeId: "archive-active" }));
-	} else if (["chat", "long", "picker", "voyage", "authorization", "visual", "tool-spacing", "process-rows", "repeated-process", "process-folding", "process-actions", "file-discovery", "content-replay-a", "content-replay-b"].includes(fixture) || fixture.startsWith("voyage-")) {
+	} else if (["chat", "long", "picker", "voyage", "authorization", "visual", "tool-spacing", "process-rows", "repeated-process", "process-folding", "process-actions", "file-discovery", "content-replay-a", "content-replay-b", "chat-polish-031"].includes(fixture) || fixture.startsWith("voyage-")) {
 		seedPolishPreview(storage, fixture === "long");
 		const sessions = JSON.parse(storage.getItem("skiff.test.sessions"));
 		if (fixture === "content-replay-a") sessions["polish-preview.jsonl"] = [
@@ -207,6 +207,50 @@ export function preparePreview(target) {
 			{ role: "toolResult", toolCallId: "visual-read", toolName: "read", content: "已读取仪表组件。" },
 			{ role: "assistant", content: "### 检查完成\n\n读数已移出指针扫掠区域。船、波浪与航程保留，刻度在两种主题下均清晰可读。\n\n- 指针与中心保持连接\n- 过程信息可通过键盘折叠\n- Token 与费用明细可展开查看", usage: { input: 73, cacheRead: 1917, cacheWrite: 0, output: 190, totalTokens: 2180 }, durationMs: 3000,
 				routeSnapshot: { providerKey: "skiff-relay-r1-deepseek", familyId: "deepseek", familyName: "DeepSeek", relayId: "r1", modelId: "deepseek-chat", relayName: "官方直连", billingAccountId: "演示账户", currency: "CNY", inputCost: .3, outputCost: 1.2, cacheReadCost: .3, cacheWriteCost: .3 } },
+		];
+		if (fixture === "chat-polish-031") sessions["polish-preview.jsonl"] = [
+			{ role: "user", content: "展示命令动作摘要、结构化结果卡片和新的排版层级。" },
+			{ role: "assistant", content: [
+				{ type: "thinking", thinking: "先并行查看目录、运行测试并检查仓库状态，再演示高风险命令的标题保留。" },
+				{ type: "toolCall", id: "p31-ls", name: "bash", arguments: { command: "ls -la" } },
+				{ type: "toolCall", id: "p31-ls2", name: "bash", arguments: { command: "cd packages/app && ls" } },
+				{ type: "toolCall", id: "p31-test", name: "bash", arguments: { command: "npm test" } },
+				{ type: "toolCall", id: "p31-git", name: "bash", arguments: { command: "git status" } },
+				{ type: "toolCall", id: "p31-rm", name: "bash", arguments: { command: "rm -rf dist/cache" } },
+				{ type: "toolCall", id: "p31-pipe", name: "bash", arguments: { command: "cat package.json | head -20" } },
+			] },
+			{ role: "toolResult", toolCallId: "p31-ls", name: "bash", content: "src/\npackage.json" },
+			{ role: "toolResult", toolCallId: "p31-ls2", name: "bash", content: "demo/\nREADME.md" },
+			{ role: "toolResult", toolCallId: "p31-test", name: "bash", content: "all tests passed" },
+			{ role: "toolResult", toolCallId: "p31-git", name: "bash", content: "nothing to commit, working tree clean" },
+			{ role: "toolResult", toolCallId: "p31-rm", name: "bash", content: "" },
+			{ role: "toolResult", toolCallId: "p31-pipe", name: "bash", isError: true, content: "npm error Missing script" },
+			{ role: "assistant", content: "命令折叠行现在显示确定性动作摘要，展开后保留完整命令、工作目录、退出状态和输出。" },
+			{ role: "user", content: "单独修改一个文件，看看单文件结果卡。" },
+			{ role: "assistant", content: [
+				{ type: "thinking", thinking: "先更新说明文件，再演示单文件卡片。" },
+				{ type: "toolCall", id: "p31-write", name: "write", arguments: { path: "docs/preview.md", content: "# 预览" } },
+			] },
+			{ role: "toolResult", toolCallId: "p31-write", name: "write", content: "已写入 docs/preview.md" },
+			{ role: "assistant", content: "### 单文件修改\n\n结果卡片出现在正文之后、操作栏之前，只展示真实数据。" },
+			{ role: "assistant", content: [
+				{ type: "toolCall", id: "p31-edit-a", name: "edit", arguments: { path: "src/App.tsx", oldText: "const width = 800;", newText: "const width = 900;" } },
+				{ type: "toolCall", id: "p31-edit-b", name: "edit", arguments: { path: "src/components/MessageItem.tsx", oldText: "const ready = false;", newText: "const ready = true;" } },
+				{ type: "toolCall", id: "p31-edit-c", name: "edit", arguments: { path: "src/chat/toolRuns.ts", oldText: "export function toolRunSummary", newText: "export function toolRunSummaryV2" } },
+			] },
+			{ role: "toolResult", toolCallId: "p31-edit-a", name: "edit", content: "ok", details: { diff: "-const width = 800;\n+const width = 900;" } },
+			{ role: "toolResult", toolCallId: "p31-edit-b", name: "edit", content: "ok", details: { diff: "-const ready = false;\n+const ready = true;\n+trackReady();" } },
+			{ role: "toolResult", toolCallId: "p31-edit-c", name: "edit", content: "ok", details: { diff: "-export function toolRunSummary\n+export function toolRunSummaryV2" } },
+			{ role: "assistant", content: "### 多文件修改\n\n多个文件聚合为一张卡，展开后查看每个文件的完整路径和增删行数。" },
+			{ role: "assistant", content: [
+				{ type: "toolCall", id: "p31-del-a", name: "delete", arguments: { path: "tmp/old-cache.json" } },
+				{ type: "toolCall", id: "p31-del-b", name: "delete", arguments: { path: "tmp/stale-report.log" } },
+			] },
+			{ role: "toolResult", toolCallId: "p31-del-a", name: "delete", content: "removed" },
+			{ role: "toolResult", toolCallId: "p31-del-b", name: "delete", content: "removed" },
+			{ role: "assistant", content: [
+				{ type: "text", text: "### 汇总\n\n- 删除结果卡显示数量和可展开清单，没有 diff 数据就不显示增删行数\n- 纯问答不渲染结果卡片\n\n| 区域 | 状态 |\n| --- | --- |\n| 命令折叠行 | 已更新 |\n| 结果卡片 | 已更新 |" },
+			], usage: { input: 4096, cacheRead: 512, cacheWrite: 0, output: 234, totalTokens: 4842 }, durationMs: 32000 },
 		];
 		for (const messages of Object.values(sessions)) messages.forEach((message, index) => {
 			message.timestamp = now - 60000 + index * 1000;

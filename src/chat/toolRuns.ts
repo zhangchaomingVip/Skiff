@@ -1,7 +1,8 @@
 import type { ContentBlock } from "./types";
+import { commandRunLabel } from "./commandSummary";
 
 /** Coarse category used to pick an icon and a human phrase for a tool call. */
-export type ToolKind = "read" | "write" | "find" | "list" | "command" | "search" | "web" | "other";
+export type ToolKind = "read" | "write" | "delete" | "find" | "list" | "command" | "search" | "web" | "other";
 
 type Tool = Extract<ContentBlock, { kind: "tool" }>;
 type Result = Extract<ContentBlock, { kind: "toolResult" }>;
@@ -11,18 +12,20 @@ const KIND_BY_NAME: Record<string, ToolKind> = {
 	read: "read", view: "read", view_image: "read", cat: "read", open: "read",
 	glob: "find", find: "find",
 	ls: "list", list: "list", tree: "list",
-	write: "write", edit: "write", multi_edit: "write", multiedit: "write", apply_patch: "write", patch: "write", create: "write", delete: "write", remove: "write", move: "write", rename: "write",
+	write: "write", edit: "write", multi_edit: "write", multiedit: "write", apply_patch: "write", patch: "write", create: "write", move: "write", rename: "write",
+	delete: "delete", remove: "delete", delete_file: "delete", remove_file: "delete",
 	bash: "command", shell: "command", exec: "command", run: "command", command: "command", terminal: "command", powershell: "command", cmd: "command",
 	grep: "search", search: "search", rg: "search", fetch: "search", web_fetch: "search",
 	web_search: "web",
 };
 
-const RUNNING_PHRASES: Record<ToolKind, string> = { read: "读取文件", write: "编辑文件", find: "查找文件", list: "列举目录", command: "执行命令", search: "搜索内容", web: "联网搜索", other: "调用工具" };
+const RUNNING_PHRASES: Record<ToolKind, string> = { read: "读取文件", write: "编辑文件", delete: "删除文件", find: "查找文件", list: "列举目录", command: "执行命令", search: "搜索内容", web: "联网搜索", other: "调用工具" };
 
 /** Settled rows read "执行了 3 条命令"; running rows drop the past-tense suffix. */
 const ACTION_PHRASES: Record<ToolKind, { verb: string; unit: string }> = {
 	read: { verb: "读取", unit: "个文件" },
 	write: { verb: "编辑", unit: "个文件" },
+	delete: { verb: "删除", unit: "个文件" },
 	find: { verb: "查找", unit: "个文件" },
 	list: { verb: "列举", unit: "个目录" },
 	command: { verb: "执行", unit: "条命令" },
@@ -68,6 +71,8 @@ export interface ToolRunSummary {
 	running: boolean;
 	error: boolean;
 	steps: number;
+	/** Plain transcript title that ToolSummaryLabel must not re-parse into verb/count spans. */
+	plain?: boolean;
 }
 
 function actionLabel(kind: ToolKind, items: ToolRunItem[], settled = false): string {
@@ -88,6 +93,12 @@ export function toolActionSummaries(items: ToolRunItem[], settled = false): stri
 /** Compact Codex-style summary of a (possibly mixed) run of consecutive tool calls. */
 export function toolRunSummary(items: ToolRunItem[]): ToolRunSummary {
 	const running = items.some((item) => !item.result);
+	const error = items.some((item) => item.result?.isError);
+	// A run of parseable shell calls shares one deterministic action title.
+	if (items.every((item) => toolKind(item.block.name) === "command")) {
+		const action = commandRunLabel(items);
+		if (action) return { kind: "command", label: items.length > 1 ? `${action} · ${items.length.toLocaleString("en-US")} 条命令` : action, running, error, steps: items.length, plain: true };
+	}
 	const kinds: ToolKind[] = [];
 	for (const item of items) {
 		const kind = toolKind(item.block.name);
@@ -98,7 +109,7 @@ export function toolRunSummary(items: ToolRunItem[]): ToolRunSummary {
 		kind,
 		label: `${[...new Set(items.map((item) => item.block.name))].join(" + ") || "工具"} · ${toolActionSummaries(items, !running).join("；") || "0 次调用"}`,
 		running,
-		error: items.some((item) => item.result?.isError),
+		error,
 		steps: items.length,
 	};
 }

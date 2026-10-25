@@ -182,6 +182,16 @@ test("discovery and directory tools preserve their actual category", () => {
 	assert.equal(toolTarget(call(0, "grep", { pattern: "Settings", path: "src" }).block), "Settings");
 });
 
+test("deletions read as their own category, not as edits", () => {
+	const call = (key: number, name: string, argsText: string, isError = false): ToolRunItem => ({ key, block: { kind: "tool", id: String(key), name, argsText, done: true }, result: { kind: "toolResult", name, text: "done", isError } });
+	assert.equal(toolKind("delete"), "delete");
+	assert.equal(toolKind("remove"), "delete");
+	assert.equal(toolKindLabel("delete"), "删除文件");
+	assert.equal(toolRunSummary([call(0, "delete", '{"path":"a.txt"}'), call(1, "delete", '{"path":"b.txt"}')]).label, "delete · 删除了 2 个文件");
+	assert.equal(toolRunSummary([call(0, "edit", '{"path":"a.txt"}'), call(1, "delete", '{"path":"b.txt"}')]).label, "edit + delete · 编辑了 1 个文件；删除了 1 个文件");
+	assert.equal(toolCallSummary(call(0, "delete", '{"path":"a.txt"}')).label, "delete · 删除了 1 个文件");
+});
+
 test("many tool categories use a stable total regardless of source order or streamed results", () => {
 	const items: ToolRunItem[] = ["web_search", "bash", "edit", "read", "write", "grep"].map((name, key) => ({ key, block: { kind: "tool", id: String(key), name, argsText: "{", done: true } }));
 	assert.deepEqual(toolActionSummaries(items), ["调用 6 次工具"]);

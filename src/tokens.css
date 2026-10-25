@@ -42,6 +42,7 @@
 		--radius-md: 6px;
 		--radius-lg: 8px;
 		--radius-xl: 12px;
+		--radius-2xl: 16px;
 		--radius-full: 999px;
 		--font-family-base: "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI", "PingFang SC", -apple-system, BlinkMacSystemFont, sans-serif;
 		--font-family-sans: "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", sans-serif;
@@ -60,6 +61,7 @@
 		--chat-gutter: var(--space-10);
 		--chat-message-gap: var(--space-5);
 		--chat-block-gap: var(--space-2);
+		--chat-tool-row: 36px;
 		--chat-meta: #9ca3af;
 		--gauge-track: var(--boundary);
 		--bubble-bg: var(--panel);
