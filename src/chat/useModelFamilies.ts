@@ -90,6 +90,9 @@ export interface RelaySpec {
 	/** Official model prices are multiplied by this factor; absent keeps legacy prices. */
 	priceMultiplier?: number;
 	excludedModelIds?: string[];
+	/** Discovered models that belong to no family yet: saved with the relay,
+	 *  never routed, so the picker hides them until they gain a family. */
+	unassignedModels?: ModelSpec[];
 }
 
 /** A route binds one relay to one family with its served models. */
@@ -206,7 +209,13 @@ export function useModelFamilies() {
 
 	// A missing or malformed payload falls back to pi's own model list rather
 	// than blanking the composer.
-	const families = useMemo(() => FAMILY_IDS.map((id) => config?.families?.find((family) => family.id === id) ?? { id, displayName: FAMILY_LABELS[id], routes: [] }), [config]);
+	// Built-in families always render first in their fixed order; families the
+	// user created later follow in creation order.
+	const families = useMemo(() => {
+		const stored = config?.families ?? [];
+		const builtIn = FAMILY_IDS.map((id) => stored.find((family) => family.id === id) ?? { id, displayName: FAMILY_LABELS[id], routes: [] });
+		return [...builtIn, ...stored.filter((family) => !(FAMILY_IDS as readonly string[]).includes(family.id))];
+	}, [config]);
 	const complete = FAMILY_IDS.every((id) => hasFamily(config, id));
 
 	return {
@@ -236,6 +245,7 @@ export function useModelFamilies() {
 		setAutoFailover: (autoFailover: boolean) => run("set_family_auto_failover", { autoFailover }),
 		setAutoRetry: (autoRetry: boolean) => run("set_family_auto_retry", { autoRetry }),
 		setUsdCnyRate: (rate: number) => run("set_usd_cny_rate", { rate }),
+		createFamily: (id: string, displayName: string) => run("create_family", { id, displayName }),
 		test: async (baseUrl: string, apiKey: string, modelId: string, timeoutSeconds: number, requestId?: string, protocol?: RelayProtocol, relay?: RelaySpec, draft = false) => {
 			const result = relay
 				? await invoke<TestResult>("test_settings_connection", { relay: { ...relay, baseUrl, apiKey, timeoutSeconds, protocol }, modelId, requestId: requestId ?? crypto.randomUUID(), draft })

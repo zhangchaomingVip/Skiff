@@ -4,6 +4,7 @@ import { useSettingsMetadata } from "../chat/useSettingsMetadata";
 import { FAMILY_LABELS, type ModelFamily, type RelaySpec, type RelayProtocol, type TestResult } from "../chat/useModelFamilies";
 import { matchesSettingsModel as matchesModel, settingsModelCandidates, settingsTestTarget as routeForModelTest, type CatalogIdentity } from "../chat/settingsModels";
 import { useFamilyModels } from "../chat/useFamilyModels";
+import type { FamilyModelEntry } from "../chat/latestModels";
 import { BrandIcon, type BrandName } from "./BrandIcon";
 import { Icon } from "./Icon";
 import { useSettingsEditor, type SettingsEditorHandle } from "./settingsEditor";
@@ -14,6 +15,8 @@ const EDITABLE = [...BRANDABLE] as const;
 const brand = (familyId: string): BrandName | undefined => BRANDABLE.find((name) => name === familyId);
 
 type Draft = { kind: "family-models" };
+/** Curated families list config entries; custom families mirror their routes. */
+type DisplayEntry = { modelId: string; origin: FamilyModelEntry["origin"] | "route" };
 
 /** A result retains the actual request target, including alias resolution. */
 type ModelTest = { state: "running" | "done"; relayName: string; modelId: string; result?: TestResult };
@@ -65,8 +68,17 @@ export const ModelsSettingsContent = forwardRef<SettingsEditorHandle, ModelsSett
 
 	const rows = useMemo(() => families.filter((family) => EDITABLE.includes(family.id as (typeof EDITABLE)[number])).map((family) => ({
 		family,
-		entries: config[family.id] ?? [],
+		entries: (config[family.id] ?? []) as DisplayEntry[],
 	})), [families, config]);
+	// Custom families (e.g. a one-click GPT) have no curated display list: their
+	// routed models mirror onto the card, and the picker shows them unfiltered.
+	const customRows = useMemo(() => families
+		.filter((family) => family.id !== "auto" && !EDITABLE.includes(family.id as (typeof EDITABLE)[number]))
+		.map((family) => ({
+			family,
+			entries: [...new Set(family.routes.flatMap((route) => route.models.map((model) => model.modelId.trim())))].filter(Boolean).map((modelId): DisplayEntry => ({ modelId, origin: "route" })),
+		})), [families]);
+	const displayRows = useMemo(() => [...rows, ...customRows], [rows, customRows]);
 	const autoFamily = families.find((family) => family.id === "auto");
 	const autoRoutes = autoFamily ? settingsModelCandidates(autoFamily, relays).length : 0;
 
@@ -148,7 +160,9 @@ export const ModelsSettingsContent = forwardRef<SettingsEditorHandle, ModelsSett
 			<div>
 				<div className="dialog-heading"><h2 id="models-title">编辑家族模型</h2><IconButton type="button" onClick={closeDraft} disabled={pending} aria-label="返回列表"><Icon name="close" /></IconButton></div>
 				<p className="muted">每个家族最多保留两个自动更新的模型；手动添加的模型标为「手动」，不会被联网更新覆盖。</p>
-				{rows.map(({ family, entries }) => <section className="family-card" key={family.id}>
+				{rows.map(({ family }) => {
+					const entries: FamilyModelEntry[] = config[family.id] ?? [];
+					return <section className="family-card" key={family.id}>
 					<div className="family-card-head">
 						<span className="family-card-title">{brand(family.id) && <BrandIcon name={brand(family.id)!} size={15} />}{FAMILY_LABELS[family.id] ?? family.displayName}</span>
 						<Button type="button" variant="ghost" size="compact" disabled={updating.has(family.id)} onClick={() => void refreshFamily(family.id)}>{updating.has(family.id) ? "更新中…" : "联网更新"}</Button>
@@ -173,7 +187,8 @@ export const ModelsSettingsContent = forwardRef<SettingsEditorHandle, ModelsSett
 					) : (
 						<Button type="button" variant="ghost" size="compact" disabled={pending} onClick={() => { setAdding(family.id); setAddingId(""); }}>添加模型</Button>
 					)}
-				</section>)}
+				</section>;
+				})}
 				{(error || updateNotice && !updateNotice.ok) && <p className="form-error" role="alert">{error || updateNotice?.text}</p>}
 				<div className="dialog-actions"><Button variant="ghost" type="button" onClick={closeDraft} disabled={pending}>返回</Button></div>
 			</div>
@@ -182,12 +197,14 @@ export const ModelsSettingsContent = forwardRef<SettingsEditorHandle, ModelsSett
 				<div className="dialog-heading"><h2 id="models-title">模型</h2><Button type="button" variant="ghost" size="compact" onClick={startEdit}>编辑家族模型</Button></div>
 				<p className="muted">自动模型最多两个，手动模型继续展示；价格与能力在「路线」中编辑。</p>
 				<div className="family-model-tabs" role="tablist" aria-label="模型家族">
-					{rows.map(({ family }) => <button type="button" className={`family-model-tab${selectedFamily === family.id ? " is-active" : ""}`} role="tab" aria-selected={selectedFamily === family.id} key={family.id} onClick={() => setSelectedFamily(family.id)}>{brand(family.id) && <BrandIcon name={brand(family.id)!} size={15} />}<span>{FAMILY_LABELS[family.id] ?? family.displayName}</span></button>)}
+					{displayRows.map(({ family }) => <button type="button" className={`family-model-tab${selectedFamily === family.id ? " is-active" : ""}`} role="tab" aria-selected={selectedFamily === family.id} key={family.id} onClick={() => setSelectedFamily(family.id)}>{brand(family.id) && <BrandIcon name={brand(family.id)!} size={15} />}<span>{FAMILY_LABELS[family.id] ?? family.displayName}</span></button>)}
 				</div>
-				{rows.filter(({ family }) => family.id === selectedFamily).map(({ family, entries }) => <section className="family-card" key={family.id}>
+				{displayRows.filter(({ family }) => family.id === selectedFamily).map(({ family, entries }) => {
+					const curated = !customRows.some((row) => row.family.id === family.id);
+					return <section className="family-card" key={family.id}>
 					<div className="family-card-head">
 						<span className="family-card-title">{brand(family.id) && <BrandIcon name={brand(family.id)!} size={15} />}{FAMILY_LABELS[family.id] ?? family.displayName}<IconButton type="button" className="model-mapping-trigger" onClick={() => setMappingOpen((current) => current === family.id ? undefined : family.id)} aria-label={`${mappingOpen === family.id ? "收起" : "查看"} ${FAMILY_LABELS[family.id] ?? family.displayName} 的实际线路映射`} aria-expanded={mappingOpen === family.id} title="查看家族实际线路映射"><Icon name={mappingOpen === family.id ? "eye-off" : "eye"} size={14} /></IconButton></span>
-						<Button type="button" variant="ghost" size="compact" disabled={updating.has(family.id)} title="从官方页面与模型目录更新这两个模型" onClick={() => void refreshFamily(family.id)}>{updating.has(family.id) ? "更新中…" : "联网更新"}</Button>
+						{curated && <Button type="button" variant="ghost" size="compact" disabled={updating.has(family.id)} title="从官方页面与模型目录更新这两个模型" onClick={() => void refreshFamily(family.id)}>{updating.has(family.id) ? "更新中…" : "联网更新"}</Button>}
 					</div>
 					{mappingOpen === family.id && modelMappingPanel(family, relays, entries.map((entry) => ({ modelId: entry.modelId, targetId: entry.modelId })), catalog)}
 					{entries.length === 0
@@ -198,14 +215,15 @@ export const ModelsSettingsContent = forwardRef<SettingsEditorHandle, ModelsSett
 							const preferred = routeForModelTest(family, relays, entry.modelId, catalog);
 							return <div className="provider-row model-family-row" key={entry.modelId}>
 								<div className="provider-row-main">
-									<div className="provider-row-title"><strong>{alias || entry.modelId}</strong>{alias && <small>{entry.modelId}</small>}<span className="provider-tag">{entry.origin === "manual" ? "手动" : "自动"}</span></div>
+									<div className="provider-row-title"><strong>{alias || entry.modelId}</strong>{alias && <small>{entry.modelId}</small>}{entry.origin !== "route" && <span className="provider-tag">{entry.origin === "manual" ? "手动" : "自动"}</span>}</div>
 							<small className="model-family-meta"><span>{count > 0 ? `${count} 条路线可用` : <button type="button" className="link-button" onClick={() => onOpenRoutes(family.id)}>未接路线，去配置</button>}</span>{preferred && <span>顺序首选：{preferred.relay.name}</span>}</small>
 								</div>
 								{modelTestStatus(family, entry.modelId)}
 								<div className="provider-row-actions">{modelTestAction(family, entry.modelId)}</div>
 							</div>;
 						})}
-				</section>)}
+				</section>;
+				})}
 				{autoFamily && <section className="family-card">
 					<div className="family-card-head">
 						<span className="family-card-title">Auto<IconButton type="button" className="model-mapping-trigger" onClick={() => setMappingOpen((current) => current === "auto" ? undefined : "auto")} aria-label={`${mappingOpen === "auto" ? "收起" : "查看"} Auto 的实际线路映射`} aria-expanded={mappingOpen === "auto"} title="查看 Auto 实际线路映射"><Icon name={mappingOpen === "auto" ? "eye-off" : "eye"} size={14} /></IconButton></span>

@@ -82,8 +82,23 @@ try {
 	await page.locator("#relay-name").fill("验证中转");
 	await page.locator("#relay-base").fill("https://api.example.com/v1");
 	await page.locator("#relay-key").fill("sk-preview-key");
-	await button("测试连接").click();
-	await dialog().getByText(/连接成功/).waitFor();
+	await button("测试延迟").click();
+	await dialog().getByText(/延迟 \d+ms · 密钥有效/).waitFor();
+	await button("获取模型列表").click();
+	await dialog().getByText(/获取到 \d+ 个模型/).waitFor();
+	// Models without a family stay in the list and suggest a one-click family.
+	await button("添加模型").click();
+	const draftIds = dialog().getByRole("textbox", { name: /^模型 ID / });
+	await draftIds.last().fill("gpt-5.2");
+	await dialog().getByText(/发现新家族：GPT/).waitFor();
+	await dialog().locator(".provider-model-editor-row").last().getByText("未配置家族").waitFor();
+	await button("一键创建家族").click();
+	await dialog().getByText(/已创建家族 GPT/).waitFor();
+	assert.equal(await dialog().locator(".provider-model-editor-row").last().getByText("GPT").count(), 1, "Created family takes over its models");
+	// A single tested model carries the connection evidence, so renaming it
+	// invalidates the save until the ID is restored.
+	await dialog().locator(".provider-model-test").first().getByRole("button", { name: "测试", exact: true }).click();
+	await dialog().locator(".provider-model-test .test-result.ok").first().waitFor();
 	const testedId = await page.evaluate(() => window.skiffPreview.testRequests.at(-1).modelId);
 	const ids = dialog().getByRole("textbox", { name: /^模型 ID / });
 	const testedIndex = await ids.evaluateAll((nodes, id) => nodes.findIndex((node) => node.value === id), testedId);
@@ -97,6 +112,8 @@ try {
 	await button("编辑 验证中转").waitFor();
 	const notice = await dialog().getByRole("status").first().textContent();
 	assert.match(notice, /已保存「验证中转」，同步 \d+ 个模型到 \d+ 条路线/, "Discovered models must create routes from the provider page");
+	assert.match(notice, /个未配置家族的模型暂不进入选择器/, "Family-less models save with the provider but stay out of the picker");
+	assert.ok(await page.evaluate(() => window.skiffPreview.families.some((family) => family.id === "gpt" && family.routes.some((route) => route.models.some((model) => model.modelId === "gpt-5.2")))), "One-click family must gain a route on save");
 	await shot("provider-saved");
 
 	// 3. The notice links across; the route entry lists routes, not providers.
@@ -108,6 +125,15 @@ try {
 	assert.equal(await button("编辑 官方直连").count(), 0, "Route entry must not list providers");
 	assert.equal(await button("更多 验证中转 的路线操作").count(), 1, "Saved destination selects its family");
 	await shot("routes-light");
+
+	// 3.5 The one-click family mirrors onto the models entry as a routed overview.
+	await button("模型").click();
+	await dialog().getByRole("tab", { name: "GPT" }).click();
+	const gptCard = dialog().locator(".family-card").filter({ hasText: "GPT" });
+	await gptCard.getByText("gpt-5.2").waitFor();
+	assert.match(await gptCard.textContent(), /1 条路线可用/, "Custom family card lists its routed models");
+	assert.equal(await gptCard.getByRole("button", { name: "联网更新" }).count(), 0, "Custom families have no official refresh source");
+	await button("供应商").click();
 
 	// 4. Both entries render in the dark theme as well.
 	await button("外观").click();
@@ -130,12 +156,16 @@ try {
 	// 5. Without providers the route entry explains the dependency and links back.
 	await button("供应商").click();
 	for (const name of ["验证中转", "官方直连", "硅基低价", "官方"]) await removeProvider(name);
+	// The status filter stays 启用-only after the row switches; clearing it reveals the empty state.
+	await dialog().getByRole("button", { name: /^启用 / }).click();
 	await dialog().getByText("还没添加供应商").waitFor();
 	await shot("providers-empty");
 	await button("路线").click();
 	await dialog().getByText("还没有供应商").waitFor();
 	assert.equal(await button("编辑 官方直连 的路线").count(), 0, "Empty route entry must not list routes");
 	await loose(/去添加供应商/).click();
+	// Returning remounts the entry, so the 启用-only filter needs clearing again.
+	await dialog().getByRole("button", { name: /^启用 / }).click();
 	await dialog().getByText("还没添加供应商").waitFor();
 	assert.equal(await pressed("供应商"), "true", "Cross-link must select the provider entry");
 	assert.equal(await button("编辑 官方直连").count(), 0, "Providers were deleted on purpose");

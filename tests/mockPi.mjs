@@ -205,6 +205,13 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 			}
 			if (command === "set_family_auto_failover") { autoFailover = !!args.autoFailover; return familiesConfig(); }
 			if (command === "set_family_auto_retry") { autoRetry = !!args.autoRetry; return familiesConfig(); }
+			if (command === "create_family") {
+				const id = String(args.id ?? "").trim().toLowerCase();
+				if (!/^[a-z][a-z0-9_-]{0,31}$/.test(id)) throw new Error("家族 ID 需以字母开头，仅含字母、数字、- 或 _，最长 32 个字符");
+				if (families.some((family) => family.id === id)) throw new Error(`家族已存在：${id}`);
+				families.push({ id, displayName: args.displayName ?? id, routes: [] });
+				return familiesConfig();
+			}
 			if (command === "save_relay") {
 				const incoming = args.relay;
 				if (!incoming.name?.trim() || incoming.name.trim().length > 32) throw new Error("显示名需为 1–32 个字符");

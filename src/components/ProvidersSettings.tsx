@@ -9,7 +9,7 @@ import { catalogEntryToPriced, syncModelPrices } from "../chat/pricingPage";
 import { catalogVision } from "../chat/modelVision";
 import { slowOrFailedModels, testModelsConcurrently } from "../chat/providerConnection";
 import { filterPresets, hostOf, matchPreset, PRESET_KINDS, type ProviderPreset } from "../chat/providerPresets";
-import { discoveredFamily, routesFromProviderModels } from "../chat/providerRoutes";
+import { discoveredFamily, routesFromProviderModels, suggestFamilyId, suggestedFamilyLabel } from "../chat/providerRoutes";
 import { modelIdMatchesCatalog } from "../chat/latestModels";
 import { useModelCatalog } from "../chat/useModelCatalog";
 import { blankModel, blankRelay, FAMILY_LABELS, maskKey, RELAY_PROTOCOLS, validateModels, type ModelFamily, type ModelSpec, type RelayProtocol, type RelayRouteSpec, type RelaySpec, type TestResult } from "../chat/useModelFamilies";
@@ -88,11 +88,13 @@ export type ProvidersSettingsProps = {
 	onTest: (baseUrl: string, apiKey: string, modelId: string, timeoutSeconds: number, requestId?: string, protocol?: RelayProtocol, relay?: RelaySpec, draft?: boolean) => Promise<TestResult>;
 	onCancelTest: (requestId: string) => Promise<unknown>;
 	onDiscover: (baseUrl: string, apiKey: string, protocol?: RelayProtocol) => Promise<DiscoveredModel[]>;
+	/** Creates an empty family for models no existing family claims. */
+	onCreateFamily: (id: string, displayName: string) => Promise<boolean>;
 	onOpenRoutes: (location?: SettingsLocation) => void;
 	onLockChange: (locked: boolean, pending: boolean) => void;
 };
 
-export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, ProvidersSettingsProps>(function ProvidersSettingsContent({ relays, families, usdCnyRate, configError, onPreviewBatch, onBatch, onSaveRelay, onDeleteRelay, onSetRelayEnabled, onTest, onCancelTest, onDiscover, onOpenRoutes, onLockChange }, ref) {
+export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, ProvidersSettingsProps>(function ProvidersSettingsContent({ relays, families, usdCnyRate, configError, onPreviewBatch, onBatch, onSaveRelay, onDeleteRelay, onSetRelayEnabled, onTest, onCancelTest, onDiscover, onCreateFamily, onOpenRoutes, onLockChange }, ref) {
 	const { catalog, catalogStale } = useModelCatalog();
 	const [query, setQuery] = useState("");
 	const [listQuery, setListQuery] = useState("");
@@ -102,6 +104,8 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 	const setEditorSection = (id: ProviderEditorSectionId, open: boolean) => setEditorSections((previous) => ({ ...previous, [id]: open }));
 	const [savedLocation, setSavedLocation] = useState<{ relayId: string; familyIds: string[] }>();
 	const metadata = useSettingsMetadata(relays);
+	// Custom families carry their own displayName; built-ins fall back to the label map.
+	const familyLabel = (familyId: string) => families.find((family) => family.id === familyId)?.displayName ?? FAMILY_LABELS[familyId] ?? familyId;
 	const [batch, setBatch] = useState(false);
 	const [selected, setSelected] = useState<string[]>([]);
 	const [batchAction, setBatchAction] = useState<BatchOperation>();
@@ -125,6 +129,7 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 	const originalEditorState = useRef<string>();
 	const [discoveringModels, setDiscoveringModels] = useState(false);
 	const [modelListNotice, setModelListNotice] = useState<string>();
+	const [creatingFamilies, setCreatingFamilies] = useState(false);
 	const [testing, setTesting] = useState(false);
 	const [probingEndpoint, setProbingEndpoint] = useState(false);
 	const [endpointResult, setEndpointResult] = useState<TestResult>();
@@ -229,9 +234,11 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 		setNotice(undefined);
 		setError(undefined); setReveal(false); setEditorSections(initialEditorSections);
 		if (relay) {
-			const configured = families.flatMap((family) => family.routes.filter((route) => route.relayId === relay.id).flatMap((route) => route.models.map((model) => ({ familyId: family.id, model: { ...model } }))));
 			const excluded = new Set(relay.excludedModelIds ?? []);
-			const models = configured.filter((entry) => !excluded.has(entry.model.modelId));
+			const configured = families.flatMap((family) => family.routes.filter((route) => route.relayId === relay.id).flatMap((route) => route.models.map((model) => ({ familyId: family.id, model: { ...model } }))));
+			// Unassigned models ride on the relay itself: no family, so no route.
+			const unassigned = (relay.unassignedModels ?? []).filter((model) => !excluded.has(model.modelId)).map((model) => ({ model: { ...model } }));
+			const models = [...configured.filter((entry) => !excluded.has(entry.model.modelId)), ...unassigned];
 			originalEditorState.current = providerEditorSnapshot(relay, models);
 			setProviderModels(models);
 			originalModelIds.current = new Set(configured.map((entry) => entry.model.modelId));
@@ -310,8 +317,10 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 			for (const modelId of models) {
 				if (restored.some((entry) => entry.model.modelId === modelId)) continue;
 				const configured = families.flatMap((family) => family.routes.filter((route) => draft?.kind === "relay" && route.relayId === draft.relay.id).flatMap((route) => route.models.map((model) => ({ familyId: family.id, model })))).find((entry) => entry.model.modelId === modelId);
+				const unassigned = draft?.kind === "relay" ? draft.relay.unassignedModels?.find((model) => model.modelId === modelId) : undefined;
 				const discovered = discoveredModels.some((model) => model.id === modelId);
 				if (configured) restored.push({ ...configured, model: { ...configured.model } });
+				else if (unassigned) restored.push({ model: { ...unassigned } });
 				else if (discovered) restored.push({ familyId: discoveredFamily(modelId) ?? (draft?.kind === "relay" ? draft.preset?.familyId : undefined), model: fillFromCatalog(modelId) });
 			}
 			return restored;
@@ -321,12 +330,11 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 	const mergeDiscoveredModels = (models: DiscoveredModel[], relay: RelaySpec, preset?: ProviderPreset) => {
 		const seen = new Set(providerModels.map((entry) => entry.model.modelId));
 		const excluded = new Set(relay.excludedModelIds ?? []);
-		const assignable = models.filter((model) => discoveredFamily(model.id) || preset?.familyId);
-		const added = assignable.filter((model) => !seen.has(model.id.trim()) && !excluded.has(model.id.trim())).length;
+		const fresh = models.filter((model) => { const id = model.id.trim(); return id && !seen.has(id) && !excluded.has(id); });
 		setProviderModels((previous) => {
 			const merged = [...previous];
 			const mergedIds = new Set(merged.map((entry) => entry.model.modelId));
-			for (const discovered of assignable) {
+			for (const discovered of fresh) {
 				const modelId = discovered.id.trim();
 				if (!modelId || mergedIds.has(modelId) || excluded.has(modelId)) continue;
 				merged.push({ familyId: discoveredFamily(modelId) ?? preset?.familyId, model: fillFromCatalog(modelId) });
@@ -334,8 +342,10 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 			}
 			return merged;
 		});
-		const unsupported = models.length - assignable.length;
-		setModelListNotice(`获取到 ${models.length} 个模型，新增 ${added} 个${unsupported ? `；${unsupported} 个暂不属于可用家族，未加入` : ""}。`);
+		// Models outside every known family join the list too: they save with the
+		// provider (hidden from the picker) and can gain a family via one click.
+		const unassigned = fresh.filter((model) => !discoveredFamily(model.id) && !preset?.familyId).length;
+		setModelListNotice(`获取到 ${models.length} 个模型，新增 ${fresh.length} 个${unassigned ? `；${unassigned} 个暂无所属家族` : ""}。`);
 	};
 
 	const discoverProviderModels = async () => {
@@ -354,6 +364,37 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 		} finally {
 			if (request === modelDiscoveryRequest.current) setDiscoveringModels(false);
 		}
+	};
+
+	// Unassigned models whose vendor prefix names a missing family, e.g. every
+	// `gpt-*` id on an endpoint with no GPT family yet.
+	const suggestedFamilies = useMemo(() => {
+		const counts = new Map<string, number>();
+		for (const entry of providerModels) {
+			if (entry.familyId) continue;
+			const id = suggestFamilyId(entry.model.modelId);
+			if (!id || families.some((family) => family.id === id)) continue;
+			counts.set(id, (counts.get(id) ?? 0) + 1);
+		}
+		return [...counts].map(([id, count]) => ({ id, count }));
+	}, [providerModels, families]);
+	const createSuggestedFamilies = async () => {
+		if (creatingFamilies || !suggestedFamilies.length) return;
+		setCreatingFamilies(true);
+		try {
+			const created: string[] = [];
+			for (const { id } of suggestedFamilies) {
+				if (families.some((family) => family.id === id)) continue;
+				if (await onCreateFamily(id, suggestedFamilyLabel(id))) created.push(id);
+			}
+			if (!created.length) { setModelListNotice("家族已存在，请为模型选择所属家族。"); return; }
+			setProviderModels((previous) => previous.map((entry) => {
+				if (entry.familyId) return entry;
+				const id = suggestFamilyId(entry.model.modelId);
+				return id && created.includes(id) ? { ...entry, familyId: id } : entry;
+			}));
+			setModelListNotice(`已创建家族 ${created.map(suggestedFamilyLabel).join("、")}，相关模型已归入，保存供应商后生效。`);
+		} finally { setCreatingFamilies(false); }
 	};
 
 	const patchProviderModel = (index: number, value: Partial<ModelSpec>) => {
@@ -485,20 +526,26 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 		if (draft.isNew && !connectionPassed) { setError("请先在模型区通过模型测试再保存"); return; }
 		if (draft.isNew && !providerModels.length) { setError("请至少添加一个模型"); return; }
 		if (providerModels.some((entry) => !entry.model.modelId.trim())) { setError("模型 ID 不能为空"); return; }
-		if (providerModels.some((entry) => !entry.familyId)) { setError("请为无法自动识别的模型选择所属家族"); return; }
 		const modelIds = providerModels.map((entry) => entry.model.modelId.trim());
 		if (new Set(modelIds).size !== modelIds.length) { setError("供应商内模型 ID 不能重复"); return; }
+		// Family-less models save on the relay instead of a route: the picker
+		// hides them until they gain a family, but the provider itself is usable.
+		const unassigned = models.filter((entry) => !entry.familyId).map((entry) => entry.model);
+		if (unassigned.length) {
+			const unassignedError = validateModels(unassigned);
+			if (unassignedError) { setError(unassignedError); return; }
+		}
 		for (const family of families) {
 			const modelError = validateModels(models.filter((entry) => entry.familyId === family.id).map((entry) => entry.model));
 			if (modelError && providerModels.some((entry) => entry.familyId === family.id)) { setError(modelError); return; }
 		}
 		setPending(true); setError(undefined);
 		try {
-			const activeModels = models.map((entry) => ({ familyId: entry.familyId!, model: entry.model }));
+			const activeModels = models.filter((entry): entry is typeof entry & { familyId: string } => !!entry.familyId).map((entry) => ({ familyId: entry.familyId, model: entry.model }));
 			const routes = routesFromProviderModels(relay, families, activeModels);
-			const saved = await onSaveRelay(relay, routes, [...completedTests.current]);
+			const saved = await onSaveRelay({ ...relay, unassignedModels: unassigned }, routes, [...completedTests.current]);
 			if (saved) {
-				setNotice(`已保存「${saved.name}」，同步 ${providerModels.length} 个模型到 ${routes.length} 条路线。`);
+				setNotice(`已保存「${saved.name}」，同步 ${activeModels.length} 个模型到 ${routes.length} 条路线。${unassigned.length ? `${unassigned.length} 个未配置家族的模型暂不进入选择器。` : ""}`);
 				setSavedLocation({ relayId: saved.id, familyIds: routes.map((item) => item.familyId) });
 				setDraft(undefined);
 			} else {
@@ -689,7 +736,7 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 								{providerModels.map((entry, index) => <div className="provider-model-editor-row" key={index}>
 									<div className="provider-model-id-cell">
 										<Input aria-label={`模型 ID ${index + 1}`} value={entry.model.modelId} maxLength={256} placeholder="模型 ID" onChange={(event) => patchProviderModel(index, { modelId: event.target.value })} disabled={pending || testing} />
-										{entry.familyId ? <small>{FAMILY_LABELS[entry.familyId] ?? entry.familyId}</small> : <small className="provider-model-family-needed">需选择所属家族</small>}
+										{entry.familyId ? <small>{familyLabel(entry.familyId)}</small> : <small className="provider-model-family-needed" title="未配置家族：这些模型随供应商保存，但不会出现在模型选择器">未配置家族</small>}
 									</div>
 									<Input aria-label={`模型 ${index + 1} 上下文窗口`} title="例如 128k、1M；1k = 1000 token，1M = 1000000 token；不带单位时按 token 计算" type="text" required pattern={"\\s*(?:\\d+(?:\\.\\d+)?|\\.\\d+)\\s*[kKmM]?\\s*"} placeholder="128k / 1M" value={entry.contextWindowText ?? formatContextWindow(entry.model.contextWindow)} onChange={(event) => {
 										const text = event.target.value;
@@ -698,9 +745,13 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 									<Input aria-label={`模型 ${index + 1} 显示名`} value={entry.model.alias} maxLength={64} placeholder="可选" onChange={(event) => patchProviderModel(index, { alias: event.target.value })} disabled={pending || testing} />
 									{providerModelTest(entry, relay, preset)}
 									<IconButton type="button" variant="ghost" size="compact" aria-label={`删除模型 ${index + 1}`} title="从供应商模型列表中移除" onClick={() => removeProviderModel(index)} disabled={pending || testing}><Icon name="trash" size={14} /></IconButton>
-									{!entry.familyId && <label className="provider-model-family-select">模型家族<Select aria-label={`模型 ${index + 1} 家族`} value="" onChange={(event) => setProviderModels((previous) => previous.map((item, row) => row === index ? { ...item, familyId: event.target.value } : item))} disabled={pending || testing}><option value="" disabled>选择家族…</option>{Object.entries(FAMILY_LABELS).map(([id, label]) => <option key={id} value={id}>{label}</option>)}</Select></label>}
+									{!entry.familyId && <label className="provider-model-family-select">模型家族<Select aria-label={`模型 ${index + 1} 家族`} value="" onChange={(event) => setProviderModels((previous) => previous.map((item, row) => row === index ? { ...item, familyId: event.target.value } : item))} disabled={pending || testing}><option value="" disabled>选择家族…</option>{families.map((family) => <option key={family.id} value={family.id}>{familyLabel(family.id)}</option>)}</Select></label>}
 								</div>)}
 								{modelListNotice && <small className="provider-model-list-notice" role="status">{modelListNotice}</small>}
+								{!!suggestedFamilies.length && <div className="provider-family-suggest" role="status">
+									<span>发现新家族：{suggestedFamilies.map(({ id, count }) => `${suggestedFamilyLabel(id)}（${count} 个模型）`).join("、")}。未配置家族的模型会随供应商保存，但不会出现在模型选择器。</span>
+									<Button type="button" variant="secondary" size="compact" disabled={pending || testing || creatingFamilies} onClick={() => void createSuggestedFamilies()}>{creatingFamilies ? "创建中…" : "一键创建家族"}</Button>
+								</div>}
 								<Button type="button" variant="ghost" size="compact" className="provider-model-add" disabled={pending || testing} onClick={() => setProviderModels((previous) => [...previous, { familyId: preset?.familyId, model: blankModel() }])}><Icon name="plus" size={14} />添加模型</Button>
 							</div>
 							{!!relay.excludedModelIds?.length && <div className="connection-exclusions"><span>已剔除 {relay.excludedModelIds.length} 个模型（保存后生效）</span><Button type="button" variant="ghost" size="compact" disabled={pending || testing} onClick={() => setModelExclusions(relay.excludedModelIds ?? [], false)}>恢复全部</Button><details><summary>查看剔除名单</summary>{relay.excludedModelIds.map((model) => <div key={model}><span>{model}</span><Button type="button" variant="ghost" size="compact" disabled={pending || testing} onClick={() => setModelExclusions([model], false)}>恢复</Button></div>)}</details></div>}
@@ -793,7 +844,7 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 				<p className="muted">供应商提供模型访问端点与密钥；模型列表在编辑供应商时配置。共 {relays.length} 个供应商。</p>
 				{notice && <div className="family-added-hint" role="status">{notice}{savedLocation?.familyIds.map((familyId) => {
 					const route = families.find((item) => item.id === familyId)?.routes.find((item) => item.relayId === savedLocation.relayId);
-					return <Button key={familyId} type="button" variant="ghost" size="compact" onClick={() => onOpenRoutes({ familyId, relayId: savedLocation.relayId, routeId: route?.id })}>查看{FAMILY_LABELS[familyId] ?? familyId}路线</Button>;
+					return <Button key={familyId} type="button" variant="ghost" size="compact" onClick={() => onOpenRoutes({ familyId, relayId: savedLocation.relayId, routeId: route?.id })}>查看{familyLabel(familyId)}路线</Button>;
 				})}</div>}
 				<div className="family-model-tabs provider-source-tabs" role="tablist" aria-label="供应商来源">
 					{PROVIDER_SOURCE_TABS.map((tab) => {
