@@ -1377,10 +1377,13 @@ span.provider-mark.generic { display: inline-flex; align-items: center; justify-
 }
 
 @layer components {
-/* Composer controls stay quieter than the send button but keep a 32px hit area. */
+/* Composer controls stay quieter than the send button but keep a 32px hit area.
+   Selected state reads as a light tint plus a soft edge; text and icons stay neutral
+   so the accent never out-shouts the primary send action. */
 .composer .composer-context .ui-button { height: var(--control-regular); }
 .composer .composer-context .ui-icon-button { width: var(--control-regular); }
-.composer .composer-context .ui-button.active, .composer .composer-context .ui-button[aria-pressed=true] { border-color: color-mix(in srgb, var(--accent) 32%, var(--border)); background: color-mix(in srgb, var(--accent) 10%, transparent); box-shadow: none; }
+.composer .composer-context .ui-button.active, .composer .composer-context .ui-button[aria-pressed=true] { border-color: color-mix(in srgb, var(--accent) 30%, var(--border)); background: color-mix(in srgb, var(--accent) 8%, transparent); color: var(--secondary); box-shadow: none; }
+.composer .composer-context .ui-button.active:hover:not(:disabled), .composer .composer-context .ui-button[aria-pressed=true]:hover:not(:disabled) { border-color: color-mix(in srgb, var(--accent) 38%, var(--border)); background: color-mix(in srgb, var(--accent) 13%, transparent); color: var(--secondary); }
 /* Latest-reply actions rest weakened and strengthen on hover or keyboard focus. */
 @media (hover: hover) {
 	.transcript .msg.assistant .message-actions:not(.is-historical) .message-buttons { opacity: .68; }

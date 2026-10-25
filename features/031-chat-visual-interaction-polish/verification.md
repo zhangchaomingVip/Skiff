@@ -13,13 +13,13 @@
 | `src/components/ToolRun.tsx` | 组行支持纯文本标题；失败组补充“失败”状态图标。 |
 | `src/components/ResultCards.tsx` + `MessageItem.tsx` | 新增结果卡片：单文件卡（操作 + 文件名 + 目录 + 增删行数）、多文件聚合卡（“修改了 N 个文件”，展开逐文件完整路径）、删除结果卡；渲染在最终正文之后、操作栏之前；仅本轮尾部消息、轮次落定（非流式）后渲染，数据仅来自真实工具结果。 |
 | `src/tokens.css` | 新增 `--radius-2xl: 16px`、`--chat-tool-row: 36px`。 |
-| `src/index.css` | 助手正文 16px；过程标签 13px；Markdown 段距 12px、列表缩进 20px、项距 6px；运行标题分隔线与正文间距 20px；过程行高 36px；用户气泡 72%（窄屏 86%）、16px 圆角、行高 1.6；composer 最小高度 112px、边框减弱、占位次级色、控件 32px 点击区、选中态描边减弱；失败行图标语义色；消息操作 hover 弱化/增强；结果卡片样式。 |
+| `src/index.css` | 助手正文 16px；过程标签 13px；Markdown 段距 12px、列表缩进 20px、项距 6px；运行标题分隔线与正文间距 20px；过程行高 36px；用户气泡 72%（窄屏 86%）、16px 圆角、行高 1.6；composer 最小高度 112px、边框减弱、占位次级色、控件 32px 点击区、思考模式选中态改为中性文字 + 强调色 8% 浅底 + 30% 轻描边（悬停 13%/38%，不再使用强调色文字与高饱和描边）；失败行图标语义色；消息操作 hover 弱化/增强；结果卡片样式。 |
 | `tests/commandSummary.test.ts`、`tests/turnResults.test.ts` | 新增回归：映射表、cd 组合、高风险保留、管道/重定向/多段回退、Shell 标签、流式部分 JSON 回退；文件操作推导、失败排除、合并去重、纯问答无卡片。 |
 | `tests/uiFixture.mjs` | 新增 `chat-polish-031` 预览场景：映射命令、cd 组合、高风险、失败管道、单文件/多文件/删除卡片、纯文本汇总。 |
 
 ## 自动化检查
 
-- `npm test`：295 通过，0 失败（含新增 11 个用例）。
+- `npm test`：299 通过，0 失败（031 共新增 15 个用例：首版 11 个 + 评审修复轮 4 个）。
 - `npm run build`（tsc + vite）：通过。
 - `npm run test:styles`：0 错误；144 个 token；126 组对比度检查全部通过（两主题）。
 - `npm run check:ui`：通过。
@@ -30,7 +30,7 @@
 - fixture `chat-polish-031`，`/tests/preview.html?theme=light|dark`，截图见 `screenshots/`。
 - 命令折叠行：`ls -la`、`cd packages/app && ls` → 查看目录内容；`npm test` → 运行测试；`git status` → 查看仓库状态；`rm -rf dist/cache` → “删除文件或目录 · rm”（关键信息保留）；`cat … | head` → 回退“执行 Bash 命令”并显示失败状态（语义色 + 图标，无大面积红色背景）。
 - 展开命令：完整原始命令、复制按钮、退出状态（成功/失败）可见；fixture 未提供 cwd 参数时工作目录行按条件省略。
-- 结果卡片：独立轮次的单文件卡“已创建 preview.md”（`chat-polish-031` 的单文件轮）；多文件聚合“修改了 4 个文件 +4 -3”，展开逐文件完整路径与各自增删行数，聚合数与逐行求和一致；删除卡“删除了 2 个文件 / tmp”无 diff 数据；纯问答与纯命令轮次无卡片。
+- 结果卡片（DOM 实证）：独立轮次的单文件卡“已创建 preview.md / docs”（无展开箭头的 standalone 卡）；多文件聚合“修改了 3 个文件 +4 -3”，展开逐文件完整路径与各自增删行数，聚合数与逐行求和一致；删除卡“删除了 2 个文件 / tmp”无 diff 数据；纯命令轮次与纯问答无卡片。截图 `light-single-and-group-cards.png`。
 - 排版与网格：助手正文 16px 明显深于过程标签；用户气泡右对齐、右缘与内容网格一致；用户消息 → 运行标题间距约 40px；两主题下卡片、状态色、对比度正常。
 - 回归：`chat` fixture 的思考折叠、混合工具计数（“调用了 4 次工具”）、长代码折叠、用量页脚、上下文告警均保持原状。
 
@@ -63,3 +63,15 @@
 5. `tokens.css` 被改动的行缩进比相邻 token 少一级 tab → 恢复两级缩进，diff 现为纯新增两行。
 6. delete 工具在过程组行显示“编辑了 N 个文件”，与删除结果卡同屏矛盾 → `toolRuns` 新增 `delete` 类别（“删除文件 / 删除了 N 个文件”+ trash 图标），混合运行按“编辑 N 个文件；删除 N 个文件”分列（`polish.test.ts` 新增用例）。
 7. `diffCounts` 把统一 diff 的 `+++`/`---` 文件头行各多计 1 行 → 排除文件头（`turnResults.test.ts` 新增用例），`ToolCallBlock` 状态计数同步修正保持一致。
+
+## 第二轮复审与修复记录（GLM-5.3 max）
+
+2026-10-25 换人复审对 7 条修复做确认，提出 3 条意见，处置如下：
+
+1. **major · 单文件卡分支仍未被 fixture 覆盖**：第一轮插入的 user 消息只把单文件写入与命令轮分开，写入与后续多文件编辑/删除仍在同一轮（fixture 仅有两条 user 消息）。→ 再插入一条 user 消息把编辑/删除拆为第三轮；DOM 实证三个轮次分别渲染：命令轮无卡片、单文件轮为 standalone 单卡（`isDetails=false`）、第三轮为“修改了 3 个文件 +4 -3”与“删除了 2 个文件”两张聚合卡（截图 `light-single-and-group-cards.png`）。
+2. **minor · 运行中 delete 工具状态回落为“正在调用工具”**：`processStatus.toolActivityLabel` 未覆盖 delete 类别 → 新增分支“正在删除 [文件名]/文件”，与其余类别的路径显示规则一致（`processStatus.test.ts` 新增 2 个断言）。
+3. **minor · verification.md 测试数字过期**（仍写 295）→ 更新为 299 并注明用例构成。
+
+## 用户反馈修复记录
+
+2026-10-25 用户在预览页指出思考模式选中态（medium/high 药丸）仍然醒目。根因：此前只调低了背景与描边浓度，但 ui.css 的 `.ui-button.active` 把 `color: var(--accent)` 写死，文字与图标仍是强调蓝，视觉主次没有变化。→ 修复：选中态文字与图标改为中性次级色（`--secondary`），强调色仅以 8% 浅底 + 30% 轻描边表达，悬停 13% 底 + 38% 描边且文字保持中性；两主题计算样式已验证（浅色 rgb(72,86,107)、深色 rgb(189,201,219)），截图 `light-composer-neutral-active.png`、`dark-composer-neutral-active.png`。发送按钮恢复为输入区唯一主色操作。

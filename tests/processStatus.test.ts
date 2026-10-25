@@ -15,6 +15,8 @@ test("live labels show concrete activity and retain progress between actions", (
 	const thought = groupFor([...group.entries.flatMap((entry) => entry.result ? [entry.block, entry.result] : [entry.block]), result("two"), { kind: "thinking", text: "重试分析" }]);
 	assert.equal(processStatus(thought, true).label, "正在思考");
 	assert.doesNotMatch(processStatus(thought, true).label, /字|段/);
+	assert.equal(toolActivityLabel(tool("del", "delete", { path: "tmp/old.json" })), "正在删除 old.json");
+	assert.equal(toolActivityLabel(tool("del", "delete", {})), "正在删除文件");
 });
 
 test("visible narration is not repeated in status and still suppresses generic waiting", () => {

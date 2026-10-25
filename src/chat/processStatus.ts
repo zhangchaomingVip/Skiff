@@ -30,10 +30,10 @@ export function toolActivityLabel(tool: Tool): string {
 		const subcommand = /^(test|build|check|run|install|ci|status|diff|log|show|fetch)$/i.test(words[1] ?? "") ? words[1] : undefined;
 		return `正在运行${executable ? ` ${executable}${subcommand ? ` ${subcommand}` : ""}` : "命令"}`;
 	}
-	if (kind === "read" || kind === "write" || kind === "list") {
+	if (kind === "read" || kind === "write" || kind === "delete" || kind === "list") {
 		const path = args.path ?? args.file ?? args.filePath ?? args.file_path;
 		const name = typeof path === "string" ? safeName(path.split(/[/\\]/).pop()) : undefined;
-		const action = kind === "read" ? "读取" : kind === "write" ? "编辑" : "浏览";
+		const action = kind === "read" ? "读取" : kind === "write" ? "编辑" : kind === "delete" ? "删除" : "浏览";
 		return `正在${action}${name ? ` ${name}` : kind === "list" ? "目录" : "文件"}`;
 	}
 	return kind === "web" ? "正在联网搜索" : kind === "find" ? "正在查找文件" : kind === "search" ? "正在搜索内容" : "正在调用工具";

@@ -233,6 +233,7 @@ export function preparePreview(target) {
 			] },
 			{ role: "toolResult", toolCallId: "p31-write", name: "write", content: "已写入 docs/preview.md" },
 			{ role: "assistant", content: "### 单文件修改\n\n结果卡片出现在正文之后、操作栏之前，只展示真实数据。" },
+			{ role: "user", content: "再修改三个文件并删除两个，看看聚合卡和删除卡。" },
 			{ role: "assistant", content: [
 				{ type: "toolCall", id: "p31-edit-a", name: "edit", arguments: { path: "src/App.tsx", oldText: "const width = 800;", newText: "const width = 900;" } },
 				{ type: "toolCall", id: "p31-edit-b", name: "edit", arguments: { path: "src/components/MessageItem.tsx", oldText: "const ready = false;", newText: "const ready = true;" } },
