@@ -686,6 +686,19 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .sidebar-menu button.danger { color: var(--danger); }
 .sidebar-menu-divider { height: 1px; margin: 2px var(--space-1); background: var(--border); }
 .rename-input { min-width: 0; width: 100%; border: 1px solid var(--accent); border-radius: var(--radius-xs); color: var(--text); background: var(--bg); padding: 5px; font-size: var(--font-size-base); }
+.chat-check { flex-shrink: 0; display: flex; align-items: center; justify-content: center; width: 16px; height: 16px; margin-left: var(--space-2); border: 1.5px solid var(--border); border-radius: var(--radius-xs); color: transparent; }
+.chat-row:hover .chat-check { border-color: var(--muted); }
+.chat-row.checked { background: var(--selected); --row-bg: var(--selected); }
+.chat-row.checked .chat-link { color: var(--text); }
+.chat-row.checked .chat-check { border-color: var(--accent); background: var(--accent); color: var(--bg); }
+.project-check { flex-shrink: 0; display: flex; align-items: center; justify-content: center; width: 16px; height: 16px; margin-right: var(--space-1); padding: 0; border: 1.5px solid var(--border); border-radius: var(--radius-xs); background: transparent; color: transparent; cursor: pointer; }
+.project-check:hover:not(:disabled) { border-color: var(--muted); }
+.project-check.checked, .project-check.partial { border-color: var(--accent); background: var(--accent); color: var(--bg); }
+.sidebar-bulk { display: flex; flex-direction: column; gap: var(--space-1); padding: var(--space-2) 0 0; border-top: 1px solid var(--sidebar-border); animation: sidebar-in var(--transition-fast) ease; }
+.sidebar-bulk-meta { display: flex; align-items: center; gap: var(--space-1); }
+.sidebar-bulk-count { flex: 1; min-width: 0; padding-left: var(--space-2); color: var(--secondary); font-size: var(--font-size-sm); font-variant-numeric: tabular-nums; }
+.sidebar-bulk-actions { display: flex; gap: var(--space-2); padding: 0 var(--space-2) var(--space-2); }
+.sidebar-bulk-actions .ui-button { flex: 1; justify-content: center; }
 @media (hover: none) { .message-buttons, .sidebar-row-actions { opacity: 1; pointer-events: auto; } }
 @media (max-width: 760px) { .back-bottom { right: 20px; } }
 @media (prefers-reduced-motion: reduce) { .message-buttons, .disclosure, .thinking-toggle svg, .project-chevron svg, .section-toggle svg, .sidebar-collapse { transition: none; } }

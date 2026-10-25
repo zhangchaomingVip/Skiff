@@ -1,4 +1,4 @@
-import { Input, IconButton } from "./ui";
+import { Button, Dialog, Input, IconButton } from "./ui";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import type { Conversation, Project } from "../chat/workspace";
@@ -102,6 +102,9 @@ export function Sidebar({ projects, chats, activeId, selectedProjectId, homeActi
 	const [editing, setEditing] = useState<{ id: string; kind: "chat" | "project"; text: string; scope?: string }>();
 	const [deleting, setDeleting] = useState<{ id: string; kind: "chat" | "purge"; name: string; hasFile?: boolean }>();
 	const [removingProject, setRemovingProject] = useState<{ id: string; name: string; chatCount: number; sessionCount: number }>();
+	const [selecting, setSelecting] = useState(false);
+	const [bulkIds, setBulkIds] = useState<Set<string>>(() => new Set());
+	const [bulkDeleting, setBulkDeleting] = useState(false);
 	const [menu, setMenu] = useState<
 		| { x: number; y: number; kind: "chat"; chatId: string; scope: string }
 		| { x: number; y: number; kind: "project"; projectId: string }
@@ -122,6 +125,40 @@ export function Sidebar({ projects, chats, activeId, selectedProjectId, homeActi
 		window.addEventListener("resize", closeMenu);
 		return () => { window.removeEventListener("pointerdown", onPointerDown); window.removeEventListener("keydown", onKeyDown); window.removeEventListener("resize", closeMenu); };
 	}, [menu]);
+
+	const exitBulkSelection = () => { setSelecting(false); setBulkIds(new Set()); setBulkDeleting(false); };
+	const toggleBulk = (id: string) => setBulkIds((previous) => { const next = new Set(previous); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+	const projectBulkState = (projectId: string) => {
+		const ids = chats.filter((chat) => chat.projectId === projectId).map((chat) => chat.id);
+		const selected = ids.filter((id) => bulkIds.has(id)).length;
+		return { ids, all: ids.length > 0 && selected === ids.length, some: selected > 0 && selected < ids.length };
+	};
+	const toggleProjectBulk = (projectId: string) => setBulkIds((previous) => {
+		const ids = chats.filter((chat) => chat.projectId === projectId).map((chat) => chat.id);
+		const next = new Set(previous);
+		const allSelected = ids.length > 0 && ids.every((id) => next.has(id));
+		for (const id of ids) { if (allSelected) next.delete(id); else next.add(id); }
+		return next;
+	});
+	// Selection is global by chat id: a chat checked under its project stays
+	// checked in 最近 and search results, and disappears from the set when deleted.
+	useEffect(() => {
+		setBulkIds((previous) => {
+			const next = new Set([...previous].filter((id) => chats.some((chat) => chat.id === id)));
+			return next.size === previous.size ? previous : next;
+		});
+		if (!chats.length) setSelecting(false);
+	}, [chats]);
+	useEffect(() => {
+		if (!selecting) return;
+		const onKeyDown = (event: KeyboardEvent) => {
+			if (event.key !== "Escape" || event.defaultPrevented) return;
+			event.preventDefault();
+			exitBulkSelection();
+		};
+		window.addEventListener("keydown", onKeyDown);
+		return () => window.removeEventListener("keydown", onKeyDown);
+	}, [selecting]);
 
 	// Edge fades hint that the list continues above or below the viewport.
 	const updateScrollFades = () => {
@@ -214,19 +251,32 @@ export function Sidebar({ projects, chats, activeId, selectedProjectId, homeActi
 		setOrder((previous) => [...rest, ...previous.filter((id) => !rest.includes(id))]);
 	};
 
+	const bulkCount = bulkIds.size;
+	const bulkAll = bulkCount > 0 && bulkCount >= chats.length;
+	const bulkBlocked = [...bulkIds].some((id) => canCloseChat?.(id) === false);
+	const bulkHint = bulkBlocked ? "有会话正在生成或等待确认，暂时无法批量操作" : undefined;
+	const bulkActionsDisabled = disabled || !bulkCount || bulkBlocked;
+	const bulkArchive = () => { for (const id of bulkIds) onArchiveChat(id); exitBulkSelection(); };
+	const bulkRemove = () => { for (const id of bulkIds) onDeleteChat(id); exitBulkSelection(); };
+	// Purging awaits each file removal; a failed chat is reported through the
+	// workspace alert like the single-chat flow while the loop moves on.
+	const bulkPurge = async () => { for (const id of bulkIds) await onPurgeChat?.(id); exitBulkSelection(); };
+
 	const renderChatRow = (chat: Conversation, list: Conversation[], scope = chat.projectId) => {
-		const showDrop = !!dragId && dragId !== chat.id && dropTarget?.id === chat.id && dropTarget.scope === scope;
-		return <div key={chat.id} className={`chat-row ${chat.id === activeId ? "selected" : ""} ${showDrop ? (dropTarget.before ? "drop-above" : "drop-below") : ""}`} draggable={!disabled && !search && editing?.id !== chat.id} onDragStart={(event) => { setDragId(chat.id); event.dataTransfer.effectAllowed = "move"; }} onDragEnd={() => { setDragId(undefined); setDropTarget(undefined); }} onDragOver={(event) => { if (!dragId || dragId === chat.id) return; const source = list.find((item) => item.id === dragId); if (!source || !!source.pinned !== !!chat.pinned) return; event.preventDefault(); event.dataTransfer.dropEffect = "move"; const rect = event.currentTarget.getBoundingClientRect(); setDropTarget({ id: chat.id, before: event.clientY < rect.top + rect.height / 2, scope }); }} onDrop={(event) => { event.preventDefault(); handleDrop(list, chat.id, event.clientY < event.currentTarget.getBoundingClientRect().top + event.currentTarget.getBoundingClientRect().height / 2); }} onContextMenu={(event) => openChatMenu(event, chat, scope)}>
-			{editing?.id === chat.id && editing.scope === scope ? renameInput() : <button className="chat-link" disabled={navigationDisabled} onClick={() => onSelectChat(chat.id)} title={conversationTooltip(chat, chats)} aria-current={chat.id === activeId ? "page" : undefined}>
+		const checked = selecting && bulkIds.has(chat.id);
+		const showDrop = !selecting && !!dragId && dragId !== chat.id && dropTarget?.id === chat.id && dropTarget.scope === scope;
+		return <div key={chat.id} className={`chat-row ${chat.id === activeId ? "selected" : ""} ${checked ? "checked" : ""} ${showDrop ? (dropTarget.before ? "drop-above" : "drop-below") : ""}`} draggable={!disabled && !search && editing?.id !== chat.id && !selecting} onDragStart={(event) => { setDragId(chat.id); event.dataTransfer.effectAllowed = "move"; }} onDragEnd={() => { setDragId(undefined); setDropTarget(undefined); }} onDragOver={(event) => { if (!dragId || dragId === chat.id) return; const source = list.find((item) => item.id === dragId); if (!source || !!source.pinned !== !!chat.pinned) return; event.preventDefault(); event.dataTransfer.dropEffect = "move"; const rect = event.currentTarget.getBoundingClientRect(); setDropTarget({ id: chat.id, before: event.clientY < rect.top + rect.height / 2, scope }); }} onDrop={(event) => { event.preventDefault(); handleDrop(list, chat.id, event.clientY < event.currentTarget.getBoundingClientRect().top + event.currentTarget.getBoundingClientRect().height / 2); }} onContextMenu={selecting ? undefined : (event) => openChatMenu(event, chat, scope)}>
+			{selecting && <span className="chat-check" aria-hidden="true">{checked && <Icon name="check" size={16} />}</span>}
+			{editing?.id === chat.id && editing.scope === scope ? renameInput() : <button className="chat-link" disabled={navigationDisabled} aria-pressed={selecting ? checked : undefined} onClick={() => { if (selecting) toggleBulk(chat.id); else onSelectChat(chat.id); }} title={selecting ? undefined : conversationTooltip(chat, chats)} aria-current={chat.id === activeId ? "page" : undefined}>
 				<span className="chat-title">{highlight(conversationLabel(chat, chats), search)}</span>
 				{statuses?.get(chat.id) && statuses.get(chat.id) !== "idle" ? <span className={`session-status ${statuses.get(chat.id)}`} role="status" aria-label={statusLabels[statuses.get(chat.id)!]} title={statusLabels[statuses.get(chat.id)!]}>{statusSymbols[statuses.get(chat.id)!]}</span> : runningIds?.has(chat.id) && <span className="dot busy" role="status" aria-label="正在生成" />}
 				{chat.hasDraft && <span className="chat-draft">草稿</span>}
 				{!!search && <time dateTime={new Date(chat.updatedAt).toISOString()}>{calendarGroup(chat.updatedAt)}</time>}
 			</button>}
-			<div className="sidebar-row-actions">
+			{!selecting && <div className="sidebar-row-actions">
 				<IconButton size="compact"  disabled={disabled} aria-label={`${chat.pinned ? "取消固定" : "固定"}聊天 ${chat.title}`} title={chat.pinned ? "取消固定" : "固定到顶部"} onClick={() => onTogglePinChat(chat.id, !chat.pinned)}><Icon name="pin" size={13} /></IconButton>
 				<IconButton size="compact" disabled={disabled || canCloseChat?.(chat.id) === false} aria-label={`归档聊天 ${chat.title}`} title="归档聊天" onClick={() => onArchiveChat(chat.id)}><Icon name="archive" size={13} /></IconButton>
-			</div>
+			</div>}
 		</div>;
 	};
 
@@ -246,12 +296,21 @@ export function Sidebar({ projects, chats, activeId, selectedProjectId, homeActi
 		<aside className="sidebar" aria-label="项目与聊天导航">
 			{deleting && <ConfirmDialog title={deleting.kind === "purge" ? "永久删除聊天" : "删除聊天"} description={deleting.kind === "purge" ? `永久删除 ${deleting.name}？${deleting.hasFile ? "将直接删除 pi 会话目录中的对话文件，无法恢复。" : "该聊天还没有 pi 会话文件，只会移除侧栏索引。"}` : `从侧栏删除 ${deleting.name}，pi 会话文件会保留。`} onConfirm={() => { if (deleting.kind === "purge") void onPurgeChat?.(deleting.id); else onDeleteChat(deleting.id); }} onClose={() => setDeleting(undefined)} />}
 			{removingProject && <ProjectRemoveDialog name={removingProject.name} chatCount={removingProject.chatCount} sessionCount={removingProject.sessionCount} onHide={() => onHideProject(removingProject.id)} onPurge={() => void onPurgeProject(removingProject.id)} onClose={() => setRemovingProject(undefined)} />}
+			{bulkDeleting && <Dialog className="project-dialog" aria-label="批量删除聊天" onClose={() => setBulkDeleting(false)}>
+				<div className="dialog-heading"><h2>删除 {bulkCount} 个聊天</h2><IconButton aria-label="关闭批量删除确认" onClick={() => setBulkDeleting(false)}><Icon name="close" /></IconButton></div>
+				<p>从侧栏移除：仅删除侧栏索引，pi 会话文件保留。永久删除：同时删除 pi 会话目录中的对话文件，无法恢复。</p>
+				<div className="dialog-actions">
+					<Button aria-label="取消批量删除" onClick={() => setBulkDeleting(false)}>取消</Button>
+					<Button disabled={bulkActionsDisabled} title={bulkHint} aria-label="从侧栏移除所选聊天" onClick={() => { setBulkDeleting(false); bulkRemove(); }}>从侧栏移除</Button>
+					<Button variant="danger" disabled={bulkActionsDisabled} title={bulkHint} aria-label="永久删除所选聊天" onClick={() => { setBulkDeleting(false); void bulkPurge(); }}>永久删除</Button>
+				</div>
+			</Dialog>}
 			<button className="new-chat" onClick={onNewChat} disabled={!projects.length}><Icon name="edit" /><span>新聊天</span><span className="shortcut">{isMacPlatform() ? "Cmd+N" : "Ctrl+N"}</span></button>
 			<button className={`home-nav ${homeActive ? "active" : ""}`} onClick={onHome} disabled={!projects.length} aria-current={homeActive ? "page" : undefined}><Icon name="home" /><span>主页</span></button>
 			{searchOpen && <div className="sidebar-search"><Icon name="search" size={14} /><Input autoFocus aria-label="搜索项目与聊天" placeholder="搜索项目与聊天" value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); setSearch(""); setSearchOpen(false); } }} /><IconButton size="compact"  onClick={() => { setSearch(""); setSearchOpen(false); }} aria-label="关闭搜索" title="关闭搜索"><Icon name="close" size={13} /></IconButton></div>}
 			<div className="sidebar-scroll" ref={scrollRef} onScroll={updateScrollFades} onTransitionEnd={updateScrollFades}>
 				{!!search.trim() && <section className="sidebar-search-results" aria-label="聊天搜索结果"><h2>标题命中</h2>{projectHistory.recent.length ? projectHistory.recent.map((chat) => renderChatRow(chat, projectHistory.recent)) : <p>无标题命中</p>}<h2>正文命中</h2><p role="status">{searchProgress?.loading ? `正在搜索 ${searchProgress.scanned}/${searchProgress.total}` : searchProgress ? `已搜索 ${searchProgress.scanned}/${searchProgress.total} · ${searchProgress.matches.length} 条命中` : "等待搜索…"}{!!searchProgress?.failures.length && ` · ${searchProgress.failures.length} 个历史无法读取，结果不完整`}</p>{searchProgress?.matches.slice(0, resultLimit).map((match, index) => { const chat = chats.find((item) => item.id === match.location.chatId); return chat && <button className="body-search-match" key={`${match.location.chatId}:${index}`} disabled={navigationDisabled} onClick={() => onSearchMatch?.(match.location)}><strong>{conversationLabel(chat, chats)}</strong><span><SearchText text={match.snippet} query={search} /></span></button>; })}{searchProgress && searchProgress.matches.length > resultLimit && <button className="body-search-match" onClick={() => setResultLimit((value) => value + 200)}>显示更多正文命中（共 {searchProgress.matches.length} 条）</button>}{searchProgress && !searchProgress.loading && !searchProgress.matches.length && <p>无正文命中</p>}</section>}
-				{!search.trim() && <><div className="section-label"><button type="button" className="section-name" onClick={() => setProjectsExpanded((expanded) => !expanded)} aria-expanded={projectsExpanded} aria-controls={projectsListId} title={projectsExpanded ? "收起项目" : "展开项目"}>项目<span className={`section-toggle ${projectsExpanded ? "expanded" : ""}`}><Icon name="chevron" size={13} /></span></button><IconButton size="compact"  onClick={() => setSearchOpen((open) => !open)} aria-label="搜索项目与聊天" aria-expanded={searchOpen} title="搜索项目与聊天"><Icon name="search" size={16} /></IconButton><IconButton size="compact"  onClick={onAddProject} disabled={disabled} aria-label="添加项目" title="添加项目"><Icon name="plus" size={16} /></IconButton></div>
+				{!search.trim() && <><div className="section-label"><button type="button" className="section-name" onClick={() => setProjectsExpanded((expanded) => !expanded)} aria-expanded={projectsExpanded} aria-controls={projectsListId} title={projectsExpanded ? "收起项目" : "展开项目"}>项目<span className={`section-toggle ${projectsExpanded ? "expanded" : ""}`}><Icon name="chevron" size={13} /></span></button><IconButton size="compact"  onClick={() => setSearchOpen((open) => !open)} aria-label="搜索项目与聊天" aria-expanded={searchOpen} title="搜索项目与聊天"><Icon name="search" size={16} /></IconButton><IconButton size="compact"  onClick={() => { if (selecting) exitBulkSelection(); else { setSelecting(true); setBulkIds(new Set()); } }} disabled={disabled || !chats.length} aria-label="批量选择会话" aria-pressed={selecting} title="批量选择会话"><Icon name="checkbox" size={16} /></IconButton><IconButton size="compact"  onClick={onAddProject} disabled={disabled} aria-label="添加项目" title="添加项目"><Icon name="plus" size={16} /></IconButton></div>
 				<SidebarCollapse open={projectsExpanded} id={projectsListId}>
 					{() => <nav aria-label="项目列表">
 						{visibleProjects.map((project) => {
@@ -279,10 +338,12 @@ export function Sidebar({ projects, chats, activeId, selectedProjectId, homeActi
 								return rows;
 							};
 							const isSelected = project.id === selectedProjectId;
+							const bulk = selecting ? projectBulkState(project.id) : undefined;
 							return <div className="project-group" key={project.id}>
 								<div className={`project-row ${isSelected ? "selected" : ""}`} onContextMenu={(event) => openProjectMenu(event, project)}>
 									<IconButton size="compact" className={`project-chevron ${!isCollapsed || search ? "expanded" : ""}`} onClick={() => setCollapsed((previous) => { const next = new Set(previous); if (next.has(project.id)) next.delete(project.id); else next.add(project.id); return next; })} aria-label={`${!isCollapsed || search ? "收起" : "展开"}${project.name}`} aria-expanded={!isCollapsed || !!search} aria-controls={`${projectsListId}-${project.id}`}><Icon name="chevron" size={13} /></IconButton>
 									{editing?.id === project.id ? renameInput() : <button className="project-select" disabled={navigationDisabled} onClick={() => onSelectProject(project.id)} aria-current={isSelected ? "true" : undefined} title={project.path}><Icon name="folder" size={15} /><span>{project.name}</span></button>}
+									{bulk && !!bulk.ids.length && <button type="button" className={`project-check ${bulk.all ? "checked" : bulk.some ? "partial" : ""}`} role="checkbox" aria-checked={bulk.all ? "true" : bulk.some ? "mixed" : "false"} aria-label={`${bulk.all ? "取消全选" : "全选"} ${project.name} 的会话`} title={bulk.all ? `取消全选 ${project.name} 的会话` : `全选 ${project.name} 的会话`} disabled={disabled} onClick={() => toggleProjectBulk(project.id)}>{bulk.all ? <Icon name="check" size={14} /> : bulk.some ? <Icon name="minus" size={14} /> : null}</button>}
 								</div>
 								<SidebarCollapse open={!isCollapsed || !!search} id={`${projectsListId}-${project.id}`}>
 									{() => <div className="project-chats">
@@ -300,6 +361,17 @@ export function Sidebar({ projects, chats, activeId, selectedProjectId, homeActi
 				</section>}
 				</>}
 			</div>
+			{selecting && <div className="sidebar-bulk" role="group" aria-label="批量管理会话">
+				<div className="sidebar-bulk-meta">
+					<span className="sidebar-bulk-count" role="status">已选 {bulkCount} / {chats.length}</span>
+					<Button size="compact" variant="ghost" disabled={disabled || !chats.length} onClick={() => setBulkIds(bulkAll ? new Set() : new Set(chats.map((chat) => chat.id)))}>{bulkAll ? "取消全选" : "全选"}</Button>
+					<IconButton size="compact" onClick={exitBulkSelection} aria-label="退出批量选择" title="退出批量选择"><Icon name="close" size={13} /></IconButton>
+				</div>
+				<div className="sidebar-bulk-actions">
+					<Button size="compact" variant="ghost" disabled={bulkActionsDisabled} title={bulkHint} onClick={bulkArchive}><Icon name="archive" size={14} />归档</Button>
+					<Button size="compact" variant="ghost" disabled={bulkActionsDisabled} title={bulkHint} onClick={() => setBulkDeleting(true)}><Icon name="trash" size={14} />删除</Button>
+				</div>
+			</div>}
 			<div className="sidebar-footer"><span className={`dot ${connected ? "on" : "off"}`} />{activeId ? `pi ${connected ? "已连接" : "未连接"}` : "无活动会话"}</div>
 			{menu?.kind === "chat" && menuChat && <div className="sidebar-menu" ref={menuRef} style={{ left: menu.x, top: menu.y }} role="menu">
 				<button disabled={navigationDisabled} onClick={() => { onSelectChat(menu.chatId); closeMenu(); }}><Icon name="message" size={14} />打开</button>
