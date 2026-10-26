@@ -34,12 +34,17 @@ const ACTION_PHRASES: Record<ToolKind, { verb: string; unit: string }> = {
 	other: { verb: "调用", unit: "次" },
 };
 
+/** Tools that keep the generic "other" layout (input + output) but deserve a real phrase. */
+const LABELS_BY_NAME: Record<string, string> = { read_url: "读取网页" };
+
 export function toolKind(name: string): ToolKind {
 	return KIND_BY_NAME[name.toLowerCase()] ?? "other";
 }
 
 /** Label for a single call, falling back to the raw tool name for unknown tools. */
 export function toolKindLabel(name: string): string {
+	const label = LABELS_BY_NAME[name.toLowerCase()];
+	if (label) return label;
 	const kind = toolKind(name);
 	return kind === "other" ? name : RUNNING_PHRASES[kind];
 }
@@ -78,7 +83,8 @@ export interface ToolRunSummary {
 function actionLabel(kind: ToolKind, items: ToolRunItem[], settled = false): string {
 	const failures = items.filter((item) => item.result?.isError).length;
 	// A single unknown tool keeps its identifier as the verb; identifiers never take the past-tense suffix.
-	const raw = kind === "other" && new Set(items.map((item) => item.block.name)).size === 1 ? items[0].block.name : undefined;
+	const single = kind === "other" && new Set(items.map((item) => item.block.name)).size === 1;
+	const raw = single ? LABELS_BY_NAME[items[0].block.name.toLowerCase()] ?? items[0].block.name : undefined;
 	const verb = raw ?? ACTION_PHRASES[kind].verb;
 	const unit = raw ? "次" : ACTION_PHRASES[kind].unit;
 	return `${verb}${settled && !raw ? "了" : ""} ${items.length} ${unit}${failures ? `（${failures} 失败）` : ""}`;

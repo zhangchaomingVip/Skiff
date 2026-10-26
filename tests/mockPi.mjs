@@ -13,6 +13,7 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 	let testOrder = Date.now() * 1000;
 	const tickets = new Map(); const latestTests = new Map(); const cancelledTests = new Set();
 	let failBatch = false; let failOrder = false;
+	let webSearchProvider = "tavily";
 	const connection = (relay) => JSON.stringify([relay.baseUrl.replace(/\/+$/, ""), relay.apiKey, relay.protocol ?? "openai", relay.timeoutSeconds]);
 	const persistMetadata = () => storage?.setItem("skiff.test.metadata.v1", JSON.stringify({ ...metadata, connections: Object.fromEntries(Object.entries(metadata.connections).map(([id, entry]) => [id, { version: entry.version }])) }));
 	const syncMetadata = () => {
@@ -308,8 +309,10 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 				return;
 			}
 			if (command === "rpc_stop") { target.clearTimeout(processes.get(args.instanceId)?.timer); processes.delete(args.instanceId); return; }
-			if (command === "get_web_search_status") return { agentDir: "D:\\mock\\pi", configured: false, extensionInstalled: false, enabled: false, validated: null };
-			if (command === "validate_web_search") return { agentDir: "D:\\mock\\pi", configured: false, extensionInstalled: false, enabled: false, validated: null };
+			if (command === "get_web_search_status") return { agentDir: "D:\\mock\\pi", provider: webSearchProvider, configured: false, extensionInstalled: false, enabled: false, readUrlEnabled: false, validated: null };
+			if (command === "validate_web_search") return { agentDir: "D:\\mock\\pi", provider: webSearchProvider, configured: false, extensionInstalled: false, enabled: false, readUrlEnabled: false, validated: null };
+			if (command === "set_web_search_provider") { webSearchProvider = args.provider === "exa" ? "exa" : "tavily"; return; }
+			if (command === "set_web_search_read_url") return;
 			if (command === "save_web_search_key" || command === "clear_web_search_key") return;
 			if (command === "install_web_search_extension") return false;
 			if (command !== "rpc_send") throw new Error(`Unknown mock command: ${command}`);

@@ -3,13 +3,17 @@ import { invoke } from "@tauri-apps/api/core";
 import type { PiSessionActions, SessionOwner } from "./usePiSession";
 import { useSessionValue } from "./useSessionValue";
 
+export type WebSearchProvider = "tavily" | "exa";
+
 /** Secret never leaves Rust; only a trailing hint comes back. */
 interface Status {
 	agentDir?: string;
+	provider?: WebSearchProvider;
 	configured: boolean;
 	keyHint?: string;
 	extensionInstalled: boolean;
 	enabled: boolean;
+	readUrlEnabled?: boolean;
 	validated: boolean | null;
 	validationMessage?: string;
 }
@@ -17,11 +21,15 @@ interface Status {
 export interface WebSearchControls {
 	/** pi actually loaded the Skiff extension, so `/web` exists. */
 	available: boolean;
+	/** Search engine in use; keys are stored per engine in Rust. */
+	provider: WebSearchProvider;
 	configured: boolean;
 	keyHint?: string;
 	agentDir?: string;
 	extensionInstalled: boolean;
 	enabled: boolean;
+	/** Exa-only `read_url` tool switch; ignored while another engine is active. */
+	readUrlEnabled: boolean;
 	validated?: boolean;
 	validationMessage?: string;
 	statusLoaded: boolean;
@@ -29,9 +37,13 @@ export interface WebSearchControls {
 	busy: boolean;
 	error?: string;
 	toggle: (next: boolean) => Promise<void>;
+	setProvider: (provider: WebSearchProvider) => Promise<void>;
+	setReadUrl: (next: boolean) => Promise<void>;
 	clearKey: () => Promise<void>;
 	install: () => Promise<void>;
 	refresh: () => Promise<void>;
+	/** Live key check; costs engine credits, so call it only after a save or by request. */
+	verify: () => Promise<void>;
 }
 
 /**
@@ -41,34 +53,48 @@ export interface WebSearchControls {
 export function useWebSearch(actions: PiSessionActions, connected: boolean, reconnect: () => void, owner: SessionOwner, isCurrent: () => boolean): WebSearchControls {
 	const [available, setAvailable] = useSessionValue(owner, isCurrent, () => false);
 	const [status, setStatus] = useState<Status>();
+	const [provider, setProviderState] = useState<WebSearchProvider>("tavily");
 	const [enabled, setEnabled] = useState(false);
+	const [readUrlEnabled, setReadUrlState] = useState(false);
 	const [validating, setValidating] = useState(false);
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string>();
 	const statusRequest = useRef(0);
 
+	/**
+	 * Reads the stored configuration only. Never calls the search engine: a live
+	 * key check costs real credits on Exa, so it is reserved for saving or
+	 * explicitly re-running validation.
+	 */
 	const refresh = useCallback(async () => {
 		const requestId = ++statusRequest.current;
-		setValidating(true);
 		setError(undefined);
 		try {
 			const next = await invoke<Status>("get_web_search_status");
 			if (requestId !== statusRequest.current) return;
 			setStatus(next);
+			setProviderState(next.provider ?? "tavily");
 			setEnabled(next.enabled);
-			if (!next.configured) return;
-
-			try {
-				const validation = await invoke<Status>("validate_web_search");
-				if (requestId === statusRequest.current) {
-					setStatus(validation);
-					setEnabled(validation.enabled);
-				}
-			} catch (e) {
-				if (requestId === statusRequest.current) setStatus({ ...next, validated: false, validationMessage: String(e) });
-			}
+			setReadUrlState(next.readUrlEnabled ?? false);
 		} catch (e) {
 			if (requestId === statusRequest.current) setError(String(e));
+		}
+	}, []);
+
+	/** Live key check; costs credits, so only called after a save or on demand. */
+	const verify = useCallback(async () => {
+		const requestId = ++statusRequest.current;
+		setValidating(true);
+		setError(undefined);
+		try {
+			const next = await invoke<Status>("validate_web_search");
+			if (requestId !== statusRequest.current) return;
+			setStatus(next);
+			setProviderState(next.provider ?? "tavily");
+			setEnabled(next.enabled);
+			setReadUrlState(next.readUrlEnabled ?? false);
+		} catch (e) {
+			if (requestId === statusRequest.current) setStatus((current) => (current ? { ...current, validated: false, validationMessage: String(e) } : current));
 		} finally {
 			if (requestId === statusRequest.current) setValidating(false);
 		}
@@ -98,7 +124,7 @@ export function useWebSearch(actions: PiSessionActions, connected: boolean, reco
 			return;
 		}
 		if (next && status?.validated === false) {
-			setError(status.validationMessage ?? "Tavily API Key 验证失败，请检查设置。");
+			setError(status.validationMessage ?? "搜索引擎 API Key 验证失败，请检查设置。");
 			return;
 		}
 		setBusy(true);
@@ -112,6 +138,35 @@ export function useWebSearch(actions: PiSessionActions, connected: boolean, reco
 			setBusy(false);
 		}
 	}, [actions, available, connected, isCurrent, status, setBusy, setError]);
+
+	const setProvider = useCallback(async (next: WebSearchProvider) => {
+		if (!isCurrent() || next === provider) return;
+		setBusy(true);
+		setError(undefined);
+		try {
+			await invoke("set_web_search_provider", { provider: next });
+			setProviderState(next);
+			await refresh();
+		} catch (e) {
+			setError(String(e));
+		} finally {
+			setBusy(false);
+		}
+	}, [provider, refresh, isCurrent, setBusy, setError]);
+
+	const setReadUrl = useCallback(async (next: boolean) => {
+		if (!isCurrent()) return;
+		setBusy(true);
+		setError(undefined);
+		try {
+			await invoke("set_web_search_read_url", { enabled: next });
+			setReadUrlState(next);
+		} catch (e) {
+			setError(String(e));
+		} finally {
+			setBusy(false);
+		}
+	}, [isCurrent, setBusy, setError]);
 
 	const clearKey = useCallback(async () => {
 		if (!isCurrent()) return;
@@ -146,11 +201,13 @@ export function useWebSearch(actions: PiSessionActions, connected: boolean, reco
 
 	return {
 		available,
+		provider,
 		configured: status?.configured ?? false,
 		keyHint: status?.keyHint,
 		agentDir: status?.agentDir,
 		extensionInstalled: status?.extensionInstalled ?? false,
 		enabled,
+		readUrlEnabled,
 		validated: status?.validated ?? undefined,
 		validationMessage: status?.validationMessage,
 		statusLoaded: status !== undefined,
@@ -158,8 +215,11 @@ export function useWebSearch(actions: PiSessionActions, connected: boolean, reco
 		busy,
 		error,
 		toggle,
+		setProvider,
+		setReadUrl,
 		clearKey,
 		install,
 		refresh,
+		verify,
 	};
 }

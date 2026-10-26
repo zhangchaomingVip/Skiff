@@ -45,5 +45,6 @@ export function parseSearchDetails(text: string): SearchDetails {
 		if (current) current.content += `${line}\n`;
 		else intro.push(line);
 	}
-	return { intro: intro.join("\n").trim().replace(/^摘要[：:]\s*/, ""), results: results.map((hit) => ({ ...hit, content: hit.content.trim() })) };
+	// 「摘要」或「摘要（Tavily 模型聚合，数字请回原文核对）」都只是一段导语标记。
+	return { intro: intro.join("\n").trim().replace(/^摘要(?:（[^）]*）)?[：:]\s*/, ""), results: results.map((hit) => ({ ...hit, content: hit.content.trim() })) };
 }

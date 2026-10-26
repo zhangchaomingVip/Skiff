@@ -12,6 +12,17 @@ function safeName(value: unknown): string | undefined {
 	return /^[\p{L}\p{N}_. /\\-]+$/u.test(name) ? name : undefined;
 }
 
+/** Host part of an http(s) URL, safe to render in a status line. */
+function safeHost(value: unknown): string | undefined {
+	if (typeof value !== "string") return undefined;
+	try {
+		const url = new URL(value);
+		return url.protocol === "http:" || url.protocol === "https:" ? safeName(url.hostname) : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
 export function toolActivityLabel(tool: Tool): string {
 	let args: Record<string, unknown> = {};
 	try {
@@ -21,6 +32,10 @@ export function toolActivityLabel(tool: Tool): string {
 	if (/^(subagent|sub_agent|spawn_agent|delegate|agent)$/i.test(tool.name)) {
 		const name = safeName(args.agent ?? args.name ?? args.task_name);
 		return `正在调用子代理${name ? ` ${name}` : ""}`;
+	}
+	if (/^read_url$/i.test(tool.name)) {
+		const host = safeHost(args.url);
+		return `正在读取网页${host ? ` ${host}` : ""}`;
 	}
 	const kind = toolKind(tool.name);
 	if (kind === "command") {

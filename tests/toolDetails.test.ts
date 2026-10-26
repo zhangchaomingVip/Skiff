@@ -16,6 +16,13 @@ test("source-like code examples remain part of the excerpt", () => {
 	assert.match(details.results[0].content, /### Example\nhttps:\/\/example.net/);
 });
 
+test("aggregated answer prefixes are stripped and demoted excerpt headings stay inside their result", () => {
+	const details = parseSearchDetails("摘要（Tavily 模型聚合，数字请回原文核对）：营收 962 亿\r\n\r\n### 财报\r\nhttps://example.com/report\r\n#### 财务摘要\r\n正文");
+	assert.equal(details.intro, "营收 962 亿");
+	assert.equal(details.results.length, 1);
+	assert.equal(details.results[0].content, "#### 财务摘要\n正文");
+});
+
 test("incomplete or unrecognized search output remains readable and empty results have no invented sources", () => {
 	for (const text of ["没有找到相关结果。", "### Still streaming", "", "Search service unavailable"]) {
 		assert.deepEqual(parseSearchDetails(text), { intro: text, results: [] });

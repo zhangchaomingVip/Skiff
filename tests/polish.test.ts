@@ -205,6 +205,8 @@ test("local grep and find keep their categories and failures in expanded calls",
 	assert.equal(toolCallSummary(items[0]).label, "grep · 搜索了 1 次（1 失败）");
 	assert.equal(toolRunSummary([items[0]]).kind, "search");
 	assert.equal(toolKindLabel("web_search"), "联网搜索");
+	assert.equal(toolKindLabel("read_url"), "读取网页");
+	assert.equal(toolCallSummary({ key: 0, block: { kind: "tool", id: "r", name: "read_url", argsText: '{"url":"https://example.com/a"}', done: true }, result: { kind: "toolResult", name: "read_url", text: "ok", isError: false } }).label, "read_url · 读取网页 1 次");
 });
 
 test("consecutive assistant messages between user prompts fold as one turn", () => {

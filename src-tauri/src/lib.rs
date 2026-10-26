@@ -238,6 +238,11 @@ fn start_session(app: AppHandle, sessions: &Mutex<HashMap<String, Proc>>, option
 	}
 	if let Some(dir) = get_pi_agent_dir() {
 		families::prepare_runtime(&dir, &mut cmd)?;
+		// Install the lookup extension up front so a new install only needs an
+		// API key; a failure here must not stop the session from starting.
+		if let Err(error) = search::ensure_extension() {
+			eprintln!("[skiff] web search extension unavailable: {error}");
+		}
 	}
 	cmd.stdin(Stdio::piped())
 		.stdout(Stdio::piped())
@@ -536,7 +541,7 @@ pub fn run() {
 			families::test_provider_connection, families::cancel_provider_test, families::discover_relay_models, families::probe_relay_endpoint,
 			families::fetch_pricing_page, families::extract_pricing_table,
 			families::fetch_public_catalog, families::fetch_official_pages, families::set_usd_cny_rate, families::create_family,
-			search::get_web_search_status, search::validate_web_search, search::save_web_search_key, search::clear_web_search_key, search::install_web_search_extension
+			search::get_web_search_status, search::validate_web_search, search::save_web_search_key, search::set_web_search_provider, search::set_web_search_read_url, search::clear_web_search_key, search::install_web_search_extension
 		])
 		.on_window_event(|window, event| {
 			if matches!(event, tauri::WindowEvent::Destroyed) {

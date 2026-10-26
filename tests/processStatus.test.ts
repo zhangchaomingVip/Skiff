@@ -257,6 +257,8 @@ test("status targets allow human actions while keeping command secrets, queries 
 	assert.equal(toolActivityLabel(tool("run", "bash", { command: "npm test --password private --token private" })), "正在运行 npm test");
 	assert.equal(toolActivityLabel(tool("run", "bash", { command: "curl https://name:private@example.com" })), "正在运行命令");
 	assert.equal(toolActivityLabel(tool("search", "web_search", { query: "password=private" })), "正在联网搜索");
+	assert.equal(toolActivityLabel(tool("read-url", "read_url", { url: "https://docs.example.com/a?token=private" })), "正在读取网页 docs.example.com");
+	assert.equal(toolActivityLabel(tool("read-url-bad", "read_url", { url: "file:///C:/token=private" })), "正在读取网页");
 	assert.equal(toolActivityLabel(tool("agent", "subagent", { agent: "reviewer", task: "token=private" })), "正在调用子代理 reviewer");
 	assert.equal(toolActivityLabel(tool("agent", "subagent", { agent: "sk-secret-credentials" })), "正在调用子代理");
 	assert.equal(toolActivityLabel(tool("read", "read", { path: "https://example.com/file?token=private" })), "正在读取文件");
