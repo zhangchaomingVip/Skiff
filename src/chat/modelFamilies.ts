@@ -30,6 +30,16 @@ export interface RuntimeOffer {
 	contextWindow: number;
 }
 
+/** Prefer familiar decimal or binary context sizes over unwieldy decimal fractions. */
+export function formatContextWindow(tokens: number): string {
+	const millions = tokens >= 1_000_000;
+	const suffix = millions ? "M" : "k";
+	const decimal = tokens / (millions ? 1_000_000 : 1000);
+	if (Number.isInteger(decimal)) return `${decimal}${suffix}`;
+	const binary = tokens / (millions ? 1024 * 1024 : 1024);
+	return `${Number.isInteger(binary) ? binary : decimal}${suffix}`;
+}
+
 function orderedOffers(offers: RuntimeOffer[]): RuntimeOffer[] {
 	return offers.map((offer, index) => ({ offer, index }))
 		.sort((a, b) => (a.offer.routeOrder ?? a.index) - (b.offer.routeOrder ?? b.index) || a.index - b.index)

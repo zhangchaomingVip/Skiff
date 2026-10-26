@@ -1055,11 +1055,15 @@ span.provider-mark.generic { display: inline-flex; align-items: center; justify-
 .editor-control #relay-base { font-family: var(--mono, monospace); font-size: var(--font-size-sm); }
 .editor-field input[type="number"] { max-width: 120px; }
 .provider-model-editor { min-width: 0; }
-.provider-model-editor-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-2); }
-.provider-model-editor-columns, .provider-model-editor-row { display: grid; grid-template-columns: minmax(120px, 1.5fr) minmax(80px, .75fr) minmax(80px, 1fr) 92px 28px; align-items: start; gap: var(--space-2); }
-.provider-model-editor-columns { margin-top: var(--space-3); color: var(--muted); font-size: var(--font-size-sm); }
+.provider-model-editor-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-3); }
+.provider-model-editor-heading > .muted { flex: 1 1 280px; min-width: 0; margin: 0; }
+.provider-section-actions { display: flex; flex: none; flex-wrap: wrap; gap: var(--space-2); margin-left: auto; }
+.provider-model-table { margin-top: var(--space-3); overflow-x: auto; }
+.provider-model-editor-columns, .provider-model-editor-row { display: grid; grid-template-columns: minmax(180px, 1.5fr) minmax(96px, .65fr) minmax(140px, 1fr) minmax(120px, .7fr) 32px; gap: var(--space-2); min-width: 600px; }
+.provider-model-editor-columns { align-items: center; min-height: 32px; padding: 0 var(--space-2); border-bottom: 1px solid var(--border); color: var(--muted); font-size: var(--font-size-sm); }
 .provider-model-editor-columns > span:nth-child(4) { text-align: right; }
-.provider-model-editor-row { margin-top: var(--space-2); }
+.provider-model-editor-columns > span:nth-child(5) { text-align: center; }
+.provider-model-editor-row { align-items: start; margin-top: 0; padding: var(--space-2); border-bottom: 1px solid var(--border); }
 .provider-model-editor-row > .ui-input { width: 100%; min-width: 0; padding: 0 var(--space-2); background: var(--panel-2); }
 .provider-model-id-cell { min-width: 0; }
 .provider-model-id-cell > .ui-input { font-family: var(--mono, monospace); font-size: var(--font-size-sm); }
@@ -1074,6 +1078,11 @@ span.provider-mark.generic { display: inline-flex; align-items: center; justify-
 .provider-family-suggest { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); margin-top: var(--space-2); padding: var(--space-2) var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--muted); font-size: var(--font-size-sm); }
 .provider-family-suggest > span { min-width: 0; }
 .provider-model-add { margin-top: var(--space-2); }
+.provider-editor-section[data-section="models"] .connection-exclusions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-top: var(--space-3); padding: var(--space-2) var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--subtle); color: var(--secondary); }
+.provider-editor-section[data-section="models"] .connection-exclusions > span { flex: 1 1 220px; }
+.provider-editor-section[data-section="models"] .connection-exclusions > button { margin-left: 0; }
+.provider-editor-section[data-section="models"] .connection-exclusions details { margin-top: 0; }
+.provider-editor-section[data-section="models"] .connection-exclusions details[open] { flex-basis: 100%; }
 .provider-editor-toolbar { display: flex; justify-content: flex-end; gap: var(--space-1); margin-top: var(--space-2); }
 .provider-editor-section { min-width: 0; padding: 0; margin-top: var(--space-3); }
 .provider-editor-section > .provider-editor-section-heading { display: flex; width: 100%; min-height: var(--control-primary); padding: var(--space-3) var(--space-4); border-radius: inherit; color: var(--text); font-size: var(--font-size-base); font-weight: var(--font-weight-semibold); }
@@ -1086,8 +1095,9 @@ span.provider-mark.generic { display: inline-flex; align-items: center; justify-
 .provider-price-note { margin: var(--space-3) 0 0; color: var(--muted); font-size: var(--font-size-sm); }
 .provider-price-sync { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); margin-top: var(--space-3); }
 .provider-price-sync .provider-price-note { flex: 1 1 auto; min-width: 0; margin: 0; }
+.provider-price-sync > .ui-button { flex: none; }
 .provider-price-sync-notice { display: block; margin-top: var(--space-1); color: var(--muted); font-size: var(--font-size-sm); }
-.provider-price-table-wrap { margin-top: var(--space-2); overflow-x: auto; }
+.provider-price-table-wrap { margin-top: var(--space-3); overflow-x: auto; }
 .provider-price-table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: var(--font-size-sm); }
 .provider-price-table caption { padding-block: var(--space-2); color: var(--muted); font-size: var(--font-size-sm); text-align: right; }
 .provider-price-table th, .provider-price-table td { padding: var(--space-2); border-bottom: 1px solid var(--border); text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
@@ -1320,10 +1330,15 @@ span.provider-mark.generic { display: inline-flex; align-items: center; justify-
 
 @layer components {
 /* Quiet resting borders keep the provider form readable; focus remains prominent. */
-.provider-editor-section[data-section="connection"] .editor-control .ui-input { border-color: var(--border); background: var(--surface); transition: border-color var(--transition-fast); }
-.provider-editor-section[data-section="connection"] .editor-control .ui-input:hover:not(:disabled):not([aria-invalid="true"]) { border-color: var(--boundary); }
-.provider-editor-section[data-section="connection"] .editor-control .ui-input:focus:not([aria-invalid="true"]) { border-color: var(--accent); }
+.preset-editor { --provider-focus-ring: color-mix(in srgb, var(--accent) 70%, var(--surface)); }
+.provider-editor-section .ui-input { border-color: var(--border); background: var(--surface); transition: border-color var(--transition-fast); }
+.provider-editor-section .ui-input:hover:not(:disabled):not([aria-invalid="true"]) { border-color: var(--boundary); }
+.provider-editor-section .ui-input:focus:not([aria-invalid="true"]) { border-color: var(--provider-focus-ring); }
 .preset-editor .ui-button[data-variant="secondary"] { border-color: var(--border); }
+}
+
+@layer accessibility {
+.preset-editor :where(.ui-input, .ui-button):focus-visible { outline-width: 1px; outline-color: var(--provider-focus-ring); }
 }
 
 @layer accessibility {

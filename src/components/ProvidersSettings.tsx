@@ -12,6 +12,7 @@ import { filterPresets, hostOf, matchPreset, PRESET_KINDS, type ProviderPreset }
 import { discoveredFamily, routesFromProviderModels, suggestFamilyId, suggestedFamilyLabel } from "../chat/providerRoutes";
 import { modelIdMatchesCatalog } from "../chat/latestModels";
 import { useModelCatalog } from "../chat/useModelCatalog";
+import { formatContextWindow } from "../chat/modelFamilies";
 import { blankModel, blankRelay, FAMILY_LABELS, maskKey, RELAY_PROTOCOLS, validateModels, type ModelFamily, type ModelSpec, type RelayProtocol, type RelayRouteSpec, type RelaySpec, type TestResult } from "../chat/useModelFamilies";
 import { filterSettingsProviders, providerSourceLabel, settingsProviderEndpointLabel, settingsProviderEndpointTitle } from "../chat/settingsModels";
 import type { SettingsLocation } from "./settingsNavigation";
@@ -32,7 +33,6 @@ type Draft =
 	| { kind: "relay"; relay: RelaySpec; isNew: boolean; preset?: ProviderPreset };
 
 type ProviderModelDraft = { familyId?: string; model: ModelSpec; contextWindowText?: string };
-const formatContextWindow = (tokens: number) => tokens >= 1_000_000 ? `${tokens / 1_000_000}M` : `${tokens / 1000}k`;
 const parseContextWindow = (text: string): number | undefined => {
 	const match = /^\s*(\d+(?:\.\d+)?|\.\d+)\s*([km]?)\s*$/i.exec(text);
 	if (!match) return undefined;
@@ -508,8 +508,8 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 		return <div className="provider-model-test">
 			{tested && <span className={`test-result ${running ? "muted" : tested.ok ? "ok" : "bad"}`} role="status" title={`${modelId} · ${text}`}>{text}</span>}
 			{running
-				? <Button type="button" variant="ghost" size="compact" onClick={() => stopProviderModelTest(modelId)}>停止</Button>
-				: <Button type="button" variant="ghost" size="compact" disabled={pending || !modelId || !relay.baseUrl.trim() || (!relay.apiKey && !preset?.keyOptional)} onClick={() => void testProviderModel(modelId)}>测试</Button>}
+				? <Button type="button" variant="secondary" size="compact" onClick={() => stopProviderModelTest(modelId)}>停止</Button>
+				: <Button type="button" variant="secondary" size="compact" disabled={pending || !modelId || !relay.baseUrl.trim() || (!relay.apiKey && !preset?.keyOptional)} onClick={() => void testProviderModel(modelId)}>测试</Button>}
 		</div>;
 	};
 
@@ -725,14 +725,17 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 						<ProviderEditorSection id="models" title="模型" status={`${providerModels.length} 个模型${relay.excludedModelIds?.length ? ` · 已剔除 ${relay.excludedModelIds.length} 个` : ""}`} open={editorSections.models} onToggle={(open) => setEditorSection("models", open)}>
 							<div className="provider-model-editor">
 								<div className="provider-model-editor-heading">
-									<Button type="button" variant="ghost" size="compact" onClick={() => void testRelay(undefined, true)} disabled={pending || testing || !relay.baseUrl || (!relay.apiKey && !preset?.keyOptional)}>测试所有模型（5 并发）</Button>
-									<Button type="button" variant="ghost" size="compact" disabled={pending || testing || discoveringModels || !relay.baseUrl || (!relay.apiKey && !preset?.keyOptional)} onClick={() => void discoverProviderModels()}><Icon name="refresh" size={14} />{discoveringModels ? "获取中…" : "获取模型列表"}</Button>
+									<small className="muted">模型测试会发送短回复请求，最多同时测试 5 个模型，可能产生少量 token 费用。{draft.isNew ? "新供应商需至少一个未剔除的模型测试成功才能保存。" : ""}</small>
+									<div className="provider-section-actions">
+										<Button type="button" variant="secondary" size="compact" onClick={() => void testRelay(undefined, true)} disabled={pending || testing || !relay.baseUrl || (!relay.apiKey && !preset?.keyOptional)}>测试所有模型（5 并发）</Button>
+										<Button type="button" variant="secondary" size="compact" disabled={pending || testing || discoveringModels || !relay.baseUrl || (!relay.apiKey && !preset?.keyOptional)} onClick={() => void discoverProviderModels()}><Icon name="refresh" size={14} />{discoveringModels ? "获取中…" : "获取模型列表"}</Button>
+									</div>
 								</div>
-								<small className="muted">模型测试会发送短回复请求，最多同时测试 5 个模型，可能产生少量 token 费用。{draft.isNew ? "新供应商需至少一个未剔除的模型测试成功才能保存。" : ""}</small>
 								{testing && <span className="test-result" role="status">{runningTestModels.length ? `正在测试 ${runningTestModels.length} 个模型 · 已完成 ${completedTestModels.length}/${testBatch.length}` : "正在获取模型列表…"}</span>}
 								{testStopped && <span className="test-result" role="status">已停止测试，已完成的结果已保留。</span>}
 								{connectionTestError && <span className="test-result bad" role="alert">模型测试失败 · {connectionTestError}</span>}
-								<div className="provider-model-editor-columns" aria-hidden="true"><span>模型 ID</span><span>上下文</span><span>显示名</span><span>测试</span><span /></div>
+								<div className="provider-model-table">
+									<div className="provider-model-editor-columns" aria-hidden="true"><span>模型 ID / 家族</span><span>上下文</span><span>显示名</span><span>测试</span><span>操作</span></div>
 								{providerModels.map((entry, index) => <div className="provider-model-editor-row" key={index}>
 									<div className="provider-model-id-cell">
 										<Input aria-label={`模型 ID ${index + 1}`} value={entry.model.modelId} maxLength={256} placeholder="模型 ID" onChange={(event) => patchProviderModel(index, { modelId: event.target.value })} disabled={pending || testing} />
@@ -746,8 +749,9 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 									{providerModelTest(entry, relay, preset)}
 									<IconButton type="button" variant="ghost" size="compact" aria-label={`删除模型 ${index + 1}`} title="从供应商模型列表中移除" onClick={() => removeProviderModel(index)} disabled={pending || testing}><Icon name="trash" size={14} /></IconButton>
 									{!entry.familyId && <label className="provider-model-family-select">模型家族<Select aria-label={`模型 ${index + 1} 家族`} value="" onChange={(event) => setProviderModels((previous) => previous.map((item, row) => row === index ? { ...item, familyId: event.target.value } : item))} disabled={pending || testing}><option value="" disabled>选择家族…</option>{families.map((family) => <option key={family.id} value={family.id}>{familyLabel(family.id)}</option>)}</Select></label>}
-								</div>)}
-								{modelListNotice && <small className="provider-model-list-notice" role="status">{modelListNotice}</small>}
+									</div>)}
+									</div>
+									{modelListNotice && <small className="provider-model-list-notice" role="status">{modelListNotice}</small>}
 								{!!suggestedFamilies.length && <div className="provider-family-suggest" role="status">
 									<span>发现新家族：{suggestedFamilies.map(({ id, count }) => `${suggestedFamilyLabel(id)}（${count} 个模型）`).join("、")}。未配置家族的模型会随供应商保存，但不会出现在模型选择器。</span>
 									<Button type="button" variant="secondary" size="compact" disabled={pending || testing || creatingFamilies} onClick={() => void createSuggestedFamilies()}>{creatingFamilies ? "创建中…" : "一键创建家族"}</Button>
@@ -800,7 +804,7 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 							</div>
 							<div className="provider-price-sync">
 								<p className="provider-price-note">以下为只读价格预览，已应用全局倍率。同步会按官方牌价回填输入、输出与缓存单价（人民币牌价直接采用，美元牌价按汇率折算），不改动上下文与能力设置；未配置价格以「—」表示。</p>
-								<Button type="button" variant="ghost" size="compact" onClick={syncCatalogPrices} disabled={pending || !providerModels.length || !catalog.length}>同步官方牌价</Button>
+								<Button type="button" variant="secondary" size="compact" onClick={syncCatalogPrices} disabled={pending || !providerModels.length || !catalog.length}>同步官方牌价</Button>
 							</div>
 							{priceSyncNotice && <small className="provider-price-sync-notice" role="status">{priceSyncNotice}</small>}
 							{providerModels.length > 0 ? priceCurrencies.map((currency) => <div className="provider-price-table-wrap" key={currency}><table className="provider-price-table"><caption>{currency} / 百万 token</caption><thead><tr><th>模型</th><th>输入</th><th>输出</th><th>缓存（写入 / 读取）</th></tr></thead><tbody>{providerModels.filter(({ model }) => model.currency === currency).map(({ model }, index) => {

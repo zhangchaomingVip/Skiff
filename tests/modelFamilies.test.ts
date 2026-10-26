@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { classifyProviderFailure, modelsFromOffers, reconcile, needsFallback, nextRoute, isProviderFailure, resolveRoute, resolveSelection, type RuntimeOffer } from "../src/chat/modelFamilies.ts";
+import { classifyProviderFailure, formatContextWindow, modelsFromOffers, reconcile, needsFallback, nextRoute, isProviderFailure, resolveRoute, resolveSelection, type RuntimeOffer } from "../src/chat/modelFamilies.ts";
 import { maskBaseUrl, maskKey, blankRelay, blankRoute, blankModel, validateModels, FAMILY_LABELS } from "../src/chat/useModelFamilies.ts";
 import { modelBrand } from "../src/chat/modelDisplay.ts";
 
@@ -169,6 +169,14 @@ test("model rows validate IDs and integer limits independently", () => {
 	const first = { ...blankModel(), modelId: "deepseek-chat" };
 	assert.equal(validateModels([first]), undefined);
 	for (const rows of [[], [blankModel()], [first, { ...first, modelId: " deepseek-chat " }], [{ ...first, contextWindow: 0 }], [{ ...first, maxTokens: 1.5 }], [{ ...first, maxTokens: 128001 }]]) assert.ok(validateModels(rows));
+});
+
+test("context windows prefer familiar decimal and binary sizes", () => {
+	assert.equal(formatContextWindow(1_048_576), "1M");
+	assert.equal(formatContextWindow(131_072), "128k");
+	assert.equal(formatContextWindow(128_000), "128k");
+	assert.equal(formatContextWindow(1_000_000), "1M");
+	assert.equal(formatContextWindow(1_500_000), "1.5M");
 });
 
 test("initial and invalidated selections follow route order", () => {
