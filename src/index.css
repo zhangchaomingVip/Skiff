@@ -64,7 +64,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .sidebar-scroll.faded-bottom { box-shadow: inset 0 -10px 8px -8px var(--shadow-color); }
 .sidebar-scroll.faded-top.faded-bottom { box-shadow: inset 0 10px 8px -8px var(--shadow-color), inset 0 -10px 8px -8px var(--shadow-color); }
 .section-label { display: flex; align-items: center; gap: var(--space-2); color: var(--muted); font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); letter-spacing: .5px; padding: 0 var(--space-2); margin: 0 0 var(--space-1); }
-.section-toggle { display: grid; place-items: center; width: 20px; height: 20px; color: var(--secondary); }
+.section-toggle { display: grid; place-items: center; width: 20px; height: 20px; color: var(--secondary); opacity: 0; transition: opacity var(--transition-fast) ease; }
+.section-name:hover .section-toggle, .section-name:focus-visible .section-toggle { opacity: 1; }
 .section-toggle.expanded svg { transform: rotate(90deg); }
 .section-name { display: flex; align-items: center; gap: var(--space-1); flex: 1; min-height: var(--control-regular); border: 0; background: transparent; padding: 0; text-align: left; color: inherit; font-size: inherit; font-weight: inherit; letter-spacing: inherit; }
 .section-name:hover { color: var(--text); }
@@ -76,11 +77,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .sidebar-recent .section-label { margin-bottom: var(--space-2); }
 .sidebar-recent .chat-model { display: none; }
 .project-group { padding: var(--space-1) 0; }
-.project-row { position: relative; display: flex; align-items: center; gap: var(--space-0-5); border-radius: var(--radius-sm); }
+.project-row { position: relative; display: flex; align-items: center; border-radius: var(--radius-sm); }
 .project-row:hover, .project-row:focus-within { background: var(--hover); --row-bg: var(--hover); }
-.project-chevron { width: 20px; height: 30px; color: var(--secondary); }
-.project-chevron svg, .section-toggle svg { transition: transform var(--transition-fast) ease; }
-.project-chevron.expanded svg { transform: rotate(90deg); }
+.section-toggle svg { transition: transform var(--transition-fast) ease; }
 .project-select { display: flex; gap: var(--space-2); align-items: center; flex: 1; min-width: 0; border: none; padding: var(--space-2) var(--space-1); background: transparent; text-align: left; color: var(--text); font-size: var(--font-size-base); font-weight: var(--font-weight-medium); line-height: var(--line-height-base); }
 .project-select > span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .project-select svg { flex-shrink: 0; color: var(--secondary); }
@@ -705,7 +704,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .sidebar-bulk-actions .ui-button { flex: 1; justify-content: center; }
 @media (hover: none) { .message-buttons, .sidebar-row-actions { opacity: 1; pointer-events: auto; } }
 @media (max-width: 760px) { .back-bottom { right: 20px; } }
-@media (prefers-reduced-motion: reduce) { .message-buttons, .disclosure, .thinking-toggle svg, .project-chevron svg, .section-toggle svg, .sidebar-collapse { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .message-buttons, .disclosure, .thinking-toggle svg, .section-toggle, .section-toggle svg, .sidebar-collapse { transition: none; } }
 
 /* Provider-grouped model picker */
 .chat { flex: 1; min-width: 0; display: flex; flex-direction: column; position: relative; }

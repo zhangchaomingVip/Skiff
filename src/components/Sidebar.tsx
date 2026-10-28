@@ -339,13 +339,22 @@ export function Sidebar({ projects, chats, activeId, selectedProjectId, homeActi
 							};
 							const isSelected = project.id === selectedProjectId;
 							const bulk = selecting ? projectBulkState(project.id) : undefined;
+							const projectExpanded = !isCollapsed || !!search;
+							const selectAndToggleProject = () => {
+								onSelectProject(project.id);
+								setCollapsed((previous) => {
+									const next = new Set(previous);
+									if (isSelected && !previous.has(project.id)) next.add(project.id);
+									else next.delete(project.id);
+									return next;
+								});
+							};
 							return <div className="project-group" key={project.id}>
 								<div className={`project-row ${isSelected ? "selected" : ""}`} onContextMenu={(event) => openProjectMenu(event, project)}>
-									<IconButton size="compact" className={`project-chevron ${!isCollapsed || search ? "expanded" : ""}`} onClick={() => setCollapsed((previous) => { const next = new Set(previous); if (next.has(project.id)) next.delete(project.id); else next.add(project.id); return next; })} aria-label={`${!isCollapsed || search ? "收起" : "展开"}${project.name}`} aria-expanded={!isCollapsed || !!search} aria-controls={`${projectsListId}-${project.id}`}><Icon name="chevron" size={13} /></IconButton>
-									{editing?.id === project.id ? renameInput() : <button className="project-select" disabled={navigationDisabled} onClick={() => onSelectProject(project.id)} aria-current={isSelected ? "true" : undefined} title={project.path}><Icon name="folder" size={15} /><span>{project.name}</span></button>}
+									{editing?.id === project.id ? renameInput() : <button className="project-select" disabled={navigationDisabled} onClick={selectAndToggleProject} aria-current={isSelected ? "true" : undefined} aria-expanded={projectExpanded} aria-controls={`${projectsListId}-${project.id}`} title={project.path}><Icon name="folder" size={15} /><span>{project.name}</span></button>}
 									{bulk && !!bulk.ids.length && <button type="button" className={`project-check ${bulk.all ? "checked" : bulk.some ? "partial" : ""}`} role="checkbox" aria-checked={bulk.all ? "true" : bulk.some ? "mixed" : "false"} aria-label={`${bulk.all ? "取消全选" : "全选"} ${project.name} 的会话`} title={bulk.all ? `取消全选 ${project.name} 的会话` : `全选 ${project.name} 的会话`} disabled={disabled} onClick={() => toggleProjectBulk(project.id)}>{bulk.all ? <Icon name="check" size={14} /> : bulk.some ? <Icon name="minus" size={14} /> : null}</button>}
 								</div>
-								<SidebarCollapse open={!isCollapsed || !!search} id={`${projectsListId}-${project.id}`}>
+								<SidebarCollapse open={projectExpanded} id={`${projectsListId}-${project.id}`}>
 									{() => <div className="project-chats">
 										{renderRows()}
 										{!history.length && <span className="no-chats">还没有聊天</span>}
