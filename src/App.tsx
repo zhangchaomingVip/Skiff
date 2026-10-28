@@ -72,7 +72,7 @@ export default function App() {
 	useEffect(() => { try { localStorage.setItem("skiff.sidebar.open", String(sidebarOpen)); } catch { /* Layout can still be used without storage. */ } }, [sidebarOpen]);
 	useEffect(() => { try { localStorage.setItem("skiff.workbench.v1", JSON.stringify({ version: 1, tool: activeTool })); } catch { /* Tool selection remains available for this run. */ } }, [activeTool]);
 	const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth);
-	const [sidebarWidth, setSidebarWidth] = useState(() => readPreferredWidth("skiff.sidebar.width", 280, 200, 420));
+	const [sidebarWidth, setSidebarWidth] = useState(() => readPreferredWidth("skiff.sidebar.width", 232, 200, 420));
 	const [voyageWidth, setVoyageWidth] = useState(() => readPreferredWidth("skiff.voyage.width", 260, 240, 480));
 	const [voyageExpanded, toggleVoyagePanel] = useVoyagePanel();
 	useEffect(() => {
@@ -137,7 +137,7 @@ export default function App() {
 	const desktopSidebarOpen = sidebarOpen && !narrowViewport;
 	const sidebarBounds = { min: 200, max: Math.max(200, Math.min(420, viewportWidth - 416)) };
 	const shownSidebarWidth = Math.max(sidebarBounds.min, Math.min(sidebarWidth, sidebarBounds.max));
-	const workspaceWidth = viewportWidth - 48 - (desktopSidebarOpen ? shownSidebarWidth + 8 : 0);
+	const workspaceWidth = viewportWidth - 50 - (desktopSidebarOpen ? shownSidebarWidth + 8 : 0);
 	const voyageBounds = { min: 240, max: Math.max(240, Math.min(480, workspaceWidth - 368)) };
 	const shownVoyageWidth = Math.max(voyageBounds.min, Math.min(voyageWidth, voyageBounds.max));
 	const setSidebarWidthFromDrag = useCallback((value: number) => setSidebarWidth(value), []);
@@ -373,12 +373,14 @@ export default function App() {
 			<TitleBar nav={<TitleBarNav sidebarOpen={sidebarOpen} onToggleSidebar={() => setSidebarOpen((value) => !value)} onNewChat={newDraft} onHome={openLauncher} onAddProject={() => setProjectDialogOpen(true)} onOpenSettings={openSettings} messages={state.messages} />} voyageOpen={voyageExpanded} onToggleVoyage={currentView === "chat" ? toggleVoyagePanel : undefined}><SettingsMenu restrictions={settingsRestrictions} onOpen={openSettings} /></TitleBar>
 			<div className="app-body" style={{ "--sidebar-width": `${shownSidebarWidth}px` } as CSSProperties}>
 			{(!narrowViewport || !sidebarOpen) && <ActivityBar active={activeTool} panelOpen={sidebarOpen} onSelect={selectTool} />}
+			<div className="workbench-shell">
 			{sidebarOpen && !(narrowViewport && settingsCategory) && <SidebarPresentation activityBar={<ActivityBar active={activeTool} panelOpen={sidebarOpen} onSelect={selectTool} />} onClose={() => setSidebarOpen(false)}>{activeTool === "chats" ? <Sidebar projects={shownProjects} chats={visibleChats} activeId={activeChat?.id} selectedProjectId={selectedProjectId} homeActive={currentView === "launcher"} disabled={navigationDisabled} runningIds={pool.runningIds} canCloseChat={pool.canClose} navigationDisabled={navigationDisabled} connected={connected} onHome={openLauncher} onNewChat={newDraft} statuses={pool.statuses} searchProgress={retrieval.progress} searchQuery={retrieval.query} onSearch={retrieval.setQuery} onSearchMatch={retrieval.openMatch} onSelectChat={selectChat} onSelectProject={selectProject} onAddProject={() => setProjectDialogOpen(true)} onRenameChat={library.renameChat} onRenameProject={library.renameProject} onDeleteChat={deleteArchivedChat} onHideProject={hideProject} onPurgeProject={purgeProject} onArchiveChat={archiveChat} onPurgeChat={purgeChat} onTogglePinChat={(id, pinned) => library.updateChat(id, { pinned })} /> : <ProjectWorkbenchPanel tool={activeTool} projects={shownProjects} project={browse.project} following={!browse.manualProjectId} onSelectProject={setManualBrowseProjectId} onFollow={() => setManualBrowseProjectId(undefined)} onOpen={openProjectPreview} onMutated={() => setWorkbenchRevision((value) => value + 1)} />}</SidebarPresentation>}
 			{desktopSidebarOpen && <ResizeSeparator label="调整左侧导航宽度" value={shownSidebarWidth} bounds={sidebarBounds} onResize={setSidebarWidthFromDrag} onCommit={commitSidebarWidth} />}
 			<main className="workspace">
 				<div className={`primary-view ${activePreviewId ? "preview-hidden" : ""}`}>{currentView === "launcher" ? <>{chatHeader}{workspaceAlerts}<div className="body"><LauncherView activeChat={activeChat} activeProject={activeProject} projects={shownProjects} chats={visibleChats} offers={modelFamilies.offers} recentOfferIds={recentOfferIds} disabled={navigationDisabled || modelFamilies.loading} navigationDisabled={navigationDisabled} loading={modelFamilies.loading} error={modelFamilies.error} onResume={resumeChat} onSelectProject={selectProject} onAddProject={() => setProjectDialogOpen(true)} onManageProviders={() => openSettings("providers")} onRetryModels={modelFamilies.refresh} onStartChat={startLauncherChat} onOpenChat={selectChat} /></div></> : <VoyageWorkspace topBar={<>{chatHeader}{workspaceAlerts}</>} draftTarget={activeChat && activeProject ? { chatId: activeChat.id, cwd: activeProject.path, sessionFile: activeChat.hasMessages ? activeChat.sessionFile : undefined } : undefined} revealMessage={retrieval.reveal} modelNotice={modelNotice} key={`${session.owner.id ?? "loading"}:${session.owner.cwd ?? ""}`} state={displayState} loading={session.loading} connected={connected} pending={session.pending} actions={actions} onSend={send} onReconnect={session.reconnect} projectName={activeProject?.name} failover={failover} routeAuthorization={routeAuthorizationPrompt} railWidth={shownVoyageWidth} availableWidth={workspaceWidth} onRailWidth={setVoyageWidthFromDrag} onRailWidthCommit={commitVoyageWidth} expanded={voyageExpanded} onToggle={toggleVoyagePanel} />}</div>
 				{activePreviewId && <ProjectPreview tabs={previewTabs} activeId={activePreviewId} revision={workbenchRevision} onActivate={setActivePreviewId} onClose={closeProjectPreview} onMode={(id, mode) => setPreviewTabs((current) => current.map((tab) => tab.id === id ? { ...tab, mode } : tab))} onBack={() => setActivePreviewId(undefined)} />}
 			</main>
+			</div>
 			</div>
 			{retrieval.historyView && <HistorySearchDialog {...retrieval.historyView} onClose={retrieval.closeHistory} />}
 			{projectDialogOpen && <ProjectDialog onAdd={library.addProject} onClose={() => setProjectDialogOpen(false)} />}

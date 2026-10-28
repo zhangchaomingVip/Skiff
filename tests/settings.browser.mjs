@@ -23,7 +23,7 @@ const assertNoDisabledFrame = async (element) => {
 };
 const wait = (fn, arg) => page.waitForFunction(fn, arg);
 const shot = (name) => page.screenshot({ animations: "disabled", path: new URL(`settings-${name}.png`, output).pathname.replace(/^\/([A-Z]:)/, "$1") });
-const ready = () => wait(() => document.querySelector(".sidebar-footer")?.textContent.includes("pi 已连接"));
+const ready = () => wait(() => document.querySelector(".sidebar")?.dataset.connected === "true");
 const open = async () => { await page.keyboard.press("Control+Comma"); await dialog().waitFor(); };
 const close = async () => { await button("关闭设置").click(); await dialog().waitFor({ state: "detached" }); };
 const checkLayout = async () => {

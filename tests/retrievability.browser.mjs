@@ -16,7 +16,7 @@ page.on("pageerror", (error) => errors.push(error.message));
 const wait = (fn, arg) => page.waitForFunction(fn, arg, { timeout: 20000 });
 const active = () => page.evaluate(() => JSON.parse(localStorage.getItem("skiff.workspace.v1")).activeId);
 const message = () => page.getByRole("textbox", { name: "聊天消息" });
-const ready = () => wait(() => !!document.querySelector(".composer") && !document.querySelector(".session-loading") && document.querySelector(".sidebar-footer")?.textContent.includes("pi 已连接"));
+const ready = () => wait(() => !!document.querySelector(".composer") && !document.querySelector(".session-loading") && document.querySelector(".sidebar")?.dataset.connected === "true");
 const select = async (id) => { await page.locator(".chat-link").filter({ has: page.locator(".chat-title", { hasText: new RegExp(`^Session ${id}$`) }) }).click({ position: { x: 24, y: 16 } }); await ready(); };
 const searchInput = () => page.getByRole("textbox", { name: "搜索项目与聊天" });
 const search = async (text) => { await searchInput().fill(text); await wait(() => document.querySelector(".sidebar-search-results [role=status]")?.textContent.includes("已搜索")); };

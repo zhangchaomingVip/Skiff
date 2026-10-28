@@ -21,7 +21,7 @@ const shot = (name) => page.screenshot({ animations: "disabled", path: new URL(`
 
 try {
 	await page.goto(`${origin}/tests/preview.html?fixture=archive&theme=light`);
-	await page.waitForFunction(() => document.querySelector(".sidebar-footer")?.textContent.includes("pi 已连接"));
+	await page.waitForFunction(() => document.querySelector(".sidebar")?.dataset.connected === "true");
 	await page.keyboard.press("Control+Comma");
 	await dialog().waitFor();
 	await button("供应商").click();

@@ -34,7 +34,7 @@ try {
 	for (const theme of ["light", "dark"]) {
 		await page.setViewportSize({ width: 1100, height: 750 });
 		await page.goto(`${origin}/tests/preview.html?fixture=archive&theme=${theme}`);
-		await page.waitForFunction(() => document.querySelector(".sidebar-footer")?.textContent.includes("pi 已连接"));
+		await page.waitForFunction(() => document.querySelector(".sidebar")?.dataset.connected === "true");
 		await page.evaluate(() => {
 			window.promptStarts = [];
 			const invoke = window.__TAURI_INTERNALS__.invoke;

@@ -9,5 +9,5 @@ const tools: Array<{ id: WorkbenchTool; label: string; icon: IconName }> = [
 ];
 
 export function ActivityBar({ active, panelOpen, onSelect }: { active: WorkbenchTool; panelOpen: boolean; onSelect: (tool: WorkbenchTool) => void }) {
-	return <nav className="activity-bar" aria-label="工作区工具">{tools.map((tool) => <Tooltip key={tool.id} text={tool.label} align="start"><button className="activity-button" aria-label={tool.label} aria-pressed={active === tool.id && panelOpen} onClick={() => onSelect(tool.id)}><Icon name={tool.icon} size={20} /></button></Tooltip>)}</nav>;
+	return <nav className="activity-bar" aria-label="工作区工具">{tools.map((tool) => <Tooltip key={tool.id} text={tool.label} align="start"><button className="activity-button" aria-label={tool.label} aria-pressed={active === tool.id && panelOpen} onClick={() => onSelect(tool.id)}><Icon name={tool.icon} size={18} /></button></Tooltip>)}</nav>;
 }

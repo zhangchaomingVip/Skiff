@@ -15,7 +15,7 @@ page.on("pageerror", (error) => errors.push(String(error)));
 try {
 	for (const theme of ["light", "dark"]) {
 		await page.goto(`${process.argv[2] ?? "http://localhost:1421"}/tests/preview.html?fixture=settings-info&theme=${theme}`);
-		await page.waitForFunction(() => document.querySelector(".sidebar-footer")?.textContent.includes("pi 已连接"));
+		await page.waitForFunction(() => document.querySelector(".sidebar")?.dataset.connected === "true");
 		await page.evaluate(async () => {
 			const invoke = window.__TAURI_INTERNALS__.invoke;
 			const config = await invoke("list_model_families");

@@ -22,7 +22,7 @@ const title = () => page.evaluate(() => document.querySelector(".header-title-ro
 
 try {
 	await page.goto(`${origin}/tests/preview.html?fixture=archive&theme=${encodeURIComponent(theme)}`);
-	await waitUntil(() => document.querySelector(".sidebar-footer")?.textContent.includes("pi 已连接"), "Active pi fixture did not connect");
+	await waitUntil(() => document.querySelector(".sidebar")?.dataset.connected === "true", "Active pi fixture did not connect");
 	assert.equal(await page.locator(".project-chats .chat-row").count(), 3, "Fixture starts with three unarchived chats");
 
 	// A selected chat that is generating must block every bulk action.

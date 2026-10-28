@@ -46,7 +46,7 @@ function record(message) { results.push(`PASS ${message}`); output.textContent =
 function count(type) { return mock.commands.filter((item) => item.command === type || (item.command === "rpc_send" && JSON.parse(item.args.message).type === type)).length; }
 function counters() { return ["rpc_start", "rpc_stop", "switch_session", "get_messages"].map(count); }
 function click(selector) { const button = document.querySelector(selector); assert(button, `Missing ${selector}`); button.click(); }
-const ready = () => document.querySelector(".sidebar-footer")?.textContent.includes("pi 已连接");
+const ready = () => document.querySelector(".sidebar")?.dataset.connected === "true";
 
 try {
 	root.render(React.createElement(App));

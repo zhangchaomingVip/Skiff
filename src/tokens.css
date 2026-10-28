@@ -112,7 +112,8 @@
 		--sidebar-border: var(--color-sidebar-border);
 		--activity-bg: #0b0e13;
 		--activity-hover: #1d2632;
-		--activity-selected: #2c3a4d;
+		--activity-selected: #2c313a;
+		--sidebar-selected: #2b333f;
 		--panel: var(--color-bg-tertiary);
 		--panel-2: var(--color-bg-secondary);
 		--border: var(--color-border);
@@ -151,8 +152,8 @@
 		--color-bg-secondary: #ffffff;
 		--color-bg-tertiary: #edf1f6;
 		--color-bg-hover: #e9ecf1;
-		--color-sidebar-bg: #f5f6f8;
-		--color-sidebar-border: #e2e2e2;
+		--color-sidebar-bg: #f5f4f2;
+		--color-sidebar-border: #e5e2de;
 		--color-text-primary: #192333;
 		--color-text-secondary: #48566b;
 		--color-text-tertiary: #4c5a6e;
@@ -189,9 +190,10 @@
 		--shadow-elevation-2: 0 4px 12px rgba(0, 0, 0, .08);
 		--shadow-elevation-3: 0 8px 20px rgba(0, 0, 0, .1);
 		--shadow-elevation-up: 0 -6px 20px rgba(0, 0, 0, .08);
-		--activity-bg: #e7e9ed;
-		--activity-hover: #dce1e8;
-		--activity-selected: #cfd8e6;
+		--activity-bg: #edecea;
+		--activity-hover: #e3e1dd;
+		--activity-selected: #d9d7d3;
+		--sidebar-selected: #e7e5e1;
 	}
 
 }

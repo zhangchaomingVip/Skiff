@@ -31,7 +31,7 @@ const resolveTests = async (ok = true) => page.evaluate((ok) => {
 
 try {
 	await page.goto(`${origin}/tests/preview.html?fixture=settings-info&theme=light`);
-	await page.waitForFunction(() => document.querySelector(".sidebar-footer")?.textContent.includes("pi 已连接"));
+	await page.waitForFunction(() => document.querySelector(".sidebar")?.dataset.connected === "true");
 	await page.keyboard.press("Control+Comma");
 	await button("供应商").click();
 	const original = await config();

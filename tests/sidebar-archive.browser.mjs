@@ -29,12 +29,12 @@ const title = () => page.locator(".header-title-row > span:first-child").textCon
 
 try {
 	await page.goto(`${origin}/tests/preview.html?fixture=archive&theme=light&persist=1`);
-	await waitUntil(() => document.querySelector(".sidebar-footer")?.textContent.includes("pi 已连接"), "Active pi fixture did not connect");
+	await waitUntil(() => document.querySelector(".sidebar")?.dataset.connected === "true", "Active pi fixture did not connect");
 	await page.getByRole("button", { name: "航行台", exact: true }).waitFor();
 	await page.getByRole("button", { name: "航行台", exact: true }).click();
 	await waitUntil(() => document.querySelector(".voyage-rail.expanded"), "Title bar toggle did not open the voyage rail");
 	assert.match((await title())?.trim(), /^当前会话/);
-	assert.equal(await page.getByRole("separator", { name: "调整左侧导航宽度" }).getAttribute("aria-valuenow"), "240", "Invalid left width should use its default");
+	assert.equal(await page.getByRole("separator", { name: "调整左侧导航宽度" }).getAttribute("aria-valuenow"), "232", "Invalid left width should use its default");
 	assert.equal(await page.getByRole("separator", { name: "调整右侧航行台宽度" }).getAttribute("aria-valuenow"), "260", "Invalid right width should use its default");
 	assert.equal(await page.locator(".project-chats .chat-row").count(), 3, "Unarchived chats appear exactly once");
 	assert.equal(await page.locator(".project-count, .header-model, .header-project").count(), 0, "Project counts and header route/folder details stay hidden");
@@ -202,7 +202,7 @@ try {
 	};
 	await drag(leftSeparator, 60);
 	let leftWidth = Number(await leftSeparator.getAttribute("aria-valuenow"));
-	assert.ok(leftWidth >= 300 && leftWidth <= 420, `Unexpected left width ${leftWidth}`);
+	assert.ok(leftWidth >= 292 && leftWidth <= 420, `Unexpected left width ${leftWidth}`);
 	await leftSeparator.focus();
 	await page.keyboard.press("ArrowRight");
 	let keyboardWidth = Number(await leftSeparator.getAttribute("aria-valuenow"));
@@ -225,7 +225,7 @@ try {
 	assert.equal(await page.evaluate(() => localStorage.getItem("skiff.voyage.width")), String(rightWidth));
 
 	await page.reload();
-	await waitUntil(() => document.querySelector(".sidebar-footer")?.textContent.includes("pi 已连接"), "Reloaded preview did not reconnect");
+	await waitUntil(() => document.querySelector(".sidebar")?.dataset.connected === "true", "Reloaded preview did not reconnect");
 	await page.getByRole("button", { name: "航行台", exact: true }).waitFor();
 	await page.getByRole("button", { name: "航行台", exact: true }).click();
 	await waitUntil(() => document.querySelector(".voyage-rail.expanded"), "Title bar toggle did not reopen the voyage rail after reload");
