@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 import type { ComponentProps } from "react";
-import { setThemePreference, useThemePreference } from "../theme";
+import { setThemeColor, setThemePreference, themeColors, useThemeColor, useThemePreference } from "../theme";
 import { ArchivedSessions } from "./ArchivedSessions";
 import { Icon } from "./Icon";
 import { PromptSettings } from "./PromptSettings";
@@ -41,6 +41,7 @@ export function SettingsDialog({ initialCategory, restrictions, prompt, provider
 		else setCategory(next);
 	};
 	const theme = useThemePreference();
+	const themeColor = useThemeColor();
 	const modifier = isMacPlatform() ? "Cmd" : "Ctrl";
 	const close = () => { if (!editor.current?.pending) onClose(); };
 	const escape = () => { if (editor.current?.pending) return; if (editor.current?.editing) editor.current.back(); else close(); };
@@ -51,9 +52,16 @@ export function SettingsDialog({ initialCategory, restrictions, prompt, provider
 			</nav>
 			<div className="settings-content">
 				{category === "fonts" && <FontSettings />}
-				{category === "appearance" && <section aria-labelledby="appearance-title"><h2 id="appearance-title">外观</h2><p className="muted">选择应用主题，立即生效。</p><div className="settings-themes" role="group" aria-label="应用主题">{([
-					["system", "跟随系统", "monitor"], ["light", "浅色", "sun"], ["dark", "深色", "moon"],
-				] as const).map(([value, label, icon]) => <Button key={value} variant="setting" aria-pressed={theme === value} onClick={() => setThemePreference(value)}><Icon name={icon} />{label}{theme === value && <Icon name="check" size={14} />}</Button>)}</div></section>}
+				{category === "appearance" && <section aria-labelledby="appearance-title"><h2 id="appearance-title">外观</h2><p className="muted">选择应用主题与主题色，立即生效。</p>
+					<h3 className="settings-section-label">应用主题</h3>
+					<div className="settings-themes" role="group" aria-label="应用主题">{([
+						["system", "跟随系统", "monitor"], ["light", "浅色", "sun"], ["dark", "深色", "moon"],
+					] as const).map(([value, label, icon]) => <Button key={value} variant="setting" aria-pressed={theme === value} onClick={() => setThemePreference(value)}><Icon name={icon} />{label}{theme === value && <Icon name="check" size={14} />}</Button>)}</div>
+					<h3 className="settings-section-label">主题色</h3>
+					<div className="settings-theme-colors" role="group" aria-label="主题色">{themeColors.map(({ value, label }) => <Button key={value} variant="setting" className="settings-theme-color" data-theme-color-option={value} aria-pressed={themeColor === value} onClick={() => setThemeColor(value)}>
+						<span className="settings-theme-color-preview" aria-hidden="true"><span /></span><span>{label}</span>{themeColor === value && <Icon name="check" size={14} />}
+					</Button>)}</div>
+				</section>}
 				{category === "websearch" && <section aria-labelledby="websearch-title"><h2 id="websearch-title">联网搜索</h2><p className="muted">为 pi 配置 web_search 工具，引擎可在 Tavily 与 Exa 之间选择；开关作用于当前 pi 会话。</p><WebSearchSettings search={search} /></section>}
 				{category === "prompt" && <section aria-labelledby="prompt-title"><h2 id="prompt-title">系统提示词</h2><p className="muted">附加到 pi 系统提示词末尾（--append-system-prompt），随每次会话启动生效。保存后当前会话会重启。</p><fieldset className="settings-config" disabled={!!restrictions.prompt}><PromptSettings {...prompt} /></fieldset>{restrictions.prompt && <p className="settings-restriction">{restrictions.prompt}</p>}</section>}
 				{category === "providers" && <><fieldset className="settings-config" disabled={!!restrictions.providers}><ProvidersSettingsContent {...providers} ref={editor} onOpenRoutes={(location) => { if (!restrictions.routes) setCategory("routes", location); }} onLockChange={updateInteraction} /></fieldset>{providers.configError && !locked && <Button disabled={!!restrictions.providers} onClick={onRetryModels}>重新读取配置</Button>}</>}

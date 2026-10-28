@@ -7,7 +7,7 @@ export function preparePreview(target) {
 	const params = new URLSearchParams(target.location.search);
 	const fixture = params.get("fixture") || "launcher";
 	const storage = target.localStorage;
-	const preservedPreferences = params.get("persist") === "1" ? ["skiff.sidebar.width", "skiff.voyage.width", "skiff.sidebar.recent-expanded", "skiff.family-models.v1", "skiff.theme", "skiff.typography.v1", "skiff.test.metadata.v1", "skiff.settings.providers-view.v1"].map((key) => [key, storage.getItem(key)]).filter((entry) => entry[1] !== null) : [];
+	const preservedPreferences = params.get("persist") === "1" ? ["skiff.sidebar.width", "skiff.voyage.width", "skiff.sidebar.recent-expanded", "skiff.family-models.v1", "skiff.theme", "skiff.themeColor", "skiff.typography.v1", "skiff.test.metadata.v1", "skiff.settings.providers-view.v1"].map((key) => [key, storage.getItem(key)]).filter((entry) => entry[1] !== null) : [];
 	for (let index = storage.length - 1; index >= 0; index--) {
 		const key = storage.key(index);
 		if (key?.startsWith("skiff.")) storage.removeItem(key);
@@ -21,6 +21,9 @@ export function preparePreview(target) {
 	const theme = params.get("theme") || storage.getItem("skiff.theme") || "system";
 	storage.setItem("skiff.theme", theme);
 	document.documentElement.dataset.theme = theme === "system" ? target.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light" : theme;
+	const themeColor = params.get("color") || storage.getItem("skiff.themeColor") || "default";
+	storage.setItem("skiff.themeColor", themeColor);
+	document.documentElement.dataset.themeColor = themeColor;
 	storage.setItem("skiff.sidebar.open", String(target.innerWidth > 760));
 	if (fixture === "sidebar") {
 		const projects = [

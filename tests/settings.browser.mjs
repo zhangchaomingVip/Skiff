@@ -77,6 +77,19 @@ try {
 	await page.emulateMedia({ colorScheme: "dark" });
 	await wait(() => document.documentElement.dataset.theme === "dark");
 	await button("浅色").click();
+	const colorBackdrops = new Set();
+	for (const [label, color] of [["紫色", "purple"], ["黄色", "yellow"], ["绿色", "green"], ["蓝色", "blue"]]) {
+		await button(label).click();
+		assert.equal(await page.locator("html").getAttribute("data-theme-color"), color);
+		assert.equal(await page.locator("html").getAttribute("data-theme"), "light", "Theme color must not change light/dark mode");
+		assert.equal(await page.evaluate(() => localStorage.getItem("skiff.themeColor")), color);
+		assert.equal(await button(label).getAttribute("aria-pressed"), "true");
+		colorBackdrops.add(await page.locator(".workspace").evaluate((element) => getComputedStyle(element).backgroundImage));
+		await shot(`color-${color}`);
+	}
+	assert.equal(colorBackdrops.size, 4, "Each theme color must render its own homepage backdrop");
+	await button("默认").click();
+	assert.equal(await page.locator("html").getAttribute("data-theme-color"), "default");
 	for (const key of ["Control+Comma", "Control+n", "Control+k", "Control+Shift+Backspace"]) await page.keyboard.press(key);
 	assert.equal(await page.locator("dialog[open]").count(), 1);
 	assert.equal(await dialog().evaluate((el) => el.contains(document.activeElement)), true);
@@ -295,11 +308,12 @@ try {
 
 	await page.getByRole("dialog", { name: "后台设置验证", exact: true }).waitFor({ state: "detached" });
 	// Reload resolves the stored theme before React, using the same startup script.
-	await open(); await button("深色").click(); await close();
+	await open(); await button("深色").click(); await button("绿色").click(); await close();
 	await page.evaluate(() => history.replaceState(null, "", "/tests/preview.html?fixture=archive&persist=1"));
 	await page.reload(); await ready();
 	assert.equal(await page.locator("html").getAttribute("data-theme-preference"), "dark");
-	await open(); assert.equal(await button("深色").getAttribute("aria-pressed"), "true"); await close();
+	assert.equal(await page.locator("html").getAttribute("data-theme-color"), "green");
+	await open(); assert.equal(await button("深色").getAttribute("aria-pressed"), "true"); assert.equal(await button("绿色").getAttribute("aria-pressed"), "true"); await close();
 	// Configuration errors keep appearance/help available and expose recovery.
 	await page.goto(`${origin}/tests/preview.html?fixture=error&theme=light`); await ready();
 	await page.getByRole("button", { name: "管理提供商", exact: true }).click();
