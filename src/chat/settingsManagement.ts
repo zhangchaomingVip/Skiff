@@ -53,6 +53,7 @@ export function settingsTestDisplay(test?: SettingsTestRecord, now = Date.now())
 		new Date(test.completedAt).toLocaleString(),
 		stale,
 	].filter(Boolean).join(" · ");
+	if (test.configChanged) return { label: "需重新测试", title: detail, tone: "muted" as const };
 	return { label: `${test.ok ? "✓" : "×"} ${test.latencyMs} ms · ${relative}`, title: detail, tone: test.ok ? "success" as const : "error" as const };
 }
 export function providerBatchImpact(relays: readonly RelaySpec[], families: readonly ModelFamily[], ids: readonly string[]) {

@@ -9,6 +9,7 @@
 		"dev": "vite",
 		"build": "tsc && vite build",
 		"test": "node --import ./tests/register.mjs --test tests/*.test.ts",
+		"test:cdp": "node tests/app.cdp.mjs",
 		"test:styles": "node scripts/check-styles.mjs",
 		"check:ui": "tsc --project tests/tsconfig.ui.json",
 		"preview": "vite preview",

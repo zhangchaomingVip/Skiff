@@ -28,8 +28,8 @@ export function PromptSettings({ sessionPath, onSaved }: { sessionPath?: string;
 	const save = () => { saveAppendPrompt(text); onSaved(); };
 	return <div className="prompt-settings">
 		<label htmlFor="append-prompt">附加指令</label>
-		<TextArea id="append-prompt" className="prompt-input" rows={8} value={text} onChange={(event) => setText(event.target.value)} placeholder="留空则不添加额外指令。" spellCheck={false} />
-		<div className="prompt-hint"><span>默认不附加指令。清空后点击“保存并重启”即可生效。</span><Button type="button" variant="ghost" size="compact" onClick={() => setText("")}>清空</Button></div>
+		<TextArea id="append-prompt" className="prompt-input" rows={8} value={text} onChange={(event) => setText(event.target.value)} placeholder="填写自定义指令，可留空。" spellCheck={false} />
+		<div className="prompt-hint"><span>Skiff 身份说明始终生效。清空仅移除自定义指令，保存并重启后生效。</span><Button type="button" variant="ghost" size="compact" onClick={() => setText("")}>清空</Button></div>
 
 		<details className="prompt-system" onToggle={(event) => { if ((event.target as HTMLDetailsElement).open && !sections) void loadSystemPrompt(); }}>
 			<summary><Icon name="file" size={13} />查看 pi 当前系统提示词（只读）</summary>

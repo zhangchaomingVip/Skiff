@@ -795,24 +795,26 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 							</section>}
 						</ProviderEditorSection>
 						<ProviderEditorSection id="pricing" title="价格与计费" status={`${relay.priceMultiplier === undefined ? "未设置倍率" : `倍率 ${relay.priceMultiplier}×`} · ${providerModels.length} 个模型`} open={editorSections.pricing} onToggle={(open) => setEditorSection("pricing", open)}>
-							<div className="editor-field">
-								<label htmlFor="relay-price-multiplier">全局倍率</label>
-								<div className="editor-control">
-									<Input id="relay-price-multiplier" type="number" min={0} step="any" placeholder="留空按官方价" value={relay.priceMultiplier ?? ""} onChange={(event) => patchRelay({ priceMultiplier: event.target.value === "" ? undefined : Number(event.target.value) })} disabled={pending} aria-describedby="relay-price-multiplier-hint" />
-									<small id="relay-price-multiplier-hint">实际单价 = 官方单价 × 倍率。0.5 表示五折，1 表示原价。留空时按路线中配置的价格计费。</small>
+							<div className="provider-price-toolbar">
+								<div className="provider-price-multiplier">
+									<label htmlFor="relay-price-multiplier">全局倍率</label>
+									<Input id="relay-price-multiplier" type="number" min={0} step="any" placeholder="默认 1" value={relay.priceMultiplier ?? ""} onChange={(event) => patchRelay({ priceMultiplier: event.target.value === "" ? undefined : Number(event.target.value) })} disabled={pending} aria-describedby="relay-price-multiplier-hint" />
 								</div>
-							</div>
-							<div className="provider-price-sync">
-								<p className="provider-price-note">以下为只读价格预览，已应用全局倍率。同步会按官方牌价回填输入、输出与缓存单价（人民币牌价直接采用，美元牌价按汇率折算），不改动上下文与能力设置；未配置价格以「—」表示。</p>
 								<Button type="button" variant="secondary" size="compact" onClick={syncCatalogPrices} disabled={pending || !providerModels.length || !catalog.length}>同步官方牌价</Button>
 							</div>
+							<p className="provider-price-note" id="relay-price-multiplier-hint">0.5 为五折；留空按已配置价格计费。</p>
 							{priceSyncNotice && <small className="provider-price-sync-notice" role="status">{priceSyncNotice}</small>}
-							{providerModels.length > 0 ? priceCurrencies.map((currency) => <div className="provider-price-table-wrap" key={currency}><table className="provider-price-table"><caption>{currency} / 百万 token</caption><thead><tr><th>模型</th><th>输入</th><th>输出</th><th>缓存（写入 / 读取）</th></tr></thead><tbody>{providerModels.filter(({ model }) => model.currency === currency).map(({ model }, index) => {
+							{providerModels.length > 0 ? priceCurrencies.map((currency) => <div className="provider-price-table-wrap" key={currency}><table className="provider-price-table"><caption><span>价格预览 · 已含倍率</span><span>{currency} / 百万 token</span></caption><thead><tr><th>模型</th><th>输入</th><th>输出</th><th>缓存（写入 / 读取）</th></tr></thead><tbody>{providerModels.filter(({ model }) => model.currency === currency).map(({ model }, index) => {
 								const multiplier = relay.priceMultiplier ?? 1;
 								const hasPrice = [model.inputCost, model.outputCost, model.cacheWriteCost, model.cacheReadCost].some((value) => value > 0);
 								const price = (value: number) => hasPrice ? (value * multiplier).toLocaleString(undefined, { maximumFractionDigits: 4 }) : "—";
 								return <tr key={`${model.modelId}:${index}`}><th scope="row" title={model.modelId}>{model.alias || model.modelId || "未命名模型"}{!hasPrice && <small className="provider-price-missing">未配置</small>}</th><td>{price(model.inputCost)}</td><td>{price(model.outputCost)}</td><td>{price(model.cacheWriteCost)} / {price(model.cacheReadCost)}</td></tr>;
 							})}</tbody></table></div>) : <p className="family-empty">添加模型后会显示价格预览。</p>}
+							<details className="provider-price-help">
+								<summary>计费说明</summary>
+								<p>预览单价 = 已配置单价 × 倍率；「—」表示未配置价格。</p>
+								<p>同步官方牌价会更新输入、输出与缓存单价，美元牌价按汇率折算为人民币；上下文与能力设置保持不变。</p>
+							</details>
 						</ProviderEditorSection>
 						<ProviderEditorSection id="advanced" title="高级选项" status={[relay.billingAccountId ? "已设置账户" : "", `超时 ${relay.timeoutSeconds} 秒`].filter(Boolean).join(" · ")} open={editorSections.advanced} onToggle={(open) => setEditorSection("advanced", open)}>
 							<div className="editor-field">
@@ -881,14 +883,14 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 						const rowTestError = rowTestErrors[relay.id];
 						const rowTestResult = rowTestResults[relay.id];
 						const rowTestRunning = rowTestingRelayId === relay.id;
-						const rowTestFailed = !!rowTestError || rowTestResult?.ok === false || (!rowTestResult && lastTest?.ok === false);
-						const rowTestStatus = rowTestRunning ? { label: "测试中…", tone: "running" } : rowTestFailed ? { label: "连接失败", tone: "error" } : rowTestResult?.ok ? { label: `最近测试 ${rowTestResult.latencyMs} ms`, tone: "success" } : lastTest?.ok ? { label: `最近测试 ${lastTest.latencyMs} ms`, tone: "success" } : undefined;
+						const rowTestFailed = !!rowTestError || rowTestResult?.ok === false || (!rowTestResult && lastTest?.ok === false && !lastTest.configChanged);
+						const rowTestStatus = rowTestRunning ? { label: "测试中…", tone: "running" } : rowTestFailed ? { label: "连接失败", tone: "error" } : rowTestResult?.ok ? { label: `最近测试 ${rowTestResult.latencyMs} ms`, tone: "success" } : lastTest?.configChanged ? { label: "需重新测试", tone: "muted" } : lastTest?.ok ? { label: `最近测试 ${lastTest.latencyMs} ms`, tone: "success" } : undefined;
 						const copied = copyStatus?.relayId === relay.id;
 						const copyState = copied ? copyStatus?.state : undefined;
 						const copyLabel = copyState === "copied" ? `API 密钥已复制 ${relay.name}` : copyState === "failed" ? `复制 API 密钥失败 ${relay.name}` : `复制 API 密钥 ${relay.name}`;
 						const copyTitle = copyState === "copied" ? "API 密钥已复制" : copyState === "failed" ? "复制 API 密钥失败" : "复制 API 密钥";
 						const copyIcon = copyState === "copied" ? "check" : copyState === "failed" ? "alert" : "copy";
-						const rowTestTitle = rowTestError || (rowTestResult ? `${rowTestResult.ok ? "连接成功" : "连接失败"} · ${rowTestResult.latencyMs} ms${rowTestResult.status ? ` · HTTP ${rowTestResult.status}` : rowTestResult.error ? ` · ${rowTestResult.error}` : ""}` : settingsTestSummary(lastTest));
+						const rowTestTitle = rowTestError || (rowTestResult ? `${rowTestResult.ok ? "连接成功" : "连接失败"} · ${rowTestResult.latencyMs} ms${rowTestResult.status ? ` · HTTP ${rowTestResult.status}` : ""}${rowTestResult.error ? ` · ${rowTestResult.error}` : ""}` : settingsTestSummary(lastTest));
 						return <div key={relay.id} className={`provider-row provider-relay-row ${batch ? "is-selecting" : ""} ${relay.enabled ? "" : "disabled"}`}>
 							{batch && <input type="checkbox" aria-label={`选择 ${relay.name}`} checked={selected.includes(relay.id)} disabled={pending} onChange={(event) => setSelected((ids) => event.target.checked ? [...ids, relay.id] : ids.filter((id) => id !== relay.id))} />}
 							<div className="provider-relay-main">

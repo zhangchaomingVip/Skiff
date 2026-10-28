@@ -14,6 +14,9 @@
 # logs
 *.log
 
+# project-local Playwright for CDP harness verification
+/.playwright-cli
+
 # OS / editor
 .DS_Store
 Thumbs.db

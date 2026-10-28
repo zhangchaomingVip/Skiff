@@ -5,7 +5,7 @@ import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
 import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { once } from "node:events";
 import { testImage } from "./imageFixture.mjs";
 await import("./register.mjs");
@@ -45,7 +45,7 @@ try {
 			{ id: "skiff-narrow-levels", reasoning: true, input: ["text"], contextWindow: 128000, maxTokens: 8192, thinkingLevelMap: { minimal: null, low: "low", medium: "medium", high: "high", xhigh: null, max: null } }],
 	} } }));
 	await writeFile(join(agentDir, "auth.json"), JSON.stringify({ "skiff-local-test": { type: "api_key", key: "dummy-local-key" } }));
-	child = spawn(process.execPath, [cli, "--mode", "rpc", "--provider", "skiff-local-test", "--model", "skiff-vision-test", "--no-extensions", "--no-skills", "--no-approve", "--no-context-files", "--offline"], {
+	child = spawn(process.execPath, [cli, "--mode", "rpc", "--provider", "skiff-local-test", "--model", "skiff-vision-test", "--no-extensions", "--extension", resolve("src-tauri/src/pi_extensions/system_prompt.js"), "--append-system-prompt", "Preserve my custom instructions.", "--no-skills", "--no-approve", "--no-context-files", "--offline"], {
 		cwd: directory, env: { ...process.env, PI_CODING_AGENT_DIR: agentDir, PI_OFFLINE: "1" }, stdio: ["pipe", "pipe", "pipe"],
 	});
 	const pending = new Map(); const events = []; let sequence = 0; let stderr = "";
@@ -114,7 +114,23 @@ try {
 	assert.ok(history.messages.some((message) => message.role === "user" && Array.isArray(message.content) && message.content.some((block) => block.type === "image")));
 	assert.equal(history.messages.findLast((message) => message.role === "assistant").usage.reasoning, 12);
 	assert.equal((await rpc({ type: "get_state" })).thinkingLevel, "low");
-	console.log("PASS: real pi reasoning, images, usage, fork-before-turn, command discovery and original history restoration (local only).");
+	const restoredEndCount = events.filter((event) => event.type === "agent_end").length;
+	await rpc({ type: "prompt", message: "Continue after restoring the session." });
+	const restoredDeadline = Date.now() + 20000;
+	while (events.filter((event) => event.type === "agent_end").length === restoredEndCount) {
+		if (Date.now() > restoredDeadline) throw new Error("Restored session prompt did not finish");
+		await new Promise((resolve) => setTimeout(resolve, 30));
+	}
+	assert.equal(requests.length, 3);
+	for (const request of requests) {
+		const prompt = request.messages.filter((message) => message.role === "system" || message.role === "developer").map((message) => message.content).join("\n");
+		assert.ok(!prompt.includes("You can inspect PI_* environment variables"), "The shell identity hint must be absent on initial, subsequent and resumed runs");
+		assert.ok(prompt.includes("Use read to examine files"));
+		assert.ok(prompt.includes("Preserve my custom instructions."));
+		assert.ok(request.tools.some((tool) => tool.function.name === "read"));
+		assert.ok(request.tools.some((tool) => ["bash", "powershell"].includes(tool.function.name)), "Removing guidance must not disable shell tools");
+	}
+	console.log("PASS: real pi prompt customization, preserved tools/user instructions, reasoning, images, usage, fork and history restoration (local only).");
 } finally {
 	if (child && child.exitCode === null) { const exited = once(child, "exit"); child.kill(); await exited; }
 	await new Promise((resolve) => server.close(resolve));

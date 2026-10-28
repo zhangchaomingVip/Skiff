@@ -60,6 +60,18 @@ try {
 	await render({ messages, revealTurn: { turnId: "turn:history_0", requestKey: "search-2" } }, 2);
 	await page.getByRole("button", { name: "收起本轮执行过程" }).waitFor();
 
+	// A leading Markdown rule after a process header must not draw a second divider.
+	const dividerMessages = [
+		{ role: "user", content: "执行工具" },
+		{ role: "assistant", content: [{ type: "toolCall", id: "divider-read", name: "read", arguments: { path: "test.txt" } }] },
+		{ role: "toolResult", toolCallId: "divider-read", toolName: "read", content: "文件内容" },
+	];
+	await render({ messages: [...dividerMessages, { role: "assistant", content: "---\n\n### 所有工具执行总结\n\n已完成。" }] }, 1);
+	assert.equal(await page.locator(".turn-process-head > summary").evaluate((el) => getComputedStyle(el).borderBottomWidth), "1px");
+	assert.equal(await page.locator(".assistant-reply .md > hr").evaluate((el) => getComputedStyle(el).display), "none");
+	await render({ messages: [...dividerMessages, { role: "assistant", content: "正文第一段。\n\n---\n\n后续正文。" }] }, 1);
+	assert.equal(await page.locator(".assistant-reply .md > hr").evaluate((el) => getComputedStyle(el).display), "block");
+
 	// Pending and active next turns must preserve all completed turns' details.
 	const nextUser = { id: "next", role: "user", blocks: [{ kind: "text", text: "第三轮" }] };
 	await render({ messages, running: true, activeTurnId: "turn:next", pendingPrompt: { id: "pending", userMessage: nextUser } }, 2);

@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 const require = createRequire(import.meta.url);
 const { chromium } = process.env.SKIFF_PLAYWRIGHT_DIR ? require(process.env.SKIFF_PLAYWRIGHT_DIR) : await import("playwright");
 const origin = process.argv[2] ?? "http://127.0.0.1:1421";
+const theme = process.argv[3] ?? "light";
 const browser = await chromium.launch({ headless: true, channel: "msedge", ...(process.env.SKIFF_BROWSER_EXECUTABLE ? { executablePath: process.env.SKIFF_BROWSER_EXECUTABLE } : {}) });
 const page = await browser.newPage({ viewport: { width: 1440, height: 960 } });
 const errors = [];
@@ -20,7 +21,7 @@ const enterBulk = async () => {
 const title = () => page.evaluate(() => document.querySelector(".header-title-row > span:first-child")?.textContent?.trim());
 
 try {
-	await page.goto(`${origin}/tests/preview.html?fixture=archive&theme=light`);
+	await page.goto(`${origin}/tests/preview.html?fixture=archive&theme=${encodeURIComponent(theme)}`);
 	await waitUntil(() => document.querySelector(".sidebar-footer")?.textContent.includes("pi 已连接"), "Active pi fixture did not connect");
 	assert.equal(await page.locator(".project-chats .chat-row").count(), 3, "Fixture starts with three unarchived chats");
 
@@ -31,10 +32,11 @@ try {
 	await enterBulk();
 	assert.equal(await page.locator(".sidebar-row-actions").count(), 0, "Selection mode hides the per-row hover actions");
 	assert.match(await page.locator(".sidebar-bulk-count").textContent(), /已选 0 \/ 3/);
-	await row("当前会话").click();
-	assert.match(await page.locator(".sidebar-bulk-count").textContent(), /已选 1 \/ 3/, "Row clicks toggle selection instead of opening the chat");
+	await row("当前会话").getByRole("checkbox", { name: "选择会话 当前会话" }).click();
+	assert.match(await page.locator(".sidebar-bulk-count").textContent(), /已选 1 \/ 3/, "Clicking the checkbox toggles selection instead of opening the chat");
 	assert.ok((await title()).startsWith("当前会话"), "Toggling a row must not navigate away from the open chat");
 	assert.ok(await row("当前会话").evaluate((element) => element.classList.contains("checked")), "Selected row gains the checked state");
+	assert.equal(await row("当前会话").getByRole("checkbox").getAttribute("aria-checked"), "true", "The row checkbox exposes its selected state");
 	assert.equal(await bulkButtons().nth(0).isDisabled(), true, "Bulk archive is disabled while a selected chat is generating");
 	assert.equal(await bulkButtons().nth(1).isDisabled(), true, "Bulk delete is disabled while a selected chat is generating");
 	await page.getByRole("button", { name: "停止生成" }).click();

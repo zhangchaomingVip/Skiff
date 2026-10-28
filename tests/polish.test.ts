@@ -7,7 +7,7 @@ import { forkEntry, forkTurn, groupTurns, turnContentTails, turnReplyText, turnD
 import { readTextFiles, appendTextFiles, splitAttachments } from "../src/chat/textAttachments.ts";
 import { highlightCode } from "../src/chat/highlight.ts";
 import { completedAtTooltip, formatCompletedAt, formatDuration } from "../src/chat/usage.ts";
-import { DEFAULT_APPEND_PROMPT, loadAppendPrompt, saveAppendPrompt } from "../src/chat/prompt.ts";
+import { DEFAULT_APPEND_PROMPT, SKIFF_IDENTITY_PROMPT, buildAppendPrompt, loadAppendPrompt, saveAppendPrompt } from "../src/chat/prompt.ts";
 import { isNotableThinking, shouldShowThinking } from "../src/chat/thinking.ts";
 import { toolActionSummaries, toolCallSummary, toolKind, toolKindLabel, toolRunSummary, toolTarget, type ToolRunItem } from "../src/chat/toolRuns.ts";
 import { PiRpc } from "../src/rpc/RpcClient.ts";
@@ -223,23 +223,30 @@ test("consecutive assistant messages between user prompts fold as one turn", () 
 	assert.notEqual(infos[2].turnId, infos[4].turnId);
 });
 
-test("the append prompt defaults to empty and keeps an explicit clear across reloads", () => {
+test("user instructions stay editable while built-in identity survives missing, empty and cleared preferences", () => {
 	const store = new Map<string, string>();
 	const previous = (globalThis as { localStorage?: unknown }).localStorage;
 	(globalThis as { localStorage?: unknown }).localStorage = { getItem: (key: string) => store.get(key) ?? null, setItem: (key: string, value: string) => void store.set(key, value), removeItem: (key: string) => void store.delete(key) };
 	try {
 		assert.equal(DEFAULT_APPEND_PROMPT, "");
 		assert.equal(loadAppendPrompt(), DEFAULT_APPEND_PROMPT);
+		assert.equal(buildAppendPrompt(), SKIFF_IDENTITY_PROMPT);
+		assert.equal(store.has("skiff.prompt.append"), false, "Composing must not write a preference");
 		saveAppendPrompt("自定义旁白指令");
 		assert.equal(loadAppendPrompt(), "自定义旁白指令");
+		assert.equal(buildAppendPrompt(), `${SKIFF_IDENTITY_PROMPT}\n\n自定义旁白指令`);
 		saveAppendPrompt("");
 		assert.equal(store.get("skiff.prompt.append"), "");
 		assert.equal(loadAppendPrompt(), "");
+		assert.equal(buildAppendPrompt(), SKIFF_IDENTITY_PROMPT);
 		saveAppendPrompt("  \n\t");
 		assert.equal(store.get("skiff.prompt.append"), "");
 		assert.equal(loadAppendPrompt(), "");
+		assert.equal(buildAppendPrompt(), SKIFF_IDENTITY_PROMPT);
 		saveAppendPrompt("  自定义多行指令\n第二行  ");
 		assert.equal(loadAppendPrompt(), "  自定义多行指令\n第二行  ");
+		assert.equal(buildAppendPrompt(), `${SKIFF_IDENTITY_PROMPT}\n\n  自定义多行指令\n第二行  `);
+		assert.equal(store.get("skiff.prompt.append"), "  自定义多行指令\n第二行  ");
 	} finally {
 		(globalThis as { localStorage?: unknown }).localStorage = previous;
 	}

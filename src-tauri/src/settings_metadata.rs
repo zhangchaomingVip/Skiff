@@ -37,7 +37,9 @@ fn order() -> u64 {
 	}
 }
 pub fn fingerprint(relay: &RelaySpec) -> String {
-	let fields = serde_json::json!([relay.base_url.trim().trim_end_matches('/'), relay.api_key.trim(), crate::families::normalize_protocol(relay.protocol.as_deref()), relay.timeout_seconds]);
+	// HTTP-only test results predate reply validation and cannot prove a model works.
+	// Invalidate their connection version so the UI asks for a fresh test.
+	let fields = serde_json::json!(["model-reply-v2", relay.base_url.trim().trim_end_matches('/'), relay.api_key.trim(), crate::families::normalize_protocol(relay.protocol.as_deref()), relay.timeout_seconds]);
 	format!("{:x}", Sha256::digest(fields.to_string().as_bytes()))
 }
 fn read(dir: &Path) -> Metadata {
@@ -95,7 +97,7 @@ fn insert(value: &mut Metadata, config: &FamiliesConfig, relay_id: &str, ticket:
 	if value.tests.iter().any(|test| test.relay_id == relay_id && test.model_id == ticket.model_id && test.started_order > ticket.order) { return; }
 	let config_version = connection.version.clone();
 	value.tests.retain(|test| test.relay_id != relay_id || test.model_id != ticket.model_id);
-	value.tests.push(TestRecord { relay_id: relay_id.into(), model_id: ticket.model_id.clone(), completed_at: ticket.completed_at, config_version, ok: result.ok, latency_ms: result.latency_ms, status: result.status, error_category: if result.ok { None } else { Some(if result.status.is_some() { "HTTP 请求失败" } else if result.error.as_deref() == Some("请求超时") { "请求超时" } else { "连接失败" }.into()) }, started_order: ticket.order, config_changed: false });
+	value.tests.push(TestRecord { relay_id: relay_id.into(), model_id: ticket.model_id.clone(), completed_at: ticket.completed_at, config_version, ok: result.ok, latency_ms: result.latency_ms, status: result.status, error_category: if result.ok { None } else { Some(if result.error.as_deref() == Some("请求超时") { "请求超时" } else if result.status.is_some_and(|status| (200..300).contains(&status)) { "模型回复无效" } else if result.status.is_some() { "HTTP 请求失败" } else { "连接失败" }.into()) }, started_order: ticket.order, config_changed: false });
 }
 pub fn finish(dir: &Path, config: &FamiliesConfig, request_id: &str, mut ticket: Ticket, result: &TestResult, draft: bool) {
 	ticket.result = Some(result.clone()); ticket.completed_at = now();
@@ -165,6 +167,35 @@ mod tests {
 		Fixture { dir, config }
 	}
 	fn result(ok: bool) -> TestResult { TestResult { ok, latency_ms: 19, status: Some(if ok {200} else {401}), error: Some("never-store-key raw secret response body".into()) } }
+
+	#[test]
+	fn http_only_test_history_requires_retesting_after_reply_validation_upgrade() {
+		let f = fixture();
+		let relay = &f.config.relays[0];
+		let ticket = begin(&f.dir, &f.config, relay, "actual/model");
+		finish(&f.dir, &f.config, "baseline", ticket, &result(true), false);
+		let mut old = read(&f.dir);
+		let fields = json!([relay.base_url.trim().trim_end_matches('/'), relay.api_key.trim(), crate::families::normalize_protocol(relay.protocol.as_deref()), relay.timeout_seconds]);
+		old.connections.get_mut(&relay.id).unwrap().fingerprint = format!("{:x}", Sha256::digest(fields.to_string().as_bytes()));
+		write(&f.dir, &old).unwrap();
+		assert!(query(&f.dir, &f.config).tests[0].config_changed);
+		let ticket = begin(&f.dir, &f.config, relay, "actual/model");
+		finish(&f.dir, &f.config, "retested", ticket, &result(true), false);
+		assert!(!query(&f.dir, &f.config).tests[0].config_changed);
+	}
+
+	#[test]
+	fn invalid_http_200_reply_persists_as_a_model_failure_without_raw_content() {
+		let f = fixture();
+		let ticket = begin(&f.dir, &f.config, &f.config.relays[0], "actual/model");
+		let mut failed = result(false); failed.status = Some(200);
+		finish(&f.dir, &f.config, "invalid-reply", ticket, &failed, false);
+		let tests = query(&f.dir, &f.config).tests;
+		assert!(!tests[0].ok);
+		assert_eq!(tests[0].status, Some(200));
+		assert_eq!(tests[0].error_category.as_deref(), Some("模型回复无效"));
+		assert!(!std::fs::read_to_string(f.dir.join(FILE)).unwrap().contains("raw secret"));
+	}
 
 	#[test]
 	fn observations_preserve_latest_failure_order_and_exact_identity_without_secrets() {

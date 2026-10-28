@@ -1420,22 +1420,22 @@ mod tests {
 		let (url, body, auth) = connection_test_request("anthropic", "https://api.anthropic.com/v1", "k", "claude-3");
 		assert_eq!(url, "https://api.anthropic.com/v1/messages");
 		assert_eq!(auth, "anthropic");
-		assert_eq!(body["max_tokens"], 1);
+		assert_eq!(body["max_tokens"], 128);
 		// The test and the SDK must agree on the endpoint for a suffix-less relay.
 		let (url, _, _) = connection_test_request("anthropic", "https://claude-proxy.example", "k", "claude-3");
 		assert_eq!(url, "https://claude-proxy.example/v1/messages");
 		let (url, body, auth) = connection_test_request("openai-responses", "https://api.openai.com/v1", "k", "gpt-5");
 		assert_eq!(url, "https://api.openai.com/v1/responses");
 		assert_eq!(auth, "bearer");
-		assert_eq!(body["max_output_tokens"], 16);
+		assert_eq!(body["max_output_tokens"], 128);
 		let (url, body, auth) = connection_test_request("google-genai", "https://generativelanguage.googleapis.com/v1beta", "k", "gemini-2.5-pro");
 		assert_eq!(url, "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=k");
 		assert_eq!(auth, "query");
-		assert_eq!(body["generationConfig"]["maxOutputTokens"], 1);
+		assert_eq!(body["generationConfig"]["maxOutputTokens"], 128);
 		let (url, body, auth) = connection_test_request("openai", "https://api.example.com/v1", "k", "m");
 		assert_eq!(url, "https://api.example.com/v1/chat/completions");
 		assert_eq!(auth, "bearer");
-		assert_eq!(body["max_tokens"], 1);
+		assert_eq!(body["max_tokens"], 128);
 	}
 
 	#[test]
@@ -1693,7 +1693,7 @@ pub fn cancel_provider_test(request_id: String) -> Result<(), String> {
 	Ok(())
 }
 
-/// One `max_tokens=1` completion proves the relay endpoint, key and model work.
+/// A short completion must contain a real model reply to pass.
 #[tauri::command]
 pub async fn test_settings_connection(relay: RelaySpec, model_id: String, request_id: String, draft: bool) -> Result<TestResult, String> {
 	let dir = agent_dir()?;
@@ -1710,7 +1710,7 @@ async fn test_settings_connection_in(dir: &Path, relay: RelaySpec, model_id: Str
 	Ok(result)
 }
 
-/// One `max_tokens=1` completion proves the relay endpoint, key and model work.
+/// A short completion must contain a real model reply to pass.
 /// `protocol` selects the request shape; absent means OpenAI Chat Completions.
 #[tauri::command]
 pub async fn test_provider_connection(base_url: String, api_key: String, model_id: String, protocol: Option<String>, timeout_seconds: Option<u64>, request_id: Option<String>) -> Result<TestResult, String> {
@@ -1739,22 +1739,57 @@ pub async fn test_provider_connection(base_url: String, api_key: String, model_i
 /// The request a protocol's connection test sends: endpoint, JSON body and the
 /// auth style. Anthropic and Google each use a different one-shot shape.
 fn connection_test_request(protocol: &str, base: &str, key: &str, model: &str) -> (String, Value, &'static str) {
+	const PROMPT: &str = "Reply only OK.";
+	const MAX_TOKENS: u32 = 128;
 	match protocol {
 		"anthropic" => (anthropic_messages_url(base), json!({
-			"model": model, "max_tokens": 1,
-			"messages": [{ "role": "user", "content": "ping" }],
+			"model": model, "max_tokens": MAX_TOKENS,
+			"messages": [{ "role": "user", "content": PROMPT }],
 		}), "anthropic"),
 		"openai-responses" => (format!("{base}/responses"), json!({
-			"model": model, "input": "ping", "max_output_tokens": 16,
+			"model": model, "input": PROMPT, "max_output_tokens": MAX_TOKENS,
 		}), "bearer"),
 		"google-genai" | "vertex" => (format!("{base}/models/{model}:generateContent?key={key}"), json!({
-			"contents": [{ "role": "user", "parts": [{ "text": "ping" }] }],
-			"generationConfig": { "maxOutputTokens": 1 },
+			"contents": [{ "role": "user", "parts": [{ "text": PROMPT }] }],
+			"generationConfig": { "maxOutputTokens": MAX_TOKENS },
 		}), "query"),
 		_ => (format!("{base}/chat/completions"), json!({
-			"model": model, "messages": [{ "role": "user", "content": "ping" }], "max_tokens": 1,
+			"model": model, "messages": [{ "role": "user", "content": PROMPT }], "max_tokens": MAX_TOKENS,
 		}), "bearer"),
 	}
+}
+
+/// HTTP 200 can also be a website, an error envelope or an empty completion.
+/// Validate the selected protocol's output, not arbitrary text in the JSON.
+fn validate_test_reply(protocol: &str, content_type: &str, bytes: &[u8]) -> Result<(), String> {
+	if content_type.to_ascii_lowercase().contains("text/html") || bytes.iter().copied().find(|byte| !byte.is_ascii_whitespace()) == Some(b'<') {
+		return Err("接口返回了 HTML 网页，未收到模型回复；请检查 Base URL 是否包含 /v1 等接口前缀".into());
+	}
+	let value: Value = serde_json::from_slice(bytes).map_err(|_| "接口未返回有效 JSON，未收到模型回复".to_string())?;
+	if value.get("error").is_some_and(|error| !error.is_null()) || value.get("errors").is_some_and(|error| !error.is_null()) {
+		return Err("接口返回了错误对象，未收到有效模型回复".into());
+	}
+	let text = |value: &Value| value.as_str().is_some_and(|text| !text.trim().is_empty());
+	fn items(value: &Value) -> &[Value] { value.as_array().map(Vec::as_slice).unwrap_or(&[]) }
+	let valid = match protocol {
+		"anthropic" => value["type"] == "message" && value["role"] == "assistant"
+			&& matches!(value["stop_reason"].as_str(), Some("end_turn" | "max_tokens" | "stop_sequence"))
+			&& items(&value["content"]).iter().any(|block| block["type"] == "text" && text(&block["text"])),
+		"openai-responses" => (value["status"] == "completed"
+			|| value["status"] == "incomplete" && value["incomplete_details"]["reason"] == "max_output_tokens")
+			&& items(&value["output"]).iter().any(|item| item["type"] == "message" && item["role"] == "assistant"
+				&& items(&item["content"]).iter().any(|block| block["type"] == "output_text" && text(&block["text"]))),
+		"google-genai" | "vertex" => items(&value["candidates"]).iter().any(|candidate|
+			matches!(candidate["finishReason"].as_str(), Some("STOP" | "MAX_TOKENS"))
+			&& candidate["content"]["role"] == "model"
+			&& items(&candidate["content"]["parts"]).iter().any(|part| part["thought"] != true && text(&part["text"]))),
+		_ => items(&value["choices"]).iter().any(|choice|
+			matches!(choice["finish_reason"].as_str(), Some("stop" | "length"))
+			&& choice["message"]["role"] == "assistant"
+			&& choice["message"]["refusal"].is_null()
+			&& (text(&choice["message"]["content"]) || items(&choice["message"]["content"]).iter().any(|block| block["type"] == "text" && text(&block["text"])))),
+	};
+	if valid { Ok(()) } else { Err("未收到有效的模型文本回复或结束状态；空内容、仅推理、拒绝及异常响应不算测试成功".into()) }
 }
 
 async fn run_provider_test(base_url: String, api_key: String, model_id: String, protocol: String, timeout_seconds: Option<u64>) -> Result<TestResult, String> {
@@ -1783,13 +1818,16 @@ async fn run_provider_test(base_url: String, api_key: String, model_id: String, 
 	match response {
 		Ok(mut response) => {
 			let status = response.status();
+			let content_type = response.headers().get(reqwest::header::CONTENT_TYPE).and_then(|value| value.to_str().ok()).unwrap_or("").to_string();
 			let mut bytes = Vec::new();
 			loop {
 				match response.chunk().await {
 					Ok(Some(chunk)) => {
-						let remaining = 16_384 - bytes.len();
-						bytes.extend_from_slice(&chunk[..chunk.len().min(remaining)]);
-						if bytes.len() == 16_384 { break; }
+						if bytes.len() + chunk.len() > 65_536 {
+							return Ok(TestResult { ok: false, latency_ms: started.elapsed().as_millis() as u64,
+								status: Some(status.as_u16()), error: Some("测试响应过大，无法验证完整模型回复".into()) });
+						}
+						bytes.extend_from_slice(&chunk);
 					}
 					Ok(None) => break,
 					Err(error) => return Ok(TestResult { ok: false, latency_ms: started.elapsed().as_millis() as u64,
@@ -1799,7 +1837,8 @@ async fn run_provider_test(base_url: String, api_key: String, model_id: String, 
 			let latency_ms = started.elapsed().as_millis() as u64;
 			let body = String::from_utf8_lossy(&bytes);
 			if status.is_success() {
-				Ok(TestResult { ok: true, latency_ms, status: Some(status.as_u16()), error: None })
+				let error = validate_test_reply(&protocol, &content_type, &bytes).err();
+				Ok(TestResult { ok: error.is_none(), latency_ms, status: Some(status.as_u16()), error })
 			} else {
 				Ok(TestResult { ok: false, latency_ms, status: Some(status.as_u16()), error: Some(summarize(&body.replace(&key, "[密钥已隐藏]"))) })
 			}
@@ -1838,6 +1877,80 @@ mod connection_test_tests {
 	use std::net::TcpListener;
 	use std::sync::mpsc;
 	use std::time::{Duration, Instant};
+
+	fn test_reply(protocol: &str, body: &str, content_type: &str, extra_length: usize) -> TestResult {
+		let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+		let address = listener.local_addr().unwrap();
+		let body = body.to_string();
+		let content_type = content_type.to_string();
+		let server = std::thread::spawn(move || {
+			let (mut socket, _) = listener.accept().unwrap();
+			socket.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+			let mut bytes = Vec::new(); let mut buffer = [0u8; 4096];
+			loop {
+				let n = socket.read(&mut buffer).unwrap(); if n == 0 { break; } bytes.extend_from_slice(&buffer[..n]);
+				if let Some(offset) = bytes.windows(4).position(|part| part == b"\r\n\r\n") {
+					let headers = String::from_utf8_lossy(&bytes[..offset]).to_lowercase();
+					let length = headers.lines().find_map(|line| line.strip_prefix("content-length:").and_then(|s| s.trim().parse::<usize>().ok())).unwrap();
+					if bytes.len() >= offset + 4 + length { break; }
+				}
+			}
+			let _ = write!(socket, "HTTP/1.1 200 OK\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len() + extra_length);
+		});
+		let result = tauri::async_runtime::block_on(test_provider_connection(format!("http://{address}/v1"), "test-key".into(), "test-model".into(), Some(protocol.into()), Some(5), None)).unwrap();
+		server.join().unwrap();
+		result
+	}
+
+	#[test]
+	fn http_200_requires_a_real_protocol_specific_text_reply() {
+		let replies = [
+			("openai", json!({"choices":[{"message":{"role":"assistant", "content":"OK"}, "finish_reason":"stop"}]})),
+			("kimi", json!({"choices":[{"message":{"role":"assistant", "content":"OK"}, "finish_reason":"length"}]})),
+			("openai-responses", json!({"status":"completed", "output":[{"type":"message", "role":"assistant", "content":[{"type":"output_text", "text":"OK"}]}]})),
+			("anthropic", json!({"type":"message", "role":"assistant", "content":[{"type":"text", "text":"OK"}], "stop_reason":"end_turn"})),
+			("google-genai", json!({"candidates":[{"content":{"role":"model", "parts":[{"text":"OK"}]}, "finishReason":"STOP"}]})),
+			("vertex", json!({"candidates":[{"content":{"role":"model", "parts":[{"text":"OK"}]}, "finishReason":"MAX_TOKENS"}]})),
+		];
+		for (protocol, reply) in replies {
+			assert!(test_reply(protocol, &reply.to_string(), "application/json", 0).ok, "{protocol}");
+			for invalid in ["<!doctype html><html>Website</html>", "", "{}", "{broken", r#"{"error":{"message":"test-key"}}"#,
+				r#"{"message":"OK","usage":{"total_tokens":1}}"#] {
+				let result = test_reply(protocol, invalid, "application/json", 0);
+				assert!(!result.ok, "{protocol}: {invalid}");
+				assert_eq!(result.status, Some(200));
+				assert!(!result.error.unwrap().contains("test-key"));
+			}
+			let empty = reply.to_string().replace("OK", "  ");
+			assert!(!test_reply(protocol, &empty, "application/json", 0).ok, "{protocol}: empty text");
+			assert!(!test_reply(protocol, &reply.to_string(), "text/html; charset=utf-8", 0).ok);
+			assert!(!test_reply(protocol, &reply.to_string(), "application/json", 10).ok, "{protocol}: truncated HTTP body");
+		}
+	}
+
+	#[test]
+	fn replies_must_have_final_text_not_only_reasoning_tools_or_refusal() {
+		let cases = [
+			("openai", json!({"choices":[{"message":{"role":"assistant", "content":null, "reasoning_content":"thinking"}, "finish_reason":"length"}]})),
+			("openai", json!({"choices":[{"message":{"role":"assistant", "content":"OK"}, "finish_reason":null}]})),
+			("openai", json!({"choices":[{"message":{"role":"user", "content":"OK"}, "finish_reason":"stop"}]})),
+			("openai", json!({"choices":[{"message":{"role":"assistant", "content":"OK", "refusal":"refused"}, "finish_reason":"stop"}]})),
+			("openai", json!({"choices":[{"message":{"role":"assistant", "tool_calls":[{"function":{"name":"test"}}]}, "finish_reason":"tool_calls"}]})),
+			("openai-responses", json!({"status":"failed", "output":[{"type":"message", "role":"assistant", "content":[{"type":"output_text", "text":"OK"}]}]})),
+			("openai-responses", json!({"status":"completed", "output":[{"type":"reasoning", "summary":[{"text":"thinking"}]}]})),
+			("openai-responses", json!({"status":"completed", "output":[{"type":"message", "role":"assistant", "content":[{"type":"refusal", "refusal":"refused"}]}]})),
+			("anthropic", json!({"type":"message", "role":"assistant", "content":[{"type":"thinking", "thinking":"thinking"}], "stop_reason":"max_tokens"})),
+			("anthropic", json!({"type":"message", "role":"assistant", "content":[{"type":"text", "text":"OK"}], "stop_reason":"refusal"})),
+			("google-genai", json!({"candidates":[{"content":{"role":"model", "parts":[{"text":"thinking", "thought":true}]}, "finishReason":"STOP"}]})),
+			("vertex", json!({"candidates":[{"content":{"role":"model", "parts":[{"text":"OK"}]}, "finishReason":"SAFETY"}]})),
+		];
+		for (protocol, reply) in cases {
+			assert!(validate_test_reply(protocol, "application/json", reply.to_string().as_bytes()).is_err(), "{protocol}: {reply}");
+		}
+		let valid = json!({"choices":[{"message":{"role":"assistant", "content":[{"type":"text", "text":"OK"}]}, "finish_reason":"stop"}]}).to_string();
+		assert!(validate_test_reply("openai", "application/json", valid.as_bytes()).is_ok());
+		assert!(!test_reply("openai", &format!("{valid}{}", " ".repeat(65_536)), "application/json", 0).ok);
+	}
 
 	fn stops_stalled_request(send_headers: bool) {
 		let listener = TcpListener::bind("127.0.0.1:0").unwrap();
@@ -1893,6 +2006,7 @@ mod connection_test_tests {
 		for (index, protocol) in ["openai", "kimi", "openai-responses", "anthropic", "google-genai", "vertex"].iter().enumerate() {
 			let listener = TcpListener::bind("127.0.0.1:0").unwrap();
 			let address = listener.local_addr().unwrap();
+			let response_protocol = *protocol;
 			let server = std::thread::spawn(move || {
 				let (mut socket, _) = listener.accept().unwrap();
 				socket.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
@@ -1905,7 +2019,14 @@ mod connection_test_tests {
 						if bytes.len() >= offset + 4 + length { break; }
 					}
 				}
-				socket.write_all(if index == 5 { b"HTTP/1.1 401 Unauthorized\r\nContent-Length: 2\r\n\r\n{}" } else { b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\n{}" }).unwrap();
+				let body = match response_protocol {
+					"anthropic" => json!({"type":"message", "role":"assistant", "content":[{"type":"text", "text":"OK"}], "stop_reason":"end_turn"}),
+					"openai-responses" => json!({"status":"completed", "output":[{"type":"message", "role":"assistant", "content":[{"type":"output_text", "text":"OK"}]}]}),
+					"google-genai" => json!({"candidates":[{"content":{"role":"model", "parts":[{"text":"OK"}]}, "finishReason":"STOP"}]}),
+					"vertex" => json!({"error":{"message":"invalid key"}}),
+					_ => json!({"choices":[{"message":{"role":"assistant", "content":"OK"}, "finish_reason":"stop"}]}),
+				}.to_string();
+				write!(socket, "HTTP/1.1 {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}", if index == 5 { "401 Unauthorized" } else { "200 OK" }, body.len()).unwrap();
 				String::from_utf8(bytes).unwrap()
 			});
 			let mut config = FamiliesConfig::default();

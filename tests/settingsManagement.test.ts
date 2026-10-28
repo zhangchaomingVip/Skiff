@@ -38,6 +38,10 @@ test("route test display keeps performance and relative time visible while detai
 	assert.equal(display.tone, "success");
 	assert.equal(settingsTestDisplay(undefined, now).label, "未测试");
 	assert.equal(settingsTestDisplay({ ...test, ok: false, status: 401 }, now).tone, "error");
+	const changed = settingsTestDisplay({ ...test, configChanged: true }, now);
+	assert.equal(changed.tone, "muted");
+	assert.equal(changed.label, "需重新测试");
+	assert.match(changed.title, /配置已变化.*复测/);
 });
 
 test("batch impact includes disabled and empty routes without changing their switches", () => {

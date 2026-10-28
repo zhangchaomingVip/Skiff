@@ -34,7 +34,7 @@ struct RpcStartOptions {
 	cwd: Option<String>,
 	env: Option<HashMap<String, String>>,
 	/// Forwarded to pi as `--append-system-prompt`; this is the user's editable
-	/// instructions plus Skiff's built-in narration hint.
+	/// instructions plus Skiff's built-in identity guidance.
 	append_system_prompt: Option<String>,
 }
 
@@ -238,6 +238,14 @@ fn start_session(app: AppHandle, sessions: &Mutex<HashMap<String, Proc>>, option
 	}
 	if let Some(dir) = get_pi_agent_dir() {
 		families::prepare_runtime(&dir, &mut cmd)?;
+		// Explicit loading scopes prompt customization to Skiff, including
+		// sessions using unmanaged providers with no configured family routes.
+		let extension = dir.join("skiff-system-prompt.js");
+		let source = include_str!("pi_extensions/system_prompt.js");
+		if std::fs::read_to_string(&extension).ok().as_deref() != Some(source) {
+			std::fs::write(&extension, source).map_err(|_| "无法安装 Skiff 提示词扩展")?;
+		}
+		cmd.arg("--extension").arg(extension);
 		// Install the lookup extension up front so a new install only needs an
 		// API key; a failure here must not stop the session from starting.
 		if let Err(error) = search::ensure_extension() {

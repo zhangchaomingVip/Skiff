@@ -6,7 +6,7 @@ import { PiRpc, type RpcEvent } from "../rpc/RpcClient";
 import { parseMessages, parseModels } from "./parse";
 import { reduce } from "./reducer";
 import { forkEntry, forkTurn } from "./turns";
-import { loadAppendPrompt } from "./prompt";
+import { buildAppendPrompt } from "./prompt";
 import { initialSessionState, type ContextUsage, type ImageAttachment, type ModelInfo, type SessionState } from "./types";
 import type { RuntimeOffer } from "./modelFamilies";
 import { attachHistoricalSnapshots } from "./routeSnapshot";
@@ -326,7 +326,7 @@ export function usePiSession(target?: SessionTarget, runtimeOffers: readonly Run
 		const spawned = preceding.then(async () => {
 			if (!current()) return;
 			startupConfig = configurationRef.current?.config;
-			await rpc.start({ cwd: selected.cwd, appendSystemPrompt: loadAppendPrompt() });
+			await rpc.start({ cwd: selected.cwd, appendSystemPrompt: buildAppendPrompt() });
 		});
 		void (async () => {
 			try {
