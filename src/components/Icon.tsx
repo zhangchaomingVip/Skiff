@@ -45,6 +45,7 @@ const paths = {
 	pin: "M12 17v5M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4h-4a2 2 0 0 0 0 4h1v4.76Z",
 	checkbox: "M4 4h16v16H4Zm4 8 3 3 6-6.5",
 	minus: "M5 12h14",
+	git: "M7 3a2 2 0 1 0 0 4 2 2 0 0 0 0-4Zm0 4v7a4 4 0 0 0 4 4h2m4-1a2 2 0 1 0 0 4 2 2 0 0 0 0-4Zm0 0V7m0 0a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z",
 };
 
 export type IconName = keyof typeof paths;

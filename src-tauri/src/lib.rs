@@ -13,6 +13,7 @@ mod providers;
 mod search;
 mod history;
 mod settings_metadata;
+mod project_workbench;
 
 /// One spawned `pi --mode rpc` session. `child` is kept only so we can kill it
 /// on stop; `stdin` is shared with the reader threads so we can write lines.
@@ -528,6 +529,7 @@ pub fn run() {
 	tauri::Builder::default()
 		.manage(AppState::default())
 		.manage(history::HistoryWorkspace::default())
+		.manage(project_workbench::WorkbenchState::default())
 		// Native folder picker for the add-project dialog.
 		.plugin(tauri_plugin_dialog::init())
 		.invoke_handler(tauri::generate_handler![
@@ -539,6 +541,9 @@ pub fn run() {
 			validate_project_directory,
 			get_workspace_directory,
 			read_system_prompt,
+			project_workbench::list_project_directory, project_workbench::read_project_file,
+			project_workbench::get_project_git_status, project_workbench::get_project_git_diff,
+			project_workbench::commit_project_files, project_workbench::rollback_project_files,
 			history::set_history_workspace, history::read_session_history, history::delete_session_file,
 			families::list_model_families, families::list_model_runtime,
 			families::save_relay, families::delete_relay, families::set_relay_enabled,

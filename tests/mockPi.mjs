@@ -159,6 +159,27 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 				return;
 			}
 			if (command === "get_workspace_directory") return { name: "Skiff", path: "D:\\workspace\\Skiff" };
+			if (command === "list_project_directory") {
+				const entries = args.path === "src" ? [
+					{ name: "components", path: "src/components", kind: "directory" },
+					{ name: "App.tsx", path: "src/App.tsx", kind: "file", size: 18420 },
+					{ name: "tokens.css", path: "src/tokens.css", kind: "file", size: 8120 },
+				] : [
+					{ name: "src", path: "src", kind: "directory" },
+					{ name: "features", path: "features", kind: "directory" },
+					{ name: "package.json", path: "package.json", kind: "file", size: 1240 },
+					{ name: "README.md", path: "README.md", kind: "file", size: 6030 },
+				];
+				return { path: args.path, entries, truncated: false };
+			}
+			if (command === "read_project_file") return { path: args.path, kind: "text", content: args.path.endsWith(".json") ? "{\n\t\"name\": \"skiff-agent\"\n}\n" : "import { useState } from \"react\";\n\nexport function Preview() {\n\treturn <main>Skiff</main>;\n}\n", size: 112, modifiedMs: Date.now(), version: "mock-file-v1" };
+			if (command === "get_project_git_status") return { repositoryRoot: "D:\\workspace\\Skiff", scope: "", branch: "codex/project-workbench", head: "87ad2410c75d", version: "mock-git-v1", entries: [
+				{ path: "src/App.tsx", kind: "modified", indexStatus: " ", worktreeStatus: "M", selectable: true, rollbackable: true },
+				{ path: "src/components/ProjectPreview.tsx", kind: "untracked", indexStatus: "?", worktreeStatus: "?", selectable: true, rollbackable: false },
+			] };
+			if (command === "get_project_git_diff") return { path: args.path, kind: "text", content: "diff --git a/src/App.tsx b/src/App.tsx\n--- a/src/App.tsx\n+++ b/src/App.tsx\n@@ -1,2 +1,3 @@\n import App from \"./App\";\n+import { ProjectPreview } from \"./components/ProjectPreview\";\n", truncated: false, version: "mock-git-v1" };
+			if (command === "commit_project_files") return { repositoryRoot: "D:\\workspace\\Skiff", commit: "a13fc921", changedPaths: args.paths, version: "mock-git-v2" };
+			if (command === "rollback_project_files") return { repositoryRoot: "D:\\workspace\\Skiff", changedPaths: args.paths, version: "mock-git-v2" };
 			if (command === "list_model_families") {
 				if (fixture === "loading") await new Promise(() => {});
 				if (fixture === "error") throw new Error("预览：模型目录暂时不可用，请重试");

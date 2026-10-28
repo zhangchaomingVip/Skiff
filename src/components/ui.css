@@ -57,8 +57,11 @@
 	.ui-field-help[role=alert] { color: var(--danger); }
 	.ui-dialog { color: var(--foreground); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-xl); padding: var(--space-6); max-width: calc(100vw - 24px); max-height: calc(100dvh - 24px); overflow: auto; box-shadow: var(--shadow-elevation-3); animation: ui-enter var(--transition-fast) var(--easing-default); }
 	.ui-dialog::backdrop { background: var(--overlay); }
-	.ui-dialog[data-variant=drawer] { position: fixed; inset: 32px auto 0 0; margin: 0; width: 240px; height: calc(100dvh - 32px); max-height: none; padding: 0; border-radius: 0; }
-	.ui-dialog[data-variant=drawer] > .sidebar { width: 100%; height: 100%; flex: 0 0 100%; padding: 0 var(--space-3); }
+	.ui-dialog[data-variant=drawer] { position: fixed; inset: 32px auto 0 0; margin: 0; width: min(328px, calc(100vw - 16px)); height: calc(100dvh - 32px); max-height: none; padding: 0; border-radius: 0; overflow: hidden; }
+	.drawer-workbench { width: 100%; height: 100%; display: flex; min-height: 0; }
+	.drawer-workbench > .activity-bar { height: 100%; }
+	.drawer-workbench > .sidebar { min-width: 0; width: auto; height: 100%; flex: 1 1 auto; padding: 0 var(--space-3); }
+	.drawer-workbench > .workbench-panel { min-width: 0; width: auto; height: 100%; flex: 1 1 auto; }
 	.ui-popover { position: fixed; z-index: 30; width: min(360px, calc(100vw - 24px)); padding: var(--space-2); border: 1px solid var(--boundary); border-radius: var(--radius-lg); background: var(--surface); color: var(--foreground); overflow: auto; box-shadow: var(--shadow-elevation-3); animation: ui-enter var(--transition-fast) var(--easing-default); }
 	.ui-segmented { display: inline-flex; gap: var(--space-1); padding: var(--space-0-5); border: 1px solid var(--boundary); border-radius: var(--radius-lg); background: var(--subtle); }
 	.ui-segmented .ui-button { border: 0; }

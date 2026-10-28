@@ -110,6 +110,9 @@
 		--bg: var(--color-bg-primary);
 		--sidebar: var(--color-sidebar-bg);
 		--sidebar-border: var(--color-sidebar-border);
+		--activity-bg: #0b0e13;
+		--activity-hover: #1d2632;
+		--activity-selected: #2c3a4d;
 		--panel: var(--color-bg-tertiary);
 		--panel-2: var(--color-bg-secondary);
 		--border: var(--color-border);
@@ -186,6 +189,9 @@
 		--shadow-elevation-2: 0 4px 12px rgba(0, 0, 0, .08);
 		--shadow-elevation-3: 0 8px 20px rgba(0, 0, 0, .1);
 		--shadow-elevation-up: 0 -6px 20px rgba(0, 0, 0, .08);
+		--activity-bg: #e7e9ed;
+		--activity-hover: #dce1e8;
+		--activity-selected: #cfd8e6;
 	}
 
 }
