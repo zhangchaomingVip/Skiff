@@ -17,7 +17,7 @@ const wait = (fn, arg) => page.waitForFunction(fn, arg, { timeout: 20000 });
 const active = () => page.evaluate(() => JSON.parse(localStorage.getItem("skiff.workspace.v1")).activeId);
 const message = () => page.getByRole("textbox", { name: "聊天消息" });
 const ready = () => wait(() => !!document.querySelector(".composer") && !document.querySelector(".session-loading") && document.querySelector(".sidebar")?.dataset.connected === "true");
-const select = async (id) => { await page.locator(".chat-link").filter({ has: page.locator(".chat-title", { hasText: new RegExp(`^Session ${id}$`) }) }).click({ position: { x: 24, y: 16 } }); await ready(); };
+const select = async (id) => { await page.locator(".project-chats .chat-link").filter({ has: page.locator(".chat-title", { hasText: new RegExp(`^Session ${id}$`) }) }).click({ position: { x: 24, y: 16 } }); await ready(); };
 const searchInput = () => page.getByRole("textbox", { name: "搜索项目与聊天" });
 const search = async (text) => { await searchInput().fill(text); await wait(() => document.querySelector(".sidebar-search-results [role=status]")?.textContent.includes("已搜索")); };
 const persisted = (id) => page.evaluate(async (id) => {
@@ -27,7 +27,7 @@ const persisted = (id) => page.evaluate(async (id) => {
 
 try {
 	await page.goto(`${base}/tests/retrievability.html`); await ready();
-	assert.equal(await page.locator(".sidebar-recent").count(), 0);
+	assert.equal(await page.locator(".sidebar-recent .chat-row").count(), 40);
 	// Each project previews five chats at a time; page every project to the end first.
 	await page.evaluate(async () => {
 		const wait = () => new Promise((resolve) => setTimeout(resolve, 60));
@@ -38,7 +38,7 @@ try {
 			if (document.querySelectorAll(".chat-row").length === before) break;
 		}
 	});
-	assert.equal(await page.locator(".chat-row").count(), 100);
+	assert.equal(await page.locator(".project-chats .chat-row").count(), 100);
 	assert.ok((await page.locator(".chat-group-label").allTextContents()).every((label) => /· \d+$/.test(label)));
 	const processes = await page.evaluate(() => window.retrievalFixture.mock.processes.size);
 	await page.getByRole("button", { name: "搜索项目与聊天", exact: true }).click();
@@ -126,9 +126,9 @@ try {
 		const [id] = [...mock.processes].find(([, process]) => process.file === "s0.jsonl");
 		mock.emit(id, { type: "error", errorMessage: "余额不足" });
 	});
-	await page.locator('.chat-row:has(.chat-title:text-is("Session 0")) [aria-label="失败"]').waitFor();
+	await page.locator('.project-chats .chat-row:has(.chat-title:text-is("Session 0")) [aria-label="失败"]').waitFor();
 	await page.evaluate(() => { const mock = window.retrievalFixture.mock; const [id] = [...mock.processes].find(([, process]) => process.file === "s0.jsonl"); mock.emit(id, { type: "error", errorMessage: "503 Service Unavailable" }); });
-	await page.locator('.chat-row:has(.chat-title:text-is("Session 0")) [aria-label="需要确认"]').waitFor();
+	await page.locator('.project-chats .chat-row:has(.chat-title:text-is("Session 0")) [aria-label="需要确认"]').waitFor();
 	assert.equal(await page.locator(".route-authorization").count(), 0);
 	await page.screenshot({ path: fileURLToPath(new URL("screenshots/background-light.png", output)) });
 	await select(0);
@@ -152,7 +152,7 @@ try {
 	await page.locator(".archive-session-row").filter({ hasText: "Session 0" }).getByRole("button", { name: "恢复", exact: true }).click(); await ready();
 	assert.equal(await message().inputValue(), "");
 	const draftRow = page.locator('.project-chats .chat-row').filter({ has: page.locator('.chat-draft') }).filter({ hasText: "新聊天" });
-	await draftRow.hover(); await draftRow.getByRole("button", { name: "删除聊天 新聊天", exact: true }).click(); await page.getByRole("button", { name: "确认删除", exact: true }).click();
+	await draftRow.click({ button: "right" }); await page.getByRole("menu").getByRole("button", { name: "从侧栏移除", exact: true }).click(); await page.getByRole("button", { name: "确认删除", exact: true }).click();
 	await page.evaluate(() => window.retrievalFixture.drafts.flush()); assert.equal(await persisted(draftId), undefined);
 	evidence.checks.push("archive/restore and delete UI clear pending drafts without resurrection");
 	await page.evaluate(async () => {

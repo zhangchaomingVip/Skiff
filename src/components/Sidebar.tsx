@@ -283,15 +283,8 @@ export function Sidebar({ projects, chats, activeId, selectedProjectId, homeActi
 	const menuChat = menu?.kind === "chat" ? chats.find((chat) => chat.id === menu.chatId) : undefined;
 	const menuProject = menu?.kind === "project" ? projects.find((project) => project.id === menu.projectId) : undefined;
 	const visibleProjects = useMemo(() => projects.filter((project) => project.name.toLowerCase().includes(search.toLowerCase()) || chats.some((chat) => chat.projectId === project.id && chat.title.toLowerCase().includes(search.toLowerCase()))), [projects, chats, search]);
-	/** Cross-project quick access: recent chats whose project is collapsed, so no row shows twice. */
-	const recentChats = useMemo(() => {
-		const shown = new Set<string>();
-		if (projectsExpanded) for (const project of visibleProjects) {
-			if (collapsed.has(project.id)) continue;
-			for (const chat of chats) if (chat.projectId === project.id) shown.add(chat.id);
-		}
-		return chats.filter((chat) => !shown.has(chat.id)).sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 40);
-	}, [chats, collapsed, projectsExpanded, visibleProjects]);
+	/** Cross-project quick access stays independent of project expansion. */
+	const recentChats = useMemo(() => [...chats].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 40), [chats]);
 	return (
 		<aside className="sidebar" aria-label="项目与聊天导航" data-connected={connected}>
 			{deleting && <ConfirmDialog title={deleting.kind === "purge" ? "永久删除聊天" : "删除聊天"} description={deleting.kind === "purge" ? `永久删除 ${deleting.name}？${deleting.hasFile ? "将直接删除 pi 会话目录中的对话文件，无法恢复。" : "该聊天还没有 pi 会话文件，只会移除侧栏索引。"}` : `从侧栏删除 ${deleting.name}，pi 会话文件会保留。`} onConfirm={() => { if (deleting.kind === "purge") void onPurgeChat?.(deleting.id); else onDeleteChat(deleting.id); }} onClose={() => setDeleting(undefined)} />}
@@ -307,6 +300,7 @@ export function Sidebar({ projects, chats, activeId, selectedProjectId, homeActi
 			</Dialog>}
 			<div className="sidebar-header">
 				<button className={`sidebar-brand home-nav ${homeActive ? "active" : ""}`} onClick={onHome} disabled={!projects.length} aria-label="主页" aria-current={homeActive ? "page" : undefined} title="主页"><span>Skiff</span><Icon name="chevron" size={13} /></button>
+				<span className="sidebar-notifications" role="img" aria-label="消息" title="消息"><Icon name="bell" size={16} /></span>
 				<IconButton size="compact" className="sidebar-search-toggle" onClick={() => setSearchOpen((open) => !open)} aria-label="搜索项目与聊天" aria-expanded={searchOpen} title="搜索项目与聊天"><Icon name="search" size={16} /></IconButton>
 			</div>
 			<button className="new-chat" onClick={onNewChat} disabled={!projects.length}><Icon name="edit" size={16} /><span>新聊天</span><span className="shortcut">{isMacPlatform() ? "Cmd+N" : "Ctrl+N"}</span></button>
@@ -354,7 +348,7 @@ export function Sidebar({ projects, chats, activeId, selectedProjectId, homeActi
 							};
 							return <div className="project-group" key={project.id}>
 								<div className={`project-row ${isSelected ? "selected" : ""}`} onContextMenu={(event) => openProjectMenu(event, project)}>
-									{editing?.id === project.id ? renameInput() : <button className="project-select" disabled={navigationDisabled} onClick={selectAndToggleProject} aria-current={isSelected ? "true" : undefined} aria-expanded={projectExpanded} aria-controls={`${projectsListId}-${project.id}`} title={project.path}><Icon name="folder" size={15} /><span>{project.name}</span></button>}
+									{editing?.id === project.id ? renameInput() : <button className="project-select" disabled={navigationDisabled} onClick={selectAndToggleProject} aria-current={isSelected ? "true" : undefined} aria-expanded={projectExpanded} aria-controls={`${projectsListId}-${project.id}`} title={project.path}><Icon name={projectExpanded ? "folderOpen" : "folder"} size={15} /><span>{project.name}</span></button>}
 									{bulk && !!bulk.ids.length && <button type="button" className={`project-check ${bulk.all ? "checked" : bulk.some ? "partial" : ""}`} role="checkbox" aria-checked={bulk.all ? "true" : bulk.some ? "mixed" : "false"} aria-label={`${bulk.all ? "取消全选" : "全选"} ${project.name} 的会话`} title={bulk.all ? `取消全选 ${project.name} 的会话` : `全选 ${project.name} 的会话`} disabled={disabled} onClick={() => toggleProjectBulk(project.id)}>{bulk.all ? <Icon name="check" size={14} /> : bulk.some ? <Icon name="minus" size={14} /> : null}</button>}
 								</div>
 								<SidebarCollapse open={projectExpanded} id={`${projectsListId}-${project.id}`}>
@@ -369,7 +363,7 @@ export function Sidebar({ projects, chats, activeId, selectedProjectId, homeActi
 				</SidebarCollapse>
 				{!!recentChats.length && <section className="sidebar-recent" aria-label="最近会话">
 					<div className="section-label"><button type="button" className="section-name" onClick={() => setRecentExpanded((expanded) => !expanded)} aria-expanded={recentExpanded} aria-controls={recentListId} title={recentExpanded ? "收起最近" : "展开最近"}>最近<span className={`section-toggle ${recentExpanded ? "expanded" : ""}`}><Icon name="chevron" size={13} /></span></button></div>
-					<SidebarCollapse open={recentExpanded} id={recentListId}>{() => <>{recentChats.map((chat) => renderChatRow(chat, [], chat.projectId))}</>}</SidebarCollapse>
+					<SidebarCollapse open={recentExpanded} id={recentListId}>{() => <>{recentChats.map((chat) => renderChatRow(chat, [], "recent"))}</>}</SidebarCollapse>
 				</section>}
 				</>}
 			</div>
