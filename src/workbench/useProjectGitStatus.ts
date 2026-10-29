@@ -5,6 +5,7 @@ import { gitStatus } from "./projectWorkbench";
 import { GIT_REFRESH_MS, GitStatusCache } from "./gitStatusCache";
 import { ProjectGitActivity } from "./projectGitActivity";
 import { projectDiffCache } from "./projectDiffCache";
+import { invalidateProjectFiles } from "./projectFiles";
 
 export const projectGitCache = new GitStatusCache(gitStatus, (root, snapshot) => {
 	if (!snapshot.loading) {
@@ -40,7 +41,11 @@ export function useProjectGitActivity(messages: Map<string, ChatMessage[]>, runn
 		}));
 		for (const root of activity.current.update(messages, runningIds, roots)) {
 			clearTimeout(timers.current.get(root));
-			timers.current.set(root, setTimeout(() => { timers.current.delete(root); void projectGitCache.refreshChanged(root); }, 750));
+			timers.current.set(root, setTimeout(() => {
+				timers.current.delete(root);
+				for (const project of projects) if (project.path === root) invalidateProjectFiles(project.id);
+				void projectGitCache.refreshChanged(root);
+			}, 750));
 		}
 	}, [messages, runningIds, chats, projects]);
 	useEffect(() => () => { for (const timer of timers.current.values()) clearTimeout(timer); timers.current.clear(); }, []);

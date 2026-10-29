@@ -1,5 +1,5 @@
 import { Icon } from "./Icon";
-import { useContext } from "react";
+import { useContext, useId, useState } from "react";
 import { Button } from "./ui";
 import { ProjectChangesNavigationContext } from "../workbench/projectChangesNavigation";
 import type { FileOp } from "../chat/turnResults";
@@ -29,23 +29,29 @@ function FileRow({ op }: { op: FileOp }) {
 
 function GroupCard({ label, ops }: { label: string; ops: FileOp[] }) {
 	const navigation = useContext(ProjectChangesNavigationContext);
+	const [expanded, setExpanded] = useState(false);
+	const listId = useId();
+	const single = ops.length === 1 ? ops[0] : undefined;
+	const path = single && navigation && single.op !== "delete" ? projectRelativePath(navigation.root, single.path) : undefined;
+	const title = single ? `${OP_LABEL[single.op]} ${single.path.slice(Math.max(single.path.lastIndexOf("/"), single.path.lastIndexOf("\\")) + 1)}` : label;
+	const visibleOps = expanded ? ops : ops.slice(0, 3);
 	const deleted = ops[0].op === "delete";
 	const totals = ops.reduce((sum, op) => ({
 		additions: op.additions === undefined ? sum.additions : (sum.additions ?? 0) + op.additions,
 		removals: op.removals === undefined ? sum.removals : (sum.removals ?? 0) + op.removals,
 	}), {} as Pick<FileOp, "additions" | "removals">);
-	return <details className="result-card" open>
-		<summary className="result-card-head" aria-label={label}>
+	return <section className="result-card" aria-label={title}>
+		<div className="result-card-head">
 			<span className={`result-card-icon${deleted ? " is-delete" : ""}`}><Icon name={deleted ? "trash" : "fileChanges"} size={24} /></span>
 			<span className="result-card-main">
-				<span className="result-card-title">{label}</span>
+				{single && navigation && path !== undefined ? <button className="result-card-title result-card-file" title={single.path} aria-label={`打开文件：${single.path}`} onClick={() => navigation.onOpenFile(path)}>{title}</button> : <span className="result-card-title" title={single?.path}>{title}</span>}
 				<DiffCount op={totals} />
 			</span>
-			{navigation && <Button size="compact" className="result-card-view" onClick={(event) => { event.preventDefault(); event.stopPropagation(); navigation.onOpen(); }}>{navigation.label}</Button>}
-			<span className="result-card-chevron"><Icon name="chevron" size={14} /></span>
-		</summary>
-		<ul className="result-card-list">{ops.map((op) => <FileRow key={op.path} op={op} />)}</ul>
-	</details>;
+			{navigation && <Button size="compact" className="result-card-view" onClick={() => navigation.onOpen()}>{navigation.label}</Button>}
+		</div>
+		{!single && <ul id={listId} className="result-card-list">{visibleOps.map((op) => <FileRow key={op.path} op={op} />)}</ul>}
+		{ops.length > 3 && <button type="button" className="result-card-more" aria-expanded={expanded} aria-controls={listId} onClick={() => setExpanded((value) => !value)}>{expanded ? "收起" : `再显示 ${ops.length - 3} 个文件`}<Icon name="chevron" size={14} /></button>}
+	</section>;
 }
 
 /** Structured task outcome after the final body; plain answers render nothing. */

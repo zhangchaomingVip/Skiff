@@ -174,6 +174,7 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 				];
 				return { path: args.path, entries, truncated: false };
 			}
+			if (command === "reveal_project_file") return;
 			if (command === "read_project_file") return { path: args.path, kind: "text", content: args.path.endsWith(".json") ? "{\n\t\"name\": \"skiff-agent\"\n}\n" : "import { useState } from \"react\";\n\nexport function Preview() {\n\treturn <main>Skiff</main>;\n}\n", size: 112, modifiedMs: Date.now(), version: "mock-file-v1" };
 			if (command === "get_project_git_status") return { repositoryRoot: "D:\\workspace\\Skiff", scope: "", branch: "codex/project-workbench", head: "87ad2410c75d", version: "mock-git-v1", entries: [
 				{ path: "src/App.tsx", kind: "modified", indexStatus: " ", worktreeStatus: "M", selectable: true, rollbackable: true },

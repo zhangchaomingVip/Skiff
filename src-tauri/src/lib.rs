@@ -542,6 +542,7 @@ pub fn run() {
 			get_workspace_directory,
 			read_system_prompt,
 			project_workbench::list_project_directory, project_workbench::read_project_file,
+			project_workbench::reveal_project_file,
 			project_workbench::get_project_git_status, project_workbench::get_project_git_diff,
 			project_workbench::history::get_project_git_history, project_workbench::history::get_project_git_commit,
 			project_workbench::history::get_project_git_commit_diff,

@@ -168,6 +168,67 @@ fn normalized_relative(path: &Path) -> String {
 	path.components().map(|part| part.as_os_str().to_string_lossy()).collect::<Vec<_>>().join("/")
 }
 
+fn reveal_target(root: &Path, path: &str) -> Result<(PathBuf, bool), String> {
+	let (mut target, _) = project_path(root, path, false)?;
+	let exists = target.exists();
+	while !target.exists() {
+		target = target.parent().ok_or("路径不可用")?.to_path_buf();
+	}
+	Ok((target, exists))
+}
+
+#[cfg(windows)]
+fn reveal_in_explorer(target: &Path, select: bool) -> Result<(), String> {
+	use windows_sys::Win32::{
+		System::Com::{CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED},
+		UI::Shell::{ILCreateFromPathW, ILFindLastID, ILFree, SHOpenFolderAndSelectItems},
+	};
+	let directory = if select { target.parent().ok_or("路径不可用")? } else { target };
+	let folder: Vec<u16> = display_path(directory).encode_utf16().chain(Some(0)).collect();
+	let file: Vec<u16> = display_path(target).encode_utf16().chain(Some(0)).collect();
+	// Use Shell item IDs so spaces, Unicode and commas never pass through
+	// Explorer's command-line parser. All IDs remain alive until the call returns.
+	unsafe {
+		let initialized = CoInitializeEx(std::ptr::null(), COINIT_APARTMENTTHREADED as u32);
+		if initialized < 0 { return Err(format!("无法初始化资源管理器接口：{initialized:#x}")); }
+		let folder_id = ILCreateFromPathW(folder.as_ptr());
+		let file_id = ILCreateFromPathW(file.as_ptr());
+		let result = if folder_id.is_null() || file_id.is_null() {
+			Err("无法定位资源管理器中的文件".to_string())
+		} else {
+			let child = ILFindLastID(file_id) as *const _;
+			let status = SHOpenFolderAndSelectItems(folder_id, u32::from(select), if select { &child } else { std::ptr::null() }, 0);
+			if status < 0 { Err(format!("无法打开资源管理器：{status:#x}")) } else { Ok(()) }
+		};
+		if !file_id.is_null() { ILFree(file_id); }
+		if !folder_id.is_null() { ILFree(folder_id); }
+		CoUninitialize();
+		result
+	}
+}
+
+#[tauri::command]
+pub async fn reveal_project_file(root: String, path: String) -> Result<(), String> {
+	tauri::async_runtime::spawn_blocking(move || {
+		let root = canonical_root(&root)?;
+		let (target, select) = reveal_target(&root, &path)?;
+		#[cfg(windows)]
+		reveal_in_explorer(&target, select)?;
+		#[cfg(target_os = "macos")]
+		{
+			let mut command = Command::new("open");
+			if select { command.arg("-R"); }
+			command.arg(&target).spawn().map_err(|error| format!("无法打开文件管理器：{error}"))?;
+		}
+		#[cfg(not(any(windows, target_os = "macos")))]
+		{
+			let directory = if select && target.is_file() { target.parent().ok_or("路径不可用")? } else { &target };
+			open::that(directory).map_err(|error| format!("无法打开文件管理器：{error}"))?;
+		}
+		Ok(())
+	}).await.map_err(|error| error.to_string())?
+}
+
 #[tauri::command]
 pub async fn list_project_directory(root: String, path: String) -> Result<DirectoryPage, String> {
 	tauri::async_runtime::spawn_blocking(move || {
@@ -565,6 +626,21 @@ mod tests {
 	pub(super) fn commit_all(repo: &Path, message: &str) {
 		let mut add = git_command(repo); add.args(["add", "-A"]); checked(add, "add").unwrap();
 		let mut commit = git_command(repo); commit.args(["commit", "-q", "-m", message]); checked(commit, "commit").unwrap();
+	}
+
+	#[test]
+	fn reveal_resolves_existing_and_deleted_paths_within_project() {
+		let repo = temporary_repo("reveal");
+		fs::create_dir(repo.join("图片 folder")).unwrap();
+		let file = repo.join("图片 folder/星空,蓝.png");
+		fs::write(&file, [0, 1, 2]).unwrap();
+		assert_eq!(reveal_target(&repo, "图片 folder/星空,蓝.png").unwrap(), (file, true));
+		assert_eq!(reveal_target(&repo, "图片 folder").unwrap(), (repo.join("图片 folder"), true));
+		assert_eq!(reveal_target(&repo, "图片 folder/deleted/nested.txt").unwrap(), (repo.join("图片 folder"), false));
+		assert_eq!(reveal_target(&repo, "deleted.txt").unwrap(), (repo.clone(), false));
+		assert!(reveal_target(&repo, "../outside.txt").is_err());
+		assert!(reveal_target(&repo, &display_path(&repo.join("absolute.txt"))).is_err());
+		fs::remove_dir_all(repo).unwrap();
 	}
 
 	#[test]

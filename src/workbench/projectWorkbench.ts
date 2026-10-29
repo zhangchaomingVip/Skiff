@@ -127,6 +127,7 @@ export function resolveBrowseProject(projects: Project[], activeProjectId: strin
 
 export const listDirectory = (root: string, path = "") => invoke<DirectoryPage>("list_project_directory", { root, path });
 export const readFile = (root: string, path: string) => invoke<FilePreview>("read_project_file", { root, path });
+export const revealFile = (root: string, path: string) => invoke<void>("reveal_project_file", { root, path });
 export const gitStatus = (root: string) => invoke<GitStatus>("get_project_git_status", { root });
 export const gitDiff = (root: string, path: string) => invoke<DiffPreview>("get_project_git_diff", { root, path });
 export const commitFiles = (root: string, paths: string[], message: string, expectedVersion: string, push = false) => invoke<GitWriteResult>("commit_project_files", { root, paths, message, expectedVersion, push });

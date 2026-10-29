@@ -32,22 +32,19 @@ try {
 		await page.waitForFunction(() => document.querySelector(".sidebar")?.dataset.connected === "true");
 		const card = page.locator(".result-card").filter({ hasText: "已编辑 3 个文件" });
 		await card.waitFor();
-		assert.equal(await card.getAttribute("open"), "");
+		assert.equal(await card.locator(".result-card-head svg").count(), 1, "Only the file icon remains in the header");
 		assert.deepEqual(await card.locator(".result-card-item .result-card-path").evaluateAll((paths) => paths.map((path) => path.getAttribute("title"))), ["src/App.tsx", "src/components/MessageItem.tsx", "src/chat/toolRuns.ts"]);
 		assert.deepEqual(await card.locator(".result-card-main .result-card-diff > span").allTextContents(), ["+4", "-3"]);
 		assert.equal(await card.locator(".result-card-item").count(), 3);
-		const single = page.locator(".result-card").filter({ hasText: "已创建 1 个文件" });
-		assert.equal(await single.locator(".result-card-item").count(), 1);
+		const single = page.locator(".result-card").filter({ hasText: "已创建 preview.md" });
+		assert.equal(await single.locator(".result-card-item").count(), 0, "Single files use the header without a duplicated list");
+		assert.equal(await single.getByRole("button", { name: "打开文件：docs/preview.md", exact: true }).count(), 1);
 		assert.equal(await single.locator(".result-card-diff").count(), 0, "Missing counts remain absent");
 		const deleted = page.locator(".result-card").filter({ hasText: "已删除 2 个文件" });
 		assert.equal(await deleted.locator(".result-card-item").count(), 2);
 		assert.equal(await deleted.locator(".result-card-diff").count(), 0);
-		await card.locator("summary").click();
-		assert.equal(await card.getAttribute("open"), null);
-		await card.locator("summary").focus();
-		await page.keyboard.press("Enter");
-		assert.equal(await card.getAttribute("open"), "");
-		await card.locator("summary").evaluate((element) => element.blur());
+		assert.equal(await card.locator("summary").count(), 0, "The header no longer toggles the list");
+		assert.equal(await card.getByRole("button", { name: /^再显示/ }).count(), 0, "Three files are fully visible");
 		await page.mouse.move(1300, 500);
 		await card.screenshot({ path: `dist/result-cards/${theme}.png` });
 
@@ -62,7 +59,7 @@ try {
 		await page.getByRole("tab", { name: "Commit", exact: true }).waitFor();
 		assert.equal(await page.getByRole("tab", { name: "Commit", exact: true }).getAttribute("aria-selected"), "true");
 		await page.getByRole("button", { name: "浏览项目：Skiff", exact: true }).waitFor();
-		assert.equal(await card.getAttribute("open"), "", "Navigation does not toggle the file list");
+		assert.equal(await card.locator(".result-card-item").count(), 3, "Navigation preserves the file list");
 		assert.equal(await page.locator(".composer-input").inputValue(), "保留这条草稿");
 		assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem("skiff.workspace.v1")).activeId), chatId);
 		assert.equal(await page.locator(".primary-view").isVisible(), false, "The shortcut enters the file workspace");
@@ -166,8 +163,49 @@ try {
 		assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
 		assert.equal(await longCard.locator(".result-card-path").evaluateAll((paths) => paths.every((path) => path.scrollWidth <= path.clientWidth)), true);
 		await longCard.screenshot({ path: `dist/result-cards/${theme}-long-path.png` });
+		// Boundary counts use parsed tool outcomes, including totals for hidden files.
+		await page.setViewportSize({ width: 1200, height: 900 });
+		for (const count of [1, 2, 3, 4, 9]) {
+			await page.evaluate((count) => {
+				const calls = Array.from({ length: count }, (_, index) => ({ type: "toolCall", id: `file-${index}`, name: "edit", arguments: { path: `notes/文件${index + 1}.ts` } }));
+				window.turnUsageHarness.render({ messages: [
+					{ role: "user", content: `修改 ${count} 个文件` },
+					{ role: "assistant", content: calls },
+					...calls.map((call) => ({ role: "toolResult", toolCallId: call.id, name: call.name, content: "ok", details: { diff: "+new\n-old" } })),
+					{ role: "assistant", content: `已修改 ${count} 个文件。`, stopReason: "stop" },
+				] });
+			}, count);
+			const title = count === 1 ? "已编辑 文件1.ts" : `已编辑 ${count} 个文件`;
+			const result = page.getByRole("region", { name: title, exact: true });
+			await result.waitFor();
+			assert.equal(await result.locator(".result-card-item").count(), count === 1 ? 0 : Math.min(count, 3));
+			assert.deepEqual(await result.locator(".result-card-main .result-card-diff > span").allTextContents(), [`+${count}`, `-${count}`]);
+			assert.equal(await result.locator(".result-card-head svg").count(), 1, "No header expand arrow");
+			if (count === 1) {
+				assert.equal(await result.locator(".result-card-list").count(), 0);
+				await result.screenshot({ path: `dist/result-cards/${theme}-single.png` });
+			}
+			if (count > 3) {
+				const more = result.getByRole("button", { name: `再显示 ${count - 3} 个文件`, exact: true });
+				assert.equal(await more.getAttribute("aria-expanded"), "false");
+				if (count === 9) await result.screenshot({ path: `dist/result-cards/${theme}-nine-preview.png` });
+				await more.focus();
+				await page.keyboard.press("Enter");
+				assert.equal(await result.locator(".result-card-item").count(), count);
+				const less = result.getByRole("button", { name: "收起", exact: true });
+				assert.equal(await less.getAttribute("aria-expanded"), "true");
+				await less.click();
+				assert.equal(await result.locator(".result-card-item").count(), 3);
+				await page.setViewportSize({ width: 390, height: 800 });
+				assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+				if (count === 9) await result.screenshot({ path: `dist/result-cards/${theme}-nine-narrow.png` });
+				await page.setViewportSize({ width: 1200, height: 900 });
+			} else {
+				assert.equal(await result.locator(".result-card-more").count(), 0);
+			}
+		}
 		assert.deepEqual(errors, []);
-		console.log(`PASS ${theme}: cards, Git/local navigation, file clicks and keyboard opening, tab reuse, correct project/path, preserved chat/draft, narrow preview`);
+		console.log(`PASS ${theme}: single-file headers, 1/2/3/4/9-file previews, show more/collapse, keyboard, hidden-file totals, navigation and narrow layout`);
 		await page.close();
 	}
 } finally { await browser.close(); }

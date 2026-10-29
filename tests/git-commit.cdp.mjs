@@ -60,4 +60,5 @@ export async function verifyGitCommit(page, temporaryRoot, artifacts) {
 	assert.equal(await message.inputValue(), "");
 	await page.screenshot({ path: join(artifacts, "git-commit-cdp.png") });
 	console.log("Commit 全链路通过：只提交勾选文件、保留其他暂存内容、本地 Commit 不推送、Commit and Push 更新本地测试远程。");
+	return root;
 }

@@ -7,13 +7,16 @@ import { Button, Dialog, IconButton, TextArea } from "./ui";
 import { WorkbenchProjectPicker } from "./WorkbenchProjectPicker";
 import { GitChanges } from "./GitChanges";
 import { projectDiffCache } from "../workbench/projectDiffCache";
+import { FileContextMenuProvider, useFileContextMenu } from "./FileContextMenu";
+import { PROJECT_FILES_UPDATED, retainedFilePages } from "../workbench/projectFiles";
 
 const fileGitLabels: Record<GitEntry["kind"], string> = { modified: "已修改", added: "已新增", untracked: "未跟踪", deleted: "已删除", renamed: "已重命名", conflict: "存在冲突" };
 
 function TreeRow({ project, entry, gitKind, depth, expanded, page, loading, error, onToggle, onOpen }: { project: Project; entry: DirectoryEntry; gitKind?: GitEntry["kind"]; depth: number; expanded: boolean; page?: DirectoryPage; loading: boolean; error?: string; onToggle: (path: string) => void; onOpen: (project: Project, path: string, mode: PreviewMode) => void }) {
 	const directory = entry.kind === "directory";
+	const openFileMenu = useFileContextMenu();
 	return <>
-		<button className="file-tree-row" data-git-kind={gitKind} aria-description={gitKind ? fileGitLabels[gitKind] : undefined} style={{ paddingLeft: `${10 + depth * 16}px` }} title={entry.path} onClick={() => directory ? onToggle(entry.path) : entry.kind === "file" && onOpen(project, entry.path, "file")}>
+		<button className="file-tree-row" data-git-kind={gitKind} aria-description={gitKind ? fileGitLabels[gitKind] : undefined} style={{ paddingLeft: `${10 + depth * 16}px` }} title={entry.path} onContextMenu={(event) => openFileMenu(event, entry.path)} onClick={() => directory ? onToggle(entry.path) : entry.kind === "file" && onOpen(project, entry.path, "file")}>
 			<span className={`file-tree-chevron ${expanded ? "expanded" : ""}`}>{directory && <Icon name="chevron" />}</span>
 			<Icon name={directory ? "folder" : entry.kind === "link" ? "share" : "file"} />
 			<span>{entry.name}</span>
@@ -69,16 +72,19 @@ function FilePanel({ project, onOpen }: { project?: Project; onOpen: (project: P
 		}
 	}, [key, pages, project]);
 
-	useEffect(() => { if (project) void load(""); }, [project?.id]);
+	useEffect(() => { if (project) for (const path of ["", ...expanded]) void load(path); }, [project?.id]);
 	useEffect(() => {
 		const invalidate = (event: Event) => {
-			if ((event as CustomEvent<string>).detail !== project?.id) return;
-			for (const [key, ticket] of requests.current) if (key.startsWith(prefix)) requests.current.set(key, ticket + 1);
-			setPages((current) => new Map(Array.from(current).filter(([item]) => !item.startsWith(prefix))));
-			for (const path of ["", ...expanded]) void load(path, true);
+			const projectId = (event as CustomEvent<string>).detail;
+			const changedPrefix = `${projectId}:`;
+			for (const [key, ticket] of requests.current) if (key.startsWith(changedPrefix)) requests.current.set(key, ticket + 1);
+			setPages((current) => new Map(Array.from(current).filter(([item]) => !item.startsWith(changedPrefix))));
+			setLoading((current) => new Set(Array.from(current).filter((item) => !item.startsWith(changedPrefix))));
+			setErrors((current) => new Map(Array.from(current).filter(([item]) => !item.startsWith(changedPrefix))));
+			if (projectId === project?.id) for (const path of ["", ...expanded]) void load(path, true);
 		};
-		window.addEventListener("skiff:project-files-updated", invalidate);
-		return () => window.removeEventListener("skiff:project-files-updated", invalidate);
+		window.addEventListener(PROJECT_FILES_UPDATED, invalidate);
+		return () => window.removeEventListener(PROJECT_FILES_UPDATED, invalidate);
 	}, [project?.id, prefix, expanded, load]);
 	const toggle = (path: string) => {
 		if (!project) return;
@@ -108,16 +114,10 @@ function FilePanel({ project, onOpen }: { project?: Project; onOpen: (project: P
 
 // The drawer and desktop panel intentionally unmount while closed. These
 // run-lifetime caches keep browsing context without writing it into workspace v1.
-const retainedFilePages = new Map<string, DirectoryPage>();
 const retainedExpandedProjects: Record<string, string[]> = {};
 const retainedFileScroll = new Map<string, number>();
 const retainedGitDrafts: Record<string, string> = {};
 const retainedGitSelections = new Map<string, { version: string; paths: string[] }>();
-
-export function invalidateProjectFiles(projectId: string) {
-	for (const key of retainedFilePages.keys()) if (key.startsWith(`${projectId}:`)) retainedFilePages.delete(key);
-	window.dispatchEvent(new CustomEvent("skiff:project-files-updated", { detail: projectId }));
-}
 
 function GitPanel({ project, onOpen, onMutated }: { project?: Project; onOpen: (project: Project, path: string, mode: PreviewMode) => void; onMutated: () => void }) {
 	const { status, loading, local, error: readError } = useProjectGitStatus(project);
@@ -190,6 +190,7 @@ export function ProjectWorkbenchPanel({ tool, onSelectTab, projects, project, fo
 	const id = useId();
 	const tabs = [{ id: "files", label: "文件" }, { id: "git", label: "Commit" }] as const;
 	return <aside className="workbench-panel">
+		<FileContextMenuProvider root={project?.path} scope={tool}>
 		<WorkbenchProjectPicker projects={projects} project={project} following={following} onSelect={onSelectProject} onFollow={onFollow} onAdd={onAddProject} />
 		{tool === "git-tree" && history}
 		<div className="workbench-content" hidden={tool === "git-tree"}>
@@ -203,5 +204,6 @@ export function ProjectWorkbenchPanel({ tool, onSelectTab, projects, project, fo
 			<div className="workbench-tool-slot" role="tabpanel" id={`${id}-panel-files`} aria-labelledby={`${id}-tab-files`} hidden={tool !== "files"}><FilePanel project={project} onOpen={onOpen} /></div>
 			<div className="workbench-tool-slot" role="tabpanel" id={`${id}-panel-git`} aria-labelledby={`${id}-tab-git`} hidden={tool !== "git"}><GitPanel key={project?.id} project={project} onOpen={onOpen} onMutated={onMutated} /></div>
 		</div>
+		</FileContextMenuProvider>
 	</aside>;
 }
