@@ -5,12 +5,12 @@ import { conversationLabel } from "./chat/conversationDisplay";
 import { HistorySearchDialog } from "./components/HistorySearchDialog";
 import { SidebarPresentation } from "./components/SidebarPresentation";
 import { dismissPopovers, Button } from "./components/ui";
-import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { usePiSessions } from "./chat/usePiSessions";
 import { useSessionRef } from "./chat/useSessionValue";
 import { showVoyageIcon } from "./taskbarIcon";
-import { isArchived, useWorkspace, visibleConversations, visibleProjects } from "./chat/workspace";
+import { MAX_PROJECTS, isArchived, useWorkspace, visibleConversations, visibleProjects } from "./chat/workspace";
 import { useModelFamilies } from "./chat/useModelFamilies";
 import { ModelFamilyContext } from "./chat/familyContext";
 import { familyFromProvider } from "./chat/modelDisplay";
@@ -21,6 +21,8 @@ import { Sidebar } from "./components/Sidebar";
 import { LauncherView } from "./components/LauncherView";
 import { TitleBar } from "./components/TitleBar";
 import { ProjectDialog } from "./components/ProjectDialog";
+import { ProjectListLimit } from "./components/ProjectListLimit";
+import { useProjectGitActivity, useProjectGitPolling, useProjectGitStatus } from "./workbench/useProjectGitStatus";
 import type { ImageAttachment } from "./chat/types";
 import { SettingsDialog } from "./components/SettingsDialog";
 import { SettingsMenu } from "./components/SettingsMenu";
@@ -30,8 +32,12 @@ import { ResizeSeparator } from "./components/ResizeSeparator";
 import { useWebSearch } from "./chat/webSearch";
 import { loadRecentOffers, normalizeRecentOfferIds, rememberOffer, saveRecentOffers } from "./chat/recentOffers";
 import { ActivityBar } from "./components/ActivityBar";
-import { ProjectWorkbenchPanel } from "./components/ProjectWorkbenchPanel";
+import { invalidateProjectFiles, ProjectWorkbenchPanel } from "./components/ProjectWorkbenchPanel";
+import { GitBranches, GitTreeWorkspace } from "./components/GitTree";
+import { useGitHistory } from "./workbench/useGitHistory";
 import { ProjectPreview } from "./components/ProjectPreview";
+import { FileWorkspaceEmpty } from "./components/FileWorkspaceEmpty";
+import { ProjectChangesNavigationContext } from "./workbench/projectChangesNavigation";
 import { openPreviewTab, previewId, resolveBrowseProject, type PreviewMode, type PreviewTab, type WorkbenchTool } from "./workbench/projectWorkbench";
 import type { Project } from "./chat/workspace";
 
@@ -49,6 +55,9 @@ export default function App() {
 	const { activeChat, activeProject } = library;
 	const allChats = library.workspace?.chats ?? [];
 	const shownProjects = useMemo(() => visibleProjects(library.workspace?.projects ?? []), [library.workspace?.projects]);
+	useProjectGitPolling(shownProjects);
+	const activeProjectGit = useProjectGitStatus(activeProject);
+	const projectHasGit = !!activeProjectGit.status;
 	const visibleChats = useMemo(() => {
 		const projectIds = new Set(shownProjects.map((project) => project.id));
 		return visibleConversations(allChats).filter((chat) => projectIds.has(chat.projectId));
@@ -64,10 +73,13 @@ export default function App() {
 	const currentView = view ?? (library.workspace ? "launcher" : "chat");
 	const modelFamilies = useModelFamilies();
 	const pool = usePiSessions(activeChat?.id, visibleChats, shownProjects, modelFamilies.offers, { config: modelFamilies.config, ready: !modelFamilies.loading }, library.updateChat);
+	useProjectGitActivity(pool.messages, pool.agentRunningIds, allChats, shownProjects);
 	const { session } = pool;
 	const { state, connected, actions } = session;
 	const { modelNotice, setModelNotice, failover, routeAuthorization: routeAuthorizationPrompt } = session;
-	const [activeTool, setActiveTool] = useState<WorkbenchTool>(() => { try { const value = JSON.parse(localStorage.getItem("skiff.workbench.v1") ?? "null")?.tool; return value === "files" || value === "git" ? value : "chats"; } catch { return "chats"; } });
+	const [activeTool, setActiveTool] = useState<WorkbenchTool>(() => { try { const value = JSON.parse(localStorage.getItem("skiff.workbench.v1") ?? "null")?.tool; return value === "files" || value === "git" || value === "git-tree" ? value : "chats"; } catch { return "chats"; } });
+	const lastFileTab = useRef<"files" | "git">(activeTool === "git" ? "git" : "files");
+	useEffect(() => { if (activeTool === "files" || activeTool === "git") lastFileTab.current = activeTool; }, [activeTool]);
 	const [sidebarOpen, setSidebarOpen] = useState(() => { if (window.innerWidth <= 760) return false; try { return localStorage.getItem("skiff.sidebar.open") !== "false"; } catch { return true; } });
 	useEffect(() => { try { localStorage.setItem("skiff.sidebar.open", String(sidebarOpen)); } catch { /* Layout can still be used without storage. */ } }, [sidebarOpen]);
 	useEffect(() => { try { localStorage.setItem("skiff.workbench.v1", JSON.stringify({ version: 1, tool: activeTool })); } catch { /* Tool selection remains available for this run. */ } }, [activeTool]);
@@ -89,6 +101,7 @@ export default function App() {
 	const [previewTabs, setPreviewTabs] = useState<PreviewTab[]>([]);
 	const [activePreviewId, setActivePreviewId] = useState<string>();
 	const [workbenchRevision, setWorkbenchRevision] = useState(0);
+	const gitHistory = useGitHistory(browse.project, activeTool === "git-tree", workbenchRevision, (project) => { invalidateProjectFiles(project.id); setWorkbenchRevision((value) => value + 1); });
 	const search = useWebSearch(actions, connected, session.reconnect, session.owner, session.isCurrent);
 	const busy = state.isStreaming || session.pending;
 	const [recentOfferIds, setRecentOfferIds] = useState<string[]>(loadRecentOffers);
@@ -223,7 +236,7 @@ export default function App() {
 	}, [actions, session.isCurrent, validOfferIds]);
 	const displayState = { ...state, model: displayModel, availableModels: displayModels };
 
-	const openLauncher = useCallback(() => { void drafts.flush(); setSelectedProjectId(undefined); if (library.workspace) { setView("launcher"); if (window.innerWidth <= 760) setSidebarOpen(false); } }, [library.workspace]);
+	const openLauncher = useCallback(() => { void drafts.flush(); setSelectedProjectId(undefined); if (library.workspace) { setActiveTool("chats"); setActivePreviewId(undefined); setView("launcher"); if (window.innerWidth <= 760) setSidebarOpen(false); } }, [library.workspace]);
 	const resumeChat = useCallback(() => { if (activeChat) setView("chat"); }, [activeChat]);
 	const selectChat = useCallback((id: string) => {
 		if (navigationDisabled) return;
@@ -238,6 +251,7 @@ export default function App() {
 	const retrieval = useConversationSearch(visibleChats, library.workspace?.projects ?? [], pool.messages, activeChat?.id, session.loading ? undefined : session.owner.id, selectChat);
 	const newDraft = useCallback(() => {
 		if (navigationDisabled || !activeProject) return;
+		setActiveTool("chats"); setActivePreviewId(undefined);
 		void drafts.flush();
 		setSelectedProjectId(undefined);
 		// A saved chat can refer to a route that was removed or renamed since it
@@ -311,15 +325,29 @@ export default function App() {
 		return accepted;
 	};
 	const selectTool = useCallback((tool: WorkbenchTool) => {
+		if (tool === "files") tool = lastFileTab.current;
 		if (activeTool === tool && sidebarOpen) { setSidebarOpen(false); return; }
 		setActiveTool(tool); setSidebarOpen(true);
 	}, [activeTool, sidebarOpen]);
+	const openProjectChanges = useCallback(() => {
+		setManualBrowseProjectId(undefined);
+		setActiveTool(projectHasGit ? "git" : "files");
+		setSidebarOpen(true);
+	}, [projectHasGit]);
 	const openProjectPreview = useCallback((project: Project, path: string, mode: PreviewMode) => {
 		const name = path.replaceAll("\\", "/").split("/").pop() ?? path;
 		setPreviewTabs((current) => openPreviewTab(current, { projectId: project.id, projectName: project.name, root: project.path, path, name, mode }).tabs);
 		setActivePreviewId(previewId(project.id, path));
 		if (narrowViewport) setSidebarOpen(false);
 	}, [narrowViewport]);
+	const openResultFile = useCallback((path: string) => {
+		if (!activeProject) return;
+		setManualBrowseProjectId(undefined);
+		setActiveTool("files");
+		if (!narrowViewport) setSidebarOpen(true);
+		openProjectPreview(activeProject, path, "file");
+	}, [activeProject, narrowViewport, openProjectPreview]);
+	const resultNavigation = useMemo(() => activeProject ? { root: activeProject.path, label: projectHasGit ? "查看变更" : "查看文件", onOpen: openProjectChanges, onOpenFile: openResultFile } : undefined, [activeProject, projectHasGit, openProjectChanges, openResultFile]);
 	const closeProjectPreview = useCallback((id: string) => {
 		const index = previewTabs.findIndex((tab) => tab.id === id);
 		const next = previewTabs.filter((tab) => tab.id !== id);
@@ -374,16 +402,19 @@ export default function App() {
 			<div className="app-body" style={{ "--sidebar-width": `${shownSidebarWidth}px` } as CSSProperties}>
 			{(!narrowViewport || !sidebarOpen) && <ActivityBar active={activeTool} panelOpen={sidebarOpen} onSelect={selectTool} />}
 			<div className="workbench-shell">
-			{sidebarOpen && !(narrowViewport && settingsCategory) && <SidebarPresentation activityBar={<ActivityBar active={activeTool} panelOpen={sidebarOpen} onSelect={selectTool} />} onClose={() => setSidebarOpen(false)}>{activeTool === "chats" ? <Sidebar projects={shownProjects} chats={visibleChats} activeId={activeChat?.id} selectedProjectId={selectedProjectId} homeActive={currentView === "launcher"} disabled={navigationDisabled} runningIds={pool.runningIds} canCloseChat={pool.canClose} navigationDisabled={navigationDisabled} connected={connected} onHome={openLauncher} onNewChat={newDraft} statuses={pool.statuses} searchProgress={retrieval.progress} searchQuery={retrieval.query} onSearch={retrieval.setQuery} onSearchMatch={retrieval.openMatch} onSelectChat={selectChat} onSelectProject={selectProject} onAddProject={() => setProjectDialogOpen(true)} onRenameChat={library.renameChat} onRenameProject={library.renameProject} onDeleteChat={deleteArchivedChat} onHideProject={hideProject} onPurgeProject={purgeProject} onArchiveChat={archiveChat} onPurgeChat={purgeChat} onTogglePinChat={(id, pinned) => library.updateChat(id, { pinned })} /> : <ProjectWorkbenchPanel tool={activeTool} projects={shownProjects} project={browse.project} following={!browse.manualProjectId} onSelectProject={setManualBrowseProjectId} onFollow={() => setManualBrowseProjectId(undefined)} onOpen={openProjectPreview} onMutated={() => setWorkbenchRevision((value) => value + 1)} />}</SidebarPresentation>}
+			{sidebarOpen && !(narrowViewport && settingsCategory) && <SidebarPresentation activityBar={<ActivityBar active={activeTool} panelOpen={sidebarOpen} onSelect={selectTool} />} onClose={() => setSidebarOpen(false)}>{activeTool === "chats" ? <Sidebar projects={shownProjects} chats={visibleChats} activeId={activeChat?.id} selectedProjectId={selectedProjectId} homeActive={currentView === "launcher"} disabled={navigationDisabled} runningIds={pool.runningIds} canCloseChat={pool.canClose} navigationDisabled={navigationDisabled} connected={connected} onHome={openLauncher} onNewChat={newDraft} statuses={pool.statuses} searchProgress={retrieval.progress} searchQuery={retrieval.query} onSearch={retrieval.setQuery} onSearchMatch={retrieval.openMatch} onSelectChat={selectChat} onSelectProject={selectProject} onAddProject={() => setProjectDialogOpen(true)} onRenameChat={library.renameChat} onRenameProject={library.renameProject} onDeleteChat={deleteArchivedChat} onHideProject={hideProject} onPurgeProject={purgeProject} onArchiveChat={archiveChat} onPurgeChat={purgeChat} onTogglePinChat={(id, pinned) => library.updateChat(id, { pinned })} /> : <ProjectWorkbenchPanel history={<GitBranches key={browse.project?.path} history={gitHistory} onSelect={(reference) => { gitHistory.selectRef(reference); if (narrowViewport) setSidebarOpen(false); }} />} tool={activeTool} onSelectTab={setActiveTool} projects={shownProjects} project={browse.project} following={!browse.manualProjectId} onSelectProject={setManualBrowseProjectId} onFollow={() => setManualBrowseProjectId(undefined)} onAddProject={() => setProjectDialogOpen(true)} onOpen={openProjectPreview} onMutated={() => setWorkbenchRevision((value) => value + 1)} />}</SidebarPresentation>}
 			{desktopSidebarOpen && <ResizeSeparator label="调整左侧导航宽度" value={shownSidebarWidth} bounds={sidebarBounds} onResize={setSidebarWidthFromDrag} onCommit={commitSidebarWidth} />}
+			<ProjectChangesNavigationContext.Provider value={resultNavigation}>
 			<main className="workspace">
-				<div className={`primary-view ${activePreviewId ? "preview-hidden" : ""}`}>{currentView === "launcher" ? <>{chatHeader}{workspaceAlerts}<div className="body"><LauncherView activeChat={activeChat} activeProject={activeProject} projects={shownProjects} chats={visibleChats} offers={modelFamilies.offers} recentOfferIds={recentOfferIds} disabled={navigationDisabled || modelFamilies.loading} navigationDisabled={navigationDisabled} loading={modelFamilies.loading} error={modelFamilies.error} onResume={resumeChat} onSelectProject={selectProject} onAddProject={() => setProjectDialogOpen(true)} onManageProviders={() => openSettings("providers")} onRetryModels={modelFamilies.refresh} onStartChat={startLauncherChat} onOpenChat={selectChat} /></div></> : <VoyageWorkspace topBar={<>{chatHeader}{workspaceAlerts}</>} draftTarget={activeChat && activeProject ? { chatId: activeChat.id, cwd: activeProject.path, sessionFile: activeChat.hasMessages ? activeChat.sessionFile : undefined } : undefined} revealMessage={retrieval.reveal} modelNotice={modelNotice} key={`${session.owner.id ?? "loading"}:${session.owner.cwd ?? ""}`} state={displayState} loading={session.loading} connected={connected} pending={session.pending} actions={actions} onSend={send} onReconnect={session.reconnect} projectName={activeProject?.name} failover={failover} routeAuthorization={routeAuthorizationPrompt} railWidth={shownVoyageWidth} availableWidth={workspaceWidth} onRailWidth={setVoyageWidthFromDrag} onRailWidthCommit={commitVoyageWidth} expanded={voyageExpanded} onToggle={toggleVoyagePanel} />}</div>
-				{activePreviewId && <ProjectPreview tabs={previewTabs} activeId={activePreviewId} revision={workbenchRevision} onActivate={setActivePreviewId} onClose={closeProjectPreview} onMode={(id, mode) => setPreviewTabs((current) => current.map((tab) => tab.id === id ? { ...tab, mode } : tab))} onBack={() => setActivePreviewId(undefined)} />}
+				<div className={`primary-view ${activeTool !== "chats" ? "preview-hidden" : ""}`}>{currentView === "launcher" ? <>{chatHeader}{workspaceAlerts}<div className="body"><LauncherView activeChat={activeChat} activeProject={activeProject} projects={shownProjects} chats={visibleChats} offers={modelFamilies.offers} recentOfferIds={recentOfferIds} disabled={navigationDisabled || modelFamilies.loading} navigationDisabled={navigationDisabled} loading={modelFamilies.loading} error={modelFamilies.error} onResume={resumeChat} onSelectProject={selectProject} onAddProject={() => setProjectDialogOpen(true)} onManageProviders={() => openSettings("providers")} onRetryModels={modelFamilies.refresh} onStartChat={startLauncherChat} onOpenChat={selectChat} /></div></> : <VoyageWorkspace topBar={<>{chatHeader}{workspaceAlerts}</>} draftTarget={activeChat && activeProject ? { chatId: activeChat.id, cwd: activeProject.path, sessionFile: activeChat.hasMessages ? activeChat.sessionFile : undefined } : undefined} revealMessage={retrieval.reveal} modelNotice={modelNotice} key={`${session.owner.id ?? "loading"}:${session.owner.cwd ?? ""}`} state={displayState} loading={session.loading} connected={connected} pending={session.pending} actions={actions} onSend={send} onReconnect={session.reconnect} projectName={activeProject?.name} failover={failover} routeAuthorization={routeAuthorizationPrompt} railWidth={shownVoyageWidth} availableWidth={workspaceWidth} onRailWidth={setVoyageWidthFromDrag} onRailWidthCommit={commitVoyageWidth} expanded={voyageExpanded} onToggle={toggleVoyagePanel} />}</div>
+				{activeTool === "git-tree" && <GitTreeWorkspace key={browse.project?.path} project={browse.project} history={gitHistory} onBack={() => { setActiveTool("chats"); setActivePreviewId(undefined); }} onBranches={() => setSidebarOpen((value) => !value)} />}
+				{(activeTool === "files" || activeTool === "git") && (activePreviewId ? <ProjectPreview tabs={previewTabs} activeId={activePreviewId} revision={workbenchRevision} onActivate={setActivePreviewId} onClose={closeProjectPreview} onMode={(id, mode) => setPreviewTabs((current) => current.map((tab) => tab.id === id ? { ...tab, mode } : tab))} onBack={() => setActiveTool("chats")} /> : <FileWorkspaceEmpty project={browse.project} />)}
 			</main>
+			</ProjectChangesNavigationContext.Provider>
 			</div>
 			</div>
 			{retrieval.historyView && <HistorySearchDialog {...retrieval.historyView} onClose={retrieval.closeHistory} />}
-			{projectDialogOpen && <ProjectDialog onAdd={library.addProject} onClose={() => setProjectDialogOpen(false)} />}
+			{shownProjects.length > MAX_PROJECTS ? <ProjectListLimit projects={shownProjects} onRemove={(ids) => { for (const id of ids) library.hideProject(id); }} /> : projectDialogOpen && <ProjectDialog projects={shownProjects} onAdd={library.addProject} onClose={() => setProjectDialogOpen(false)} />}
 			{settingsCategory && <SettingsDialog onRetryModels={() => void modelFamilies.refresh()} initialCategory={settingsCategory} prompt={{ sessionPath: session.sessionFile, onSaved: () => { setSettingsCategory(undefined); session.reconnect(); } }} restrictions={settingsRestrictions} providers={{ configError: modelFamilies.error, relays: modelFamilies.relays, families: modelFamilies.families, usdCnyRate: modelFamilies.usdCnyRate, onPreviewBatch: modelFamilies.previewRelayBatch, onBatch: modelFamilies.batchRelays, onSaveRelay: modelFamilies.saveRelay, onDeleteRelay: modelFamilies.deleteRelay, onSetRelayEnabled: modelFamilies.setRelayEnabled, onTest: modelFamilies.test, onCancelTest: modelFamilies.cancelTest, onDiscover: modelFamilies.discover, onCreateFamily: modelFamilies.createFamily }} models={{ configError: modelFamilies.error, families: modelFamilies.families, relays: modelFamilies.relays, onTest: modelFamilies.test, onCancelTest: modelFamilies.cancelTest }} routes={{ configError: modelFamilies.error, families: modelFamilies.families, relays: modelFamilies.relays, autoFailover: modelFamilies.config?.autoFailover ?? false, usdCnyRate: modelFamilies.usdCnyRate, onSaveRate: modelFamilies.setUsdCnyRate, onSaveRoute: modelFamilies.saveRoute, onDeleteRoute: modelFamilies.deleteRoute, onReorderRoutes: modelFamilies.reorderRoutes, onAutoFailover: modelFamilies.setAutoFailover }} archives={{ chats: archivedChats, projects: library.workspace?.projects ?? [], busy: locked, canClose: pool.canClose, onRestore: restoreArchivedChat, onDelete: deleteArchivedChat }} search={search} onClose={() => setSettingsCategory(undefined)} />}
 		</div>
 		</ModelFamilyContext.Provider>

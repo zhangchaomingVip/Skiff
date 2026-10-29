@@ -1,4 +1,10 @@
 use serde::Serialize;
+#[path = "git_history.rs"]
+pub mod history;
+#[path = "git_update.rs"]
+pub mod update;
+#[path = "git_push.rs"]
+mod push;
 use std::{
 	collections::hash_map::DefaultHasher,
 	fs,
@@ -90,6 +96,8 @@ pub struct GitWriteResult {
 	commit: Option<String>,
 	changed_paths: Vec<String>,
 	version: String,
+	pushed: bool,
+	push_error: Option<String>,
 }
 
 fn display_path(path: &Path) -> String {
@@ -389,32 +397,46 @@ fn validate_paths(root: &Path, repo: &Path, paths: &[String]) -> Result<Vec<Stri
 
 #[tauri::command]
 pub async fn get_project_git_diff(root: String, path: String) -> Result<DiffPreview, String> {
-	tauri::async_runtime::spawn_blocking(move || {
-		let root = canonical_root(&root)?;
-		let status = read_status(&root)?;
-		let repo = repository_for(&root)?;
-		let repo_path = repo_path(&root, &repo, &path)?;
-		let entry = status.entries.iter().find(|entry| entry.path == repo_path || entry.path == path || entry.path.ends_with(&format!("/{path}")));
-		let mut bytes = if entry.is_some_and(|entry| entry.kind == "untracked") {
-			let (file, _) = project_path(&root, &path, true)?;
-			let data = fs::read(file).map_err(|error| error.to_string())?;
-			if looks_binary(&data) { return Ok(DiffPreview { path, kind: "binary", content: None, truncated: false, version: status.version }); }
-			let content = String::from_utf8(data).map_err(|_| "文件不是 UTF-8 文本".to_string())?;
-			format!("--- /dev/null\n+++ b/{repo_path}\n@@ -0,0 +1,{} @@\n{}", content.lines().count(), content.lines().map(|line| format!("+{line}\n")).collect::<String>()).into_bytes()
-		} else {
-			let mut command = git_command(&repo);
-			if status.head.is_some() { command.args(["diff", "--no-ext-diff", "--binary", "HEAD", "--", &repo_path]); }
-			else { command.args(["diff", "--cached", "--no-ext-diff", "--binary", "--", &repo_path]); }
-			checked(command, "读取文件 Diff")?.stdout
-		};
-		if bytes.windows(b"GIT binary patch".len()).any(|part| part == b"GIT binary patch") || bytes.windows(b"Binary files differ".len()).any(|part| part == b"Binary files differ") {
-			return Ok(DiffPreview { path, kind: "binary", content: None, truncated: false, version: status.version });
+	tauri::async_runtime::spawn_blocking(move || read_diff(&canonical_root(&root)?, path)).await.map_err(|error| error.to_string())?
+}
+
+fn read_diff(root: &Path, path: String) -> Result<DiffPreview, String> {
+	use std::io::Read;
+	let repo = repository_for(root)?;
+	let relative = repo_path(root, &repo, &path)?;
+	let literal = format!(":(literal){relative}");
+	// Do not call read_status: its write-safety fingerprint hashes every changed
+	// file and index entry. Previewing one file only needs its own status and Diff.
+	let status = status_bytes(&repo, &literal)?;
+	let mut truncated = false;
+	let mut binary = false;
+	let mut bytes = if status.starts_with(b"?? ") {
+		let (file, _) = project_path(root, &path, true)?;
+		let mut data = Vec::new();
+		fs::File::open(file).map_err(|error| error.to_string())?.take((DIFF_LIMIT + 1) as u64).read_to_end(&mut data).map_err(|error| error.to_string())?;
+		truncated = data.len() > DIFF_LIMIT;
+		data.truncate(DIFF_LIMIT);
+		binary = looks_binary(&data);
+		if binary { data } else {
+			let content = if truncated { String::from_utf8_lossy(&data).into_owned() } else { String::from_utf8(data).map_err(|_| "文件不是 UTF-8 文本".to_string())? };
+			format!("--- /dev/null\n+++ b/{relative}\n@@ -0,0 +1,{} @@\n{}", content.lines().count(), content.lines().map(|line| format!("+{line}\n")).collect::<String>()).into_bytes()
 		}
-		let truncated = bytes.len() > DIFF_LIMIT;
-		bytes.truncate(DIFF_LIMIT);
-		let content = String::from_utf8_lossy(&bytes).to_string();
-		Ok(DiffPreview { path, kind: "text", content: Some(content), truncated, version: status.version })
-	}).await.map_err(|error| error.to_string())?
+	} else {
+		let mut command = git_command(&repo);
+		command.args(["diff", "--no-ext-diff", "--no-textconv", "--binary"]);
+		if current_head(&repo)?.is_some() { command.arg("HEAD"); } else { command.arg("--cached"); }
+		command.args(["--", &literal]);
+		checked(command, "读取文件 Diff")?.stdout
+	};
+	// Preview versions describe this result; cache validity uses the shared GitStatus version.
+	let mut hash = DefaultHasher::new(); path.hash(&mut hash); bytes.hash(&mut hash);
+	let version = format!("{:016x}", hash.finish());
+	binary |= bytes.windows(b"GIT binary patch".len()).any(|part| part == b"GIT binary patch") || bytes.windows(b"Binary files differ".len()).any(|part| part == b"Binary files differ");
+	if binary { return Ok(DiffPreview { path, kind: "binary", content: None, truncated, version }); }
+	truncated |= bytes.len() > DIFF_LIMIT;
+	bytes.truncate(DIFF_LIMIT);
+	let content = String::from_utf8_lossy(&bytes).to_string();
+	Ok(DiffPreview { path, kind: "text", content: Some(content), truncated, version })
 }
 
 fn ensure_expected(status: &GitStatus, expected: &str) -> Result<(), String> {
@@ -485,15 +507,17 @@ fn commit_selected(root: &Path, paths: &[String], message: &str, expected: &str)
 	let _ = fs::remove_file(&index);
 	result?;
 	let after = read_status(root)?;
-	Ok(GitWriteResult { repository_root: after.repository_root, commit: Some(short_head(&repo)?), changed_paths: paths, version: after.version })
+	Ok(GitWriteResult { repository_root: after.repository_root, commit: Some(short_head(&repo)?), changed_paths: paths, version: after.version, pushed: false, push_error: None })
 }
 
 #[tauri::command]
-pub async fn commit_project_files(state: tauri::State<'_, WorkbenchState>, root: String, paths: Vec<String>, message: String, expected_version: String) -> Result<GitWriteResult, String> {
+pub async fn commit_project_files(state: tauri::State<'_, WorkbenchState>, root: String, paths: Vec<String>, message: String, expected_version: String, push: Option<bool>) -> Result<GitWriteResult, String> {
 	let lock = Arc::clone(&state.inner().write_lock);
 	tauri::async_runtime::spawn_blocking(move || {
 		let _guard = lock.lock().map_err(|_| "Git 写入锁不可用".to_string())?;
-		commit_selected(&canonical_root(&root)?, &paths, &message, &expected_version)
+		let root = canonical_root(&root)?;
+		if push.unwrap_or(false) { push::commit_and_push(&root, &paths, &message, &expected_version) }
+		else { commit_selected(&root, &paths, &message, &expected_version) }
 	}).await.map_err(|error| error.to_string())?
 }
 
@@ -512,7 +536,7 @@ fn rollback_selected(root: &Path, paths: &[String], expected: &str) -> Result<Gi
 	append_paths(&mut command, &paths);
 	checked(command, "恢复所选文件")?;
 	let after = read_status(root)?;
-	Ok(GitWriteResult { repository_root: after.repository_root, commit: None, changed_paths: paths, version: after.version })
+	Ok(GitWriteResult { repository_root: after.repository_root, commit: None, changed_paths: paths, version: after.version, pushed: false, push_error: None })
 }
 
 #[tauri::command]
@@ -528,7 +552,7 @@ pub async fn rollback_project_files(state: tauri::State<'_, WorkbenchState>, roo
 mod tests {
 	use super::*;
 
-	fn temporary_repo(name: &str) -> PathBuf {
+	pub(super) fn temporary_repo(name: &str) -> PathBuf {
 		let nonce = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
 		let path = std::env::temp_dir().join(format!("skiff-{name}-{nonce}"));
 		fs::create_dir_all(&path).unwrap();
@@ -538,9 +562,36 @@ mod tests {
 		fs::canonicalize(path).unwrap()
 	}
 
-	fn commit_all(repo: &Path, message: &str) {
+	pub(super) fn commit_all(repo: &Path, message: &str) {
 		let mut add = git_command(repo); add.args(["add", "-A"]); checked(add, "add").unwrap();
 		let mut commit = git_command(repo); commit.args(["commit", "-q", "-m", message]); checked(commit, "commit").unwrap();
+	}
+
+	#[test]
+	fn targeted_diff_handles_scoped_literal_paths_and_content_versions() {
+		let repo = temporary_repo("targeted-diff");
+		fs::create_dir(repo.join("sub")).unwrap();
+		fs::write(repo.join("sub/[file].txt"), "base\n").unwrap();
+		fs::write(repo.join("unrelated.txt"), "base\n").unwrap();
+		commit_all(&repo, "base");
+		fs::write(repo.join("sub/[file].txt"), "changed\n").unwrap();
+		fs::write(repo.join("unrelated.txt"), "not in selected Diff\n").unwrap();
+		let first = read_diff(&repo.join("sub"), "[file].txt".into()).unwrap();
+		assert!(first.content.as_ref().unwrap().contains("+changed"));
+		assert!(!first.content.as_ref().unwrap().contains("not in selected Diff"));
+		fs::write(repo.join("sub/[file].txt"), "updated\n").unwrap();
+		let second = read_diff(&repo.join("sub"), "[file].txt".into()).unwrap();
+		assert_ne!(first.version, second.version);
+		fs::remove_file(repo.join("sub/[file].txt")).unwrap();
+		assert!(read_diff(&repo.join("sub"), "[file].txt".into()).unwrap().content.unwrap().contains("-base"));
+		fs::write(repo.join("sub/new.txt"), "new\n").unwrap();
+		assert!(read_diff(&repo.join("sub"), "new.txt".into()).unwrap().content.unwrap().contains("+new"));
+		fs::write(repo.join("binary.bin"), [0, 1, 2]).unwrap();
+		assert_eq!(read_diff(&repo, "binary.bin".into()).unwrap().kind, "binary");
+		fs::write(repo.join("large.txt"), vec![b'x'; DIFF_LIMIT + 100]).unwrap();
+		let large = read_diff(&repo, "large.txt".into()).unwrap();
+		assert!(large.truncated); assert!(large.content.unwrap().len() <= DIFF_LIMIT);
+		fs::remove_dir_all(repo).unwrap();
 	}
 
 	#[test]

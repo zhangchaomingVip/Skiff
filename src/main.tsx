@@ -1,9 +1,10 @@
 import ReactDOM from "react-dom/client";
-import App from "./App";
+// Establish layer order before components import their own stylesheets.
 import "./tokens.css";
 import "./index.css";
 import "./voyage.css";
 import "./components/ui.css";
+import App from "./App";
 import { syncNativeTheme } from "./theme";
 import { initTypography } from "./typography";
 

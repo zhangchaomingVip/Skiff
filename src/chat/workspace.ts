@@ -13,6 +13,10 @@ export interface Project {
 	hiddenAt?: number;
 }
 
+export const MAX_PROJECTS = 5;
+
+export const projectPathKey = (value: string) => /^[a-z]:[\\/]|^\\\\/i.test(value) ? value.replaceAll("/", "\\").toLowerCase().replace(/\\+$/, "") : value.replace(/\/+$/, "");
+
 export interface Conversation {
 	id: string;
 	projectId: string;
@@ -174,6 +178,21 @@ export function unhideProject(workspace: Workspace, id: string, makeDraft = newC
 	return { ...workspace, projects, chats: workspace.chats.includes(latest) ? workspace.chats : [...workspace.chats, latest], activeId: latest.id };
 }
 
+/** Replace list entries atomically; transcripts, drafts and folders remain intact. */
+export function addWorkspaceProject(workspace: Workspace, project: Project, removeIds: string[] = [], makeDraft = newChat): Workspace {
+	const existing = workspace.projects.find((item) => projectPathKey(item.path) === projectPathKey(project.path));
+	const target = existing ?? project;
+	const removed = new Set(removeIds.filter((id) => id !== target.id));
+	const projects = workspace.projects.map((item) => {
+		if (item.id === target.id) { const restored = { ...item }; delete restored.hiddenAt; return restored; }
+		return removed.has(item.id) ? { ...item, hiddenAt: Date.now() } : item;
+	});
+	if (!existing) projects.push(project);
+	if (visibleProjects(projects).length > MAX_PROJECTS) throw new Error(`最多保留 ${MAX_PROJECTS} 个项目，请选择要移出列表的项目。`);
+	const latest = workspace.chats.filter((chat) => chat.projectId === target.id && !isArchived(chat)).sort((a, b) => b.updatedAt - a.updatedAt)[0] ?? makeDraft(target.id);
+	return { ...workspace, projects, chats: workspace.chats.includes(latest) ? workspace.chats : [...workspace.chats, latest], activeId: latest.id };
+}
+
 export function deleteConversation(workspace: Workspace, id: string, makeDraft = newChat): Workspace {
 	const removed = workspace.chats.find((chat) => chat.id === id);
 	if (!removed) return workspace;
@@ -268,21 +287,20 @@ export function useWorkspace() {
 		if (latest) setWorkspace((w) => w && w.activeId !== latest.id ? { ...w, activeId: latest.id } : w);
 		else createChat(id);
 	};
-	const addProject = async (path: string, name?: string) => {
+	const addProject = async (path: string, name?: string, removeIds: string[] = []) => {
 		void drafts.flush();
 		const directory = await invoke<{ name: string; path: string }>("validate_project_directory", { path: path.trim() });
-		const pathKey = (value: string) => /^[a-z]:\\|^\\\\/i.test(value) ? value.toLowerCase() : value;
-		const existing = workspace?.projects.find((p) => pathKey(p.path) === pathKey(directory.path));
+		const existing = workspace?.projects.find((p) => projectPathKey(p.path) === projectPathKey(directory.path));
 		if (existing) {
 			// A hidden project keeps its chats, so re-adding the folder restores them.
-			if (isHiddenProject(existing)) setWorkspace((w) => w ? unhideProject(w, existing.id) : w);
-			else selectProject(existing.id);
-			return;
+			if (!isHiddenProject(existing)) { selectProject(existing.id); return; }
 		}
 		// The dialog's name field wins; an empty name keeps the folder's own name.
 		const project = { name: name?.trim() ? name.trim().slice(0, 100) : directory.name, path: directory.path, id: crypto.randomUUID() };
+		// Validate before scheduling the state update so the dialog can show errors.
+		if (workspace) addWorkspaceProject(workspace, project, removeIds);
 		const chat = newChat(project.id);
-		setWorkspace((w) => w ? { ...w, projects: [...w.projects, project], chats: [...w.chats, chat], activeId: chat.id } : { version: 1, projects: [project], chats: [chat], activeId: chat.id });
+		setWorkspace((w) => w ? addWorkspaceProject(w, project, removeIds) : { version: 1, projects: [project], chats: [chat], activeId: chat.id });
 	};
 	const updateChat = (id: string, patch: Partial<Conversation>) => {
 		setWorkspace((w) => {

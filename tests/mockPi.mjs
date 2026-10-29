@@ -1,4 +1,5 @@
 // Test-only Tauri bridge. Never imported by the application entry point.
+import { gitHistoryFixture } from "./gitHistoryFixture.mjs";
 export function installMockPi(target, storage, fixture, sessionOverrides) {
 	const callbacks = new Map();
 	const listeners = new Map();
@@ -158,6 +159,7 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 				persist();
 				return;
 			}
+			if (["get_project_git_history", "get_project_git_commit", "get_project_git_commit_diff", "update_project_from_remote"].includes(command)) return gitHistoryFixture(command, args);
 			if (command === "get_workspace_directory") return { name: "Skiff", path: "D:\\workspace\\Skiff" };
 			if (command === "list_project_directory") {
 				const entries = args.path === "src" ? [
@@ -178,7 +180,7 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 				{ path: "src/components/ProjectPreview.tsx", kind: "untracked", indexStatus: "?", worktreeStatus: "?", selectable: true, rollbackable: false },
 			] };
 			if (command === "get_project_git_diff") return { path: args.path, kind: "text", content: "diff --git a/src/App.tsx b/src/App.tsx\n--- a/src/App.tsx\n+++ b/src/App.tsx\n@@ -1,2 +1,3 @@\n import App from \"./App\";\n+import { ProjectPreview } from \"./components/ProjectPreview\";\n", truncated: false, version: "mock-git-v1" };
-			if (command === "commit_project_files") return { repositoryRoot: "D:\\workspace\\Skiff", commit: "a13fc921", changedPaths: args.paths, version: "mock-git-v2" };
+			if (command === "commit_project_files") return { repositoryRoot: "D:\\workspace\\Skiff", commit: "a13fc921", changedPaths: args.paths, version: "mock-git-v2", pushed: !!args.push };
 			if (command === "rollback_project_files") return { repositoryRoot: "D:\\workspace\\Skiff", changedPaths: args.paths, version: "mock-git-v2" };
 			if (command === "list_model_families") {
 				if (fixture === "loading") await new Promise(() => {});

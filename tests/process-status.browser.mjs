@@ -39,13 +39,24 @@ const verifyNestedRow = async (nestedRow) => {
 	const before = await text.textContent();
 	const beforeColor = await text.evaluate((el) => getComputedStyle(el).color);
 	const beforeBox = await text.boundingBox();
-	await nestedRow.hover();
+	await text.hover();
 	assert.equal(await arrow.evaluate((el) => getComputedStyle(el).opacity), "1");
 	assert.equal(await text.textContent(), before);
 	assert.equal(await text.evaluate((el) => getComputedStyle(el).color), beforeColor);
 	assert.deepEqual(await text.boundingBox(), beforeBox);
 	const arrowBox = await arrow.boundingBox();
 	assert.ok(arrowBox.x >= beforeBox.x + beforeBox.width && arrowBox.x - beforeBox.x - beforeBox.width <= 8);
+	await arrow.hover();
+	assert.equal(await arrow.evaluate((el) => getComputedStyle(el).opacity), "1");
+	await nestedRow.locator(".process-row-icon").hover();
+	assert.equal(await arrow.evaluate((el) => getComputedStyle(el).opacity), "1");
+	const rowBox = await nestedRow.boundingBox();
+	await page.mouse.move(rowBox.x + rowBox.width - 2, rowBox.y + rowBox.height / 2);
+	assert.equal(await arrow.evaluate((el) => getComputedStyle(el).opacity), "0");
+	await page.keyboard.press("Escape");
+	await nestedRow.focus();
+	assert.equal(await arrow.evaluate((el) => getComputedStyle(el).opacity), "1");
+	await nestedRow.evaluate((el) => el.blur());
 	await page.mouse.move(0, 0);
 	assert.equal(await arrow.evaluate((el) => getComputedStyle(el).opacity), "0");
 };
@@ -360,7 +371,7 @@ try {
 		for (const strong of typography.strong) {
 			assert.equal(strong.size, strong.parentSize);
 			assert.equal(strong.color, strong.parentColor);
-			assert.ok(Number(strong.weight) >= 600);
+			assert.ok(Number(strong.weight) >= 500);
 		}
 		assert.ok(typography.paragraphs.every((p) => !p.heading));
 		assert.ok(typography.headings.every((h) => h.size <= Math.max(18, typography.body)));

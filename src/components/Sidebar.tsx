@@ -89,6 +89,7 @@ export function Sidebar({ projects, chats, activeId, selectedProjectId, homeActi
 	useEffect(() => { try { localStorage.setItem("skiff.sidebar.collapsed", JSON.stringify([...collapsed])); } catch { /* Optional layout preference. */ } }, [collapsed]);
 	// Per-project preview window: 5 chats at a time, 收起 resets it to the first page.
 	const [chatLimits, setChatLimits] = useState<Map<string, number>>(new Map());
+	const [chatSelection, setChatSelection] = useState<{ id: string; scope: string }>();
 	const [recentExpanded, setRecentExpanded] = useState(() => { try { return localStorage.getItem("skiff.sidebar.recent-expanded") !== "false"; } catch { return true; } });
 	useEffect(() => { try { localStorage.setItem("skiff.sidebar.recent-expanded", String(recentExpanded)); } catch { /* Optional layout preference. */ } }, [recentExpanded]);
 	const recentListId = useId();
@@ -262,14 +263,31 @@ export function Sidebar({ projects, chats, activeId, selectedProjectId, homeActi
 	// workspace alert like the single-chat flow while the loop moves on.
 	const bulkPurge = async () => { for (const id of bulkIds) await onPurgeChat?.(id); exitBulkSelection(); };
 
+	/** Cross-project quick access stays independent of project expansion. */
+	const recentChats = useMemo(() => [...chats].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 40), [chats]);
+	const activeChat = chats.find((chat) => chat.id === activeId);
+	const activeProjectHistory = activeChat ? projectHistory.histories.get(activeChat.projectId) ?? [] : [];
+	const activeProjectIndex = activeProjectHistory.findIndex((chat) => chat.id === activeId);
+	const projectRowVisible = !!activeChat && projectsExpanded && !collapsed.has(activeChat.projectId) && projects.some((project) => project.id === activeChat.projectId) && activeProjectIndex >= 0 && activeProjectIndex < (chatLimits.get(activeChat.projectId) ?? CHAT_PREVIEW_LIMIT);
+	const recentRowVisible = recentExpanded && recentChats.some((chat) => chat.id === activeId);
+	// Keep one current occurrence, preferring the clicked entry while it is visible.
+	const selectedChatScope = search.trim() ? activeChat?.projectId
+		: chatSelection?.id === activeId && chatSelection?.scope === "recent" && recentRowVisible ? "recent"
+			: projectRowVisible ? activeChat?.projectId : recentRowVisible ? "recent" : undefined;
+	const selectChatRow = (id: string, scope: string) => {
+		setChatSelection({ id, scope });
+		onSelectChat(id);
+	};
 	const renderChatRow = (chat: Conversation, list: Conversation[], scope = chat.projectId) => {
+		const selected = chat.id === activeId && scope === selectedChatScope;
+		const status = statuses?.get(chat.id) ?? (runningIds?.has(chat.id) ? "running" : "idle");
 		const checked = selecting && bulkIds.has(chat.id);
 		const showDrop = !selecting && !!dragId && dragId !== chat.id && dropTarget?.id === chat.id && dropTarget.scope === scope;
-		return <div key={chat.id} className={`chat-row ${chat.id === activeId ? "selected" : ""} ${checked ? "checked" : ""} ${showDrop ? (dropTarget.before ? "drop-above" : "drop-below") : ""}`} draggable={!disabled && !search && editing?.id !== chat.id && !selecting} onDragStart={(event) => { setDragId(chat.id); event.dataTransfer.effectAllowed = "move"; }} onDragEnd={() => { setDragId(undefined); setDropTarget(undefined); }} onDragOver={(event) => { if (!dragId || dragId === chat.id) return; const source = list.find((item) => item.id === dragId); if (!source || !!source.pinned !== !!chat.pinned) return; event.preventDefault(); event.dataTransfer.dropEffect = "move"; const rect = event.currentTarget.getBoundingClientRect(); setDropTarget({ id: chat.id, before: event.clientY < rect.top + rect.height / 2, scope }); }} onDrop={(event) => { event.preventDefault(); handleDrop(list, chat.id, event.clientY < event.currentTarget.getBoundingClientRect().top + event.currentTarget.getBoundingClientRect().height / 2); }} onContextMenu={selecting ? undefined : (event) => openChatMenu(event, chat, scope)}>
+		return <div key={chat.id} className={`chat-row ${selected ? "selected" : ""} ${checked ? "checked" : ""} ${showDrop ? (dropTarget.before ? "drop-above" : "drop-below") : ""}`} draggable={!disabled && !search && editing?.id !== chat.id && !selecting} onDragStart={(event) => { setDragId(chat.id); event.dataTransfer.effectAllowed = "move"; }} onDragEnd={() => { setDragId(undefined); setDropTarget(undefined); }} onDragOver={(event) => { if (!dragId || dragId === chat.id) return; const source = list.find((item) => item.id === dragId); if (!source || !!source.pinned !== !!chat.pinned) return; event.preventDefault(); event.dataTransfer.dropEffect = "move"; const rect = event.currentTarget.getBoundingClientRect(); setDropTarget({ id: chat.id, before: event.clientY < rect.top + rect.height / 2, scope }); }} onDrop={(event) => { event.preventDefault(); handleDrop(list, chat.id, event.clientY < event.currentTarget.getBoundingClientRect().top + event.currentTarget.getBoundingClientRect().height / 2); }} onContextMenu={selecting ? undefined : (event) => openChatMenu(event, chat, scope)}>
 			{selecting && <button type="button" className="chat-check" role="checkbox" aria-checked={checked} aria-label={`${checked ? "取消选择" : "选择"}会话 ${conversationLabel(chat, chats)}`} disabled={disabled} onClick={() => toggleBulk(chat.id)}>{checked && <Icon name="check" size={16} />}</button>}
-			{editing?.id === chat.id && editing.scope === scope ? renameInput() : <button className="chat-link" disabled={navigationDisabled} aria-pressed={selecting ? checked : undefined} onClick={() => { if (selecting) toggleBulk(chat.id); else onSelectChat(chat.id); }} title={selecting ? undefined : conversationTooltip(chat, chats)} aria-current={chat.id === activeId ? "page" : undefined}>
+			{editing?.id === chat.id && editing.scope === scope ? renameInput() : <button className="chat-link" disabled={navigationDisabled} aria-pressed={selecting ? checked : undefined} onClick={() => { if (selecting) toggleBulk(chat.id); else selectChatRow(chat.id, scope); }} title={selecting ? undefined : conversationTooltip(chat, chats)} aria-current={selected ? "page" : undefined}>
 				<span className="chat-title">{highlight(conversationLabel(chat, chats), search)}</span>
-				{statuses?.get(chat.id) && statuses.get(chat.id) !== "idle" ? <span className={`session-status ${statuses.get(chat.id)}`} role="status" aria-label={statusLabels[statuses.get(chat.id)!]} title={statusLabels[statuses.get(chat.id)!]}>{statusSymbols[statuses.get(chat.id)!]}</span> : runningIds?.has(chat.id) && <span className="dot busy" role="status" aria-label="正在生成" />}
+				{status !== "idle" && <span className={`session-status ${status}`} role="status" aria-label={statusLabels[status]} title={statusLabels[status]}>{status === "running" ? <span className="session-spinner" aria-hidden="true" /> : statusSymbols[status]}</span>}
 				{chat.hasDraft && <span className="chat-draft">草稿</span>}
 				{!!search && <time dateTime={new Date(chat.updatedAt).toISOString()}>{calendarGroup(chat.updatedAt)}</time>}
 			</button>}
@@ -283,8 +301,6 @@ export function Sidebar({ projects, chats, activeId, selectedProjectId, homeActi
 	const menuChat = menu?.kind === "chat" ? chats.find((chat) => chat.id === menu.chatId) : undefined;
 	const menuProject = menu?.kind === "project" ? projects.find((project) => project.id === menu.projectId) : undefined;
 	const visibleProjects = useMemo(() => projects.filter((project) => project.name.toLowerCase().includes(search.toLowerCase()) || chats.some((chat) => chat.projectId === project.id && chat.title.toLowerCase().includes(search.toLowerCase()))), [projects, chats, search]);
-	/** Cross-project quick access stays independent of project expansion. */
-	const recentChats = useMemo(() => [...chats].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 40), [chats]);
 	return (
 		<aside className="sidebar" aria-label="项目与聊天导航" data-connected={connected}>
 			{deleting && <ConfirmDialog title={deleting.kind === "purge" ? "永久删除聊天" : "删除聊天"} description={deleting.kind === "purge" ? `永久删除 ${deleting.name}？${deleting.hasFile ? "将直接删除 pi 会话目录中的对话文件，无法恢复。" : "该聊天还没有 pi 会话文件，只会移除侧栏索引。"}` : `从侧栏删除 ${deleting.name}，pi 会话文件会保留。`} onConfirm={() => { if (deleting.kind === "purge") void onPurgeChat?.(deleting.id); else onDeleteChat(deleting.id); }} onClose={() => setDeleting(undefined)} />}
@@ -379,7 +395,7 @@ export function Sidebar({ projects, chats, activeId, selectedProjectId, homeActi
 				</div>
 			</div>}
 			{menu?.kind === "chat" && menuChat && <div className="sidebar-menu" ref={menuRef} style={{ left: menu.x, top: menu.y }} role="menu">
-				<button disabled={navigationDisabled} onClick={() => { onSelectChat(menu.chatId); closeMenu(); }}><Icon name="message" size={14} />打开</button>
+				<button disabled={navigationDisabled} onClick={() => { selectChatRow(menu.chatId, menu.scope); closeMenu(); }}><Icon name="message" size={14} />打开</button>
 				<button disabled={disabled} onClick={() => { startEdit({ id: menu.chatId, kind: "chat", text: menuChat.title, scope: menu.scope }); closeMenu(); }}><Icon name="edit" size={14} />重命名</button>
 				<button disabled={disabled} onClick={() => { onTogglePinChat(menu.chatId, !menuChat.pinned); closeMenu(); }}><Icon name="pin" size={14} />{menuChat.pinned ? "取消固定" : "固定到顶部"}</button>
 				<button disabled={disabled || canCloseChat?.(menu.chatId) === false} onClick={() => { onArchiveChat(menu.chatId); closeMenu(); }}><Icon name="archive" size={14} />归档</button>

@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 import type { ComponentProps } from "react";
-import { setThemeColor, setThemePreference, themeColors, useThemeColor, useThemePreference } from "../theme";
+import { darkThemeColors, setDarkThemeColor, setThemeColor, setThemePreference, setThemeStars, themeColors, useDarkThemeColor, useThemeColor, useThemePreference, useThemeStars } from "../theme";
 import { ArchivedSessions } from "./ArchivedSessions";
 import { Icon } from "./Icon";
 import { PromptSettings } from "./PromptSettings";
@@ -42,6 +42,8 @@ export function SettingsDialog({ initialCategory, restrictions, prompt, provider
 	};
 	const theme = useThemePreference();
 	const themeColor = useThemeColor();
+	const darkThemeColor = useDarkThemeColor();
+	const themeStars = useThemeStars();
 	const modifier = isMacPlatform() ? "Cmd" : "Ctrl";
 	const close = () => { if (!editor.current?.pending) onClose(); };
 	const escape = () => { if (editor.current?.pending) return; if (editor.current?.editing) editor.current.back(); else close(); };
@@ -57,10 +59,19 @@ export function SettingsDialog({ initialCategory, restrictions, prompt, provider
 					<div className="settings-themes" role="group" aria-label="应用主题">{([
 						["system", "跟随系统", "monitor"], ["light", "浅色", "sun"], ["dark", "深色", "moon"],
 					] as const).map(([value, label, icon]) => <Button key={value} variant="setting" aria-pressed={theme === value} onClick={() => setThemePreference(value)}><Icon name={icon} />{label}{theme === value && <Icon name="check" size={14} />}</Button>)}</div>
-					<h3 className="settings-section-label">主题色</h3>
-					<div className="settings-theme-colors" role="group" aria-label="主题色">{themeColors.map(({ value, label }) => <Button key={value} variant="setting" className="settings-theme-color" data-theme-color-option={value} aria-pressed={themeColor === value} onClick={() => setThemeColor(value)}>
+					<h3 className="settings-section-label">浅色配色</h3>
+					<div className="settings-theme-colors" role="group" aria-label="浅色配色">{themeColors.map(({ value, label }) => <Button key={value} variant="setting" className="settings-theme-color" data-theme-color-option={value} aria-pressed={themeColor === value} onClick={() => setThemeColor(value)}>
 						<span className="settings-theme-color-preview" aria-hidden="true"><span /></span><span>{label}</span>{themeColor === value && <Icon name="check" size={14} />}
 					</Button>)}</div>
+					<h3 className="settings-section-label">深色背景</h3>
+					<p className="muted">仅在深色模式下生效，浅色模式保留上方主题色。</p>
+					<div className="settings-theme-colors" role="group" aria-label="深色背景">{darkThemeColors.map(({ value, label }) => <Button key={value} variant="setting" className="settings-theme-color" data-dark-theme-color-option={value} aria-pressed={darkThemeColor === value} onClick={() => setDarkThemeColor(value)}>
+						<span className="settings-theme-color-preview settings-dark-color-preview" aria-hidden="true"><span /></span><span>{label}</span>{darkThemeColor === value && <Icon name="check" size={14} />}
+					</Button>)}</div>
+					<div className="settings-stars-row">
+						<div><label htmlFor="settings-theme-stars">显示星星</label><p id="settings-theme-stars-description" className="muted">细小星点静止，部分亮星缓慢呼吸；关闭后保留底色。</p></div>
+						<label className="switch"><input id="settings-theme-stars" type="checkbox" checked={themeStars} aria-describedby="settings-theme-stars-description" onChange={(event) => setThemeStars(event.target.checked)} /><span className="slider" /></label>
+					</div>
 				</section>}
 				{category === "websearch" && <section aria-labelledby="websearch-title"><h2 id="websearch-title">联网搜索</h2><p className="muted">为 pi 配置 web_search 工具，引擎可在 Tavily 与 Exa 之间选择；开关作用于当前 pi 会话。</p><WebSearchSettings search={search} /></section>}
 				{category === "prompt" && <section aria-labelledby="prompt-title"><h2 id="prompt-title">系统提示词</h2><p className="muted">附加到 pi 系统提示词末尾（--append-system-prompt），随每次会话启动生效。保存后当前会话会重启。</p><fieldset className="settings-config" disabled={!!restrictions.prompt}><PromptSettings {...prompt} /></fieldset>{restrictions.prompt && <p className="settings-restriction">{restrictions.prompt}</p>}</section>}

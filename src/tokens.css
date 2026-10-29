@@ -18,6 +18,7 @@
 		--color-border: #354154;
 		--color-border-light: #73859f;
 		--color-success: #79dda3;
+		--git-modified: #91baff;
 		--color-warning: #f4cd76;
 		--color-error: #ff9ca5;
 		--space-px: 1px;
@@ -148,24 +149,32 @@
 		--workspace-backdrop: var(--bg);
 		--sidebar-backdrop: var(--sidebar);
 		--app-backdrop: var(--activity-bg);
-		--theme-swatch-default: linear-gradient(135deg, #f5f4f2 0 52%, #e9f1fc 52% 100%);
-		--theme-swatch-default-accent: #2458be;
-		--theme-swatch-purple: linear-gradient(135deg, #f3edf8 0 52%, #e9def2 52% 100%);
-		--theme-swatch-purple-accent: #745198;
-		--theme-swatch-yellow: linear-gradient(135deg, #faf6eb 0 52%, #f2ead6 52% 100%);
-		--theme-swatch-yellow-accent: #7b5b16;
-		--theme-swatch-green: linear-gradient(135deg, #f0f6f1 0 52%, #dfeee5 52% 100%);
-		--theme-swatch-green-accent: #2f6d4f;
-		--theme-swatch-blue: linear-gradient(135deg, #eef5fa 0 52%, #dcecf7 52% 100%);
-		--theme-swatch-blue-accent: #326a98;
+		--settings-accent: var(--color-accent);
+		--settings-action: var(--action);
+		--settings-action-hover: var(--action-hover);
+		--settings-action-active: var(--action-active);
+		--settings-selected: var(--selected);
+		--theme-swatch-purple: linear-gradient(135deg, #e9e0fb 0%, #f3efff 100%);
+		--theme-swatch-purple-accent: #eee3fc;
+		--theme-swatch-yellow: linear-gradient(135deg, #ffefdf 0%, #fbf4ec 100%);
+		--theme-swatch-yellow-accent: #fbf1e5;
+		--theme-swatch-green: linear-gradient(135deg, #c3dac6 0%, #e5f3e4 100%);
+		--theme-swatch-green-accent: #e1f1e4;
+		--theme-swatch-blue: linear-gradient(135deg, #c0e3ff 0%, #e5f3ff 100%);
+		--theme-swatch-blue-accent: #d5ecfe;
+		--theme-swatch-star-black: linear-gradient(135deg, #14151d, #252631);
+		--theme-swatch-star-black-accent: #343440;
+		--theme-swatch-star-blue: linear-gradient(135deg, #111b33, #233b65);
+		--theme-swatch-star-blue-accent: #304569;
+		--starfield: none;
 	}
 
 	[data-theme="light"] {
-		--color-bg-primary: #fafbfc;
+		--color-bg-primary: #ffffff;
 		--color-bg-secondary: #ffffff;
 		--color-bg-tertiary: #edf1f6;
 		--color-bg-hover: #e9ecf1;
-		--color-sidebar-bg: #f5f4f2;
+		--color-sidebar-bg: #fafaf9;
 		--color-sidebar-border: #e5e2de;
 		--color-text-primary: #192333;
 		--color-text-secondary: #48566b;
@@ -178,6 +187,7 @@
 		--color-border: #d5dce6;
 		--color-border-light: #758399;
 		--color-success: #176a3d;
+		--git-modified: #2458be;
 		--color-warning: #805600;
 		--color-error: #b52b37;
 		--selected: #e9f1fc;
@@ -203,210 +213,206 @@
 		--shadow-elevation-2: 0 4px 12px rgba(0, 0, 0, .08);
 		--shadow-elevation-3: 0 8px 20px rgba(0, 0, 0, .1);
 		--shadow-elevation-up: 0 -6px 20px rgba(0, 0, 0, .08);
+		--bubble-bg: var(--sidebar);
 		--activity-bg: #edecea;
 		--activity-hover: #e3e1dd;
 		--activity-selected: #d9d7d3;
 		--sidebar-selected: #e7e5e1;
 	}
 
+	/* Color themes tint the shell, user bubbles and settings controls; blue actions stay stable. */
 	[data-theme="light"][data-theme-color="purple"] {
-		--color-bg-primary: #fcfbfd;
-		--color-bg-secondary: #fffeff;
-		--color-bg-tertiary: #f0eaf5;
-		--color-bg-hover: #ece5f2;
-		--color-sidebar-bg: #f5f0f9;
-		--color-sidebar-border: #e1d7e9;
-		--color-accent: #745198;
-		--color-accent-hover: #624180;
-		--color-accent-active: #50336b;
-		--color-border: #ddd4e5;
-		--action: #745198;
-		--action-hover: #624180;
-		--action-active: #50336b;
-		--selected: #e9def2;
-		--selection: #d8c5e8;
-		--activity-bg: #ece4f3;
-		--activity-hover: #e2d7ec;
-		--activity-selected: #d9cbe6;
-		--sidebar-selected: #e9e0f0;
-		--workspace-backdrop: radial-gradient(circle at 0% 0%, #f0e8f7 0%, transparent 45%), radial-gradient(circle at 100% 100%, #f6f1fa 0%, transparent 46%), #fdfcfe;
-		--sidebar-backdrop: linear-gradient(180deg, #f3edf8 0%, #faf7fb 55%, #f5eff9 100%);
-		--app-backdrop: linear-gradient(135deg, #ede4f4 0%, #f6f0fa 100%);
+		--color-sidebar-bg: #fcfafd;
+		--color-sidebar-border: #e7e1ef;
+		--activity-bg: #e9e0fb;
+		--activity-hover: #e5daf5;
+		--activity-selected: #ded0f1;
+		--sidebar-selected: #eee3fc;
+		--sidebar-backdrop: var(--sidebar);
+		--app-backdrop: linear-gradient(135deg, #e9e0fb 0%, #f3efff 100%);
+		--settings-accent: #745198;
+		--settings-action: #745198;
+		--settings-action-hover: #624180;
+		--settings-action-active: #50336b;
+		--settings-selected: var(--sidebar-selected);
 	}
 
 	[data-theme="light"][data-theme-color="yellow"] {
-		--color-bg-primary: #fdfcf8;
-		--color-bg-secondary: #fffefa;
-		--color-bg-tertiary: #f3eee2;
-		--color-bg-hover: #f0eadc;
-		--color-sidebar-bg: #faf6eb;
-		--color-sidebar-border: #e8dfcc;
-		--color-accent: #7b5b16;
-		--color-accent-hover: #674a0e;
-		--color-accent-active: #533a08;
-		--color-border: #e5dcc8;
-		--action: #7b5b16;
-		--action-hover: #674a0e;
-		--action-active: #533a08;
-		--selected: #f2ead6;
-		--selection: #e7d7b4;
-		--activity-bg: #f1ebdd;
-		--activity-hover: #eae1cf;
-		--activity-selected: #e2d6bd;
-		--sidebar-selected: #f0e8d7;
-		--workspace-backdrop: radial-gradient(circle at 0% 0%, #f5efdf 0%, transparent 45%), radial-gradient(circle at 100% 100%, #faf6eb 0%, transparent 46%), #fdfcf8;
-		--sidebar-backdrop: linear-gradient(180deg, #f7f1e3 0%, #fcfaf3 55%, #f8f3e8 100%);
-		--app-backdrop: linear-gradient(135deg, #f0e9d9 0%, #faf6eb 100%);
+		--color-sidebar-bg: #fdfbf8;
+		--color-sidebar-border: #eee5db;
+		--activity-bg: #ffefdf;
+		--activity-hover: #f5e7da;
+		--activity-selected: #efdfd0;
+		--sidebar-selected: #fbf1e5;
+		--sidebar-backdrop: var(--sidebar);
+		--app-backdrop: linear-gradient(135deg, #ffefdf 0%, #fbf4ec 100%);
+		--settings-accent: #8a5b32;
+		--settings-action: #8a5b32;
+		--settings-action-hover: #744a27;
+		--settings-action-active: #603b1f;
+		--settings-selected: var(--sidebar-selected);
 	}
 
 	[data-theme="light"][data-theme-color="green"] {
-		--color-bg-primary: #fbfdfc;
-		--color-bg-secondary: #fdfffe;
-		--color-bg-tertiary: #eaf3ed;
-		--color-bg-hover: #e4efe8;
-		--color-sidebar-bg: #f0f6f1;
-		--color-sidebar-border: #d8e6dc;
-		--color-accent: #2f6d4f;
-		--color-accent-hover: #255a40;
-		--color-accent-active: #1c4833;
-		--color-border: #d6e3da;
-		--action: #2f6d4f;
-		--action-hover: #255a40;
-		--action-active: #1c4833;
-		--selected: #dfeee5;
-		--selection: #c8e1d2;
-		--activity-bg: #e5f0e9;
-		--activity-hover: #dbe9df;
-		--activity-selected: #cfdfd4;
-		--sidebar-selected: #e2ede5;
-		--workspace-backdrop: radial-gradient(circle at 0% 0%, #eaf3ed 0%, transparent 45%), radial-gradient(circle at 100% 100%, #f1f7f3 0%, transparent 46%), #fbfdfc;
-		--sidebar-backdrop: linear-gradient(180deg, #edf5ef 0%, #f7faf7 55%, #eff6f1 100%);
-		--app-backdrop: linear-gradient(135deg, #e3eee7 0%, #f1f7f3 100%);
+		--color-sidebar-bg: #f9fcfa;
+		--color-sidebar-border: #dfe9e1;
+		--activity-bg: #c3dac6;
+		--activity-hover: #c8dece;
+		--activity-selected: #bad2c1;
+		--sidebar-selected: #e1f1e4;
+		--sidebar-backdrop: var(--sidebar);
+		--app-backdrop: linear-gradient(135deg, #c3dac6 0%, #e5f3e4 100%);
+		--settings-accent: #2f6d4f;
+		--settings-action: #2f6d4f;
+		--settings-action-hover: #255a40;
+		--settings-action-active: #1c4833;
+		--settings-selected: var(--sidebar-selected);
 	}
 
 	[data-theme="light"][data-theme-color="blue"] {
-		--color-bg-primary: #fafcfd;
-		--color-bg-secondary: #fdfeff;
-		--color-bg-tertiary: #eaf2f8;
-		--color-bg-hover: #e3edf4;
-		--color-sidebar-bg: #eef5fa;
-		--color-sidebar-border: #d6e3ed;
-		--color-accent: #326a98;
-		--color-accent-hover: #285980;
-		--color-accent-active: #1f4869;
-		--color-border: #d3e0ea;
-		--action: #326a98;
-		--action-hover: #285980;
-		--action-active: #1f4869;
-		--selected: #dcecf7;
-		--selection: #c3dcee;
-		--activity-bg: #e3eef6;
-		--activity-hover: #d8e6f0;
-		--activity-selected: #ccdeeb;
-		--sidebar-selected: #e0ebf3;
-		--workspace-backdrop: radial-gradient(circle at 0% 0%, #e6f0f8 0%, transparent 45%), radial-gradient(circle at 100% 100%, #eef5fa 0%, transparent 46%), #fafcfd;
-		--sidebar-backdrop: linear-gradient(180deg, #eaf3f9 0%, #f5f9fc 55%, #edf5fa 100%);
-		--app-backdrop: linear-gradient(135deg, #e1edf6 0%, #eef5fa 100%);
+		--color-sidebar-bg: #f9fcfe;
+		--color-sidebar-border: #dfe9f2;
+		--activity-bg: #c0e3ff;
+		--activity-hover: #b9dcf7;
+		--activity-selected: #aed3f0;
+		--sidebar-selected: #d5ecfe;
+		--sidebar-backdrop: var(--sidebar);
+		--app-backdrop: linear-gradient(135deg, #c0e3ff 0%, #e5f3ff 100%);
+		--settings-accent: #326a98;
+		--settings-action: #326a98;
+		--settings-action-hover: #285980;
+		--settings-action-active: #1f4869;
+		--settings-selected: var(--sidebar-selected);
 	}
 
 	[data-theme="dark"][data-theme-color="purple"] {
-		--color-bg-primary: #151219;
-		--color-bg-secondary: #1e1924;
-		--color-bg-tertiary: #292231;
-		--color-bg-hover: #342b3e;
 		--color-sidebar-bg: #1a1520;
 		--color-sidebar-border: #41354c;
-		--color-accent: #c5a3e5;
-		--color-accent-hover: #d8bdf0;
-		--color-accent-active: #b18bd8;
-		--color-border: #3d3347;
-		--action: #745198;
-		--action-hover: #8663ab;
-		--action-active: #624180;
-		--selected: #382a45;
-		--selection: #513d65;
 		--activity-bg: #110e16;
 		--activity-hover: #241c2c;
 		--activity-selected: #30263a;
 		--sidebar-selected: #2d2336;
-		--workspace-backdrop: radial-gradient(circle at 0% 0%, #211827 0%, transparent 48%), #151219;
 		--sidebar-backdrop: linear-gradient(180deg, #1d1624 0%, #18131e 100%);
 		--app-backdrop: linear-gradient(135deg, #120e18 0%, #1c1523 100%);
+		--settings-accent: #c5a3e5;
+		--settings-action: #745198;
+		--settings-action-hover: #624180;
+		--settings-action-active: #50336b;
+		--settings-selected: var(--sidebar-selected);
 	}
 
 	[data-theme="dark"][data-theme-color="yellow"] {
-		--color-bg-primary: #171510;
-		--color-bg-secondary: #211d16;
-		--color-bg-tertiary: #2e281d;
-		--color-bg-hover: #3a3223;
 		--color-sidebar-bg: #1d1912;
 		--color-sidebar-border: #4a402d;
-		--color-accent: #e2c17b;
-		--color-accent-hover: #efd69f;
-		--color-accent-active: #d3ae60;
-		--color-border: #463d2c;
-		--action: #7b5b16;
-		--action-hover: #866719;
-		--action-active: #674a0e;
-		--selected: #40351f;
-		--selection: #5c4b2b;
 		--activity-bg: #12100c;
 		--activity-hover: #2a2419;
 		--activity-selected: #373020;
 		--sidebar-selected: #30291c;
-		--workspace-backdrop: radial-gradient(circle at 0% 0%, #252014 0%, transparent 48%), #171510;
 		--sidebar-backdrop: linear-gradient(180deg, #211c14 0%, #1a1711 100%);
 		--app-backdrop: linear-gradient(135deg, #14110c 0%, #211c13 100%);
+		--settings-accent: #e2bd98;
+		--settings-action: #8a5b32;
+		--settings-action-hover: #744a27;
+		--settings-action-active: #603b1f;
+		--settings-selected: var(--sidebar-selected);
 	}
 
 	[data-theme="dark"][data-theme-color="green"] {
-		--color-bg-primary: #111713;
-		--color-bg-secondary: #19231c;
-		--color-bg-tertiary: #233128;
-		--color-bg-hover: #2c3d32;
 		--color-sidebar-bg: #151e18;
 		--color-sidebar-border: #344b3b;
-		--color-accent: #93ceb0;
-		--color-accent-hover: #b1dfc8;
-		--color-accent-active: #80bd9e;
-		--color-border: #304638;
-		--action: #2f6d4f;
-		--action-hover: #3d8262;
-		--action-active: #255a40;
-		--selected: #263f31;
-		--selection: #355842;
 		--activity-bg: #0d130f;
 		--activity-hover: #1e2c23;
 		--activity-selected: #29382e;
 		--sidebar-selected: #233128;
-		--workspace-backdrop: radial-gradient(circle at 0% 0%, #19271e 0%, transparent 48%), #111713;
 		--sidebar-backdrop: linear-gradient(180deg, #18221b 0%, #131b16 100%);
 		--app-backdrop: linear-gradient(135deg, #0e150f 0%, #18231b 100%);
+		--settings-accent: #93ceb0;
+		--settings-action: #2f6d4f;
+		--settings-action-hover: #255a40;
+		--settings-action-active: #1c4833;
+		--settings-selected: var(--sidebar-selected);
 	}
 
 	[data-theme="dark"][data-theme-color="blue"] {
-		--color-bg-primary: #11171c;
-		--color-bg-secondary: #19232b;
-		--color-bg-tertiary: #23313d;
-		--color-bg-hover: #2c3d4b;
 		--color-sidebar-bg: #151e25;
 		--color-sidebar-border: #344b5d;
-		--color-accent: #9cc8ec;
-		--color-accent-hover: #bddcf6;
-		--color-accent-active: #86b6df;
-		--color-border: #304757;
-		--action: #326a98;
-		--action-hover: #3a76a6;
-		--action-active: #285980;
-		--selected: #253e52;
-		--selection: #355672;
 		--activity-bg: #0d1318;
 		--activity-hover: #1e2c37;
 		--activity-selected: #293946;
 		--sidebar-selected: #23313d;
-		--workspace-backdrop: radial-gradient(circle at 0% 0%, #192732 0%, transparent 48%), #11171c;
 		--sidebar-backdrop: linear-gradient(180deg, #18232c 0%, #131c23 100%);
 		--app-backdrop: linear-gradient(135deg, #0e151b 0%, #18232d 100%);
+		--settings-accent: #9cc8ec;
+		--settings-action: #326a98;
+		--settings-action-hover: #285980;
+		--settings-action-active: #1f4869;
+		--settings-selected: var(--sidebar-selected);
+	}
+
+	/* These dark backgrounds override the shell tint without changing the saved light palette. */
+	[data-theme="dark"][data-dark-theme-color="star-black"] {
+		--color-bg-primary: #1b1c25;
+		--color-bg-secondary: #292a35;
+		--color-bg-tertiary: #30313e;
+		--color-bg-hover: #373947;
+		--color-sidebar-bg: #20212b;
+		--color-sidebar-border: #393b4a;
+		--color-border: #434553;
+		--color-border-light: #81869a;
+		--color-text-primary: #f0f0f5;
+		--color-text-secondary: #c9cbd9;
+		--color-text-tertiary: #b6bacd;
+		--activity-bg: #14151d;
+		--activity-hover: #2c2d3a;
+		--activity-selected: #383947;
+		--sidebar-selected: #343440;
+		--selected: #343440;
+		--selection: #454d73;
+		--workspace-backdrop: var(--starfield), linear-gradient(145deg, #1b1c25, #20212c);
+		--sidebar-backdrop: var(--starfield), linear-gradient(180deg, #20212b, #1c1d27);
+		--app-backdrop: var(--starfield), linear-gradient(135deg, #14151d, #1c1d27);
+	}
+
+	[data-theme="dark"][data-dark-theme-color="star-blue"] {
+		--color-bg-primary: #172844;
+		--color-bg-secondary: #263957;
+		--color-bg-tertiary: #2d4060;
+		--color-bg-hover: #354a6a;
+		--color-sidebar-bg: #1c2b45;
+		--color-sidebar-border: #354966;
+		--color-border: #425a7b;
+		--color-border-light: #8b9fbe;
+		--color-text-primary: #f1f5ff;
+		--color-text-secondary: #d2ddef;
+		--color-text-tertiary: #bdcce3;
+		--color-accent: #b1d0ff;
+		--activity-bg: #111b33;
+		--activity-hover: #233652;
+		--activity-selected: #304569;
+		--sidebar-selected: #304569;
+		--selected: #304569;
+		--selection: #405e8b;
+		--workspace-backdrop: var(--starfield), linear-gradient(145deg, #14213b, #20385f);
+		--sidebar-backdrop: var(--starfield), linear-gradient(180deg, #1c2b45, #192840);
+		--app-backdrop: var(--starfield), linear-gradient(135deg, #111b33, #1a2a48);
+	}
+
+	[data-theme="dark"]:is([data-dark-theme-color="star-black"], [data-dark-theme-color="star-blue"]) {
+		--settings-accent: var(--color-accent);
+		--settings-action: var(--action);
+		--settings-action-hover: var(--action-hover);
+		--settings-action-active: var(--action-active);
+		--settings-selected: var(--selected);
+		--chat-meta: var(--muted);
+	}
+
+	[data-theme="dark"][data-theme-stars="true"]:is([data-dark-theme-color="star-black"], [data-dark-theme-color="star-blue"]) {
+		--starfield: url("/themes/stars.svg");
+	}
+	@media (prefers-reduced-motion: reduce) {
+		[data-theme="dark"][data-theme-stars="true"]:is([data-dark-theme-color="star-black"], [data-dark-theme-color="star-blue"]) {
+			--starfield: url("/themes/stars-static.svg");
+		}
 	}
 
 }

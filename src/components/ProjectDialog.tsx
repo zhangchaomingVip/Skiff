@@ -2,16 +2,21 @@ import { Dialog, IconButton, Input, Button } from "./ui";
 import { useRef, useState, type FormEvent } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { Icon } from "./Icon";
+import { MAX_PROJECTS, projectPathKey, type Project } from "../chat/workspace";
+import { ProjectRemovalChoices } from "./ProjectListLimit";
 
 const folderName = (path: string) => path.split(/[\\/]/).filter(Boolean).pop() ?? path;
 
-export function ProjectDialog({ onAdd, onClose }: { onAdd: (path: string, name?: string) => Promise<void>; onClose: () => void }) {
+export function ProjectDialog({ projects = [], onAdd, onClose }: { projects?: Project[]; onAdd: (path: string, name?: string, removeIds?: string[]) => Promise<void>; onClose: () => void }) {
 	const inputRef = useRef<HTMLInputElement>(null);
 	const [name, setName] = useState("");
 	const [folder, setFolder] = useState("");
 	const [error, setError] = useState<string>();
 	const [pending, setPending] = useState(false);
 	const [browsing, setBrowsing] = useState(false);
+	const [removeIds, setRemoveIds] = useState<string[]>([]);
+	const existing = projects.some((project) => folder && projectPathKey(project.path) === projectPathKey(folder));
+	const removeCount = existing ? 0 : Math.max(0, projects.length - MAX_PROJECTS + 1);
 	// Remember the name we filled in from a folder, so picking another folder
 	// updates it while a name typed by the user survives.
 	const autoName = useRef("");
@@ -31,9 +36,9 @@ export function ProjectDialog({ onAdd, onClose }: { onAdd: (path: string, name?:
 	};
 	const submit = async (event: FormEvent) => {
 		event.preventDefault();
-		if (pending || !folder) return;
+		if (pending || !folder || (removeCount > 0 && removeIds.length !== removeCount)) return;
 		setPending(true);
-		try { await onAdd(folder, name); onClose(); } catch (e) { setError(String(e)); setPending(false); }
+		try { await onAdd(folder, name, removeCount ? removeIds : []); onClose(); } catch (e) { setError(String(e)); setPending(false); }
 	};
 	return <Dialog onClose={onClose} pending={pending} initialFocus={inputRef} className="project-dialog" aria-labelledby="project-dialog-title" >
 		<form onSubmit={(event) => void submit(event)}>
@@ -59,7 +64,8 @@ export function ProjectDialog({ onAdd, onClose }: { onAdd: (path: string, name?:
 				</div>
 				{error && <span className="ui-field-help" role="alert">{error}</span>}
 			</div>
-			<div className="dialog-actions"><Button variant="ghost" onClick={onClose} disabled={pending}>取消</Button><Button type="submit" variant="primary" size="primary" loading={pending} disabled={!folder}>{pending ? "正在创建…" : "创建项目"}</Button></div>
+			{removeCount > 0 && <ProjectRemovalChoices projects={projects} count={removeCount} selected={removeIds} onChange={setRemoveIds} disabled={pending} />}
+			<div className="dialog-actions"><Button variant="ghost" onClick={onClose} disabled={pending}>取消</Button><Button type="submit" variant="primary" size="primary" loading={pending} disabled={!folder || (removeCount > 0 && removeIds.length !== removeCount)}>{pending ? "正在创建…" : removeCount ? "移出并创建项目" : "创建项目"}</Button></div>
 		</form>
 	</Dialog>;
 }

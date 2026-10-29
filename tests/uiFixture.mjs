@@ -1,13 +1,13 @@
 import { seedPolishPreview } from "./polishFixture.mjs";
 
-export const fixtures = ["launcher", "single", "multi", "unknown", "empty", "loading", "error", "chat", "long", "settings", "settings-info", "picker", "voyage", "voyage-output", "voyage-thinking", "voyage-tool", "voyage-moored", "voyage-high", "authorization", "sidebar", "archive", "visual", "tool-spacing", "process-rows", "repeated-process", "process-folding", "process-actions", "file-discovery", "content-replay-a", "content-replay-b", "chat-polish-031"];
+export const fixtures = ["launcher", "single", "multi", "unknown", "empty", "loading", "error", "chat", "long", "settings", "settings-info", "picker", "voyage", "voyage-output", "voyage-thinking", "voyage-tool", "voyage-moored", "voyage-high", "authorization", "sidebar", "project-limit", "archive", "visual", "tool-spacing", "process-rows", "repeated-process", "process-folding", "process-actions", "file-discovery", "content-replay-a", "content-replay-b", "chat-polish-031"];
 
 // This entry runs only on the separate preview origin. It never uses real pi.
 export function preparePreview(target) {
 	const params = new URLSearchParams(target.location.search);
 	const fixture = params.get("fixture") || "launcher";
 	const storage = target.localStorage;
-	const preservedPreferences = params.get("persist") === "1" ? ["skiff.sidebar.width", "skiff.voyage.width", "skiff.sidebar.recent-expanded", "skiff.family-models.v1", "skiff.theme", "skiff.themeColor", "skiff.typography.v1", "skiff.test.metadata.v1", "skiff.settings.providers-view.v1"].map((key) => [key, storage.getItem(key)]).filter((entry) => entry[1] !== null) : [];
+	const preservedPreferences = params.get("persist") === "1" ? ["skiff.git-tree.columns.v1", "skiff.sidebar.width", "skiff.voyage.width", "skiff.sidebar.recent-expanded", "skiff.family-models.v1", "skiff.theme", "skiff.themeColor", "skiff.darkThemeColor", "skiff.themeStars", "skiff.typography.v1", "skiff.test.metadata.v1", "skiff.settings.providers-view.v1"].map((key) => [key, storage.getItem(key)]).filter((entry) => entry[1] !== null) : [];
 	for (let index = storage.length - 1; index >= 0; index--) {
 		const key = storage.key(index);
 		if (key?.startsWith("skiff.")) storage.removeItem(key);
@@ -21,16 +21,17 @@ export function preparePreview(target) {
 	const theme = params.get("theme") || storage.getItem("skiff.theme") || "system";
 	storage.setItem("skiff.theme", theme);
 	document.documentElement.dataset.theme = theme === "system" ? target.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light" : theme;
-	const themeColor = params.get("color") || storage.getItem("skiff.themeColor") || "default";
+	const themeColor = params.get("color") || storage.getItem("skiff.themeColor") || "yellow";
 	storage.setItem("skiff.themeColor", themeColor);
 	document.documentElement.dataset.themeColor = themeColor;
 	storage.setItem("skiff.sidebar.open", String(target.innerWidth > 760));
-	if (fixture === "sidebar") {
+	if (fixture === "sidebar" || fixture === "project-limit") {
 		const projects = [
 			{ id: "sidebar-skiff", name: "Skiff", path: "D:\\workspace\\Skiff" },
 			{ id: "sidebar-aiagent", name: "aiagent", path: "D:\\workspace\\aiagent" },
 			{ id: "sidebar-empty", name: "cc-switch", path: "D:\\workspace\\cc-switch" },
 		];
+		if (fixture === "project-limit") projects.push(...["api-portal", "workbuddy2api", "emptyForTest"].map((name) => ({ id: name, name, path: `D:\\workspace\\${name}` })));
 		const titles = ["固定模型配置弹窗尺寸", "实现009 UI系统加固需求", "澄清006范围与字段权威", "对比Skiff与cc-switch页面", "回应问候"];
 		const chats = projects.flatMap((project, projectIndex) => Array.from({ length: [22, 6, 0][projectIndex] }, (_, index) => ({
 			id: `${project.id}-chat-${index}`, projectId: project.id,

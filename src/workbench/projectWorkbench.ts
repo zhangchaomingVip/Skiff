@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { Project } from "../chat/workspace";
 
-export type WorkbenchTool = "chats" | "files" | "git";
+export type WorkbenchTool = "chats" | "files" | "git" | "git-tree";
 
 export interface DirectoryEntry {
 	name: string;
@@ -58,6 +58,18 @@ export interface GitWriteResult {
 	commit?: string;
 	changedPaths: string[];
 	version: string;
+	pushed?: boolean;
+	pushError?: string;
+}
+
+export function selectedChangeCounts(entries: GitEntry[], selected: string[]) {
+	const paths = new Set(selected);
+	const counts = { added: 0, modified: 0, deleted: 0, renamed: 0 };
+	for (const entry of entries) {
+		if (!paths.has(entry.path) || !entry.selectable || entry.kind === "conflict") continue;
+		counts[entry.kind === "untracked" ? "added" : entry.kind]++;
+	}
+	return counts;
 }
 
 export type PreviewMode = "file" | "diff";
@@ -72,6 +84,30 @@ export interface PreviewTab {
 }
 
 export const previewId = (projectId: string, path: string) => `${projectId}\0${path.replaceAll("\\", "/")}`;
+
+/** Convert tool paths to the project-relative paths accepted by file previews. */
+export function projectRelativePath(root: string, path: string): string | undefined {
+	const normalizedRoot = root.replaceAll("\\", "/").replace(/\/+$/, "");
+	let relative = path.replaceAll("\\", "/");
+	if (/^(?:[a-z]:|\/)/i.test(relative)) {
+		const prefix = `${normalizedRoot}/`;
+		const windows = /^(?:[a-z]:|\/\/)/i.test(normalizedRoot);
+		if (!(windows ? relative.toLowerCase().startsWith(prefix.toLowerCase()) : relative.startsWith(prefix))) return undefined;
+		relative = relative.slice(prefix.length);
+	}
+	const parts: string[] = [];
+	for (const part of relative.split("/")) {
+		if (!part || part === ".") continue;
+		if (part === "..") {
+			if (!parts.length) return undefined;
+			parts.pop();
+		} else {
+			if (/[:\0]/.test(part)) return undefined;
+			parts.push(part);
+		}
+	}
+	return parts.length ? parts.join("/") : undefined;
+}
 
 export function openPreviewTab(tabs: PreviewTab[], incoming: Omit<PreviewTab, "id">, limit = 3): { tabs: PreviewTab[]; activeId: string } {
 	const id = previewId(incoming.projectId, incoming.path);
@@ -93,5 +129,5 @@ export const listDirectory = (root: string, path = "") => invoke<DirectoryPage>(
 export const readFile = (root: string, path: string) => invoke<FilePreview>("read_project_file", { root, path });
 export const gitStatus = (root: string) => invoke<GitStatus>("get_project_git_status", { root });
 export const gitDiff = (root: string, path: string) => invoke<DiffPreview>("get_project_git_diff", { root, path });
-export const commitFiles = (root: string, paths: string[], message: string, expectedVersion: string) => invoke<GitWriteResult>("commit_project_files", { root, paths, message, expectedVersion });
+export const commitFiles = (root: string, paths: string[], message: string, expectedVersion: string, push = false) => invoke<GitWriteResult>("commit_project_files", { root, paths, message, expectedVersion, push });
 export const rollbackFiles = (root: string, paths: string[], expectedVersion: string) => invoke<GitWriteResult>("rollback_project_files", { root, paths, expectedVersion });

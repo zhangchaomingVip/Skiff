@@ -17,6 +17,8 @@ import { join } from "node:path";
 import { createRequire } from "node:module";
 import assert from "node:assert/strict";
 import { SKIFF_IDENTITY_PROMPT } from "../src/chat/prompt.ts";
+import { verifyGitTree } from "./git-tree.cdp.mjs";
+import { verifyGitCommit } from "./git-commit.cdp.mjs";
 
 const CDP_PORT = 9222;
 const MODEL_ID = "skiff-cdp-test";
@@ -254,6 +256,9 @@ try {
 		console.log(`模型测试 ${modelId}: ${result.ok ? "成功（有真实文本）" : result.error}`);
 	}
 
+	await verifyGitTree(page, root, artifacts);
+	await verifyGitCommit(page, root, artifacts);
+	assert.deepEqual(pageErrors, [], "No uncaught errors after Git Tree verification");
 	console.log(`\n验证通过：\n- mock 收到 ${requests.length} 次请求，model=${requests[0].model}，messages=${requests[0].messageCount}\n- 回复已渲染到真实窗口 DOM\n- 页面无未捕获异常\n- 截图：${shotPath}`);
 } catch (error) {
 	await writeArtifacts();

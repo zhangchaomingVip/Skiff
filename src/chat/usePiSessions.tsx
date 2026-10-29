@@ -100,6 +100,12 @@ export function usePiSessions(activeId: string | undefined, chats: Conversation[
 		const runtime = sessions.get(sessionKey(target));
 		return runtime && (runtime.pending || runtime.state.isStreaming || !!runtime.state.activeRun);
 	}).map(({ target }) => target.id));
+	// File-change refreshes follow actual agent runs, not model selection or
+	// other pending configuration requests that also lock the conversation UI.
+	const agentRunningIds = new Set(opened.filter(({ target }) => {
+		const runtime = sessions.get(sessionKey(target));
+		return runtime && (runtime.state.isStreaming || !!runtime.state.activeRun);
+	}).map(({ target }) => target.id));
 	const statuses = new Map(opened.flatMap(({ target }) => {
 		const runtime = sessions.get(sessionKey(target));
 		return runtime?.isCurrent() ? [[target.id, conversationStatus({ needsConfirmation: runtime.needsConfirmation, error: runtime.state.lastError, running: runningIds.has(target.id) })] as const] : [];
@@ -111,5 +117,5 @@ export function usePiSessions(activeId: string | undefined, chats: Conversation[
 		return !runtime || (!runtime.loading && runtime.canNavigate());
 	};
 	const runtimes = opened.map(({ chat, target }) => <SessionRuntime key={sessionKey(target)} target={target} chat={chat} offers={offers} configuration={configuration} report={report} updateChat={update} />);
-	return { session, runtimes, runningIds, statuses, messages, canClose };
+	return { session, runtimes, runningIds, agentRunningIds, statuses, messages, canClose };
 }

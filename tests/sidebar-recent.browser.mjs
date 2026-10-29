@@ -20,10 +20,29 @@ try {
 		const expected = ["同项目候选", "其他项目会话", "当前会话"];
 		assert.deepEqual(await recentTitles(), expected, "Expanded projects retain every recent chat in timestamp order");
 		assert.equal(await page.locator(".project-chats .chat-row").count(), 3);
+		const assertCurrentRow = async (container, title) => {
+			assert.equal(await page.locator(".sidebar .chat-row.selected").count(), 1, "Only one occurrence of the current chat is highlighted");
+			assert.equal(await page.locator('.sidebar .chat-link[aria-current="page"]').count(), 1);
+			assert.equal((await container.locator(".chat-row.selected .chat-title").textContent()).split(" · ")[0], title);
+		};
+		const projectChats = page.locator(".project-chats");
+		await assertCurrentRow(projectChats, "当前会话");
+		await recent.locator(".chat-row").filter({ hasText: "当前会话" }).locator(".chat-link").click();
+		await assertCurrentRow(recent, "当前会话");
+		await projectChats.locator(".chat-row").filter({ hasText: "当前会话" }).locator(".chat-link").click();
+		await assertCurrentRow(projectChats, "当前会话");
+		await recent.locator(".chat-row").filter({ hasText: "同项目候选" }).locator(".chat-link").click();
+		await assertCurrentRow(recent, "同项目候选");
+		await projectChats.locator(".chat-row").filter({ hasText: "同项目候选" }).click({ button: "right" });
+		await page.getByRole("menu").getByRole("button", { name: "打开", exact: true }).click();
+		await assertCurrentRow(projectChats, "同项目候选");
+		await page.mouse.move(1000, 500);
+		await page.screenshot({ path: `dist/sidebar-single-highlight-${theme}.png` });
 
 		const projectsToggle = page.getByRole("button", { name: "项目", exact: true });
 		await projectsToggle.click();
 		await page.locator(".project-group").first().waitFor({ state: "detached" });
+		await assertCurrentRow(recent, "同项目候选");
 		assert.deepEqual(await recentTitles(), expected, "Collapsing the project section does not change recent chats");
 		await projectsToggle.click();
 		await page.locator(".project-group").first().waitFor();
@@ -41,6 +60,7 @@ try {
 		const recentToggle = recent.getByRole("button", { name: "最近", exact: true });
 		await recentToggle.click();
 		await recent.locator(".chat-row").first().waitFor({ state: "detached" });
+		await assertCurrentRow(projectChats, "同项目候选");
 		assert.equal(await page.locator(".project-chats .chat-row").count(), 3, "Recent collapse does not affect project rows");
 		await recentToggle.click();
 		await recent.locator(".chat-row").first().waitFor();
@@ -66,7 +86,7 @@ try {
 		assert.deepEqual(await recentTitles(), ["其他项目会话", "当前会话"], "Archiving removes the chat from both views");
 		await page.screenshot({ path: `dist/sidebar-recent-${theme}.png` });
 		assert.deepEqual(errors, []);
-		console.log(`PASS ${theme}: independent project/recent expansion, ordering, rename, shared selection and archive`);
+		console.log(`PASS ${theme}: single current-chat highlight, click/context-menu selection, collapse fallback, independent project/recent expansion, ordering, rename, shared bulk selection and archive`);
 		await page.close();
 	}
 } finally {
