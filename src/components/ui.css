@@ -71,7 +71,8 @@
 	.ui-segmented .ui-button[aria-pressed=true] { background: var(--surface); color: var(--accent); box-shadow: var(--shadow-xs); }
 	.ui-tooltip-wrap { display: inline-flex; position: relative; }
 	/* A solid dark bubble reads as a hint; a bordered surface bubble reads as a control. */
-	.ui-tooltip { pointer-events: none; opacity: 0; position: absolute; z-index: 50; top: calc(100% + 4px); right: 0; width: max-content; max-width: 220px; padding: var(--space-1) var(--space-2); border-radius: var(--radius-md); background: var(--tooltip-bg); color: var(--tooltip-text); box-shadow: var(--shadow-elevation-2); font-size: var(--font-size-sm); }
+	/* A hairline highlight keeps the bubble's edge readable over dark backdrops. */
+	.ui-tooltip { pointer-events: none; opacity: 0; position: absolute; z-index: 50; top: calc(100% + 4px); right: 0; width: max-content; max-width: 220px; padding: var(--space-1) var(--space-2); border: 1px solid var(--tooltip-border); border-radius: var(--radius-md); background: var(--tooltip-bg); color: var(--tooltip-text); box-shadow: var(--shadow-elevation-2); font-size: var(--font-size-sm); }
 	.ui-tooltip-wrap:hover .ui-tooltip, .ui-tooltip-wrap:has(:focus-visible) .ui-tooltip { opacity: 1; }
 	.ui-tooltip[data-align=start] { left: 0; right: auto; }
 	/* Sideways variant for vertical rails: it clears the neighbouring buttons. */

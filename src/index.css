@@ -39,8 +39,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .file-workspace-empty h1 { margin: 0; color: var(--text); font-size: var(--font-size-lg); font-weight: var(--font-weight-medium); }
 .file-workspace-empty p { margin: 0; color: var(--secondary); font-size: var(--font-size-base); }
 .file-workspace-project { max-width: 100%; margin-top: var(--space-3); font-size: var(--font-size-sm); overflow-wrap: anywhere; }
-/* One viewport-aligned star field across the shell; it never intercepts input. */
-[data-theme="dark"]:is([data-dark-theme-color="star-black"], [data-dark-theme-color="star-blue"]) :is(.app-body, .workbench-shell, .workspace, .titlebar, .activity-bar, .sidebar, .workbench-panel) { background-attachment: fixed; background-size: 1440px 960px, cover; }
+/* One viewport-aligned star field across the shell; it never intercepts input.
+   Every star surface leads with its dimming scrim, so the field is the second layer. */
+[data-theme="dark"]:is([data-dark-theme-color="star-black"], [data-dark-theme-color="star-blue"]) :is(.app-body, .workbench-shell, .workspace, .titlebar, .activity-bar, .sidebar, .workbench-panel, .git-tree-workspace, .voyage-rail) { background-attachment: fixed; background-size: cover, 1440px 960px, cover; }
 .titlebar { flex: 0 0 40px; height: 40px; display: flex; align-items: stretch; background: var(--app-backdrop); }
 /* The corner holds only the mark, in a box exactly as wide as the activity rail, so
    the logo and the 💬/📁/Git column share one vertical axis by construction. */
@@ -353,7 +354,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .msg-body { display: flex; flex-direction: column; gap: var(--chat-block-gap); width: 100%; max-width: var(--chat-content-width); min-width: 0; overflow-wrap: anywhere; line-height: 1.7; font-size: var(--font-size-chat); }
 .msg-body > * { margin-block: 0; }
 .msg .table-scroll { width: 100%; max-width: 100%; margin-right: 0; }
-.msg.user .message-bubble { width: fit-content; max-width: 72%; margin-left: auto; background: var(--bubble-bg); border-color: transparent; border-radius: var(--radius-2xl); }
+.msg.user .message-bubble { width: fit-content; max-width: 72%; margin-left: auto; background: var(--bubble-bg); border-color: var(--user-bubble-border); border-radius: var(--radius-2xl); }
 .msg.user .msg-body { width: auto; max-width: 100%; padding: 0; line-height: 1.6; }
 .msg.assistant .msg-body { padding: 0; font-size: var(--font-size-chat); line-height: 1.65; }
 .typing { color: var(--muted); }
@@ -450,7 +451,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 
 /* Floating composer */
 .composer-wrap { width: 100%; padding: var(--space-3) var(--chat-gutter) var(--space-2); flex-shrink: 0; }
-.composer:focus-within { border-color: color-mix(in srgb, var(--accent) 42%, var(--border)); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 8%, transparent), var(--shadow-xs); }
+.composer:focus-within { border-color: color-mix(in srgb, var(--accent) 42%, var(--border)); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 8%, transparent), var(--composer-shadow); }
 .composer-input { display: block; width: 100%; min-height: 36px; max-height: 200px; resize: none; padding: var(--space-0-5) var(--space-1) var(--space-2); background: transparent; color: var(--text); border: none; font: inherit; line-height: 1.65; outline: none; scrollbar-width: none; }
 .composer-input::-webkit-scrollbar { display: none; }
 .composer-input::placeholder { color: var(--secondary); }
@@ -817,7 +818,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 
 /* Search, shortcuts and compact input */
 /* The composer is the quiet frame; the send button carries the primary emphasis. */
-.composer { max-width: var(--chat-content-width); margin: 0 auto; display: flex; flex-direction: column; min-height: 92px; background: var(--surface); border: 1px solid color-mix(in srgb, var(--border) 72%, transparent); border-radius: var(--radius-xl); padding: var(--space-2) var(--space-4) var(--space-3); position: relative; box-shadow: var(--shadow-xs); transition: border-color var(--transition-fast), box-shadow var(--transition-fast); }
+.composer { max-width: var(--chat-content-width); margin: 0 auto; display: flex; flex-direction: column; min-height: 92px; background: var(--composer-bg); border: 1px solid var(--composer-border); border-radius: var(--radius-xl); padding: var(--space-2) var(--space-4) var(--space-3); position: relative; box-shadow: var(--composer-shadow); transition: border-color var(--transition-fast), box-shadow var(--transition-fast); }
 .composer .composer-bottom { margin-top: auto; }
 .composer-menu { position: absolute; bottom: calc(100% + 8px); left: 0; right: 0; max-height: 240px; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius-md); padding: 8px; background: var(--bg); box-shadow: 0 8px 28px var(--shadow-color); z-index: 5; }
 .composer-menu button { width: 100%; display: flex; flex-direction: column; text-align: left; padding: 8px 12px; gap: 3px; border: 0; background: transparent; border-radius: var(--radius-sm); }
@@ -1570,9 +1571,10 @@ span.provider-mark.generic { display: inline-flex; align-items: center; justify-
 
 @layer accessibility {
 .titlebar-menu .ui-button:disabled { border-color: transparent; background: transparent; color: var(--muted); }
-/* An idle send button is a quiet grey dot, not an outlined empty target: it only
-   turns into the filled primary action once there is something to send. */
-.composer-actions .ui-icon-button.send-btn:disabled { border-color: transparent; background: var(--hover); color: color-mix(in srgb, var(--muted) 55%, transparent); box-shadow: none; }
+/* An idle send button is a quiet translucent dot, not an outlined empty target: it only
+   turns into the filled primary action once there is something to send. The tint is ink
+   rather than a solid grey, so it stays clean over a deeply tinted composer. */
+.composer-actions .ui-icon-button.send-btn:disabled { border-color: transparent; background: color-mix(in srgb, var(--text) 8%, transparent); color: var(--muted); box-shadow: none; }
 /* The composer's inner pills are frameless, so a disabled one must not inherit
    the global disabled outline either. */
 .composer .composer-context .ui-button:disabled { border-color: transparent; background: transparent; color: var(--color-text-disabled); }
@@ -1621,10 +1623,12 @@ span.provider-mark.generic { display: inline-flex; align-items: center; justify-
 .composer .composer-context .ui-icon-button { width: var(--control-regular); }
 .composer .composer-context .ui-button.active, .composer .composer-context .ui-button[aria-pressed=true] { border-color: transparent; background: color-mix(in srgb, var(--accent) 10%, transparent); color: var(--secondary); box-shadow: none; }
 .composer .composer-context .ui-button.active:hover:not(:disabled), .composer .composer-context .ui-button[aria-pressed=true]:hover:not(:disabled) { border-color: transparent; background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--secondary); }
-/* Preserve the time's layout slot while revealing it on hover, focus or details. */
+/* Preserve the time's layout slot while revealing it on hover, focus or details.
+   Hiding with visibility as well keeps the clock from leaving a faint painted
+   afterimage over the dark starfield while the row is at rest. */
 @media (hover: hover) {
-	.msg.assistant .usage-time { opacity: 0; pointer-events: none; transition: opacity var(--transition-fast); }
-	.assistant-reply:hover .usage-time, .assistant-reply:focus-within .usage-time, .msg.assistant .turn-usage[data-open=true] .usage-time { opacity: 1; pointer-events: auto; }
+	.msg.assistant .usage-time { visibility: hidden; opacity: 0; pointer-events: none; }
+	.assistant-reply:hover .usage-time, .assistant-reply:focus-within .usage-time, .msg.assistant .turn-usage[data-open=true] .usage-time { visibility: visible; opacity: 1; pointer-events: auto; }
 }
 }
 

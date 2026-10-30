@@ -70,6 +70,13 @@
 		--gauge-track: var(--boundary);
 		--bubble-bg: var(--panel);
 		--bubble-border: var(--boundary);
+		/* A user bubble sits directly on the backdrop; its edge is theme-controlled so it
+		   can be outlined only where the backdrop would otherwise swallow it. */
+		--user-bubble-border: transparent;
+		/* The composer floats over the backdrop, so its fill, edge and lift are theme-controlled. */
+		--composer-bg: var(--surface);
+		--composer-border: color-mix(in srgb, var(--border) 72%, transparent);
+		--composer-shadow: var(--shadow-xs);
 		--disabled-text: var(--muted);
 		--font-weight-regular: 400;
 		--font-weight-medium: 500;
@@ -129,6 +136,7 @@
 		/* Hover hints are always a dark solid bubble, so they never read as controls. */
 		--tooltip-bg: #23272e;
 		--tooltip-text: #f2f4f8;
+		--tooltip-border: rgba(255, 255, 255, .12);
 		--danger: var(--color-error);
 		--error-bg: #2a1a1a;
 		--selection: #3d568a;
@@ -377,9 +385,17 @@
 		--sidebar-selected: #343440;
 		--selected: #343440;
 		--selection: #454d73;
-		--workspace-backdrop: var(--starfield), linear-gradient(145deg, #1b1c25, #20212c);
-		--sidebar-backdrop: var(--starfield), linear-gradient(180deg, #20212b, #1c1d27);
-		--app-backdrop: var(--starfield), linear-gradient(135deg, #14151d, #1c1d27);
+		/* The first layer sits above the starfield and dims every star to a quiet glow
+		   without repainting the SVG; its stops mirror the base gradient, so the hue stays
+		   identical. Reading and list surfaces carry a heavier scrim than the chrome, so
+		   dense copy and the occasional large sparkle never compete with the text. */
+		--workspace-backdrop: linear-gradient(145deg, rgb(27 28 37 / 68%), rgb(32 33 44 / 68%)), var(--starfield), linear-gradient(145deg, #1b1c25, #20212c);
+		--sidebar-backdrop: linear-gradient(180deg, rgb(32 33 43 / 68%), rgb(28 29 39 / 68%)), var(--starfield), linear-gradient(180deg, #20212b, #1c1d27);
+		--app-backdrop: linear-gradient(135deg, rgb(20 21 29 / 58%), rgb(28 29 39 / 58%)), var(--starfield), linear-gradient(135deg, #14151d, #1c1d27);
+		--composer-bg: #121320;
+		--composer-border: color-mix(in srgb, var(--color-border-light) 32%, var(--border));
+		--composer-shadow: 0 8px 24px rgb(2 5 14 / 45%), inset 0 1px 0 rgb(255 255 255 / 6%);
+		--user-bubble-border: color-mix(in srgb, var(--text) 8%, transparent);
 	}
 
 	[data-theme="dark"][data-dark-theme-color="star-blue"] {
@@ -401,9 +417,14 @@
 		--sidebar-selected: #304569;
 		--selected: #304569;
 		--selection: #405e8b;
-		--workspace-backdrop: var(--starfield), linear-gradient(145deg, #14213b, #20385f);
-		--sidebar-backdrop: var(--starfield), linear-gradient(180deg, #1c2b45, #192840);
-		--app-backdrop: var(--starfield), linear-gradient(135deg, #111b33, #1a2a48);
+		/* Same scrim trick as star-black; see the note above. */
+		--workspace-backdrop: linear-gradient(145deg, rgb(20 33 59 / 68%), rgb(32 56 95 / 68%)), var(--starfield), linear-gradient(145deg, #14213b, #20385f);
+		--sidebar-backdrop: linear-gradient(180deg, rgb(28 43 69 / 68%), rgb(25 40 64 / 68%)), var(--starfield), linear-gradient(180deg, #1c2b45, #192840);
+		--app-backdrop: linear-gradient(135deg, rgb(17 27 51 / 58%), rgb(26 42 72 / 58%)), var(--starfield), linear-gradient(135deg, #111b33, #1a2a48);
+		--composer-bg: #121e36;
+		--composer-border: color-mix(in srgb, var(--color-border-light) 32%, var(--border));
+		--composer-shadow: 0 8px 24px rgb(4 9 20 / 45%), inset 0 1px 0 rgb(255 255 255 / 6%);
+		--user-bubble-border: color-mix(in srgb, var(--text) 8%, transparent);
 	}
 
 	[data-theme="dark"]:is([data-dark-theme-color="star-black"], [data-dark-theme-color="star-blue"]) {

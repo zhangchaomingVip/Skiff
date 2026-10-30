@@ -28,7 +28,7 @@
 .voyage-expand { color: var(--muted); font-size: var(--font-size-xl); line-height: 1; }
 
 /* Fixed instrument rail. */
-.voyage-rail { --voyage-progress: var(--accent); min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow-y: auto; border-left: 1px solid var(--border); background: var(--panel-2); font-variant-numeric: tabular-nums; }
+.voyage-rail { --voyage-progress: var(--accent); min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow-y: auto; border-left: 1px solid var(--border); background: var(--sidebar-backdrop); font-variant-numeric: tabular-nums; }
 .voyage-rail.voyage-warning { --voyage-progress: color-mix(in srgb, var(--color-warning) 70%, var(--danger) 30%); }
 .voyage-rail.voyage-critical { --voyage-progress: var(--danger); }
 .voyage-rail.expanded { padding: 16px 12px 14px; }
@@ -127,7 +127,8 @@
 @media (max-width: 600px) { .voyage-summary { gap: 8px; flex-wrap: wrap; } .voyage-status { flex-basis: auto; } .voyage-speed { min-width: auto; } .voyage-distance { min-width: auto; } .voyage-distance small, .voyage-route > .voyage-anchor, .voyage-route > .voyage-flag { display: none; } }
 @media (prefers-reduced-motion: reduce) { .voyage *, .voyage-rail * { animation: none !important; transition: none !important; } }
 
-@media (max-width: 760px) { .voyage-dialog { width: min(380px, calc(100vw - 24px)); } .voyage-dialog .voyage-rail { border: 0; background: transparent; } }
+/* The narrow-screen dialog draws its own surface, so its rail must not paint a backdrop. */
+@media (max-width: 760px) { .voyage-dialog { width: min(380px, calc(100vw - 24px)); } .voyage-dialog .voyage-rail.expanded { border: 0; background: transparent; } }
 
 }
 
@@ -135,10 +136,12 @@
 @layer pages {
 	.chat-and-rail { grid-template-columns: minmax(0, 1fr); }
 	.chat-and-rail.rail-expanded { grid-template-columns: minmax(360px, 1fr) 8px minmax(0, var(--voyage-width, 260px)); }
-	.voyage-rail.expanded { padding: 0; overflow-y: auto; overflow-x: hidden; background: var(--bg); }
-	.voyage-dashboard { position: relative; width: 100%; min-width: 0; min-height: 100%; padding: 16px; color: var(--text); font-size: var(--font-size-sm); }
-	.voyage-dashboard-header { margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid color-mix(in srgb, var(--border) 65%, transparent); }
-	.voyage-dashboard-header h1 { margin: 0; font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold); letter-spacing: .5px; }
+	.voyage-rail.expanded { padding: 0; overflow-y: auto; overflow-x: hidden; background: var(--sidebar-backdrop); }
+	.voyage-dashboard { position: relative; width: 100%; min-width: 0; min-height: 100%; padding: 0 16px 16px; color: var(--text); font-size: var(--font-size-sm); }
+	/* The rail header is the third cell of the shell's top row: a 52px band puts its
+	   centre on the sidebar brand and the chat title, and no rule runs across it. */
+	.voyage-dashboard-header { min-height: 52px; margin-bottom: 16px; }
+	.voyage-dashboard-header h1 { margin: 0; font-size: var(--font-size-md); font-weight: var(--font-weight-semibold); }
 	.voyage-dashboard-header .voyage-pill { align-self: center; margin-top: 0; }
 	.voyage-status-pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border: 1px solid var(--border); border-radius: var(--radius-full); color: var(--secondary); font-size: var(--font-size-sm); }
 	.voyage-status-dot { display: inline-block; width: 6px; height: 6px; flex: none; border-radius: var(--radius-full); background: var(--accent); }
