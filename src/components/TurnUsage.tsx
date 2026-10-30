@@ -6,7 +6,7 @@ import { useModelFamily } from "../chat/familyContext";
 import { Popover } from "./ui";
 import { Icon } from "./Icon";
 
-/** Quiet completion footer: copy, cost then usage sit on one row; usage opens a grouped panel. */
+/** Icon-only message details; accounting stays inside the grouped panel. */
 export function TurnUsage({ message, messages }: { message: ChatMessage; messages?: ChatMessage[] }) {
 	const { pricingModels, models, current } = useModelFamily();
 	const usage = useMemo(() => summarizeUsage(messages ?? [message]), [messages, message]);
@@ -21,6 +21,9 @@ export function TurnUsage({ message, messages }: { message: ChatMessage; message
 	const modelName = snapshot?.modelId ?? routeModel?.modelId ?? routeMessage.model ?? routeModel?.id ?? "未知模型";
 	const relayName = snapshot?.relayName ?? routeModel?.providerName ?? routeMessage.provider ?? routeModel?.provider ?? "未知渠道";
 	const account = snapshot ? snapshot.billingAccountId : routeModel?.billingAccountId;
+	const relayLabel = `${relayName}${account?.trim() ? ` · 账户${account.trim()}` : ""}`;
+	const modelCharacters = Array.from(modelName);
+	const abbreviateModel = modelCharacters.length > 30;
 	const preciseCost = formatCosts(cost, 6);
 	const amount = formatCosts(cost, 4);
 	const hitRate = (usage.hitRate * 100).toFixed(1);
@@ -38,10 +41,9 @@ export function TurnUsage({ message, messages }: { message: ChatMessage; message
 		clearTimeout(copyTimer.current);
 		copyTimer.current = setTimeout(() => setCopyStatus(""), 2000);
 	};
-	return <div className="turn-usage">
-		{amount !== "—" && <span className="usage-amount" title={preciseCost === "—" ? costTooltip(cost) : `精确费用 ${preciseCost}`}>{amount}</span>}
-		<button type="button" ref={trigger} className="usage-trigger" aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? panelId : undefined} onClick={() => setOpen((value) => !value)}><Icon name="tokens" size={13} />{hasUsage ? `用量 ${formatTokens(usage.total)} tok` : "消息详情"}</button>
-		{open && <Popover anchor={trigger} onClose={close} id={panelId} className="usage-popover" gap={4} aria-label={hasUsage ? "本轮 Token 消耗明细" : "消息详情"}>
+	return <div className="turn-usage" data-open={open || undefined}>
+		<button type="button" ref={trigger} className="usage-trigger" aria-label={hasUsage ? `消息详情（本轮用量 ${formatTokens(usage.total)} tok）` : "消息详情"} title="消息详情" aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? panelId : undefined} onClick={() => setOpen((value) => !value)}><Icon name="more" size={16} /></button>
+		{open && <Popover anchor={trigger} onClose={close} id={panelId} className="usage-popover" gap={6} aria-label={hasUsage ? "本轮 Token 消耗明细" : "消息详情"}>
 			<section className="usage-group usage-turn">
 				<p className="usage-group-head"><span>本轮用量</span><b>{hasUsage ? `${formatTokens(usage.total)} tok` : "未记录"}</b></p>
 				{hasUsage && <dl className="usage-metrics">
@@ -52,8 +54,9 @@ export function TurnUsage({ message, messages }: { message: ChatMessage; message
 			</section>
 			<section className="usage-group usage-system">
 				<dl className="usage-metrics">
-					<div className="usage-metric"><dt>模型名称</dt><dd><button type="button" className="usage-model" title={`完整线路：${relayName} · ${modelName} · ${account?.trim() ? `账户${account.trim()}` : "未知账户"}`} aria-label={`复制模型名 ${modelName}`} onClick={() => void copy(modelName, "模型名")}><span className="usage-model-label"><span className="usage-relay">{relayName}</span> · {modelName}</span></button></dd></div>
-					<div className="usage-metric"><dt>预估费用</dt><dd><button type="button" className="usage-cost" title={preciseCost === "—" ? costTooltip(cost) : `精确费用 ${preciseCost}（按 6 位原始值）`} aria-label={preciseCost === "—" ? costTooltip(cost) : "复制费用"} disabled={preciseCost === "—"} onClick={() => void copy(preciseCost, "费用")}>{preciseCost === "—" ? costTooltip(cost) : amount}</button></dd></div>
+					<div className="usage-metric"><dt>渠道</dt><dd><span className="usage-relay" title={relayLabel}>{relayLabel}</span></dd></div>
+					<div className="usage-metric"><dt>模型</dt><dd><button type="button" className="usage-model" title={modelName} aria-label={`复制模型名 ${modelName}`} onClick={() => void copy(modelName, "模型名")}><span className={`usage-model-label${abbreviateModel ? " is-truncated" : ""}`}>{abbreviateModel ? <><span className="usage-model-head">{modelCharacters.slice(0, 16).join("")}</span><span>…</span><span className="usage-model-tail">{modelCharacters.slice(-13).join("")}</span></> : modelName}</span>{copyStatus === "模型名已复制" && <Icon name="check" size={14} />}</button></dd></div>
+					<div className="usage-metric"><dt>费用</dt><dd><button type="button" className="usage-cost" title={preciseCost === "—" ? costTooltip(cost) : `精确费用 ${preciseCost}（按 6 位原始值）`} aria-label={preciseCost === "—" ? costTooltip(cost) : "复制费用"} disabled={preciseCost === "—"} onClick={() => void copy(preciseCost, "费用")}>{preciseCost === "—" ? costTooltip(cost) : amount}{copyStatus === "费用已复制" && <Icon name="check" size={14} />}</button></dd></div>
 				</dl>
 			</section>
 		</Popover>}

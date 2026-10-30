@@ -3,7 +3,7 @@ import test from "node:test";
 import { reduce } from "../src/chat/reducer.ts";
 import { initialSessionState } from "../src/chat/types.ts";
 import { DialogRuntime, extensionDialog, queueSize } from "../src/chat/interactions.ts";
-import { prepareDraft, persistedAttachmentBytes, type DraftRecord } from "../src/chat/drafts.ts";
+import { draftLimits, prepareDraft, persistedAttachmentBytes, type DraftRecord } from "../src/chat/drafts.ts";
 
 test("routine completion notifications stay quiet while extension warnings and errors remain visible", () => {
 	let state = initialSessionState;
@@ -113,12 +113,12 @@ test("generation disposal prevents old dialog ids from being sent", async () => 
 	assert.equal(await runtime.reply("old", { value: "late" }), false); await runtime.cancelAll(); assert.equal(writes, 0);
 });
 
-test("edit previous draft attachments share the same persistence capacity and quota fallback", () => {
+test("edit previous draft shares identical content without double charging storage", () => {
 	const image = { id: "image", name: "image", kind: "image" as const, body: "x".repeat(700000), bytes: 700000 };
 	const draft: DraftRecord = { chatId: "c", cwd: "d", revision: 1, text: "edit", attachments: [image], edit: { target: { chatId: "c", version: "v", fingerprint: "f", query: "", occurrence: 0, occurrences: 1 }, branchVersion: "v", previous: { text: "normal", attachments: [image] } } };
-	const prepared = prepareDraft(draft, 20 * 1024 * 1024 - 1000000);
-	assert.ok(prepared.attachments[0].body); assert.equal(prepared.edit?.previous.attachments[0].body, undefined);
-	assert.ok(persistedAttachmentBytes(prepared) < 1000000);
+	const prepared = prepareDraft(draft, draftLimits.total - 525000);
+	assert.ok(prepared.attachments[0].body); assert.equal(prepared.edit?.previous.attachments[0].body, image.body);
+	assert.equal(persistedAttachmentBytes(prepared), 525000);
 	const fallback = prepareDraft(draft, 0, true);
 	assert.equal(fallback.attachments[0].body, undefined); assert.equal(fallback.edit?.previous.attachments[0].body, undefined);
 	assert.equal(fallback.edit?.previous.text, "normal");

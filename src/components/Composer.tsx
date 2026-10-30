@@ -1,5 +1,5 @@
 import type { Delivery } from "../chat/interactions";
-import { TextArea, IconButton } from "./ui";
+import { TextArea, IconButton, Button } from "./ui";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import type { ImageAttachment, ModelInfo } from "../chat/types";
 import { readImages } from "../chat/images";
@@ -9,6 +9,7 @@ import { ModelMenu } from "./ModelMenu";
 import { ReasoningChip } from "./ReasoningChip";
 import { Icon } from "./Icon";
 import type { PiCommand } from "../chat/usePiSession";
+import type { DraftAttachment } from "../chat/drafts";
 
 const IMAGE_CAPABILITY_ERROR = "当前模型未启用图片输入，请在模型配置中确认视觉能力或切换模型。";
 
@@ -37,7 +38,11 @@ export function Composer({
 	getCommands,
 	onAttachmentsChange,
 	recoveryNotice,
+	missingAttachments = [],
+	onRemoveMissing,
 }: {
+	missingAttachments?: Pick<DraftAttachment, "id" | "name">[];
+	onRemoveMissing?: (id: string) => void;
 	recoveryNotice?: string;
 	disabled: boolean;
 	streaming: boolean;
@@ -60,19 +65,20 @@ export function Composer({
 	editing: boolean;
 	onCancelEdit: () => void;
 	getCommands: () => Promise<PiCommand[]>;
-	onAttachmentsChange?: (images: ImageAttachment[], files: TextAttachment[]) => void;
+	onAttachmentsChange?: (images: ImageAttachment[], files: TextAttachment[], replacementId?: string) => void;
 }) {
 	const inputRef = useRef<HTMLTextAreaElement>(null);
 	const sendingRef = useRef(false);
 	const textRef = useRef(text);
 	textRef.current = text;
 	const fileRef = useRef<HTMLInputElement>(null);
+	const replacementRef = useRef<string>();
 	const [images, setImages] = useState<ImageAttachment[]>([]);
 	const [files, setFiles] = useState<TextAttachment[]>([]);
 	const attachmentsRef = useRef({ images, files }); attachmentsRef.current = { images, files };
-	const updateAttachments = (nextImages: ImageAttachment[], nextFiles: TextAttachment[]) => {
+	const updateAttachments = (nextImages: ImageAttachment[], nextFiles: TextAttachment[], replacementId?: string) => {
 		attachmentsRef.current = { images: nextImages, files: nextFiles };
-		setImages(nextImages); setFiles(nextFiles); onAttachmentsChange?.(nextImages, nextFiles);
+		setImages(nextImages); setFiles(nextFiles); onAttachmentsChange?.(nextImages, nextFiles, replacementId);
 	};
 	const [commands, setCommands] = useState<{ name: string; description?: string }[]>([]);
 	const [commandError, setCommandError] = useState(false);
@@ -101,14 +107,16 @@ export function Composer({
 	const canUseImages = model?.input?.includes("image") ?? false;
 	const hasContent = !!text.trim() || images.length > 0 || files.length > 0;
 	useEffect(() => { setImageError(undefined); }, [model?.provider, model?.id, canUseImages]);
-	const addAttachments = async (selected: File[]) => {
+	const pickAttachments = (replacementId?: string) => { replacementRef.current = replacementId; fileRef.current?.click(); };
+	const addAttachments = async (selected: File[], replacementId?: string) => {
 		if (!selected.length || addingRef.current || sendingRef.current ) return;
 		addingRef.current = true; setReading(true); setImageError(undefined);
 		try {
+			if (replacementId && selected.length !== 1) throw new Error("请为需要重新添加的附件选择一个文件。");
 			const imageFiles = selected.filter((file) => !isWordFile(file) && file.type.startsWith("image/"));
 			const textFiles = selected.filter((file) => isWordFile(file) || !file.type.startsWith("image/"));
 			const [addedImages, addedFiles] = await Promise.all([readImages(imageFiles, images.length), readTextFiles(textFiles, files.length)]);
-			updateAttachments([...attachmentsRef.current.images, ...addedImages], [...attachmentsRef.current.files, ...addedFiles]);
+			updateAttachments([...attachmentsRef.current.images, ...addedImages], [...attachmentsRef.current.files, ...addedFiles], replacementId);
 		}
 		catch (error) { setImageError(error instanceof Error ? error.message : String(error)); }
 		finally { addingRef.current = false; setReading(false); }
@@ -122,7 +130,7 @@ export function Composer({
 
 	const submit = async () => {
 		const trimmed = text.trim();
-		if ((!trimmed && !images.length && !files.length) || disabled || sendingRef.current || reading) return;
+		if ((!trimmed && !images.length && !files.length) || disabled || missingAttachments.length > 0 || sendingRef.current || reading) return;
 		if (images.length && !canUseImages) { setImageError(IMAGE_CAPABILITY_ERROR); return; }
 		sendingRef.current = true;
 		const sentIds = new Set(images.map((image) => image.id));
@@ -154,6 +162,7 @@ export function Composer({
 		<div className="composer-wrap"><div className="composer" onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); void addAttachments(Array.from(event.dataTransfer.files)); }}>
 			{editing && <div className="editing-banner">编辑提问 · 发送后替换本轮及后续消息<button disabled={disabled || reading || sendingRef.current} onClick={onCancelEdit} aria-label="取消编辑"><Icon name="close" size={14} /></button></div>}
 			{recoveryNotice && <span className="draft-restored" role="status" aria-live="polite">{recoveryNotice}</span>}
+			{missingAttachments.map((item) => <div className="draft-notice" key={item.id}><span>{item.name} · 需要重新添加</span><Button variant="ghost" disabled={disabled || reading || sendingRef.current} aria-label={`重新添加 ${item.name}`} onClick={() => pickAttachments(item.id)}>重新添加</Button><Button variant="ghost" disabled={disabled || reading || sendingRef.current} aria-label={`移除缺失附件 ${item.name}`} onClick={() => onRemoveMissing?.(item.id)}>移除</Button></div>)}
 			{menuOpen && <div className="composer-menu" aria-label={slash ? "命令面板" : "文件引用"}>
 				{slash ? <>{options.map((command, index) => <button key={command.name} className={index === activeOption ? "focused" : ""} onClick={() => { onTextChange(`/${command.name} `); inputRef.current?.focus(); }} aria-label={`使用命令 ${command.name}`}><strong>/{command.name}</strong><span>{command.description}</span></button>)}{!options.length && <p>{commandError ? "无法读取 pi 命令，请重新连接后重试" : "暂无匹配命令"}</p>}</> : <p>输入项目相对路径，按 Enter 引用。<br />例如 @src/App.tsx · 外部文件可通过 + 添加文本或 Word 文件。</p>}
 			</div>}
@@ -172,13 +181,13 @@ export function Composer({
 				onKeyDown={onKeyDown}
 				onPaste={(event) => { const selected = Array.from(event.clipboardData.files); if (selected.length) { event.preventDefault(); void addAttachments(selected); } }}
 			/>
-			<div className="composer-bottom"><span className="composer-context"><IconButton  onClick={() => fileRef.current?.click()} disabled={disabled || reading || sendingRef.current} aria-label="添加图片、文本或 Word 文件" title="添加图片、UTF-8 文本或 Word（.docx）文件（支持拖放或粘贴）；Word 提取正文，单个最大 10 MiB"><Icon name="plus" size={20} /></IconButton><ModelMenu models={models} model={model} onModel={onSelectModel} disabled={!connected || modelDisabled} /><ReasoningChip level={thinkingLevel} levels={thinkingLevels} disabled={!connected || modelDisabled} onLevel={onThinkingLevel} />{reading && <span>读取中…</span>}</span><input ref={fileRef} type="file" hidden multiple accept="image/png,image/jpeg,image/webp,image/gif,text/*,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx,.log,.json,.ts,.tsx,.js,.rs,.py,.yaml,.yml,.toml" onChange={(event) => { void addAttachments(Array.from(event.target.files ?? [])); event.target.value = ""; }} /><div className="composer-actions">
+			<div className="composer-bottom"><span className="composer-context"><IconButton  onClick={() => pickAttachments()} disabled={disabled || reading || sendingRef.current} aria-label="添加图片、文本或 Word 文件" title="添加图片、UTF-8 文本或 Word（.docx）文件（支持拖放或粘贴）；Word 提取正文，单个最大 10 MiB"><Icon name="plus" size={20} /></IconButton><ModelMenu models={models} model={model} onModel={onSelectModel} disabled={!connected || modelDisabled} /><ReasoningChip level={thinkingLevel} levels={thinkingLevels} disabled={!connected || modelDisabled} onLevel={onThinkingLevel} />{reading && <span>读取中…</span>}</span><input ref={fileRef} type="file" hidden multiple accept="image/png,image/jpeg,image/webp,image/gif,text/*,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx,.log,.json,.ts,.tsx,.js,.rs,.py,.yaml,.yml,.toml" onChange={(event) => { const replacementId = replacementRef.current; replacementRef.current = undefined; void addAttachments(Array.from(event.target.files ?? []), replacementId); event.target.value = ""; }} /><div className="composer-actions">
 				{streaming && !hasContent ? (
 					<IconButton className="send-btn" variant="primary" size="primary" onClick={onAbort} disabled={stopping || !connected} aria-label="停止生成" title="停止生成（Ctrl+Shift+Backspace）">
 						<Icon name="stop" size={17} />
 					</IconButton>
 				) : (
-					<IconButton className="send-btn" variant="primary" size="primary" onClick={() => void submit()} disabled={disabled || reading || !hasContent || (images.length > 0 && !canUseImages)} aria-label={streaming ? "发送并排队" : "发送消息"} title={streaming ? "发送并排队（Enter）" : "发送消息（Enter）"}>
+					<IconButton className="send-btn" variant="primary" size="primary" onClick={() => void submit()} disabled={disabled || missingAttachments.length > 0 || reading || !hasContent || (images.length > 0 && !canUseImages)} aria-label={streaming ? "发送并排队" : "发送消息"} title={missingAttachments.length > 0 ? "请重新添加或移除缺失附件后发送" : streaming ? "发送并排队（Enter）" : "发送消息（Enter）"}>
 						<Icon name="arrow" size={19} />
 					</IconButton>
 				)}

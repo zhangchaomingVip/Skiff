@@ -1,5 +1,5 @@
 import type { Delivery } from "../chat/interactions";
-import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { memo, useCallback, useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import type { ImageAttachment, SessionState } from "../chat/types";
 import type { PiSessionActions } from "../chat/usePiSession";
 import { useVoyageMetrics } from "../chat/useVoyageMetrics";
@@ -74,24 +74,7 @@ export function VoyageWorkspace({ draftTarget, revealMessage, state, loading = f
 	const railBounds = { min: 240, max: Math.max(240, Math.min(480, availableWidth - 368)) };
 	const shownRailWidth = Math.max(240, Math.min(railWidth, railBounds.max));
 
-	const layout = useRef<HTMLDivElement>(null);
-	useLayoutEffect(() => {
-		const root = layout.current;
-		const workspace = root?.closest<HTMLElement>(".workspace");
-		const composer = root?.querySelector<HTMLElement>(".composer");
-		if (!root || !workspace || !composer) return;
-		// Follow the actual centered content, including rail/sidebar resizing.
-		const align = () => workspace.style.setProperty("--chat-content-inset", `${composer.getBoundingClientRect().left - workspace.getBoundingClientRect().left}px`);
-		const observer = new ResizeObserver(align);
-		observer.observe(root);
-		const column = root.querySelector(".chat-column");
-		if (column) observer.observe(column);
-		observer.observe(composer);
-		align();
-		return () => { observer.disconnect(); workspace.style.removeProperty("--chat-content-inset"); };
-	}, []);
-
-	return <div ref={layout} className={`chat-and-rail ${visibleExpanded ? "rail-expanded" : "rail-collapsed"}`} style={{ "--voyage-width": `${shownRailWidth}px` } as CSSProperties}>
+	return <div className={`chat-and-rail ${visibleExpanded ? "rail-expanded" : "rail-collapsed"}`} style={{ "--voyage-width": `${shownRailWidth}px` } as CSSProperties}>
 		<div className="chat-column">
 			{topBar}
 			<LiveTurnContext.Provider value={metrics.liveTurn}>

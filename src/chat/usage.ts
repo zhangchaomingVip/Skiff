@@ -33,6 +33,19 @@ export function formatDuration(ms: number): string {
 	return `${Math.floor(seconds / 3600)}h ${Math.floor(seconds % 3600 / 60)}m`;
 }
 
+/** Full Chinese elapsed time for reply headers; omit units whose value is zero. */
+export function formatElapsedSeconds(seconds: number): string {
+	let remaining = Number.isFinite(seconds) ? Math.max(0, Math.floor(seconds)) : 0;
+	const units = [[86400, "天"], [3600, "小时"], [60, "分钟"], [1, "秒"]] as const;
+	const parts: string[] = [];
+	for (const [size, label] of units) {
+		const value = Math.floor(remaining / size);
+		if (value > 0) parts.push(`${value}${label}`);
+		remaining %= size;
+	}
+	return parts.join(" ") || "0秒";
+}
+
 const WEEKDAYS = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
 
 /** Compact turn completion clock; the full local date lives in the tooltip. */

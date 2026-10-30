@@ -4,6 +4,19 @@ import { reduce } from "../src/chat/reducer.ts";
 import { initialSessionState, type ChatMessage, type SessionState } from "../src/chat/types.ts";
 import { currentTurnStats } from "../src/chat/sailing.ts";
 import { groupTurns } from "../src/chat/turns.ts";
+import { formatElapsedSeconds } from "../src/chat/usage.ts";
+
+test("reply durations roll over through seconds, minutes, hours and days", () => {
+	const cases: [number, string][] = [
+		[0, "0秒"], [0.9, "0秒"], [59.999, "59秒"],
+		[60, "1分钟"], [62, "1分钟 2秒"], [182, "3分钟 2秒"],
+		[3599, "59分钟 59秒"], [3600, "1小时"], [3602, "1小时 2秒"],
+		[3661, "1小时 1分钟 1秒"], [86399, "23小时 59分钟 59秒"],
+		[86400, "1天"], [86401, "1天 1秒"], [93784, "1天 2小时 3分钟 4秒"],
+		[172800, "2天"], [-1, "0秒"], [NaN, "0秒"], [Infinity, "0秒"],
+	];
+	for (const [seconds, expected] of cases) assert.equal(formatElapsedSeconds(seconds), expected, String(seconds));
+});
 
 function startTurn(state: SessionState, startedAt: number): SessionState {
 	state = reduce(state, { type: "agent_start", startedAt });

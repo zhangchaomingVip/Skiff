@@ -37,7 +37,13 @@ try {
 	assert.equal(await page.getByRole("separator", { name: "调整左侧导航宽度" }).getAttribute("aria-valuenow"), "232", "Invalid left width should use its default");
 	assert.equal(await page.getByRole("separator", { name: "调整右侧航行台宽度" }).getAttribute("aria-valuenow"), "260", "Invalid right width should use its default");
 	assert.equal(await page.locator(".project-chats .chat-row").count(), 3, "Unarchived chats appear exactly once");
-	assert.equal(await page.locator(".project-count, .header-model, .header-project").count(), 0, "Project counts and header route/folder details stay hidden");
+	assert.equal(await page.locator(".project-count, .header-model").count(), 0, "Project counts and header route details stay hidden");
+	// The folder mark carries the owning project, revealed on hover only.
+	const projectMark = page.locator(".chat-header .header-project");
+	assert.equal(await projectMark.count(), 1, "The header should mark the chat's project with a folder glyph");
+	assert.equal(await projectMark.getAttribute("aria-label"), "所属项目：Skiff Archive");
+	await projectMark.hover();
+	assert.equal(await page.locator(".chat-header .ui-tooltip").evaluate((node) => getComputedStyle(node).opacity), "1", "Hovering the folder mark reveals the project name");
 	const beforeArchiveSearch = await page.locator(".sidebar-scroll .chat-row").count();
 	await page.getByRole("button", { name: "搜索项目与聊天" }).click();
 	await page.getByRole("textbox", { name: "搜索项目与聊天" }).fill("已归档会话");

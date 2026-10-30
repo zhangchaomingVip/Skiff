@@ -3,6 +3,7 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
 import { highlightCode } from "../chat/highlight";
+import { remarkLooseStrong } from "../chat/remarkLooseStrong";
 import { CopyButton } from "./CopyButton";
 import { ImagePreview } from "./ImagePreview";
 
@@ -26,7 +27,7 @@ function CodeBlock({ children, streaming }: { children?: ReactNode; streaming: b
 	</div>;
 }
 
-const plugins = [remarkGfm, remarkBreaks];
+const plugins = [remarkGfm, remarkLooseStrong, remarkBreaks];
 
 export const Markdown = memo(function Markdown({ text, streaming = false, replyKey }: { text: string; streaming?: boolean; replyKey?: string }) {
 	const components = useMemo<Components>(() => ({

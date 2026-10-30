@@ -1,8 +1,19 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-label="Skiff sailing">
-	<!-- "Sailing" variant of the app icon: same white tile + navy speedboat, plus the
-	     bright blue waterline wave so the running state reads at a glance. -->
-	<rect width="1024" height="1024" rx="160" fill="#ffffff" />
-	<path d="M214 684 Q274 644 334 684 T454 684 T574 684 T694 684 T814 684" fill="none" stroke="#5b9fff" stroke-width="56" stroke-linecap="round" />
-	<path d="M190 470 H613 C693 470 773 440 834 392 C826 492 770 592 658 640 H288 C228 640 190 582 190 470 Z" fill="#0b1626" />
-	<path d="M358 470 L406 376 L566 376 L596 470 Z" fill="#5b9fff" />
+	<!-- Running state: the same plate and boat, bow lifted 6° around the stern over a
+	     bright cyan wake, so a glance at the task bar says the turn is still streaming. -->
+	<defs>
+		<linearGradient id="skiff-plate" x1="0" y1="0" x2="0" y2="1">
+			<stop offset="0" stop-color="#132238" />
+			<stop offset="1" stop-color="#0b1524" />
+		</linearGradient>
+	</defs>
+	<rect width="1024" height="1024" rx="220" fill="url(#skiff-plate)" />
+	<rect x="5" y="5" width="1014" height="1014" rx="215" fill="none" stroke="#ffffff" stroke-opacity="0.10" stroke-width="10" />
+	<path d="M150 737 Q 245 657 340 737 T 530 737 T 720 737 T 910 737" fill="none" stroke="#38bdf8" stroke-width="72" stroke-linecap="round" />
+	<g transform="translate(-124 -158) scale(1.24)">
+		<g transform="rotate(-6 240 610)">
+			<path d="M190 470 H613 C693 470 773 440 834 392 C824 488 762 570 652 612 H286 C226 612 190 566 190 470 Z" fill="#f8fafc" />
+			<path d="M373 440 L406 376 L566 376 L586 440 Z" fill="#5b9fff" />
+		</g>
+	</g>
 </svg>

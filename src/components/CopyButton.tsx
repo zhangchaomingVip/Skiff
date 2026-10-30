@@ -6,7 +6,7 @@ export function CopyButton({ text, label, iconOnly = false }: { text: string; la
 	const [status, setStatus] = useState("");
 	const timer = useRef<number>();
 	useEffect(() => () => window.clearTimeout(timer.current), []);
-	return <Button size="compact" variant="ghost" className="copy-btn" aria-label={label} title={iconOnly ? undefined : label} style={iconOnly ? { background: "transparent" } : undefined} onClick={async () => {
+	return <Button size="compact" variant="ghost" className="copy-btn" aria-label={label} title={iconOnly ? undefined : label} onClick={async () => {
 		try { await navigator.clipboard.writeText(text); setStatus("已复制"); }
 		catch { setStatus("复制失败"); }
 		window.clearTimeout(timer.current);

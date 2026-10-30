@@ -200,10 +200,10 @@ export function LauncherView({ activeChat, activeProject, projects, chats, offer
 			</div>
 			<div className="launcher-section launcher-recent-section">
 				<div className="launcher-section-heading"><div><h2>最近会话</h2><p>显示最后一次完成回复的实际线路。</p></div></div>
-				{recentChats.length ? <div className="launcher-recent-list">{recentChats.map((chat) => { const snapshot = conversationRoute(chat); const modelText = snapshot ? [snapshot.familyName, snapshot.alias].filter(Boolean).join(" · ") : chat.modelAlias; return <ListRow className="launcher-recent-row" title={conversationTooltip(chat, chats)} key={chat.id} disabled={navigationDisabled} onClick={() => onOpenChat(chat.id)}><span className="launcher-recent-main"><strong>{conversationLabel(chat, chats)}</strong><span>{projectNames.get(chat.projectId) ?? "项目已移除"} · {relativeTime(chat.updatedAt)}</span><span>{modelText ?? "尚无模型记录"}{snapshot ? ` · ${snapshot.relayName}` : " · 尚无完成回复线路"}</span></span><span className="launcher-recent-arrow">继续 →</span></ListRow>; })}</div> : <div className="launcher-empty launcher-recent-empty" role="status">还没有可恢复的历史会话</div>}
+				{recentChats.length ? <div className="launcher-recent-list">{recentChats.map((chat) => { const snapshot = conversationRoute(chat); const modelText = snapshot ? [snapshot.familyName, snapshot.alias].filter(Boolean).join(" · ") : chat.modelAlias; return <ListRow className="launcher-recent-row" title={conversationTooltip(chat)} key={chat.id} disabled={navigationDisabled} onClick={() => onOpenChat(chat.id)}><span className="launcher-recent-main"><strong>{conversationLabel(chat)}</strong><span>{projectNames.get(chat.projectId) ?? "项目已移除"} · {relativeTime(chat.updatedAt)}</span><span>{modelText ?? "尚无模型记录"}{snapshot ? ` · ${snapshot.relayName}` : " · 尚无完成回复线路"}</span></span><span className="launcher-recent-arrow">继续 →</span></ListRow>; })}</div> : <div className="launcher-empty launcher-recent-empty" role="status">还没有可恢复的历史会话</div>}
 			</div>
 			{activeChat && <div className="launcher-resume">
-				<div><h2>当前会话</h2><p>{conversationLabel(activeChat, chats)}</p></div>
+				<div><h2>当前会话</h2><p>{conversationLabel(activeChat)}</p></div>
 				<Button  onClick={onResume}><Icon name="message" size={16} />返回聊天</Button>
 			</div>}
 		</div>

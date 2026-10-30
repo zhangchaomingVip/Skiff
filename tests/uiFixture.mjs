@@ -42,6 +42,19 @@ export function preparePreview(target) {
 		storage.setItem("skiff.test.sessions", JSON.stringify(Object.fromEntries(chats.map((chat) => [chat.sessionFile, [{ role: "user", content: chat.title }, { role: "assistant", content: "预览任务已完成。" }]]))));
 		storage.setItem("skiff.sidebar.collapsed", JSON.stringify(projects.map((project) => project.id)));
 		storage.setItem("skiff.workspace.v1", JSON.stringify({ version: 1, projects, chats, activeId: chats[0].id }));
+	} else if (fixture === "conversation-titles") {
+		const project = { id: "titles-project", name: "emptyForTest", path: "D:\\workspace\\emptyForTest" };
+		const otherProject = { id: "titles-other-project", name: "Skiff", path: "D:\\workspace\\Skiff" };
+		const longTitle = "你在这个项目下的每个子目录中新增一个文件，并检查所有文件的内容是否正确";
+		const chats = ["你好", "你好", "北京明天天气怎么样", "你是什么模型", longTitle, "你是什么模型", longTitle, longTitle, longTitle].map((title, index) => ({
+			id: `titles-${index}-a1b2c${index}`, projectId: project.id, title, customTitle: index === 1,
+			sessionFile: `titles-${index}.jsonl`, hasMessages: true, modelAlias: "测试模型",
+			...(index === 6 ? { archivedAt: now } : index === 7 ? { hasMessages: false } : index === 8 ? { projectId: otherProject.id } : {}),
+			createdAt: now - index * 86400000, updatedAt: now - index * 60000,
+			selectedModel: { provider: "skiff-relay-r1-deepseek", id: "deepseek-chat", modelId: "deepseek-chat", routeId: "route-deepseek-r1", offerId: "route-deepseek-r1/deepseek-chat" },
+		}));
+		storage.setItem("skiff.test.sessions", JSON.stringify(Object.fromEntries(chats.map((chat) => [chat.sessionFile, [{ role: "user", content: chat.title }, { role: "assistant", content: "预览回答。" }]]))));
+		storage.setItem("skiff.workspace.v1", JSON.stringify({ version: 1, projects: [project, otherProject], chats, activeId: chats[2].id }));
 	} else if (fixture === "archive") {
 		const project = { id: "archive-project", name: "Skiff Archive", path: "D:\\workspace\\Skiff" };
 		const otherProject = { id: "archive-other", name: "Other Project", path: "D:\\workspace\\aiagent" };

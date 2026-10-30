@@ -45,19 +45,22 @@ try {
 		assert.equal(await page.locator(".msg-role:not(.is-compact)").count(), 0, "Assistant identity is available only in details");
 		assert.equal(await page.locator(".usage-model").count(), 0, "Route names stay inside usage details");
 		assert.equal(await page.locator(".turn-process[open]").count(), 0, "Reasoning defaults to collapsed");
-		for (const selector of [".msg-role", ".msg-time", ".usage-time", ".usage-trigger", ".usage-cost", ".turn-process > summary"]) {
+		for (const selector of [".msg-role", ".msg-time", ".usage-time", ".usage-trigger", ".usage-cost"]) {
 			assert.ok((await page.locator(selector).evaluateAll((nodes) => nodes.map((node) => getComputedStyle(node).fontSize))).every((size) => size === "12px"), `${selector} uses 12px metadata`);
 		}
+		assert.ok((await page.locator(".turn-process > summary").evaluateAll((nodes) => nodes.map((node) => getComputedStyle(node).fontSize))).every((size) => size === "13px"), "Process summaries use the existing base type scale");
 		const buttons = user.locator(".message-buttons");
 		assert.equal(await buttons.locator(".copy-btn .sr-only").count(), 1, "Message copy uses an icon-only control");
 		assert.equal(await buttons.locator(".copy-btn").getAttribute("title"), null, "Icon-only copy has no hover tooltip");
-		assert.equal(await buttons.locator(":scope > *").count(), 2, "User hover row contains only time and copy");
+		assert.equal(await buttons.locator(":scope > *").count(), 2, "User hover row contains only copy and time");
+		assert.equal(await buttons.locator(".copy-btn + .msg-time").count(), 1, "Copy appears before the user timestamp");
 		assert.equal(await buttons.evaluate((el) => getComputedStyle(el).opacity), "0");
 		await bubble.hover();
 		assert.equal(await buttons.evaluate((el) => getComputedStyle(el).opacity), "1");
 		assert.deepEqual(await buttons.evaluate((el) => { const style = getComputedStyle(el); return { border: style.borderWidth, background: style.backgroundColor, shadow: style.boxShadow }; }), { border: "0px", background: "rgba(0, 0, 0, 0)", shadow: "none" }, "User hover row is plain metadata, not a floating panel");
 		await buttons.locator(".copy-btn").hover();
-		assert.equal(await buttons.locator(".copy-btn").evaluate((el) => getComputedStyle(el).backgroundColor), "rgba(0, 0, 0, 0)", "User copy icon has no hover surface");
+		const userCopyHover = await buttons.locator(".copy-btn").evaluate((el) => { const probe = document.createElement("span"); probe.style.backgroundColor = "var(--chat-action-hover)"; el.append(probe); const result = { actual: getComputedStyle(el).backgroundColor, expected: getComputedStyle(probe).backgroundColor }; probe.remove(); return result; });
+		assert.equal(userCopyHover.actual, userCopyHover.expected, "User copy shares the assistant hover surface");
 		assert.deepEqual(await bubble.boundingBox(), bounds, "Hover actions never move the message");
 		const toolbar = await buttons.boundingBox();
 		assert.ok(Math.abs(toolbar.x + toolbar.width - bounds.x - bounds.width) < 24);
@@ -69,25 +72,104 @@ try {
 		const rects = await page.locator(".messages > .msg, .messages > .assistant-reply").evaluateAll((nodes) => nodes.map((node) => { const r = node.getBoundingClientRect(); return { top: r.top, bottom: r.bottom }; }));
 		assert.equal(Math.round(rects[1].top - rects[0].bottom), 8);
 		assert.equal(Math.round(rects[2].top - rects[1].bottom), 32);
-		const historicalActions = page.locator(".assistant-reply").first().locator(".message-actions.is-historical");
+		const historicalActions = page.locator(".assistant-reply").nth(1).locator(".message-actions.is-historical");
 		const latestActions = page.locator(".assistant-reply").last().locator(".message-actions");
+		const latestTime = latestActions.locator(".usage-time");
+		const opacity = async (locator, value) => {
+			const node = await locator.elementHandle();
+			await page.waitForFunction(({ node, value }) => getComputedStyle(node).opacity === value, { node, value });
+			await node.dispose();
+		};
+		await latestActions.scrollIntoViewIfNeeded();
 		await page.mouse.move(0, 0);
 		assert.equal(await historicalActions.evaluate((el) => getComputedStyle(el).opacity), "0", "Historical reply metadata defaults to hidden");
 		assert.equal(await latestActions.locator(".message-buttons").evaluate((el) => getComputedStyle(el).opacity), "1", "Latest reply copy action stays visible");
-		assert.deepEqual(await latestActions.locator(":scope > *").evaluateAll((nodes) => nodes.map((node) => node.className)), ["message-buttons", "turn-usage"], "Reply footer order is copy, usage, time");
+		await opacity(latestTime, "0");
+		assert.equal(await page.locator(".usage-amount").count(), 0, "Costs stay inside details even for priced turns");
+		assert.equal(await latestActions.locator(".usage-trigger").textContent(), "", "More is an icon-only control");
+		assert.match(await latestActions.locator(".usage-trigger").getAttribute("aria-label"), /^消息详情（本轮用量 .* tok）$/);
+		assert.deepEqual(await latestActions.locator(":scope > *").evaluateAll((nodes) => nodes.map((node) => node.className)), ["message-buttons", "turn-usage"], "Reply footer order is copy, more, time");
+		const iconStyles = await latestActions.locator(".copy-btn, .usage-trigger").evaluateAll((nodes) => nodes.map((node) => {
+			const s = getComputedStyle(node);
+			return { width: s.width, height: s.height, padding: s.padding, radius: s.borderRadius, color: s.color, background: s.backgroundColor };
+		}));
+		assert.deepEqual(iconStyles[0], iconStyles[1], "Copy and more share dimensions, color and hover surfaces");
+		assert.deepEqual(await buttons.locator(".copy-btn").evaluate((node) => { const s = getComputedStyle(node); return { width: s.width, height: s.height, padding: s.padding, radius: s.borderRadius, color: s.color, background: s.backgroundColor }; }), iconStyles[0], "User and assistant copy buttons share the same style");
+		assert.equal(iconStyles[0].width, "28px");
+		assert.equal(iconStyles[0].height, "28px");
+		assert.equal(iconStyles[0].radius, "8px");
+		await page.emulateMedia({ reducedMotion: "no-preference" });
+		assert.ok((await latestActions.locator(".copy-btn, .usage-trigger").evaluateAll((nodes) => nodes.map((node) => { const s = getComputedStyle(node); return s.transitionProperty.includes("background-color") && s.transitionProperty.includes("color") && s.transitionDuration.split(", ").every((duration) => duration === "0.15s"); }))).every(Boolean), "Both icons animate background and color over 150ms");
+		await page.emulateMedia({ reducedMotion: "reduce" });
+		assert.equal(await latestActions.evaluate((node) => getComputedStyle(node).marginTop), "12px");
+		assert.ok(["none", "normal", '""'].includes(await latestTime.evaluate((node) => getComputedStyle(node, "::before").content)), "Time has no dot separator");
 		const replyText = await page.locator(".assistant-reply").last().locator(".msg-body > .md > *").first().boundingBox();
 		const copyIcon = await latestActions.locator(".message-buttons .copy-btn svg").boundingBox();
 		assert.ok(Math.abs(copyIcon.x - replyText.x) <= 2, "Copy icon lines up with the answer text");
 		const usageBox = await latestActions.locator(".turn-usage").boundingBox();
 		assert.ok(usageBox.x - replyText.x <= 48, "Reply footer clusters on the left instead of drifting right");
-		await page.locator(".assistant-reply").first().hover();
+		const copyBox = await latestActions.locator(".copy-btn").boundingBox();
+		const moreBox = await latestActions.locator(".usage-trigger").boundingBox();
+		assert.equal(moreBox.x - copyBox.x - copyBox.width, 4, "The icon buttons have a 4px gap");
+		assert.equal((await latestTime.boundingBox()).x - moreBox.x - moreBox.width, 12, "Time clears the hover surface with a 12px gap");
+		if (output) await page.screenshot({ path: `${output}/footer-idle-${theme}.png` });
+		await latestActions.locator(".copy-btn").hover();
+		await opacity(latestTime, "1");
+		const hoverStyle = await latestActions.locator(".copy-btn").evaluate((node) => { const s = getComputedStyle(node); return { color: s.color, background: s.backgroundColor }; });
+		await latestActions.locator(".usage-trigger").hover();
+		assert.deepEqual(await latestActions.locator(".usage-trigger").evaluate((node) => { const s = getComputedStyle(node); return { color: s.color, background: s.backgroundColor }; }), hoverStyle, "Both icons use the same hover treatment");
+		assert.notEqual(hoverStyle.background, "rgba(0, 0, 0, 0)");
+		if (output) await page.screenshot({ path: `${output}/footer-hover-${theme}.png` });
+		await page.locator(".assistant-reply").nth(1).hover();
 		assert.equal(await historicalActions.evaluate((el) => getComputedStyle(el).opacity), "1", "Hover reveals historical reply metadata");
-		await page.locator(".usage-trigger").first().click();
-		assert.equal(await page.locator(".usage-model-label").textContent(), "mock · glm-5.3-flash");
+		await opacity(historicalActions.locator(".usage-time"), "1");
+		await historicalActions.locator(".usage-trigger").click();
+		assert.deepEqual(await page.locator(".usage-system dt").allTextContents(), ["渠道", "模型", "费用"]);
+		assert.equal(await page.locator(".usage-relay").textContent(), "mock");
+		assert.equal(await page.locator(".usage-model-label").textContent(), "glm-5.3-flash");
+		assert.equal(await page.locator(".usage-model-label").evaluate((node) => node.scrollWidth <= node.clientWidth), true, "Ordinary model names fit without premature truncation");
+		assert.deepEqual(await page.locator(".usage-popover").evaluate((node) => {
+			const s = getComputedStyle(node);
+			const probe = document.createElement("div");
+			probe.style.cssText = "color: var(--text); background: var(--surface); border: 1px solid var(--boundary); box-shadow: var(--shadow-elevation-2)";
+			node.append(probe);
+			const expected = getComputedStyle(probe);
+			const result = {
+				width: s.width, radius: s.borderRadius,
+				softBorder: s.borderColor !== expected.borderColor,
+				surface: s.backgroundColor === expected.backgroundColor,
+				shadow: s.boxShadow === expected.boxShadow,
+				values: [...node.querySelectorAll(".usage-model, .usage-cost")].every((button) => getComputedStyle(button).color === expected.color),
+				relay: getComputedStyle(node.querySelector(".usage-relay")).color !== expected.color,
+			};
+			probe.remove();
+			return result;
+		}), { width: "280px", radius: "12px", softBorder: true, surface: true, shadow: true, values: true, relay: true }, "Details use a compact soft surface with clear model/cost hierarchy");
+		const panelBox = await page.locator(".usage-popover").boundingBox();
+		const anchorBox = await historicalActions.locator(".usage-trigger").boundingBox();
+		assert.equal(Math.round(Math.max(panelBox.y - anchorBox.y - anchorBox.height, anchorBox.y - panelBox.y - panelBox.height)), 6, "Details leave a 6px gap from the trigger");
+		for (const selector of [".usage-model", ".usage-cost"]) {
+			await page.locator(selector).hover();
+			assert.notEqual(await page.locator(selector).evaluate((node) => getComputedStyle(node).backgroundColor), "rgba(0, 0, 0, 0)", "Copyable values provide hover feedback");
+		}
+		await page.locator(".usage-popover").hover();
+		await page.evaluate(() => document.activeElement.blur());
+		await page.mouse.move(0, 0);
+		assert.equal(await historicalActions.evaluate((node) => getComputedStyle(node).opacity), "1", "An open historical panel keeps the footer visible without hover or focus");
+		assert.equal(await historicalActions.locator(".message-buttons").evaluate((node) => getComputedStyle(node).opacity), "1", "Copy stays visible with the historical panel");
+		assert.equal(await historicalActions.locator(".usage-time").evaluate((node) => getComputedStyle(node).opacity), "1", "The open panel keeps the time visible");
+		if (output) {
+			await page.screenshot({ path: `${output}/footer-details-${theme}.png` });
+			const x = Math.max(0, Math.min(panelBox.x, anchorBox.x - 32) - 16);
+			const y = Math.max(0, Math.min(panelBox.y, anchorBox.y) - 16);
+			await page.screenshot({ path: `${output}/detail-closeup-${theme}.png`, clip: { x, y, width: Math.min(1100 - x, Math.max(panelBox.x + panelBox.width, anchorBox.x + anchorBox.width + 64) - x + 16), height: Math.min(960 - y, Math.max(panelBox.y + panelBox.height, anchorBox.y + anchorBox.height) - y + 16) } });
+		}
 		await page.keyboard.press("Escape");
+		await opacity(historicalActions.locator(".usage-time"), "1");
+		assert.equal(await historicalActions.evaluate((node) => getComputedStyle(node).opacity), "1", "Escape restores focus and keeps keyboard actions visible");
 		await page.evaluate(() => { document.activeElement.blur(); window.getSelection()?.removeAllRanges(); });
 		await page.mouse.move(0, 0);
-		const latestTime = latestActions.locator(".usage-time");
+		await opacity(latestTime, "0");
 		const collapsedTimeX = await latestTime.evaluate((node) => node.getBoundingClientRect().x);
 		await latestActions.locator(".usage-trigger").click();
 		assert.equal(await latestTime.evaluate((node) => node.getBoundingClientRect().x), collapsedTimeX, "Opening usage must not shift the footer row");
@@ -135,7 +217,7 @@ try {
 		assert.equal(await page.evaluate(() => document.querySelector(".assistant-reply") === window.replyContainer), true, "Appending steps preserves the existing reply container");
 		toolReply.push(assistant("检查完成，所有结果均已核对。"), assistant([], { timestamp: timestamp + 1000 }));
 		await renderReply(toolReply, false);
-		await page.locator(".assistant-reply .usage-details").waitFor();
+		await page.locator(".assistant-reply .usage-trigger").waitFor();
 		assert.equal(await page.locator(".assistant-reply").count(), 1);
 		assert.equal(await page.locator(".assistant-reply .message-bubble").count(), 0, "Segments never create nested bubbles");
 		assert.deepEqual(await page.locator(".assistant-reply .msg-body > .md").allTextContents(), ["检查完成，所有结果均已核对。"]);
@@ -155,7 +237,18 @@ try {
 		await page.getByText("再次核对完成。", { exact: true }).waitFor();
 		assert.equal(await page.locator(".assistant-reply").count(), 2, "A new user prompt starts a new reply bubble");
 		await page.close();
-		console.log(`PASS ${theme}: hierarchy, bubbles, hover/keyboard actions, model changes, collapsed reasoning, spacing, 360px layout and floating navigation`);
+		const touch = await browser.newPage({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+		touch.on("pageerror", (error) => errors.push(error.message));
+		await touch.goto(`${base}/tests/turn-usage.html`);
+		await touch.waitForFunction(() => window.turnUsageHarness);
+		await touch.evaluate(({ messages, models, theme }) => { document.documentElement.dataset.theme = theme; window.turnUsageHarness.render({ messages, models, current: models[0] }); }, { messages, models, theme });
+		await touch.locator(".usage-time").last().waitFor();
+		assert.equal(await touch.evaluate(() => matchMedia("(hover: none)").matches), true);
+		assert.ok((await touch.locator(".message-actions, .message-buttons, .usage-time").evaluateAll((nodes) => nodes.map((node) => getComputedStyle(node).opacity))).every((value) => value === "1"), "Touch devices keep historical and latest actions and times visible");
+		await touch.locator(".usage-trigger").last().tap();
+		await touch.locator(".usage-popover").waitFor();
+		await touch.close();
+		console.log(`PASS ${theme}: minimal footer, hover/focus/open/touch states, equal icon styles, hierarchy, bubbles, model changes, spacing, 360px layout and floating navigation`);
 	}
 	assert.deepEqual(errors, []);
 } finally { await browser.close(); }

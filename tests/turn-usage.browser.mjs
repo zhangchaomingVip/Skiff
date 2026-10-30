@@ -44,7 +44,7 @@ try {
 	await first.evaluate((button) => button.click());
 	assert.equal(await page.locator(".usage-turn .usage-group-head b").textContent(), "260 tok");
 	assert.deepEqual(await page.locator(".usage-turn .usage-metric dd").allTextContents(), ["+170", "55", "17.1%"]);
-	assert.deepEqual(await page.locator(".usage-system .usage-metric dt").allTextContents(), ["模型名称", "预估费用"]);
+	assert.deepEqual(await page.locator(".usage-system .usage-metric dt").allTextContents(), ["渠道", "模型", "费用"]);
 	await first.press("Escape");
 	assert.equal(await first.getAttribute("aria-expanded"), "false");
 	assert.equal(await first.evaluate((el) => el === document.activeElement), true);
@@ -67,7 +67,62 @@ try {
 		{ role: "toolResult", toolCallId: "divider-read", toolName: "read", content: "文件内容" },
 	];
 	await render({ messages: [...dividerMessages, { role: "assistant", content: "---\n\n### 所有工具执行总结\n\n已完成。" }] }, 1);
-	assert.equal(await page.locator(".turn-process-head > summary").evaluate((el) => getComputedStyle(el).borderBottomWidth), "1px");
+	const processGroup = page.locator(".turn-process-head");
+	const dividerSummary = processGroup.locator(":scope > summary");
+	for (const theme of ["light", "dark"]) {
+		await page.evaluate((theme) => document.documentElement.dataset.theme = theme, theme);
+		const colors = await dividerSummary.evaluate((el) => {
+			const probe = document.createElement("span");
+			el.append(probe);
+			const colors = Object.fromEntries(["--chat-meta", "--secondary"].map((token) => { probe.style.color = `var(${token})`; return [token, getComputedStyle(probe).color]; }));
+			probe.remove();
+			return colors;
+		});
+		const waitHeaderColor = async (color) => {
+			await page.waitForFunction((color) => {
+				const row = document.querySelector(".turn-process-head > .process-row");
+				return getComputedStyle(row.querySelector(".process-row-label")).color === color && getComputedStyle(row.querySelector(".disclosure")).color === color;
+			}, color);
+		};
+		let headerHeight;
+		for (const expanded of [false, true, false]) {
+			if (await dividerSummary.getAttribute("aria-expanded") !== String(expanded)) await dividerSummary.click();
+			assert.equal(await dividerSummary.getAttribute("aria-expanded"), String(expanded));
+			assert.equal(await processGroup.evaluate((el) => getComputedStyle(el).borderBottomWidth), "0px");
+			assert.equal(await dividerSummary.evaluate((el) => getComputedStyle(el).borderBottomWidth), "1px");
+			const height = await dividerSummary.evaluate((el) => el.getBoundingClientRect().bottom - el.closest(".turn-process-head").getBoundingClientRect().top);
+			headerHeight ??= height;
+			assert.equal(height, headerHeight, "The divider must stay anchored to the header when toggled");
+			await page.mouse.move(0, 0);
+			await dividerSummary.blur();
+			await waitHeaderColor(colors["--chat-meta"]);
+			assert.deepEqual(await dividerSummary.locator(".disclosure svg").evaluate((el) => { const s = getComputedStyle(el); return [s.width, s.height]; }), ["14px", "14px"], "Disclosure arrows use a smaller glyph in either rotation");
+			assert.equal(await dividerSummary.evaluate((el) => getComputedStyle(el).transitionProperty), "color");
+			assert.equal(await dividerSummary.evaluate((el) => getComputedStyle(el).transitionDuration), "0.15s");
+			assert.equal(await dividerSummary.locator(".disclosure").evaluate((el) => getComputedStyle(el).opacity), "1", "The header arrow must remain visible without hover or focus");
+			assert.equal(await dividerSummary.evaluate((el) => {
+				const label = el.querySelector(".process-row-label").getBoundingClientRect();
+				const trailing = el.querySelector(".process-row-trailing").getBoundingClientRect();
+				const arrow = el.querySelector(".disclosure");
+				// Measure the layout slot, not the arrow's rotating bounding box.
+				return Math.abs(trailing.left - label.right - 8) <= 1 && getComputedStyle(arrow).order === "-1";
+			}), true, "The arrow must sit immediately after the duration label");
+			if (process.env.SKIFF_SCREENSHOT_DIR) await processGroup.screenshot({ path: `${process.env.SKIFF_SCREENSHOT_DIR}/process-${theme}-${expanded ? "expanded" : "collapsed"}.png`, animations: "disabled" });
+			await dividerSummary.hover();
+			await waitHeaderColor(colors["--secondary"]);
+			await page.mouse.move(0, 0);
+			await waitHeaderColor(colors["--chat-meta"]);
+			if (expanded) {
+				assert.equal(await processGroup.evaluate((el) => {
+					const details = el.querySelector(":scope > .process-detail-content");
+					const style = getComputedStyle(details);
+					const body = details.querySelector(".turn-process-body").getBoundingClientRect();
+					const reply = el.closest(".msg").nextElementSibling.querySelector(".md").getBoundingClientRect();
+					return style.paddingTop === "12px" && style.paddingBottom === "8px" && reply.top - body.bottom >= 20;
+				}), true, "Expanded details must leave breathing room before the final reply");
+			}
+		}
+	}
 	assert.equal(await page.locator(".assistant-reply .md > hr").evaluate((el) => getComputedStyle(el).display), "none");
 	await render({ messages: [...dividerMessages, { role: "assistant", content: "正文第一段。\n\n---\n\n后续正文。" }] }, 1);
 	assert.equal(await page.locator(".assistant-reply .md > hr").evaluate((el) => getComputedStyle(el).display), "block");
@@ -89,7 +144,8 @@ try {
 	await render({ messages: [{ role: "user", content: "未上报用量" }, { role: "assistant", content: "回复" }] }, 1);
 	await page.locator(".usage-trigger").click();
 	assert.equal(await page.locator(".usage-popover").textContent().then((value) => value.includes("未记录")), true);
-	assert.equal(await page.locator(".usage-model-label").textContent(), "未知渠道 · 未知模型");
+	assert.equal(await page.locator(".usage-relay").textContent(), "未知渠道");
+	assert.equal(await page.locator(".usage-model-label").textContent(), "未知模型");
 	await page.keyboard.press("Escape");
 
 	// A centred first turn used to clip the upward-opening panel inside .messages.
@@ -144,8 +200,9 @@ try {
 	assert.equal(await page.locator(".usage-model").count(), 0);
 	assert.equal(await page.locator(".usage-time").count(), 1);
 	await chip.click();
-	assert.equal(await page.locator(".usage-model-label").textContent(), "基元律动 · deepseek-flash");
-	assert.equal(await page.locator(".usage-model").getAttribute("title"), "完整线路：基元律动 · deepseek-flash · 账户xxx");
+	assert.equal(await page.locator(".usage-relay").textContent(), "基元律动 · 账户xxx");
+	assert.equal(await page.locator(".usage-model-label").textContent(), "deepseek-flash");
+	assert.equal(await page.locator(".usage-model").getAttribute("title"), "deepseek-flash");
 	assert.equal(await page.locator(".message-route").count(), 0);
 	assert.deepEqual(await totals(), ["2.18k tok"]);
 
@@ -165,7 +222,9 @@ try {
 		Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async (value) => window.copiedValues.push(value) } });
 	});
 	await page.locator(".usage-model").click();
+	assert.equal(await page.locator(".usage-model > svg").count(), 1, "Copying the model shows a visible confirmation check");
 	await page.locator(".usage-cost").click();
+	assert.equal(await page.locator(".usage-cost > svg").count(), 1, "Copying the exact cost shows a visible confirmation check");
 	await page.keyboard.press("Escape");
 	assert.deepEqual(await page.evaluate(() => window.copiedValues), ["deepseek-flash", "¥0.002137"]);
 	assert.equal(await page.locator(".usage-model").count(), 0);
@@ -207,15 +266,48 @@ try {
 	assert.equal(await page.locator(".usage-cost").isDisabled(), true);
 	await page.keyboard.press("Escape");
 	await render({ messages: [{ role: "user", content: "历史来源" }, { ...completed, usage: undefined }], current: { provider: "new", id: "new-model" } }, 1);
-	assert.equal(await chip.textContent(), "消息详情");
+	assert.equal(await chip.textContent(), "", "Message details uses only an icon");
+	assert.equal(await chip.getAttribute("aria-label"), "消息详情");
 	await chip.press("Enter");
-	assert.equal(await page.locator(".usage-model-label").textContent(), "基元律动 · deepseek-flash");
+	assert.equal(await page.locator(".usage-relay").textContent(), "基元律动 · 账户xxx");
+	assert.equal(await page.locator(".usage-model-label").textContent(), "deepseek-flash");
 	assert.equal(await page.locator(".usage-turn .usage-group-head b").textContent(), "未记录");
 	assert.equal(await page.locator(".usage-turn .usage-metric").count(), 0, "Unrecorded usage must not imply zero consumption");
 	await page.keyboard.press("Escape");
 	assert.equal(await chip.evaluate((node) => node === document.activeElement), true);
+	// Compact details must truncate long identities without hiding their full copy value.
+	const longName = "kimi-k2.7-code-".repeat(8);
+	for (const theme of ["light", "dark"]) {
+		await page.evaluate((theme) => document.documentElement.dataset.theme = theme, theme);
+		await page.setViewportSize({ width: 360, height: 700 });
+		for (const name of ["deepseek-v4.1-pro-1017", "claude-3-7-sonnet-20250219", "a".repeat(30)]) {
+			await render({ messages: [{ role: "user", content: "模型全名" }, { ...completed, routeSnapshot: { ...snapshot, modelId: name, relayName: "ninijoker" } }] }, 1);
+			await chip.click();
+			assert.equal(await page.locator(".usage-model-label").textContent(), name, "Names up to 30 characters remain whole");
+			assert.equal(await page.locator(".usage-model-label.is-truncated").count(), 0, "Middle abbreviation starts only above 30 characters");
+			if (name.length < 30) assert.equal(await page.locator(".usage-model-label").evaluate((node) => node.scrollWidth <= node.clientWidth), true, `Normal model name fits on its own row: ${name}`);
+			if (name === "deepseek-v4.1-pro-1017" && process.env.SKIFF_SCREENSHOT_DIR) {
+				await page.waitForFunction(() => !document.querySelector(".usage-model > svg, .usage-cost > svg"));
+				await panel.screenshot({ path: `${process.env.SKIFF_SCREENSHOT_DIR}/model-details-${theme}.png`, animations: "disabled" });
+			}
+			await page.keyboard.press("Escape");
+		}
+		await render({ messages: [{ role: "user", content: "长线路名称" }, { ...completed, routeSnapshot: { ...snapshot, modelId: longName, relayName: "ninijoker-".repeat(8) } }] }, 1);
+		await chip.click();
+		for (const width of [360, 280]) {
+			await page.setViewportSize({ width, height: 500 });
+			await page.waitForFunction(() => { const p = document.querySelector(".usage-popover").getBoundingClientRect(); return p.left >= 11 && p.right <= innerWidth - 11; });
+			assert.equal(await panel.evaluate((node) => node.scrollWidth <= node.clientWidth), true, "Long labels fit inside the compact panel");
+			assert.equal(await page.locator(".usage-model-label").textContent(), `${longName.slice(0, 16)}…${longName.slice(-13)}`, "Long names preserve both ends");
+			assert.equal(await page.locator(".usage-model-tail").evaluate((node) => node.getBoundingClientRect().right <= node.closest("button").getBoundingClientRect().right), true, "The model suffix stays visible in narrow windows");
+			assert.ok((await page.locator(".usage-model").getAttribute("title")).includes(longName), "Full model identity remains available");
+		}
+		await page.locator(".usage-model").click();
+		assert.equal(await page.evaluate(() => window.copiedValues.at(-1)), longName, "Truncated models still copy in full");
+		await page.keyboard.press("Escape");
+	}
 	assert.deepEqual(errors, []);
-	console.log("PASS: footer copy/amount/usage order, grouped usage panel, route details, explicit missing prices, route snapshots, exact cost/model copying, full date titles, new input boundaries, tool aggregation, folding, pending/history turns, click/keyboard dismissal and small-window popovers");
+	console.log("PASS: icon-only message details, grouped usage panel, route details, explicit missing prices, route snapshots, exact cost/model copying, full date titles, new input boundaries, tool aggregation, folding, pending/history turns, click/keyboard dismissal and small-window popovers");
 } finally {
 	await browser.close();
 }

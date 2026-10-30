@@ -12,7 +12,7 @@ page.on("pageerror", (error) => errors.push(String(error)));
 const summary = () => page.getByRole("separator", { name: "调整提交信息列宽" });
 const author = () => page.getByRole("separator", { name: "调整作者列宽" });
 const open = async () => {
-	await page.getByRole("navigation", { name: "工作区工具" }).getByRole("button", { name: "Git Tree", exact: true }).click();
+	await page.getByRole("navigation", { name: "工作区工具" }).getByRole("button", { name: "Git 历史", exact: true }).click();
 	await page.locator(".commit-metadata h2").waitFor();
 };
 const drag = async (handle, distance, fraction) => {

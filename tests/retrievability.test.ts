@@ -1,21 +1,35 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { calendarGroup, conversationLabel, deriveTitle } from "../src/chat/conversationDisplay.ts";
+import { calendarGroup, conversationLabel, conversationTime, conversationTooltip, deriveTitle } from "../src/chat/conversationDisplay.ts";
 import { backgroundSessions, conversationStatus } from "../src/chat/sessionStatus.ts";
 import { bodyMatches, HistorySearch, locateMessage, mergeHistory, type HistoryProjection } from "../src/chat/historySearch.ts";
 import { draftLimits, prepareDraft, persistedAttachmentBytes, type DraftRecord } from "../src/chat/drafts.ts";
 import { persistableConversations, type Conversation } from "../src/chat/workspace.ts";
 
 const chat = (id: string): Conversation => ({ id, projectId: "p", title: "你好", hasMessages: true, updatedAt: 0, sessionFile: `${id}.jsonl` });
-test("titles normalize prose, count Unicode, preserve manual names and disambiguate stably", () => {
+test("titles normalize prose, count Unicode and keep display labels free of metadata", () => {
 	assert.equal(deriveTitle([{ id: "u", role: "user", blocks: [{ kind: "text", text: "  你好\n\t世界  " }] }]), "你好 世界");
 	assert.equal(Array.from(deriveTitle([{ id: "u", role: "user", blocks: [{ kind: "text", text: "😀".repeat(40) }] }])).length, 32);
 	assert.equal(deriveTitle([{ id: "u", role: "user", blocks: [{ kind: "image", data: "", mimeType: "image/png" }] }]), "图片聊天");
 	const peers = [chat("first-111111"), chat("second-222222")];
-	assert.match(conversationLabel(peers[0], peers), /111111$/);
-	assert.equal(conversationLabel(peers[0], peers), conversationLabel({ ...peers[0], updatedAt: 9999 }, [...peers].reverse()));
-	assert.equal(conversationLabel({ ...peers[0], customTitle: true, modelAlias: "别名" }, peers), "你好");
-	assert.equal(conversationLabel({ ...chat("solo"), modelAlias: "短别名", selectedModel: { provider: "p", id: "must-not-display" } }, []), "你好 · 短别名");
+	assert.deepEqual(peers.map(conversationLabel), ["你好", "你好"]);
+	assert.equal(conversationLabel({ ...peers[0], createdAt: 1000, updatedAt: 9999 }), "你好");
+	assert.equal(conversationLabel({ ...peers[0], customTitle: true, title: "完整的手动标题".repeat(8), modelAlias: "别名" }), "完整的手动标题".repeat(8));
+	assert.equal(conversationLabel({ ...chat("solo"), modelAlias: "短别名", selectedModel: { provider: "p", id: "must-not-display" } }), "你好");
+});
+
+test("conversation dates distinguish creation times without IDs and remain available in tooltips", () => {
+	const now = +new Date("2026-10-30T16:00:00");
+	const createdAt = +new Date("2026-10-30T14:53:00");
+	const target = { ...chat("chat-2feaee"), createdAt, updatedAt: now };
+	assert.equal(conversationTime(target, now), "14:53");
+	assert.equal(conversationTime({ ...target, createdAt: +new Date("2026-10-29T23:29:00") }, now), "10/29");
+	assert.equal(conversationTime({ ...target, createdAt: +new Date("2025-10-30T14:53:00") }, now), "10/30");
+	assert.equal(conversationTime({ ...target, createdAt: undefined }, now), "16:00");
+	assert.match(conversationTooltip(target), /创建于 .*14:53/);
+	assert.match(conversationTooltip(target), /更新于 .*16:00/);
+	assert.doesNotMatch(conversationTooltip(target), /2feaee/);
+	assert.doesNotMatch(conversationTooltip({ ...target, createdAt: undefined }), /创建于|Invalid Date/);
 });
 test("calendar buckets use local days at month/year boundaries and both DST transitions", () => {
 	const original = process.env.TZ; process.env.TZ = "America/New_York";
@@ -82,13 +96,13 @@ test("an older overlapping read cannot replace a freshly validated version", asy
 	const third = engine.history(chat("a")); assert.equal(known[2], "new");
 	pending[2]({ version: "new", messages: [], unchanged: true }); assert.equal((await third).version, "new");
 });
-test("draft capacity counts serialized UTF8 bytes and retains overflow metadata without truncating text", () => {
+test("draft capacity counts content bytes and retains overflow metadata without truncating text", () => {
 	const record: DraftRecord = { chatId: "a", cwd: "p", revision: 1, text: "keep text", attachments: [{ id: "f", kind: "text", name: "large.txt", body: "汉".repeat(400000), bytes: 1200002 }] };
 	const prepared = prepareDraft(record);
 	assert.equal(prepared.text, record.text); assert.equal(prepared.attachments[0].body, undefined); assert.equal(prepared.attachments[0].needsReattach, true);
 	const small = { ...record, attachments: [{ ...record.attachments[0], body: "汉" }] };
-	assert.equal(persistedAttachmentBytes(small), 5);
-	assert.equal(prepareDraft(small, draftLimits.total - 4).attachments[0].needsReattach, true);
+	assert.equal(persistedAttachmentBytes(small), 3);
+	assert.equal(prepareDraft(small, draftLimits.total - 2).attachments[0].needsReattach, true);
 	assert.equal(prepareDraft(small, 0, true).attachments[0].body, undefined);
 	assert.equal(persistableConversations([{ ...chat("draft"), hasMessages: false, hasDraft: true }], "other").length, 1);
 });

@@ -2,9 +2,12 @@
 .msg .message-buttons { opacity: 0; pointer-events: none; }
 .msg.assistant .message-actions:not(.is-historical) .message-buttons { opacity: 1; pointer-events: auto; }
 .msg.assistant .message-actions.is-historical { opacity: 0; pointer-events: none; transition: opacity var(--transition-fast); }
-.assistant-reply:hover .message-actions.is-historical, .assistant-reply:focus-within .message-actions.is-historical { opacity: 1; pointer-events: auto; }
-.message-bubble:hover .message-buttons, .message-bubble:focus-within .message-buttons, .assistant-reply:hover .message-buttons, .assistant-reply:focus-within .message-buttons { opacity: 1; pointer-events: auto; }
+.assistant-reply:hover .message-actions.is-historical, .assistant-reply:focus-within .message-actions.is-historical, .msg.assistant .message-actions.is-historical:has(.turn-usage[data-open=true]) { opacity: 1; pointer-events: auto; }
+.message-bubble:hover .message-buttons, .message-bubble:focus-within .message-buttons, .assistant-reply:hover .message-buttons, .assistant-reply:focus-within .message-buttons, .message-actions:has(.turn-usage[data-open=true]) .message-buttons { opacity: 1; pointer-events: auto; }
 @media (hover: none) { .msg .message-buttons, .msg.assistant .message-actions.is-historical { opacity: 1; pointer-events: auto; } }
+/* Message footer icons share the same hit area, inset and quiet color. */
+.msg .message-actions .copy-btn, .msg.assistant .message-actions .usage-trigger { justify-content: center; width: var(--control-compact); height: var(--control-compact); padding: var(--space-1-5); border-radius: var(--radius-lg); color: var(--chat-meta); transition: background-color var(--transition-fast), color var(--transition-fast); }
+.msg .message-actions .copy-btn:hover:not(:disabled), .msg.assistant .message-actions .usage-trigger:hover, .msg.assistant .message-actions .usage-trigger[aria-expanded=true] { color: var(--secondary); background: var(--chat-action-hover); }
 .extension-dialog { width: min(520px, calc(100vw - 32px)); padding: var(--space-5); display: flex; flex-direction: column; gap: var(--space-4); }
 .extension-dialog p { white-space: pre-wrap; overflow-wrap: anywhere; }
 .extension-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-2); }
@@ -28,11 +31,11 @@
 	.ui-icon-button { width: var(--control-regular); padding: 0; }
 	.ui-icon-button[data-size=compact] { width: var(--control-compact); padding: 0; }
 	.ui-icon-button[data-size=primary] { width: var(--control-primary); }
-	/* Composer toolbar: unified quiet pills. */
-	.composer-context .ui-button { height: var(--control-compact); padding: 0 var(--space-2-5); border-color: var(--border); border-radius: var(--radius-full); background: transparent; color: var(--secondary); font-size: var(--font-size-sm); font-weight: var(--font-weight-regular); }
-	.composer-context .ui-button:hover:not(:disabled) { background: var(--hover); color: var(--foreground); border-color: var(--boundary); }
+	/* Composer toolbar: unified quiet pills, frameless so only the composer frame draws an edge. */
+	.composer-context .ui-button { height: var(--control-compact); padding: 0 var(--space-2-5); border-color: transparent; border-radius: var(--radius-full); background: transparent; color: var(--secondary); font-size: var(--font-size-sm); font-weight: var(--font-weight-regular); }
+	.composer-context .ui-button:hover:not(:disabled) { background: var(--hover); color: var(--foreground); border-color: transparent; }
 	.composer-context .ui-icon-button { width: var(--control-compact); padding: 0; }
-	.composer-context .ui-button.active, .composer-context .ui-button[aria-pressed=true] { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); box-shadow: none; }
+	.composer-context .ui-button.active, .composer-context .ui-button[aria-pressed=true] { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); border-color: transparent; box-shadow: none; }
 	.composer-actions .ui-button { border-radius: var(--radius-full); }
 	.composer-actions .ui-icon-button.send-btn { width: var(--control-regular); height: var(--control-regular); box-shadow: var(--shadow-xs); transition: background-color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast); }
 	.composer-actions .ui-icon-button.send-btn:hover:not(:disabled) { box-shadow: var(--shadow-sm); }
@@ -67,9 +70,12 @@
 	.ui-segmented .ui-button { border: 0; }
 	.ui-segmented .ui-button[aria-pressed=true] { background: var(--surface); color: var(--accent); box-shadow: var(--shadow-xs); }
 	.ui-tooltip-wrap { display: inline-flex; position: relative; }
-	.ui-tooltip { pointer-events: none; opacity: 0; position: absolute; z-index: 50; top: calc(100% + 4px); right: 0; width: max-content; max-width: 220px; padding: var(--space-1) var(--space-2); border-radius: var(--radius-md); background: var(--surface); border: 1px solid var(--boundary); color: var(--foreground); box-shadow: var(--shadow-elevation-2); font-size: var(--font-size-sm); }
+	/* A solid dark bubble reads as a hint; a bordered surface bubble reads as a control. */
+	.ui-tooltip { pointer-events: none; opacity: 0; position: absolute; z-index: 50; top: calc(100% + 4px); right: 0; width: max-content; max-width: 220px; padding: var(--space-1) var(--space-2); border-radius: var(--radius-md); background: var(--tooltip-bg); color: var(--tooltip-text); box-shadow: var(--shadow-elevation-2); font-size: var(--font-size-sm); }
 	.ui-tooltip-wrap:hover .ui-tooltip, .ui-tooltip-wrap:has(:focus-visible) .ui-tooltip { opacity: 1; }
 	.ui-tooltip[data-align=start] { left: 0; right: auto; }
+	/* Sideways variant for vertical rails: it clears the neighbouring buttons. */
+	.ui-tooltip[data-side=right] { top: 50%; right: auto; left: calc(100% + 6px); transform: translateY(-50%); }
 	@keyframes ui-enter { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: translateY(0); } }
 }
 @layer components {

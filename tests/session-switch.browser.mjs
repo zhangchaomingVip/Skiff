@@ -29,6 +29,8 @@ const ready = (id) => page.waitForFunction((id) => window.switchFixture?.renders
 const open = async (query = fixtureQuery) => { await page.goto(`${origin}/tests/session-switch.html?fixture=sidebar&expanded=1&${query}`); await ready("s0"); };
 const row = (id) => page.locator(".project-chats .chat-link").filter({ has: page.getByText(`Session ${id}`, { exact: true }) });
 const select = (id) => row(id).click({ timeout: perfOnly ? 60000 : 800, position: { x: 20, y: 15 } });
+// The sidebar title is a static heading, so the launcher is reached via 文件 → 主页.
+const home = async () => { await page.getByRole("navigation", { name: "应用菜单" }).getByRole("button", { name: "文件", exact: true }).click(); await page.getByRole("menuitem", { name: "主页", exact: true }).click(); };
 async function stopSampling() {
 	report.failure = "Fixture exceeded the 5 minute sampling budget; incomplete, not a passing measurement.";
 	await writeFile(destination, JSON.stringify(report, null, 2));
@@ -88,7 +90,7 @@ async function regressions() {
 		await page.getByRole("button", { name: "重新连接", exact: true }).waitFor();
 		check((await page.getByRole("alert").innerText()).includes("fixture initialization failed"), `${type} 初始化失败展示当前错误与重试入口`);
 		if (type === "rpc_start") {
-			await page.locator('.home-nav').click();
+			await home();
 			check((await page.getByRole("alert").innerText()).includes("fixture initialization failed") && await page.getByRole("button", { name: "重新连接", exact: true }).count() === 1, "Launcher 同样显示当前初始化错误与重试入口");
 			await page.getByRole("button", { name: "返回聊天", exact: true }).click();
 		}
@@ -120,7 +122,7 @@ async function regressions() {
 	await clean(); await open();
 	await page.evaluate(() => window.switchFixture.hold("get_messages"));
 	await select(1); await page.waitForFunction(() => window.switchFixture.held());
-	await page.locator('.home-nav').click();
+	await home();
 	await page.locator('.launcher-recent-row').filter({ hasText: "Session 2" }).click(); await ready("s2");
 	check((await data()).renders.at(-1).id === "s2", "Launcher 最近会话在加载期间可打开");
 	await page.evaluate(() => window.switchFixture.release());
@@ -141,7 +143,7 @@ async function regressions() {
 	await page.getByRole("button", { name: "发送消息", exact: true }).click();
 	await page.getByRole("button", { name: "停止生成", exact: true }).waitFor();
 	check(await row(1).isEnabled() && await page.locator('.project-select').first().isEnabled(), "生成中侧栏与项目入口可用");
-	await page.locator('.home-nav').click();
+	await home();
 	check(await page.locator('.launcher-recent-row').first().isEnabled(), "生成中 Launcher 已有会话入口可用");
 	await page.getByRole("button", { name: "当前工作区", exact: true }).click();
 	check(await page.locator('.launcher-ws-item').first().isEnabled(), "生成中 Launcher 项目入口可用");

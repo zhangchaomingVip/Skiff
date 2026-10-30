@@ -19,10 +19,19 @@ const message = () => page.getByRole("textbox", { name: "聊天消息" });
 const ready = () => wait(() => !!document.querySelector(".composer") && !document.querySelector(".session-loading") && document.querySelector(".sidebar")?.dataset.connected === "true");
 const select = async (id) => { await page.locator(".project-chats .chat-link").filter({ has: page.locator(".chat-title", { hasText: new RegExp(`^Session ${id}$`) }) }).click({ position: { x: 24, y: 16 } }); await ready(); };
 const searchInput = () => page.getByRole("textbox", { name: "搜索项目与聊天" });
+// The sidebar title is a static heading, so the launcher is reached via 文件 → 主页.
+const home = async () => { await page.getByRole("navigation", { name: "应用菜单" }).getByRole("button", { name: "文件", exact: true }).click(); await page.getByRole("menuitem", { name: "主页", exact: true }).click(); };
 const search = async (text) => { await searchInput().fill(text); await wait(() => document.querySelector(".sidebar-search-results [role=status]")?.textContent.includes("已搜索")); };
 const persisted = (id) => page.evaluate(async (id) => {
-	const db = await new Promise((resolve, reject) => { const r = indexedDB.open("skiff-drafts", 1); r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error); });
-	const result = await new Promise((resolve) => { const r = db.transaction("drafts").objectStore("drafts").get(id); r.onsuccess = () => resolve(r.result); }); db.close(); return result;
+	const db = await new Promise((resolve, reject) => { const r = indexedDB.open("skiff-drafts"); r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error); });
+	try {
+		const result = await new Promise((resolve) => { const r = db.transaction("drafts").objectStore("drafts").get(id); r.onsuccess = () => resolve(r.result); });
+		for (const attachment of result?.attachments ?? []) if (attachment.kind === "text" && attachment.contentId) {
+			const asset = await new Promise((resolve) => { const r = db.transaction("attachments").objectStore("attachments").get(attachment.contentId); r.onsuccess = () => resolve(r.result); });
+			attachment.body = await asset.blob.text();
+		}
+		return result;
+	} finally { db.close(); }
 }, id);
 
 try {
@@ -91,7 +100,7 @@ try {
 	await select(1); await select(0);
 	assert.equal(await message().inputValue(), "未发送的正文草稿");
 	assert.equal(await page.getByRole("button", { name: "移除文件 notes.txt" }).count(), 1);
-	await page.getByRole("button", { name: "主页", exact: true }).click(); await page.getByRole("button", { name: "返回聊天" }).click();
+	await home(); await page.getByRole("button", { name: "返回聊天" }).click();
 	assert.equal(await message().inputValue(), "未发送的正文草稿");
 	await page.evaluate(() => window.retrievalFixture.drafts.flush());
 	assert.equal((await persisted("s0")).attachments[0].body, "附件内容保持完整");
@@ -118,7 +127,7 @@ try {
 	await page.goto(`${base}/tests/retrievability.html?restore=1`); await ready();
 	assert.equal(await active(), draftId); assert.equal(await message().inputValue(), "新草稿也要保留");
 	await page.keyboard.press("Control+n"); await ready(); assert.notEqual(await active(), draftId);
-	await page.getByRole("button", { name: "主页", exact: true }).click(); await page.getByRole("heading", { name: "选择一个模型，开始工作" }).waitFor();
+	await home(); await page.getByRole("heading", { name: "选择一个模型，开始工作" }).waitFor();
 	await select(0); assert.equal(await message().inputValue(), "保留非空草稿");
 	await select(1);
 	await page.evaluate(() => {
@@ -165,7 +174,9 @@ try {
 	await page.goto(`${base}/tests/retrievability.html?restore=1`); await ready();
 	await page.getByText("large.txt · 需要重新添加").waitFor();
 	assert.equal(await page.getByRole("button", { name: "发送消息", exact: true }).isDisabled(), true);
-	await page.locator('input[type="file"]').setInputFiles({ name: "large.txt", mimeType: "text/plain", buffer: Buffer.from("重新添加的完整附件") });
+	const reattach = page.waitForEvent("filechooser");
+	await page.getByRole("button", { name: "重新添加 large.txt", exact: true }).click();
+	await (await reattach).setFiles({ name: "large.txt", mimeType: "text/plain", buffer: Buffer.from("重新添加的完整附件") });
 	await page.getByRole("button", { name: "移除文件 large.txt" }).waitFor();
 	assert.equal(await page.getByRole("button", { name: "发送消息", exact: true }).isEnabled(), true);
 	evidence.checks.push("oversized attachment stays usable in memory; reload requires reattachment; replacing it unlocks send");
@@ -185,25 +196,25 @@ try {
 	evidence.checks.push("removing a project clears all its drafts and prevents late writes");
 	const storageChecks = await page.evaluate(async () => {
 		const { DraftStore } = window.retrievalFixture;
-		const store = new DraftStore(); await store.hydrate(["quota", "failure", "deleted", ...Array.from({ length: 6 }, (_, i) => `limit${i}`)]);
+		const store = new DraftStore({ attachment: 1024 * 1024, textAttachment: 1024 * 1024, perDraft: 4 * 1024 * 1024, total: 20 * 1024 * 1024 }); await store.hydrate(["quota", "failure", "deleted", ...Array.from({ length: 6 }, (_, i) => `limit${i}`)]);
 		const original = IDBObjectStore.prototype.put;
 		let attempts = 0;
-		IDBObjectStore.prototype.put = function(value, ...args) { if (value.chatId === "failure" || (value.chatId === "quota" && value.attachments.some((item) => item.body))) { attempts++; throw new DOMException("quota", "QuotaExceededError"); } return original.call(this, value, ...args); };
+		IDBObjectStore.prototype.put = function(value, ...args) { if ((this.name === "drafts" && value.chatId === "failure") || (this.name === "attachments" && value.chatId === "quota")) { attempts++; throw new DOMException("quota", "QuotaExceededError"); } return original.call(this, value, ...args); };
 		store.save({ chatId: "quota", cwd: "p", text: "must retain", attachments: [{ id: "f", name: "f", kind: "text", body: "attachment", bytes: 10 }] });
 		store.save({ chatId: "failure", cwd: "p", text: "memory only", attachments: [] }); await store.flush();
 		const result = { quota: store.status("quota"), failure: store.status("failure"), memory: store.get("failure").text, attempts };
 		IDBObjectStore.prototype.put = original;
 		store.save({ chatId: "deleted", cwd: "p", text: "late", attachments: [] }); const writing = store.flush(); store.remove("deleted"); store.save({ chatId: "deleted", cwd: "p", text: "resurrect", attachments: [] }); await writing; await store.flush();
-		const body = "a".repeat(1024 * 1024 - 2);
+		const body = btoa("a".repeat(1024 * 1024));
 		for (let i = 0; i < 6; i++) { store.save({ chatId: `limit${i}`, cwd: "p", text: "text", attachments: Array.from({ length: 4 }, (_, j) => ({ id: `${j}`, name: `${j}`, kind: "image", body, bytes: 1024 * 1024 })) }); await store.flush(); }
 		return { ...result, last: store.status("limit5"), first: store.status("limit0"), deleted: store.get("deleted") };
 	});
 	assert.deepEqual(storageChecks, { quota: "limited", failure: "error", memory: "memory only", attempts: 3, last: "limited", first: "saved", deleted: undefined });
 	assert.equal(await persisted("deleted"), undefined);
 	assert.equal((await persisted("quota")).attachments[0].needsReattach, true);
-	assert.equal((await persisted("limit0")).attachments[0].body.length, 1024 * 1024 - 2);
+	assert.equal(typeof (await persisted("limit0")).attachments[0].contentId, "string");
 	evidence.storage = storageChecks;
-	evidence.checks.push("actual IndexedDB quota retry, full failure, global 20MiB/per-draft 4MiB limits, and deletion tombstone");
+	evidence.checks.push("actual IndexedDB quota retry, full failure, injected global/per-draft budgets, and deletion tombstone");
 	evidence.performance = await page.evaluate(() => window.retrievalFixture.performance());
 	const p95 = (values) => [...values].sort((a, b) => a - b)[Math.ceil(values.length * .95) - 1];
 	evidence.performance.hotP50 = [...evidence.performance.samples].sort((a,b) => a-b)[9];

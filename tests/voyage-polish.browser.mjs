@@ -7,7 +7,7 @@ import fs from "node:fs/promises";
 const { chromium } = createRequire(import.meta.url)("playwright");
 const browser = await chromium.launch({ headless: true, channel: process.env.SKIFF_BROWSER_CHANNEL ?? "msedge" });
 const base = process.argv[2] ?? "http://localhost:1424";
-const screenshots = new URL("../features/014-voyage-panel-polish/screenshots/", import.meta.url);
+const screenshots = new URL(process.argv[3] ?? "../features/014-voyage-panel-polish/screenshots/", import.meta.url);
 await fs.mkdir(screenshots, { recursive: true });
 const page = await browser.newPage({ viewport: { width: 1200, height: 800 } });
 const errors = [];
@@ -54,12 +54,14 @@ try {
 	assert.equal((await read()).context, 11);
 	assert.equal((await read()).contextEstimated, true);
 	assert((await page.locator(".voyage-progress-caption").textContent()).includes("估算"));
-	assert.equal((await record())["思考 tokens"], "—");
+	assert.equal((await record())["思考"], undefined);
+	assert.equal((await record())["新增 / 缓存"], "—");
 	await page.locator('[aria-label="收起航行台"]').click();
 	assert.equal(await page.locator(".voyage-summary").count(), 0);
 	await page.getByRole("button", { name: "展开航行台", exact: true }).click();
 	state.messages[1].usage = usage(20); await render();
-	assert.equal((await read()).context, 40); assert.equal((await read()).contextEstimated, true);
+	// The tool result attached after this request adds four estimated context tokens.
+	assert.equal((await read()).context, 44); assert.equal((await read()).contextEstimated, true);
 
 	state = { sessionId: "statuses", messages: [user, { id: "tools", role: "assistant", streaming: true, usage: usage(100, 40, 10, 20, 8), blocks: [
 		call("failed", "inspect_repository_and_permissions", "D:/workspace/Skiff/".repeat(10)),
@@ -76,7 +78,8 @@ try {
 	state.voyageTimeline = { ...timeline, tools: [...timeline.tools, { ...timeline.tools[2], id: "interrupted", name: "cancelled_tool", summary: "", status: "interrupted", completionOrder: 5 }], completedCount: 5 };
 	await render();
 	assert.equal(await page.locator(".voyage-tool-log summary").textContent(), "航海日志 · 5 项已入日志（4 次失败）");
-	assert.deepEqual(await record(), { "本轮耗时": "6s", "累计输入 tokens（含缓存）": "230", "思考 tokens": "12", "输出 tokens": "30" });
+	assert.deepEqual(await record(), { "累计输入": "230", "新增 / 缓存": "+175 · 23.9%", "思考": "12", "输出": "30", "计费": "未配置定价" });
+	assert.equal(await page.locator(".voyage-turn-header span").textContent(), "260 tok");
 	await page.locator(".voyage-tool-log summary").click();
 	for (const [status, label] of [["failed", "失败"], ["timeout", "超时"], ["missing", "缺少结果"], ["interrupted", "已中止"]]) {
 		await page.locator(`.tool-${status} .voyage-tool-state`).waitFor({ state: "visible" });
@@ -111,9 +114,73 @@ try {
 	state = { sessionId: "success", messages: [user, { id: "success", role: "assistant", blocks: [call("success")] }], isStreaming: true, model: state.model };
 	await render(); state.messages[1].blocks.push(result("success", "完成")); await render();
 	assert.equal(await page.locator(".voyage-tool-log summary").textContent(), "航海日志 · 1 项已入日志");
+	// Historical turns retain their own currency/prices; the current bill excludes older turns.
+	await page.setViewportSize({ width: 1200, height: 800 });
+	const snapshot = (currency) => ({ currency, inputCost: 10, outputCost: 20, cacheReadCost: 1, cacheWriteCost: 10 });
+	state = { sessionId: "billing", isStreaming: false, model: { ...state.model, contextWindow: 128000 }, messages: [
+		{ ...user, id: "older-user" },
+		{ id: "older", role: "assistant", blocks: [], usage: usage(1000, 0, 0, 100, 0), routeSnapshot: snapshot("USD") },
+		user,
+		{ id: "billed", role: "assistant", blocks: [], usage: usage(1000, 38000, 0, 2000, 640), durationMs: 6000, routeSnapshot: snapshot("CNY") },
+	] };
+	await render();
+	assert.deepEqual([(await read()).turn.total, (await read()).turn.newInput, (await read()).turn.cacheRead], [41000, 1000, 38000]);
+	assert.equal(await page.locator(".voyage-turn-header span").textContent(), "41k tok");
+	assert.equal((await record())["本轮耗时"], "6s");
+	assert.equal((await record())["思考"], "640");
+	assert.equal(await page.locator(".hit-high").textContent(), "97.4%");
+	const bills = page.locator(".voyage-turn-cost");
+	assert.deepEqual(await bills.allTextContents(), ["¥0.0880", "¥0.0880 + $0.0120"]);
+	assert((await bills.first().getAttribute("title")).includes("¥0.088000"));
+	await page.evaluate(() => Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async (text) => { window.copiedVoyageCost = text; } } }));
+	await page.getByRole("button", { name: "复制本轮费用", exact: true }).click();
+	assert.equal(await page.evaluate(() => window.copiedVoyageCost), "¥0.088000");
+	assert.equal(await page.locator(".voyage-turn [role=status]").first().textContent(), "本轮费用已复制");
+	await page.getByRole("button", { name: "复制会话累计费用", exact: true }).click();
+	assert.equal(await page.evaluate(() => window.copiedVoyageCost), "¥0.088000 + $0.012000");
+	for (const theme of ["light", "dark"]) {
+		await page.evaluate((theme) => { document.documentElement.dataset.theme = theme; }, theme);
+		for (const width of [1200, 360]) {
+			await page.setViewportSize({ width, height: 900 });
+			await page.waitForTimeout(60);
+			await page.locator(".voyage-turn").scrollIntoViewIfNeeded();
+			assert(await page.locator(".voyage-turn").evaluate((element) => element.scrollWidth <= element.clientWidth));
+			await capture(`${theme}-${width}-billing.png`);
+		}
+	}
+	await page.setViewportSize({ width: 1200, height: 900 });
+	await page.locator(".voyage-gauge-svg").scrollIntoViewIfNeeded();
+	assert(await page.locator(".voyage-rail").evaluate((element) => element.getBoundingClientRect().width === 260));
+	assert(await page.locator(".voyage-dashboard-header").evaluate((element) => {
+		const title = element.querySelector("h1").getBoundingClientRect();
+		const pill = element.querySelector(".voyage-pill").getBoundingClientRect();
+		return Math.abs(title.y + title.height / 2 - pill.y - pill.height / 2) < 1;
+	}));
+	assert(await page.locator(".voyage-gauge-svg").evaluate((svg) => [...svg.querySelectorAll(".voyage-gauge-limit")].every((label) => {
+		const box = label.getBBox();
+		const outsideArc = label.textContent === "0" ? box.x + box.width < 32 : box.x > 228;
+		return box.x >= -6 && box.x + box.width <= 266 && (label.textContent === "150" ? box.y + box.height < 36 : outsideArc && box.y + box.height < 151);
+	})));
+	await capture("dark-1200-gauge-billing.png");
+	state.messages[3].usage = usage(100, 0, 0, 10, 0); await render();
+	assert.equal((await record())["思考"], undefined);
+	assert.equal(await page.locator(".hit-low").textContent(), "0.0%");
+	state.messages[3].usage = usage(0, 0, 0, 10, 0); await render();
+	assert.equal(await page.locator(".hit-low, .hit-high").count(), 0);
+	delete state.messages[3].routeSnapshot; await render();
+	assert.equal(await bills.count(), 0);
+	assert.equal((await record())["计费"], "未配置定价");
+	// A new pending turn can still show the completed session's bill.
+	state.messages[3].routeSnapshot = snapshot("CNY");
+	state.messages.push({ ...user, id: "pending" }); await render();
+	assert.equal(await bills.first().isDisabled(), true);
+	assert.equal(await bills.last().isEnabled(), true);
 	await page.evaluate(() => window.voyageHarness.unmount());
 	assert.equal(await page.evaluate(() => window.voyageHarness.intervalCount()), 0);
 	assert.deepEqual(errors, []);
-	console.log("PASS polish: cumulative/cache/streaming usage, repeated/regressed input, event total isolation, estimates, token values, all four failure states, zero-failure summary, rail/log toggles, 4 widths x 2 themes, reduced motion, cleanup; 18 screenshots");
+	console.log("PASS polish: cumulative/cache/streaming usage, estimates, token values, failure states, rail/log toggles, 4 widths x 2 themes, reduced motion, current/session billing, precise copy, mixed currencies, unpriced/pending turns, conditional reasoning, gauge bounds/alignment, cleanup; 23 screenshots");
 	console.log(`Browser: ${browser.version()}`);
+} catch (error) {
+	await capture("failure.png");
+	throw error;
 } finally { await browser.close(); }

@@ -39,8 +39,8 @@ try {
 	state.messages[2].usage = usage(1, 0, 0, 1, 1);
 	await render();
 	assert.equal((await read()).context, 2);
-	assert((await page.locator(".voyage-turn").textContent()).includes("累计输入 tokens（含缓存）"));
-	assert((await page.locator(".voyage-turn").textContent()).includes("思考 tokens"));
+	assert((await page.locator(".voyage-turn").textContent()).includes("累计输入"));
+	assert((await page.locator(".voyage-turn").textContent()).includes("思考"));
 	state = { sessionId: "context-reset", messages: [], isStreaming: false, model: { id: "preview", provider: "mock", contextWindow: 1000 } };
 	await render();
 	state = { messages: [], isStreaming: true, activeRun: { startedAt: 1000, promptId: "prompt", turnId: "turn:user" } };

@@ -1,6 +1,6 @@
+import { MAX_WORD_BYTES, MAX_TEXT_BYTES } from "./attachmentLimits";
+
 const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-const MAX_WORD_BYTES = 10 * 1024 * 1024;
-const MAX_TEXT_BYTES = 512 * 1024;
 
 export function isWordFile(file: Pick<File, "name" | "type">): boolean {
 	return /\.docx$/i.test(file.name) || file.type === DOCX_MIME;

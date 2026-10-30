@@ -14,7 +14,7 @@ const notice = () => page.locator(".commit-log > .workbench-banner").first();
 try {
 	for (const theme of ["light", "dark"]) {
 		await page.goto(`${origin}/tests/preview.html?fixture=sidebar&theme=${theme}`);
-		await page.getByRole("navigation", { name: "工作区工具" }).getByRole("button", { name: "Git Tree", exact: true }).click();
+		await page.getByRole("navigation", { name: "工作区工具" }).getByRole("button", { name: "Git 历史", exact: true }).click();
 		await page.locator(".commit-metadata h2").waitFor();
 		assert.equal(await updates().count(), 2);
 		assert.match(await updates().first().getAttribute("title"), /当前分支 main/);

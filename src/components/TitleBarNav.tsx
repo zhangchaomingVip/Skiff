@@ -50,7 +50,9 @@ function Menu({ label, sections }: { label: string; sections: MenuEntry[][] }) {
 	</>;
 }
 
-/** Top-left application bar: brand, sidebar toggle and the file/edit/help menus. */
+/** Top-left application bar: brand mark, sidebar toggle and the file/edit/help menus.
+ *  The app name lives in the sidebar, so the corner carries only the icon and the
+ *  mark shares the activity column's axis instead of pushing text into the corner. */
 export function TitleBarNav({ sidebarOpen, onToggleSidebar, onNewChat, onHome, onAddProject, onOpenSettings, messages }: {
 	sidebarOpen: boolean;
 	onToggleSidebar: () => void;
@@ -68,8 +70,7 @@ export function TitleBarNav({ sidebarOpen, onToggleSidebar, onNewChat, onHome, o
 	const modifier = isMacPlatform() ? "Cmd" : "Ctrl";
 	return <>
 		<nav className="titlebar-nav" aria-label="应用菜单">
-			<span className="titlebar-mark"><BrandMark /></span>
-			<span className="titlebar-brand">Skiff</span>
+			<span className="titlebar-mark" role="img" aria-label="Skiff"><BrandMark /></span>
 			<IconButton size="compact" className="titlebar-sidebar-toggle" onClick={onToggleSidebar} aria-label={toggleLabel} title={toggleLabel}><Icon name="panel" /></IconButton>
 			<Menu label="文件" sections={[
 				[{ label: "新建聊天", shortcut: `${modifier}+N`, onSelect: onNewChat }],

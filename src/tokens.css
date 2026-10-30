@@ -66,6 +66,7 @@
 		/* Process rows stay control-compact so consecutive rows read as one stack. */
 		--chat-tool-row: var(--control-compact);
 		--chat-meta: #9ca3af;
+		--chat-action-hover: color-mix(in srgb, var(--text) 9%, transparent);
 		--gauge-track: var(--boundary);
 		--bubble-bg: var(--panel);
 		--bubble-border: var(--boundary);
@@ -108,6 +109,8 @@
 		--control-compact: 28px;
 		--control-regular: 32px;
 		--control-primary: 36px;
+		/* Width of the activity rail; the title bar's logo box matches it exactly. */
+		--activity-width: 40px;
 		--bg: var(--color-bg-primary);
 		--sidebar: var(--color-sidebar-bg);
 		--sidebar-border: var(--color-sidebar-border);
@@ -123,6 +126,9 @@
 		--secondary: var(--color-text-secondary);
 		--accent: var(--color-accent);
 		--hover: var(--color-bg-hover);
+		/* Hover hints are always a dark solid bubble, so they never read as controls. */
+		--tooltip-bg: #23272e;
+		--tooltip-text: #f2f4f8;
 		--danger: var(--color-error);
 		--error-bg: #2a1a1a;
 		--selection: #3d568a;
@@ -180,7 +186,8 @@
 		--color-text-secondary: #48566b;
 		--color-text-tertiary: #4c5a6e;
 		--color-text-disabled: #bbb;
-		--chat-meta: #646e7d;
+		--chat-meta: #8b95a5;
+		--chat-action-hover: color-mix(in srgb, var(--text) 6%, transparent);
 		--color-accent: #2458be;
 		--color-accent-hover: #1d4ca8;
 		--color-accent-active: #183e8a;
@@ -191,6 +198,8 @@
 		--color-warning: #805600;
 		--color-error: #b52b37;
 		--selected: #e9f1fc;
+		--tooltip-bg: #1f2329;
+		--tooltip-text: #ffffff;
 		--scrollbar-thumb: rgba(16, 25, 40, .14);
 		--scrollbar-thumb-hover: rgba(16, 25, 40, .28);
 		--overlay: rgb(16 25 40 / .35);

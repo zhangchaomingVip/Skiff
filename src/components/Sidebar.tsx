@@ -3,7 +3,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import type { Conversation, Project } from "../chat/workspace";
 import { Icon } from "./Icon";
-import { calendarGroup, conversationLabel, conversationTooltip } from "../chat/conversationDisplay";
+import { calendarGroup, conversationLabel, conversationTime, conversationTooltip } from "../chat/conversationDisplay";
 import { statusLabels, statusSymbols, type ConversationStatus } from "../chat/sessionStatus";
 import type { MessageLocation, SearchProgress } from "../chat/historySearch";
 import { SearchText } from "./SearchText";
@@ -21,8 +21,15 @@ const highlight = (text: string, query: string) => {
 
 const readOrder = (): string[] => { try { const value = JSON.parse(localStorage.getItem("skiff.sidebar.order") ?? "[]"); return Array.isArray(value) ? value.filter((id) => typeof id === "string") : []; } catch { return []; } };
 
-/** How many of a project's chats the sidebar previews before offering 展开显示. */
+/** How many of a project's chats the sidebar previews before offering more. */
 const CHAT_PREVIEW_LIMIT = 5;
+
+/** Count only peers rendered in the same list, not hidden history or other groups. */
+const duplicateChatTitles = (list: readonly Conversation[]) => {
+	const counts = new Map<string, number>();
+	for (const chat of list) counts.set(chat.title, (counts.get(chat.title) ?? 0) + 1);
+	return new Set(list.filter((chat) => (counts.get(chat.title) ?? 0) > 1).map((chat) => chat.id));
+};
 
 export function SidebarCollapse({ open, id, children }: { open: boolean; id?: string; children: () => ReactNode }) {
 	const [retained, setRetained] = useState(open);
@@ -48,13 +55,12 @@ export function SidebarCollapse({ open, id, children }: { open: boolean; id?: st
 	</div>;
 }
 
-export function Sidebar({ projects, chats, activeId, selectedProjectId, homeActive, disabled, navigationDisabled = disabled, runningIds, statuses, searchProgress, searchQuery, onSearch, onSearchMatch, canCloseChat, connected, onHome, onNewChat, onSelectChat, onSelectProject, onAddProject, onRenameChat, onRenameProject, onDeleteChat, onHideProject, onPurgeProject, onArchiveChat, onPurgeChat, onTogglePinChat }: {
+export function Sidebar({ projects, chats, activeId, selectedProjectId, disabled, navigationDisabled = disabled, runningIds, statuses, searchProgress, searchQuery, onSearch, onSearchMatch, canCloseChat, connected, onNewChat, onSelectChat, onSelectProject, onAddProject, onRenameChat, onRenameProject, onDeleteChat, onHideProject, onPurgeProject, onArchiveChat, onPurgeChat, onTogglePinChat }: {
 	projects: Project[];
 	chats: Conversation[];
 	activeId?: string;
 	/** Set by a project click and cleared by any chat selection, so a chat never highlights its project. */
 	selectedProjectId?: string;
-	homeActive: boolean;
 	disabled: boolean;
 	navigationDisabled?: boolean;
 	runningIds?: ReadonlySet<string>;
@@ -65,7 +71,6 @@ export function Sidebar({ projects, chats, activeId, selectedProjectId, homeActi
 	onSearchMatch?: (location: MessageLocation) => void;
 	canCloseChat?: (id: string) => boolean;
 	connected: boolean;
-	onHome: () => void;
 	onNewChat: () => void;
 	onSelectChat: (id: string) => void;
 	onSelectProject: (id: string) => void;
@@ -198,7 +203,7 @@ export function Sidebar({ projects, chats, activeId, selectedProjectId, homeActi
 		const recent: Conversation[] = [];
 		const query = search.toLowerCase();
 		for (const chat of sortedChats) {
-			if ((!chat.hasMessages && !chat.hasDraft && chat.id !== activeId) || (query && !conversationLabel(chat, chats).toLowerCase().includes(query) && !projectNames.get(chat.projectId)?.includes(query))) continue;
+			if ((!chat.hasMessages && !chat.hasDraft && chat.id !== activeId) || (query && !conversationLabel(chat).toLowerCase().includes(query) && !projectNames.get(chat.projectId)?.includes(query))) continue;
 			recent.push(chat);
 			const bucket = histories.get(chat.projectId);
 			if (bucket) bucket.push(chat);
@@ -265,6 +270,7 @@ export function Sidebar({ projects, chats, activeId, selectedProjectId, homeActi
 
 	/** Cross-project quick access stays independent of project expansion. */
 	const recentChats = useMemo(() => [...chats].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 40), [chats]);
+	const recentDuplicateTitles = useMemo(() => duplicateChatTitles(recentChats), [recentChats]);
 	const activeChat = chats.find((chat) => chat.id === activeId);
 	const activeProjectHistory = activeChat ? projectHistory.histories.get(activeChat.projectId) ?? [] : [];
 	const activeProjectIndex = activeProjectHistory.findIndex((chat) => chat.id === activeId);
@@ -278,18 +284,20 @@ export function Sidebar({ projects, chats, activeId, selectedProjectId, homeActi
 		setChatSelection({ id, scope });
 		onSelectChat(id);
 	};
-	const renderChatRow = (chat: Conversation, list: Conversation[], scope = chat.projectId) => {
+	const renderChatRow = (chat: Conversation, list: Conversation[], scope = chat.projectId, duplicateTitles?: ReadonlySet<string>) => {
 		const selected = chat.id === activeId && scope === selectedChatScope;
 		const status = statuses?.get(chat.id) ?? (runningIds?.has(chat.id) ? "running" : "idle");
 		const checked = selecting && bulkIds.has(chat.id);
 		const showDrop = !selecting && !!dragId && dragId !== chat.id && dropTarget?.id === chat.id && dropTarget.scope === scope;
 		return <div key={chat.id} className={`chat-row ${selected ? "selected" : ""} ${checked ? "checked" : ""} ${showDrop ? (dropTarget.before ? "drop-above" : "drop-below") : ""}`} draggable={!disabled && !search && editing?.id !== chat.id && !selecting} onDragStart={(event) => { setDragId(chat.id); event.dataTransfer.effectAllowed = "move"; }} onDragEnd={() => { setDragId(undefined); setDropTarget(undefined); }} onDragOver={(event) => { if (!dragId || dragId === chat.id) return; const source = list.find((item) => item.id === dragId); if (!source || !!source.pinned !== !!chat.pinned) return; event.preventDefault(); event.dataTransfer.dropEffect = "move"; const rect = event.currentTarget.getBoundingClientRect(); setDropTarget({ id: chat.id, before: event.clientY < rect.top + rect.height / 2, scope }); }} onDrop={(event) => { event.preventDefault(); handleDrop(list, chat.id, event.clientY < event.currentTarget.getBoundingClientRect().top + event.currentTarget.getBoundingClientRect().height / 2); }} onContextMenu={selecting ? undefined : (event) => openChatMenu(event, chat, scope)}>
-			{selecting && <button type="button" className="chat-check" role="checkbox" aria-checked={checked} aria-label={`${checked ? "取消选择" : "选择"}会话 ${conversationLabel(chat, chats)}`} disabled={disabled} onClick={() => toggleBulk(chat.id)}>{checked && <Icon name="check" size={16} />}</button>}
-			{editing?.id === chat.id && editing.scope === scope ? renameInput() : <button className="chat-link" disabled={navigationDisabled} aria-pressed={selecting ? checked : undefined} onClick={() => { if (selecting) toggleBulk(chat.id); else selectChatRow(chat.id, scope); }} title={selecting ? undefined : conversationTooltip(chat, chats)} aria-current={selected ? "page" : undefined}>
-				<span className="chat-title">{highlight(conversationLabel(chat, chats), search)}</span>
+			{selecting && <button type="button" className="chat-check" role="checkbox" aria-checked={checked} aria-label={`${checked ? "取消选择" : "选择"}会话 ${conversationLabel(chat)}`} disabled={disabled} onClick={() => toggleBulk(chat.id)}>{checked && <Icon name="check" size={16} />}</button>}
+			{editing?.id === chat.id && editing.scope === scope ? renameInput() : <button className="chat-link" disabled={navigationDisabled} aria-pressed={selecting ? checked : undefined} onClick={() => { if (selecting) toggleBulk(chat.id); else selectChatRow(chat.id, scope); }} title={selecting ? undefined : conversationTooltip(chat)} aria-current={selected ? "page" : undefined}>
+				<span className="chat-title">{highlight(conversationLabel(chat), search)}</span>
 				{status !== "idle" && <span className={`session-status ${status}`} role="status" aria-label={statusLabels[status]} title={statusLabels[status]}>{status === "running" ? <span className="session-spinner" aria-hidden="true" /> : statusSymbols[status]}</span>}
 				{chat.hasDraft && <span className="chat-draft">草稿</span>}
+				{!search && duplicateTitles?.has(chat.id) && <time className="chat-disambiguator" dateTime={new Date(chat.createdAt ?? chat.updatedAt).toISOString()}>{conversationTime(chat)}</time>}
 				{!!search && <time dateTime={new Date(chat.updatedAt).toISOString()}>{calendarGroup(chat.updatedAt)}</time>}
+				{chat.pinned && !selecting && <span className="chat-pinned" role="img" aria-label="已固定" title="已固定"><Icon name="pin" size={13} /></span>}
 			</button>}
 			{!selecting && <div className="sidebar-row-actions">
 				<IconButton size="compact"  disabled={disabled} aria-label={`${chat.pinned ? "取消固定" : "固定"}聊天 ${chat.title}`} title={chat.pinned ? "取消固定" : "固定到顶部"} onClick={() => onTogglePinChat(chat.id, !chat.pinned)}><Icon name="pin" size={13} /></IconButton>
@@ -315,14 +323,14 @@ export function Sidebar({ projects, chats, activeId, selectedProjectId, homeActi
 				</div>
 			</Dialog>}
 			<div className="sidebar-header">
-				<button className={`sidebar-brand home-nav ${homeActive ? "active" : ""}`} onClick={onHome} disabled={!projects.length} aria-label="主页" aria-current={homeActive ? "page" : undefined} title="主页"><span>Skiff</span><Icon name="chevron" size={13} /></button>
+				<h1 className="sidebar-brand">Skiff</h1>
 				<span className="sidebar-notifications" role="img" aria-label="消息" title="消息"><Icon name="bell" size={16} /></span>
 				<IconButton size="compact" className="sidebar-search-toggle" onClick={() => setSearchOpen((open) => !open)} aria-label="搜索项目与聊天" aria-expanded={searchOpen} title="搜索项目与聊天"><Icon name="search" size={16} /></IconButton>
 			</div>
-			<button className="new-chat" onClick={onNewChat} disabled={!projects.length}><Icon name="edit" size={16} /><span>新聊天</span><span className="shortcut">{isMacPlatform() ? "Cmd+N" : "Ctrl+N"}</span></button>
+			<button className="new-chat" onClick={onNewChat} disabled={!projects.length}><Icon name="squarePen" size={16} /><span>新聊天</span><span className="shortcut">{isMacPlatform() ? "Cmd+N" : "Ctrl+N"}</span></button>
 			{searchOpen && <div className="sidebar-search"><Icon name="search" size={14} /><Input autoFocus aria-label="搜索项目与聊天" placeholder="搜索项目与聊天" value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); setSearch(""); setSearchOpen(false); } }} /><IconButton size="compact"  onClick={() => { setSearch(""); setSearchOpen(false); }} aria-label="关闭搜索" title="关闭搜索"><Icon name="close" size={13} /></IconButton></div>}
 			<div className="sidebar-scroll" ref={scrollRef} onScroll={updateScrollFades} onTransitionEnd={updateScrollFades}>
-				{!!search.trim() && <section className="sidebar-search-results" aria-label="聊天搜索结果"><h2>标题命中</h2>{projectHistory.recent.length ? projectHistory.recent.map((chat) => renderChatRow(chat, projectHistory.recent)) : <p>无标题命中</p>}<h2>正文命中</h2><p role="status">{searchProgress?.loading ? `正在搜索 ${searchProgress.scanned}/${searchProgress.total}` : searchProgress ? `已搜索 ${searchProgress.scanned}/${searchProgress.total} · ${searchProgress.matches.length} 条命中` : "等待搜索…"}{!!searchProgress?.failures.length && ` · ${searchProgress.failures.length} 个历史无法读取，结果不完整`}</p>{searchProgress?.matches.slice(0, resultLimit).map((match, index) => { const chat = chats.find((item) => item.id === match.location.chatId); return chat && <button className="body-search-match" key={`${match.location.chatId}:${index}`} disabled={navigationDisabled} onClick={() => onSearchMatch?.(match.location)}><strong>{conversationLabel(chat, chats)}</strong><span><SearchText text={match.snippet} query={search} /></span></button>; })}{searchProgress && searchProgress.matches.length > resultLimit && <button className="body-search-match" onClick={() => setResultLimit((value) => value + 200)}>显示更多正文命中（共 {searchProgress.matches.length} 条）</button>}{searchProgress && !searchProgress.loading && !searchProgress.matches.length && <p>无正文命中</p>}</section>}
+				{!!search.trim() && <section className="sidebar-search-results" aria-label="聊天搜索结果"><h2>标题命中</h2>{projectHistory.recent.length ? projectHistory.recent.map((chat) => renderChatRow(chat, projectHistory.recent)) : <p>无标题命中</p>}<h2>正文命中</h2><p role="status">{searchProgress?.loading ? `正在搜索 ${searchProgress.scanned}/${searchProgress.total}` : searchProgress ? `已搜索 ${searchProgress.scanned}/${searchProgress.total} · ${searchProgress.matches.length} 条命中` : "等待搜索…"}{!!searchProgress?.failures.length && ` · ${searchProgress.failures.length} 个历史无法读取，结果不完整`}</p>{searchProgress?.matches.slice(0, resultLimit).map((match, index) => { const chat = chats.find((item) => item.id === match.location.chatId); return chat && <button className="body-search-match" key={`${match.location.chatId}:${index}`} disabled={navigationDisabled} onClick={() => onSearchMatch?.(match.location)}><strong>{conversationLabel(chat)}</strong><span><SearchText text={match.snippet} query={search} /></span></button>; })}{searchProgress && searchProgress.matches.length > resultLimit && <button className="body-search-match" onClick={() => setResultLimit((value) => value + 200)}>显示更多正文命中（共 {searchProgress.matches.length} 条）</button>}{searchProgress && !searchProgress.loading && !searchProgress.matches.length && <p>无正文命中</p>}</section>}
 				{!search.trim() && <><div className="section-label"><button type="button" className="section-name" onClick={() => setProjectsExpanded((expanded) => !expanded)} aria-expanded={projectsExpanded} aria-controls={projectsListId} title={projectsExpanded ? "收起项目" : "展开项目"}>项目<span className={`section-toggle ${projectsExpanded ? "expanded" : ""}`}><Icon name="chevron" size={13} /></span></button><div className="section-actions"><IconButton size="compact"  onClick={() => { if (selecting) exitBulkSelection(); else { setSelecting(true); setBulkIds(new Set()); } }} disabled={disabled || !chats.length} aria-label="批量选择会话" aria-pressed={selecting} title="批量选择会话"><Icon name="checkbox" size={16} /></IconButton><IconButton size="compact"  onClick={onAddProject} disabled={disabled} aria-label="添加项目" title="添加项目"><Icon name="plus" size={16} /></IconButton></div></div>
 				<SidebarCollapse open={projectsExpanded} id={projectsListId}>
 					{() => <nav aria-label="项目列表">
@@ -333,21 +341,22 @@ export function Sidebar({ projects, chats, activeId, selectedProjectId, homeActi
 								if (search) return history.map((chat) => renderChatRow(chat, history));
 								// Newest first, pinned on top, then a flat preview: no date
 								// buckets, because 今天/昨天 headers made short lists read as
-								// navigation rather than chats. 展开显示 pages in another five
+								// navigation rather than chats. Expand in another five
 								// rows at a time and only becomes 收起 on the last page.
 								const limit = chatLimits.get(project.id) ?? CHAT_PREVIEW_LIMIT;
 								const shown = history.slice(0, limit);
+								const duplicates = duplicateChatTitles(shown);
 								const complete = shown.length >= history.length;
 								const rows: ReactNode[] = [];
 								const pinnedChats = history.filter((chat) => chat.pinned);
 								if (pinnedChats.length) rows.push(<div className="chat-group-label" key="pinned">已固定 · {pinnedChats.length}</div>);
-								rows.push(...shown.map((chat) => renderChatRow(chat, history)));
+								rows.push(...shown.map((chat) => renderChatRow(chat, history, project.id, duplicates)));
 								if (history.length > CHAT_PREVIEW_LIMIT) rows.push(<button type="button" key="more-chats" className="chat-more" aria-expanded={complete} title={`共 ${history.length} 条对话`} onClick={() => setChatLimits((previous) => {
 									const next = new Map(previous);
 									if (complete) next.delete(project.id);
 									else next.set(project.id, limit + CHAT_PREVIEW_LIMIT);
 									return next;
-								})}>{complete ? "收起" : "展开显示"}</button>);
+								})}><Icon name="chevron" size={13} /><span>{complete ? "收起" : `展开更多 (${history.length - shown.length})`}</span></button>);
 								return rows;
 							};
 							const isSelected = project.id === selectedProjectId;
@@ -379,7 +388,7 @@ export function Sidebar({ projects, chats, activeId, selectedProjectId, homeActi
 				</SidebarCollapse>
 				{!!recentChats.length && <section className="sidebar-recent" aria-label="最近会话">
 					<div className="section-label"><button type="button" className="section-name" onClick={() => setRecentExpanded((expanded) => !expanded)} aria-expanded={recentExpanded} aria-controls={recentListId} title={recentExpanded ? "收起最近" : "展开最近"}>最近<span className={`section-toggle ${recentExpanded ? "expanded" : ""}`}><Icon name="chevron" size={13} /></span></button></div>
-					<SidebarCollapse open={recentExpanded} id={recentListId}>{() => <>{recentChats.map((chat) => renderChatRow(chat, [], "recent"))}</>}</SidebarCollapse>
+					<SidebarCollapse open={recentExpanded} id={recentListId}>{() => <>{recentChats.map((chat) => renderChatRow(chat, [], "recent", recentDuplicateTitles))}</>}</SidebarCollapse>
 				</section>}
 				</>}
 			</div>

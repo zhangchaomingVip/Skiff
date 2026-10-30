@@ -1,7 +1,18 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-label="Skiff">
-	<!-- Source icon for `tauri icon`. White tile so the navy speedboat stays legible on
-	     light task bars; colors mirror the in-app Boat mark (navy hull, brand-blue wheelhouse). -->
-	<rect width="1024" height="1024" rx="160" fill="#ffffff" />
-	<path d="M190 470 H613 C693 470 773 440 834 392 C826 492 770 592 658 640 H288 C228 640 190 582 190 470 Z" fill="#0b1626" />
-	<path d="M358 470 L406 376 L566 376 L596 470 Z" fill="#5b9fff" />
+	<!-- Source icon for `tauri icon`. A deep-sea plate carries the mark on light and
+	     dark task bars alike; the docked state keeps the boat level on a still, dim
+	     waterline so the sailing variant (raised bow, bright wake) reads as a change. -->
+	<defs>
+		<linearGradient id="skiff-plate" x1="0" y1="0" x2="0" y2="1">
+			<stop offset="0" stop-color="#132238" />
+			<stop offset="1" stop-color="#0b1524" />
+		</linearGradient>
+	</defs>
+	<rect width="1024" height="1024" rx="220" fill="url(#skiff-plate)" />
+	<rect x="5" y="5" width="1014" height="1014" rx="215" fill="none" stroke="#ffffff" stroke-opacity="0.10" stroke-width="10" />
+	<path d="M232 688 H792" fill="none" stroke="#24435f" stroke-width="56" stroke-linecap="round" />
+	<g transform="translate(-124 -158) scale(1.24)">
+		<path d="M190 470 H613 C693 470 773 440 834 392 C824 488 762 570 652 612 H286 C226 612 190 566 190 470 Z" fill="#f8fafc" />
+		<path d="M373 440 L406 376 L566 376 L586 440 Z" fill="#5b9fff" />
+	</g>
 </svg>

@@ -124,15 +124,26 @@ try {
 		await page.locator(".composer").waitFor();
 		await page.locator(".msg.assistant").first().waitFor();
 		await page.evaluate(() => document.fonts.ready);
-		await page.waitForFunction(() => {
-			const header = document.querySelector(".chat-header"), composer = document.querySelector(".composer");
-			return Math.abs(header.getBoundingClientRect().left + parseFloat(getComputedStyle(header).paddingLeft) - composer.getBoundingClientRect().left) < 1;
+		const headerInset = () => page.evaluate(() => {
+			const header = document.querySelector(".chat-header");
+			const canvas = document.querySelector(".chat-column") ?? header.parentElement;
+			return header.getBoundingClientRect().left + parseFloat(getComputedStyle(header).paddingLeft) - canvas.getBoundingClientRect().left;
 		});
+		// The title bar is a toolbar, not part of the reading column: a fixed 16px
+		// inset that mirrors the sidebar, and untouched by the rail resizing.
 		const layout = await page.evaluate(() => {
-			const header = document.querySelector(".chat-header"), composer = document.querySelector(".composer"), message = document.querySelector(".msg.assistant");
-			return { header: header.getBoundingClientRect().left + parseFloat(getComputedStyle(header).paddingLeft), composer: composer.getBoundingClientRect().left, message: message.getBoundingClientRect().left, overflow: document.documentElement.scrollWidth > innerWidth, composerOverflow: composer.scrollWidth > composer.clientWidth, headerOverlap: document.querySelector(".header-title").getBoundingClientRect().right > document.querySelector(".header-actions").getBoundingClientRect().left && document.querySelector(".header-title").getBoundingClientRect().bottom > document.querySelector(".header-actions").getBoundingClientRect().top };
+			const header = document.querySelector(".chat-header"), composer = document.querySelector(".composer"), message = document.querySelector(".assistant-reply"), messages = document.querySelector(".messages");
+			const canvas = document.querySelector(".chat-column") ?? header.parentElement;
+			const center = (node) => node ? (node.getBoundingClientRect().top + node.getBoundingClientRect().height / 2) : undefined;
+			const search = document.querySelector(".sidebar-search-toggle"), mark = document.querySelector(".header-project");
+			const aligned = search?.getClientRects().length && mark ? Math.abs(center(search) - center(mark)) : null;
+			return { headerInset: header.getBoundingClientRect().left + parseFloat(getComputedStyle(header).paddingLeft) - canvas.getBoundingClientRect().left, gutter: parseFloat(getComputedStyle(messages).paddingLeft), rowOffset: aligned, composer: composer.getBoundingClientRect().left, message: message.getBoundingClientRect().left, overflow: document.documentElement.scrollWidth > innerWidth, composerOverflow: composer.scrollWidth > composer.clientWidth, headerOverlap: document.querySelector(".header-title").getBoundingClientRect().right > document.querySelector(".header-actions").getBoundingClientRect().left && document.querySelector(".header-title").getBoundingClientRect().bottom > document.querySelector(".header-actions").getBoundingClientRect().top };
 		});
-		assert(Math.abs(layout.message - layout.composer) < 1, JSON.stringify(layout));
+		assert.equal(layout.headerInset, 16, `Title bar inset mirrors the sidebar: ${JSON.stringify(layout)}`);
+		if (layout.rowOffset !== null) assert(layout.rowOffset <= 1, `Title row must share the sidebar header's centre line: ${JSON.stringify(layout)}`);
+		// The messages list reserves a scrollbar gutter, so the two centred columns
+		// can differ by half of it while still sharing the same reading width.
+		assert(Math.abs(layout.message - layout.composer) <= 5, JSON.stringify(layout));
 		assert.equal(layout.overflow, false, JSON.stringify(layout));
 		assert.equal(layout.composerOverflow, false, JSON.stringify(layout));
 		assert.equal(layout.headerOverlap, false, JSON.stringify(layout));
@@ -171,12 +182,12 @@ try {
 			assert.equal(await summary.evaluate((el) => el.parentElement.open), false);
 		}
 		if (width === 2200) {
-			await page.getByRole("button", { name: "航行台", exact: true }).click();
-			await page.getByRole("button", { name: "航行台", exact: true }).click();
-			await page.waitForFunction(() => {
-				const header = document.querySelector(".chat-header"), composer = document.querySelector(".composer");
-				return Math.abs(header.getBoundingClientRect().left + parseFloat(getComputedStyle(header).paddingLeft) - composer.getBoundingClientRect().left) < 1;
-			});
+			const rail = page.getByRole("button", { name: "航行台", exact: true });
+			const resting = await headerInset();
+			await rail.click();
+			assert(Math.abs(await headerInset() - resting) < 1, "Opening the rail must not move the title");
+			await rail.click();
+			assert(Math.abs(await headerInset() - resting) < 1, "Closing the rail must not move the title");
 		}
 		if (width === 360) {
 			await page.getByRole("button", { name: "航行台", exact: true }).click();

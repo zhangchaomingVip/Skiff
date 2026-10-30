@@ -111,10 +111,11 @@ export function Popover({ anchor, onClose, className = "", gap = 6, children, ..
 	}, [anchor]);
 	return <div {...props} ref={ref} role={props.role ?? "dialog"} className={`ui-popover ${className}`} style={{ ...props.style, ...position }}>{children}</div>;
 }
-export function Tooltip({ text, children, align = "end" }: { text: string; children: ReactNode; align?: "start" | "end" }) {
+/** `side="right"` suits narrow vertical rails, where a bubble below would cover the next control. */
+export function Tooltip({ text, children, align = "end", side = "bottom" }: { text: string; children: ReactNode; align?: "start" | "end"; side?: "bottom" | "right" }) {
 	const id = useId();
 	const [dismissed, setDismissed] = useState(false);
-	return <span className="ui-tooltip-wrap" onFocus={() => setDismissed(false)} onMouseEnter={() => setDismissed(false)} onKeyDown={(event) => { if (event.key === "Escape") setDismissed(true); }}>{isValidElement(children) ? cloneElement(children as ReactElement<HTMLAttributes<HTMLElement>>, { "aria-describedby": [children.props["aria-describedby"], id].filter(Boolean).join(" ") }) : children}<span className="ui-tooltip" data-align={align} hidden={dismissed} id={id} role="tooltip">{text}</span></span>;
+	return <span className="ui-tooltip-wrap" onFocus={() => setDismissed(false)} onMouseEnter={() => setDismissed(false)} onKeyDown={(event) => { if (event.key === "Escape") setDismissed(true); }}>{isValidElement(children) ? cloneElement(children as ReactElement<HTMLAttributes<HTMLElement>>, { "aria-describedby": [children.props["aria-describedby"], id].filter(Boolean).join(" ") }) : children}<span className="ui-tooltip" data-align={align} data-side={side} hidden={dismissed} id={id} role="tooltip">{text}</span></span>;
 }
 export function SegmentedControl<T extends string>({ value, onChange, options, label }: { value: T; onChange: (value: T) => void; options: { value: T; label: string }[]; label: string }) {
 	return <div className="ui-segmented" role="group" aria-label={label}>{options.map((option, index) => <Button key={option.value} size="compact" variant="ghost" aria-pressed={value === option.value} tabIndex={value === option.value ? 0 : -1} onClick={() => onChange(option.value)} onKeyDown={(event) => {

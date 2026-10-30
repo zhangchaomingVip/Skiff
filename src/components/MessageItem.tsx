@@ -104,8 +104,8 @@ export const MessageItem = memo(function MessageItem({ runStartedAt, onEdit, onC
 			{showCards && <ResultCards ops={fileOps} />}
 		{(showActions || showUsage || showTime) && <div className={`message-actions${showUsage ? " with-usage" : ""}${!isUser && !isLast ? " is-historical" : ""}`}>
 			{(showActions || (isUser && showTime)) && <div className="message-buttons">
-				{isUser && showTime && <time className="msg-time" dateTime={new Date(message.timestamp!).toISOString()}>{formatMessageTime(message.timestamp)}</time>}
 				{canCopy && <CopyButton text={copyText} label="复制消息" iconOnly />}
+				{isUser && showTime && <time className="msg-time" dateTime={new Date(message.timestamp!).toISOString()}>{formatMessageTime(message.timestamp)}</time>}
 			</div>}
 			{!readOnly && isUser && <Button className="edit-message-btn sr-only" disabled={!onEdit || running} onClick={() => onEdit?.(message)}>编辑并重发</Button>}
 			{showUsage && <TurnUsage message={[...(turnMessages ?? [])].reverse().find((entry) => entry.role === "assistant") ?? message} messages={turnMessages} />}

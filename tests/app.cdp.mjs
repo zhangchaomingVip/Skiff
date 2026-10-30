@@ -21,6 +21,7 @@ import { verifyGitTree } from "./git-tree.cdp.mjs";
 import { verifyGitCommit } from "./git-commit.cdp.mjs";
 import { verifyFileContextMenu } from "./file-context-menu.cdp.mjs";
 import { verifyFileTreeRefresh } from "./file-tree-refresh.cdp.mjs";
+import { verifyDraftAttachments } from "./draft-attachments.cdp.mjs";
 
 const CDP_PORT = 9222;
 const MODEL_ID = "skiff-cdp-test";
@@ -119,7 +120,7 @@ const families = {
 await writeFile(join(agentDir, "skiff-families.json"), JSON.stringify(families, null, "\t"));
 
 // --- 拉起桌面 dev 实例（CDP 调试端口 + 临时数据目录）----------------------------
-const env = { ...process.env, PI_CODING_AGENT_DIR: agentDir, WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${CDP_PORT}` };
+const env = { ...process.env, PI_CODING_AGENT_DIR: agentDir, WEBVIEW2_USER_DATA_FOLDER: join(root, "webview"), WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${CDP_PORT}` };
 // Optional already-built debug binary, for verification while a developer's
 // Vite/Tauri instance owns port 1420. Copy it and isolate WebView2 storage so
 // neither its executable nor its workspace can be affected by this run.
@@ -127,7 +128,6 @@ let executable;
 if (process.env.SKIFF_CDP_BINARY) {
 	executable = join(root, "skiff-cdp.exe");
 	await copyFile(process.env.SKIFF_CDP_BINARY, executable);
-	env.WEBVIEW2_USER_DATA_FOLDER = join(root, "webview");
 }
 const dev = executable ? spawn(executable, [], { cwd: repoRoot, env }) : spawn("cmd.exe", ["/c", "npm run tauri -- dev"], { cwd: repoRoot, env });
 const devLog = [];
@@ -176,8 +176,8 @@ try {
 	const pageErrors = [];
 	page.on("pageerror", (error) => pageErrors.push(String(error)));
 
-	// WebView2 的用户目录只有一份，localStorage 就是开发者真实的工作区索引。
-	// 先整份快照落盘（dist/ 里可手工回填），退出前再原样还原，避免污染项目与聊天列表。
+	// 使用临时 WebView2 profile，同时保留快照/还原保护。
+	// 草稿包含 IndexedDB 实体，仅备份 localStorage 不足以隔离附件测试。
 	storageSnapshot = await page.evaluate(() => Object.fromEntries(Object.entries(localStorage)));
 	await writeFile(join(artifacts, "cdp-localstorage-backup.json"), JSON.stringify(storageSnapshot, null, "\t")).catch(() => {});
 	console.log(`已快照 ${Object.keys(storageSnapshot).length} 个 localStorage 键，退出时会还原`);
@@ -207,6 +207,7 @@ try {
 	console.log("已在启动台点击「开始聊天」，等待聊天视图…");
 
 	await page.waitForSelector(".composer-input", { timeout: 60_000 });
+	await verifyDraftAttachments(page);
 	await page.fill(".composer-input", "请原样回复一句话，用于验证链路。");
 	await page.click(".send-btn", { timeout: 60_000 });
 	console.log("消息已发送，等待 pi 经由本地 mock 返回流式回复…");

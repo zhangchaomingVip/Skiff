@@ -22,7 +22,7 @@ export interface VoyageMetrics {
 	phase: VoyagePhase;
 	arrived: boolean;
 	pressure: "normal" | "warning" | "critical";
-	turn: { durationMs?: number; input?: number; output?: number; reasoning?: number; cost?: CostSummary };
+	turn: { durationMs?: number; input?: number; total?: number; newInput?: number; cacheRead?: number; hitRate?: number; output?: number; reasoning?: number; cost?: CostSummary };
 	recentRequestInput?: number;
 	liveTurn?: { turnId?: string; durationMs: number };
 	sessionCost: CostSummary;

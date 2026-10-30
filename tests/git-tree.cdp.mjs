@@ -33,7 +33,7 @@ export async function verifyGitTree(page, temporaryRoot, artifacts) {
 		localStorage.setItem("skiff.sidebar.open", "true");
 	}, root);
 	await page.reload({ waitUntil: "domcontentloaded" });
-	await page.getByRole("navigation", { name: "工作区工具" }).getByRole("button", { name: "Git Tree", exact: true }).click();
+	await page.getByRole("navigation", { name: "工作区工具" }).getByRole("button", { name: "Git 历史", exact: true }).click();
 	await page.getByRole("heading", { name: "Merge history fixture", exact: true }).waitFor();
 	assert.equal(await page.getByRole("option").count(), 4);
 	await page.getByRole("button", { name: "feature.txt A", exact: true }).click();

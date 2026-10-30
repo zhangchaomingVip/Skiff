@@ -30,12 +30,12 @@ try {
 		const row = page.locator(".turn-process > summary");
 		await render([user]);
 		const waiting = page.locator(".waiting-reply .process-count-label");
-		assert.equal(await waiting.textContent(), "用时 1 秒");
+		assert.equal(await waiting.textContent(), "用时 1秒");
 		await page.clock.runFor(1000);
-		assert.equal(await waiting.textContent(), "用时 2 秒");
+		assert.equal(await waiting.textContent(), "用时 2秒");
 		await render([user, assistant([thought(firstThought)])]);
 		assert.equal(await row.count(), 1);
-		assert.equal(await row.textContent(), "用时 2 秒");
+		assert.equal(await row.textContent(), "用时 2秒");
 		assert.equal(await row.getAttribute("aria-expanded"), "false");
 		await row.focus();
 		await row.press("Enter");
@@ -45,7 +45,7 @@ try {
 		assert.doesNotMatch(await thoughtRow.textContent(), /随后核对/);
 		await page.clock.runFor(420);
 		assert.match(await thoughtRow.textContent(), /随后核对/);
-		assert.equal(await row.textContent(), "用时 2 秒", "Live prose never leaks into the top duration");
+		assert.equal(await row.textContent(), "用时 2秒", "Live prose never leaks into the top duration");
 		assert.equal(await thoughtRow.getAttribute("aria-expanded"), "false", "Opening the outer process leaves each thought collapsed");
 		assert.equal(await page.locator(".thinking-note").first().isVisible(), false);
 		await thoughtRow.focus();
@@ -63,7 +63,7 @@ try {
 		const working = [user, assistant([thought(firstThought), { type: "text", text: "第一步正文完整保留。" }, call("a")])];
 		await render(working);
 		assert.equal(await row.count(), 1);
-		assert.match(await row.textContent(), /^用时 \d+ 秒$/);
+		assert.match(await row.textContent(), /^用时 \d+秒$/);
 		assert.equal(await thoughtRow.textContent(), "思考", "Tool activity ends thinking preview");
 		assert.equal(await page.locator(".msg.assistant .msg-body > .md").count(), 0, "Prose migrates only after a following tool arrives");
 		assert.equal(await page.locator(".turn-process-body .md").textContent(), "第一步正文完整保留。");
@@ -72,7 +72,7 @@ try {
 		assert.equal(await thoughtRow.getAttribute("aria-expanded"), "true", "Streaming preserves inner expansion");
 		const settled = [...working, { role: "toolResult", toolCallId: "a", toolName: "read", content: "read output" }, assistant([{ type: "text", text: "第二步正文完整保留。" }, thought(nextThought)]), assistant("最终回答。", { timestamp: 1700000090000, durationMs: 12340 })];
 		await render(settled, false);
-		assert.match(await row.textContent(), /^用时 12 秒/);
+		assert.match(await row.textContent(), /^用时 12秒/);
 		assert.equal(await row.getAttribute("aria-expanded"), "true", "Completion preserves user expansion");
 		assert.equal(await thoughtRow.getAttribute("aria-expanded"), "true", "Settling preserves inner expansion");
 		assert.equal(await thoughtRow.textContent(), "思考");
@@ -88,7 +88,24 @@ try {
 		assert.equal(await page.locator(".thinking-note pre").first().textContent(), firstThought);
 		await row.press("Enter");
 		await render(settled.map((message) => ({ ...message, durationMs: undefined })), false);
-		assert.match(await row.textContent(), /^用时约 90 秒/);
+		assert.match(await row.textContent(), /^用时约 1分钟 30秒/);
+		// Live placeholders, process headers and settled history share the same units.
+		for (const [seconds, initial, next] of [
+			[59, "59秒", "1分钟"],
+			[3599, "59分钟 59秒", "1小时"],
+			[86399, "23小时 59分钟 59秒", "1天"],
+			[93784, "1天 2小时 3分钟 4秒", "1天 2小时 3分钟 5秒"],
+		]) {
+			const runStartedAt = await page.evaluate((seconds) => Date.now() - seconds * 1000, seconds);
+			await render([user], true, { runStartedAt });
+			assert.equal(await waiting.textContent(), `用时 ${initial}`);
+			await render([user, assistant([thought(firstThought)])], true, { runStartedAt });
+			assert.equal(await row.textContent(), `用时 ${initial}`);
+			await page.clock.runFor(1000);
+			assert.equal(await row.textContent(), `用时 ${next}`);
+			await render([user, assistant("计时完成。", { durationMs: (seconds + 1) * 1000 })], false);
+			assert.equal(await row.textContent(), `用时 ${next}`);
+		}
 		await render([user, assistant("没有计时数据。")], false);
 		assert.match(await row.textContent(), /^用时未记录/);
 		const failed = [user, assistant([call("bad")]), { role: "toolResult", toolCallId: "bad", toolName: "read", content: "failed-read-output", isError: true }, assistant([call("unrelated")]), { role: "toolResult", toolCallId: "unrelated", toolName: "read", content: "success" }, assistant("回答保留。", { stopReason: "error" })];
@@ -103,10 +120,10 @@ try {
 		assert.equal(await page.getByText("停止前的旁白仍可查看", { exact: true }).isVisible(), true);
 		const parallel = [user, assistant([call("parallel-a"), call("parallel-b")])];
 		await render(parallel);
-		assert.match(await row.textContent(), /^用时 \d+ 秒$/);
+		assert.match(await row.textContent(), /^用时 \d+秒$/);
 		assert.equal(await page.locator(".tool-run .tool > summary .tool-state.running").count(), 2);
 		await render([...parallel, { role: "toolResult", toolCallId: "parallel-b", toolName: "read", content: "second completes first" }]);
-		assert.match(await row.textContent(), /^用时 \d+ 秒$/);
+		assert.match(await row.textContent(), /^用时 \d+秒$/);
 		assert.equal(await page.locator(".tool-run .tool > summary .tool-state.running").count(), 1);
 		assert.match(await page.locator(".tool-run").textContent(), /second completes first/);
 		await render([...parallel, { role: "toolResult", toolCallId: "parallel-b", toolName: "read", content: "second completes first" }], false);
@@ -148,8 +165,8 @@ try {
 		const oldTurn = [user, assistant("历史回答", { durationMs: 45000 }), { role: "user", content: "新一轮" }, assistant([{ type: "thinking", thinking: firstThought }, { type: "thinking", thinking: nextThought }])];
 		await render(oldTurn, true, { activeTurnId: "turn:history_2", runStartedAt: await page.evaluate(() => Date.now() - 3000) });
 		const rows = page.locator(".turn-process > summary");
-		assert.equal(await rows.first().textContent(), "用时 45 秒");
-		assert.equal(await rows.last().textContent(), "用时 3 秒");
+		assert.equal(await rows.first().textContent(), "用时 45秒");
+		assert.equal(await rows.last().textContent(), "用时 3秒");
 		await render([...oldTurn.slice(0, -1), assistant([{ type: "thinking", thinking: firstThought }])], true, { activeTurnId: "turn:history_2", runStartedAt: await page.evaluate(() => Date.now() - 3000) });
 		await rows.last().click();
 		await render(oldTurn, true, { activeTurnId: "turn:history_2", runStartedAt: await page.evaluate(() => Date.now() - 3000) });
@@ -162,8 +179,8 @@ try {
 		assert.equal(await thoughts.nth(0).textContent(), "思考");
 		assert.match(await thoughts.nth(1).textContent(), /随后核对/);
 		await page.clock.runFor(2100);
-		assert.equal(await rows.first().textContent(), "用时 45 秒", "History never ticks with the active turn");
-		assert.equal(await rows.last().textContent(), "用时 5 秒");
+		assert.equal(await rows.first().textContent(), "用时 45秒", "History never ticks with the active turn");
+		assert.equal(await rows.last().textContent(), "用时 5秒");
 		await render(oldTurn, true, { activeTurnId: "turn:history_2", runStartedAt: undefined });
 		assert.equal(await rows.last().textContent(), "用时统计中");
 		await render([user, assistant("两个流式正文块")], false);

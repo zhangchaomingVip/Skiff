@@ -1,5 +1,6 @@
 import type { ChatMessage, ContentBlock } from "./types";
 import { toolActionSummaries, type ToolRunItem } from "./toolRuns";
+import { formatElapsedSeconds } from "./usage";
 
 type Result = Extract<ContentBlock, { kind: "toolResult" }>;
 export type ProcessBlock = { key: number; block: ContentBlock; result?: Result };
@@ -186,5 +187,5 @@ export function turnDurationLabel(messages: ChatMessage[]): string {
 	const end = [...messages].reverse().find((message) => message.role === "assistant")?.timestamp;
 	const estimated = measured === undefined && start !== undefined && end !== undefined && Number.isFinite(start) && Number.isFinite(end) && end >= start ? end - start : undefined;
 	const duration = measured ?? estimated;
-	return duration === undefined ? "用时未记录" : `用时${measured === undefined ? "约" : ""} ${Math.round(duration / 1000)} 秒`;
+	return duration === undefined ? "用时未记录" : `用时${measured === undefined ? "约" : ""} ${formatElapsedSeconds(Math.round(duration / 1000))}`;
 }

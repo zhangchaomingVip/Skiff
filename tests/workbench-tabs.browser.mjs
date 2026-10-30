@@ -41,7 +41,7 @@ try {
 		await tool("对话").click(); await tool("文件").click();
 		assert.equal(await tab("Commit").getAttribute("aria-selected"), "true");
 		assert.equal(await page.getByRole("textbox", { name: "提交信息" }).inputValue(), "preserve my commit draft");
-		await tool("Git Tree").click();
+		await tool("Git 历史").click();
 		await page.locator(".git-tree-workspace").waitFor();
 		assert.equal(await page.getByRole("tablist", { name: "项目文件与提交" }).count(), 0);
 		await tool("文件").click();

@@ -9,20 +9,22 @@ export function deriveTitle(messages: readonly ChatMessage[]): string {
 }
 
 export function conversationRoute(chat: Conversation): RouteSnapshot | undefined { return [...(chat.routeSnapshots ?? [])].reverse().find((snapshot) => snapshot !== null) ?? undefined; }
-export function conversationLabel(chat: Conversation, peers: readonly Conversation[]): string {
-	if (chat.customTitle) return chat.title;
-	const snapshot = conversationRoute(chat);
-	const alias = snapshot ? snapshot.alias?.trim() : chat.modelAlias?.trim();
-	const base = `${Array.from(chat.title).slice(0, 32).join("")}${alias ? ` · ${alias}` : ""}`;
-	const duplicates = peers.filter((other) => !other.customTitle && other.projectId === chat.projectId && other.title === chat.title && ((conversationRoute(other) ? conversationRoute(other)?.alias?.trim() : other.modelAlias?.trim()) || "") === (alias || ""));
-	if (duplicates.length < 2) return base;
-	// The stable ID also disambiguates identical creation timestamps.
-	const created = chat.createdAt === undefined ? "" : `${new Date(chat.createdAt).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })} `;
-	return `${base} · ${created}${chat.id.slice(-6)}`;
+export function conversationLabel(chat: Conversation): string {
+	return chat.title;
 }
-export function conversationTooltip(chat: Conversation, peers: readonly Conversation[]): string {
+
+export function conversationTime(chat: Conversation, now = Date.now()): string {
+	const date = new Date(chat.createdAt ?? chat.updatedAt);
+	const today = new Date(now);
+	const time = date.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false });
+	if (date.toDateString() === today.toDateString()) return time;
+	const day = `${date.getMonth() + 1}/${date.getDate()}`;
+	return day;
+}
+
+export function conversationTooltip(chat: Conversation): string {
 	const route = conversationRoute(chat);
-	return [conversationLabel(chat, peers), route ? `${route.familyName} · ${route.relayName} · ${route.modelId} · 账户${route.billingAccountId?.trim() || "未标注"}` : "线路待更新"].join("\n");
+	return [conversationLabel(chat), ...(chat.createdAt === undefined ? [] : [`创建于 ${new Date(chat.createdAt).toLocaleString("zh-CN")}`]), `更新于 ${new Date(chat.updatedAt).toLocaleString("zh-CN")}`, route ? `${route.familyName} · ${route.relayName} · ${route.modelId} · 账户${route.billingAccountId?.trim() || "未标注"}` : "线路待更新"].join("\n");
 }
 
 export function calendarGroup(timestamp: number, now = Date.now()): string {

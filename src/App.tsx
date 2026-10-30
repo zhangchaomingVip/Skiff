@@ -1,10 +1,11 @@
 import type { Delivery } from "./chat/interactions";
 import { drafts, hasDraft } from "./chat/drafts";
 import { useConversationSearch } from "./chat/useConversationSearch";
-import { conversationLabel } from "./chat/conversationDisplay";
+import { conversationLabel, conversationTooltip } from "./chat/conversationDisplay";
 import { HistorySearchDialog } from "./components/HistorySearchDialog";
 import { SidebarPresentation } from "./components/SidebarPresentation";
-import { dismissPopovers, Button } from "./components/ui";
+import { dismissPopovers, Button, Tooltip } from "./components/ui";
+import { Icon } from "./components/Icon";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { usePiSessions } from "./chat/usePiSessions";
@@ -378,11 +379,14 @@ export default function App() {
 	}), [modelFamilies.offers, modelFamilies.families, displayModels, displayModel, selectModel, pricingModels, openSettings]);
 
 	// The header belongs to the chat column so the rail divider can run from the
-	// title bar to the bottom edge, the way Codex splits its panes.
+	// title bar to the bottom edge, the way Codex splits its panes. The folder mark
+	// names the owning project only on hover, so the title line stays short.
+	const headerProject = currentView === "launcher" ? undefined : activeProject;
 	const chatHeader = (
 		<header className="chat-header">
+			{headerProject && <Tooltip text={headerProject.name} align="start"><span className="header-project" role="img" aria-label={`所属项目：${headerProject.name}`}><Icon name="folder" size={16} /></span></Tooltip>}
 			<div className="header-title">
-				<div className="header-title-row"><span>{currentView === "launcher" ? "主页" : activeChat ? conversationLabel(activeChat, visibleChats) : "新聊天"}</span></div>
+				<div className="header-title-row"><span title={currentView !== "launcher" && activeChat ? conversationTooltip(activeChat) : undefined}>{currentView === "launcher" ? "主页" : activeChat ? conversationLabel(activeChat) : "新聊天"}</span></div>
 				{currentView === "launcher" && <span className="header-subtitle">模型优先的任务入口</span>}
 			</div>
 			<div className="header-actions">{busy && <span className="working"><span className="dot busy" />{state.isStreaming ? "运行中" : "等待响应"}</span>}</div>
@@ -403,7 +407,7 @@ export default function App() {
 			<div className="app-body" style={{ "--sidebar-width": `${shownSidebarWidth}px` } as CSSProperties}>
 			{(!narrowViewport || !sidebarOpen) && <ActivityBar active={activeTool} panelOpen={sidebarOpen} onSelect={selectTool} />}
 			<div className="workbench-shell">
-			{sidebarOpen && !(narrowViewport && settingsCategory) && <SidebarPresentation activityBar={<ActivityBar active={activeTool} panelOpen={sidebarOpen} onSelect={selectTool} />} onClose={() => setSidebarOpen(false)}>{activeTool === "chats" ? <Sidebar projects={shownProjects} chats={visibleChats} activeId={activeChat?.id} selectedProjectId={selectedProjectId} homeActive={currentView === "launcher"} disabled={navigationDisabled} runningIds={pool.runningIds} canCloseChat={pool.canClose} navigationDisabled={navigationDisabled} connected={connected} onHome={openLauncher} onNewChat={newDraft} statuses={pool.statuses} searchProgress={retrieval.progress} searchQuery={retrieval.query} onSearch={retrieval.setQuery} onSearchMatch={retrieval.openMatch} onSelectChat={selectChat} onSelectProject={selectProject} onAddProject={() => setProjectDialogOpen(true)} onRenameChat={library.renameChat} onRenameProject={library.renameProject} onDeleteChat={deleteArchivedChat} onHideProject={hideProject} onPurgeProject={purgeProject} onArchiveChat={archiveChat} onPurgeChat={purgeChat} onTogglePinChat={(id, pinned) => library.updateChat(id, { pinned })} /> : <ProjectWorkbenchPanel history={<GitBranches key={browse.project?.path} history={gitHistory} onSelect={(reference) => { gitHistory.selectRef(reference); if (narrowViewport) setSidebarOpen(false); }} />} tool={activeTool} onSelectTab={setActiveTool} projects={shownProjects} project={browse.project} following={!browse.manualProjectId} onSelectProject={setManualBrowseProjectId} onFollow={() => setManualBrowseProjectId(undefined)} onAddProject={() => setProjectDialogOpen(true)} onOpen={openProjectPreview} onMutated={() => setWorkbenchRevision((value) => value + 1)} />}</SidebarPresentation>}
+			{sidebarOpen && !(narrowViewport && settingsCategory) && <SidebarPresentation activityBar={<ActivityBar active={activeTool} panelOpen={sidebarOpen} onSelect={selectTool} />} onClose={() => setSidebarOpen(false)}>{activeTool === "chats" ? <Sidebar projects={shownProjects} chats={visibleChats} activeId={activeChat?.id} selectedProjectId={selectedProjectId} disabled={navigationDisabled} runningIds={pool.runningIds} canCloseChat={pool.canClose} navigationDisabled={navigationDisabled} connected={connected} onNewChat={newDraft} statuses={pool.statuses} searchProgress={retrieval.progress} searchQuery={retrieval.query} onSearch={retrieval.setQuery} onSearchMatch={retrieval.openMatch} onSelectChat={selectChat} onSelectProject={selectProject} onAddProject={() => setProjectDialogOpen(true)} onRenameChat={library.renameChat} onRenameProject={library.renameProject} onDeleteChat={deleteArchivedChat} onHideProject={hideProject} onPurgeProject={purgeProject} onArchiveChat={archiveChat} onPurgeChat={purgeChat} onTogglePinChat={(id, pinned) => library.updateChat(id, { pinned })} /> : <ProjectWorkbenchPanel history={<GitBranches key={browse.project?.path} history={gitHistory} onSelect={(reference) => { gitHistory.selectRef(reference); if (narrowViewport) setSidebarOpen(false); }} />} tool={activeTool} onSelectTab={setActiveTool} projects={shownProjects} project={browse.project} following={!browse.manualProjectId} onSelectProject={setManualBrowseProjectId} onFollow={() => setManualBrowseProjectId(undefined)} onAddProject={() => setProjectDialogOpen(true)} onOpen={openProjectPreview} onMutated={() => setWorkbenchRevision((value) => value + 1)} />}</SidebarPresentation>}
 			{desktopSidebarOpen && <ResizeSeparator label="调整左侧导航宽度" value={shownSidebarWidth} bounds={sidebarBounds} onResize={setSidebarWidthFromDrag} onCommit={commitSidebarWidth} />}
 			<ProjectChangesNavigationContext.Provider value={resultNavigation}>
 			<main className="workspace">

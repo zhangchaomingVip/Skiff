@@ -2,6 +2,9 @@ import { Button, Popover } from "./ui";
 import { useRef, useState } from "react";
 import { Icon } from "./Icon";
 
+/** Levels that cost noticeable extra thinking time; only they earn an accent cue. */
+const ELEVATED_LEVELS = new Set(["high", "xhigh", "max"]);
+
 /** Thinking-level pill; hidden when the selected model cannot reason. */
 export function ReasoningChip({ level, levels, disabled, onLevel }: {
 	level?: string; levels: string[]; disabled: boolean; onLevel: (level: string) => void;
@@ -12,12 +15,15 @@ export function ReasoningChip({ level, levels, disabled, onLevel }: {
 	const canThink = levels.some((value) => value !== "off");
 	const currentLevel = levels.includes(level ?? "") ? level : levels[0];
 	if (!canThink) return null;
-	const active = Boolean(currentLevel && currentLevel !== "off");
+	// A reasoning level is a normal setting, not a switch that is flipped: the pill
+	// stays as quiet as the model pill and only tints its star when raised.
+	const thinking = Boolean(currentLevel && currentLevel !== "off");
+	const elevated = Boolean(currentLevel && ELEVATED_LEVELS.has(currentLevel));
 
 	return <div className="model-chip-wrap" ref={root}>
-		<Button variant="setting" className={`reasoning-trigger${active ? " active" : ""}`} ref={trigger} disabled={disabled} onClick={() => setOpen((value) => !value)} aria-expanded={open} aria-haspopup="dialog" aria-label="推理等级">
+		<Button variant="setting" className={`reasoning-trigger${elevated ? " is-elevated" : ""}`} ref={trigger} disabled={disabled} onClick={() => setOpen((value) => !value)} aria-expanded={open} aria-haspopup="dialog" aria-label="推理等级">
 			<Icon name="spark" size={14} />
-			<span>{active ? currentLevel : "无推理"}</span>
+			<span>{thinking ? currentLevel : "无推理"}</span>
 			<span className="chev-caret"><Icon name="chevron" size={12} /></span>
 		</Button>
 		{open && <Popover anchor={trigger} onClose={() => setOpen(false)} className="model-popover" aria-label="推理等级">

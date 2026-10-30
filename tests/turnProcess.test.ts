@@ -324,8 +324,10 @@ test("one stable aggregate collects ordered narration and leaves only post-tool 
 test("duration labels prefer measured runtime and mark historical estimates without guessing missing data", () => {
 	const prompt = { ...user, timestamp: 1000 };
 	const reply = { ...assistant("a", [text("回答")]), timestamp: 91000, durationMs: 12500 };
-	assert.equal(turnDurationLabel([prompt, reply]), "用时 13 秒");
-	assert.equal(turnDurationLabel([prompt, { ...reply, durationMs: undefined }]), "用时约 90 秒");
+	assert.equal(turnDurationLabel([prompt, reply]), "用时 13秒");
+	assert.equal(turnDurationLabel([prompt, { ...reply, durationMs: undefined }]), "用时约 1分钟 30秒");
+	assert.equal(turnDurationLabel([prompt, { ...reply, durationMs: 59999 }]), "用时 1分钟");
+	assert.equal(turnDurationLabel([prompt, { ...reply, durationMs: 93784000 }]), "用时 1天 2小时 3分钟 4秒");
 	assert.equal(turnDurationLabel([user, assistant("a", [])]), "用时未记录");
 	assert.equal(turnDurationLabel([prompt, { ...reply, durationMs: undefined, timestamp: 0 }]), "用时未记录");
 });

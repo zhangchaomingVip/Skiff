@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
-import { drafts, draftAttachments, type DraftAttachment, type DraftRecord } from "./drafts";
+import { drafts, draftAttachments, mergeDraftAttachments, type DraftAttachment, type DraftRecord } from "./drafts";
 import type { ImageAttachment } from "./types";
 import type { TextAttachment } from "./textAttachments";
 
@@ -34,22 +34,24 @@ export function useDraft(target?: DraftTarget) {
 		const scopeFile = fork && (!target.sessionFile || target.sessionFile === fork.from || target.sessionFile === fork.to) ? fork.to : target.sessionFile;
 		drafts.save({ ...target, sessionFile: scopeFile, edit: current?.cwd === target.cwd ? current.edit : undefined, text: current?.cwd === target.cwd ? current.text : "", attachments: current?.cwd === target.cwd ? current.attachments : [], ...patch });
 	}, [target?.chatId, target?.cwd, target?.sessionFile]);
-	const onAttachments = useCallback((images: ImageAttachment[], files: TextAttachment[]) => {
+	const onAttachments = useCallback((images: ImageAttachment[], files: TextAttachment[], replacementId?: string) => {
 		const current = target ? drafts.get(target.chatId) : undefined;
 		const added = draftAttachments(images, files);
-		update({ attachments: [...added, ...(current?.attachments.filter((attachment) => attachment.needsReattach && attachment.body === undefined && !added.some((item) => item.kind === attachment.kind && item.name === attachment.name)) ?? [])] });
+		update({ attachments: mergeDraftAttachments(current?.attachments ?? [], added, replacementId) });
 	}, [update, target?.chatId]);
 	const restored = useMemo(() => ({
 		images: attachments.filter((item) => item.kind === "image" && item.body !== undefined).map((item): ImageAttachment => ({ type: "image", id: item.id, name: item.name, mimeType: item.mimeType ?? "image/png", data: item.body! })),
 		files: attachments.filter((item) => item.kind === "text" && item.body !== undefined).map((item): TextAttachment => ({ id: item.id, name: item.name, text: item.body! })),
 	}), [attachments]);
 	const status = target ? drafts.status(target.chatId) : undefined;
-	const notice = drafts.loadFailed ? "草稿存储无法读取，当前输入仍可使用；请保留需要的内容。" : !compatible ? "项目路径已变化，旧草稿未自动应用。" : status === "error" ? "草稿未能持久化，当前内容仅保留在内存中。" : status === "limited" ? "附件超出保存容量或存储配额，重载后需重新添加；当前内存中的附件仍可使用。" : undefined;
+	const problem = target ? drafts.problem(target.chatId) : undefined;
+	const notice = drafts.loadFailed ? "草稿存储无法读取，当前输入仍可使用；请保留需要的内容。" : !compatible ? "项目路径已变化，旧草稿未自动应用。" : status === "error" ? "本次草稿未能持久化，请重试保存；当前内容仍可使用，刷新或关闭后可能丢失。" : status === "limited" && problem?.reason !== "missing" ? `${problem?.reason === "quota" ? "本地存储配额不足" : "附件超出草稿保存上限"}，未完整保存：${problem?.names.join("、") ?? "附件"}。当前内存中的附件仍可使用，刷新或关闭后需重新添加。` : undefined;
+	const retry = () => { if (target && compatible) void drafts.retry(target.chatId); };
 	const rebase = (sessionFile?: string) => {
 		if (!target) return;
 		forkScope.current = { from: target.sessionFile, to: sessionFile };
 		const current = drafts.get(target.chatId);
 		if (current?.cwd === target.cwd) drafts.save({ ...current, sessionFile, edit: undefined });
 	};
-	return { record: compatible ? record : undefined, rebase, update, restored, text: compatible ? record?.text ?? "" : "", attachments, onText: (text: string) => update({ text }), onAttachments, removeMissing: (id: string) => update({ attachments: attachments.filter((attachment) => attachment.id !== id) }), notice, recoveryNotice: restoredTarget === targetKey && restoredTarget ? "已恢复上次输入" : undefined, ready: drafts.ready };
+	return { record: compatible ? record : undefined, rebase, update, restored, text: compatible ? record?.text ?? "" : "", attachments, onText: (text: string) => update({ text }), onAttachments, removeMissing: (id: string) => update({ attachments: attachments.filter((attachment) => attachment.id !== id) }), notice, retry, canRetry: compatible && !drafts.loadFailed && ((status === "limited" && problem?.reason !== "missing") || status === "error"), recoveryNotice: restoredTarget === targetKey && restoredTarget ? "已恢复上次输入" : undefined, ready: drafts.ready };
 }

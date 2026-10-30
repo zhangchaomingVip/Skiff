@@ -1,7 +1,7 @@
 import type { ImageAttachment } from "./types";
+import { MAX_IMAGES, MAX_IMAGE_BYTES } from "./attachmentLimits";
 
-export const MAX_IMAGES = 4;
-export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+export { MAX_IMAGES, MAX_IMAGE_BYTES } from "./attachmentLimits";
 export const IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
 
 export async function readImages(files: File[], currentCount: number): Promise<ImageAttachment[]> {

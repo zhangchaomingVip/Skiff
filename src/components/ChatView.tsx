@@ -176,10 +176,11 @@ export function ChatView({
 			{queueSize(state.queue) > 0 && state.queue && <QueuedMessages queue={state.queue} disabled={state.stopping} onChange={actions.updateQueuedMessage} />}
 			{queueSize(state.withdrawn) > 0 && <div className="queue-panel" aria-label="已撤回输入"><strong>已撤回的文字（不含图片）</strong><pre>{[...(state.withdrawn?.steering ?? []), ...(state.withdrawn?.followUp ?? [])].join("\n\n")}</pre><CopyButton text={[...(state.withdrawn?.steering ?? []), ...(state.withdrawn?.followUp ?? [])].join("\n\n")} label="复制撤回文字" /><Button onClick={() => { setDraft([draft, ...(state.withdrawn?.steering ?? []), ...(state.withdrawn?.followUp ?? [])].filter(Boolean).join("\n\n")); setFocusSignal((n) => n + 1); }}>追加到草稿</Button></div>}
 			{state.lastOutcome?.reason === "manual" && !state.messages.some((message) => message.role === "user" && `turn:${message.id}` === state.lastOutcome?.turnId) && <div className="turn-outcome manual" role="status">{outcomeLabel("manual")}<Button disabled={continuing || state.stopping} onClick={() => void continueRun()}>继续</Button></div>}
-			{draftTarget && storedDraft.notice && <p className="draft-notice" role="status">{storedDraft.notice}</p>}
-			{draftTarget && storedDraft.attachments.filter((item) => item.body === undefined).map((item) => <div className="draft-notice" key={item.id}>{item.name} · 需要重新添加<Button variant="ghost" onClick={() => storedDraft.removeMissing(item.id)}>移除</Button></div>)}
+			{draftTarget && storedDraft.notice && <div className="draft-notice" role="status">{storedDraft.notice}{storedDraft.canRetry && <Button variant="ghost" onClick={storedDraft.retry}>重试保存</Button>}</div>}
 			<Composer
-				disabled={(!!draftTarget && (!storedDraft.ready || storedDraft.attachments.some((item) => item.body === undefined))) || !connected || state.stopping || editPending || (!state.isStreaming && pending) || !state.model || !state.availableModels.length}
+				disabled={(!!draftTarget && !storedDraft.ready) || !connected || state.stopping || editPending || (!state.isStreaming && pending) || !state.model || !state.availableModels.length}
+				missingAttachments={draftTarget ? storedDraft.attachments.filter((item) => item.body === undefined) : undefined}
+				onRemoveMissing={storedDraft.removeMissing}
 				streaming={state.isStreaming}
 				stopping={state.stopping}
 				onSend={send}

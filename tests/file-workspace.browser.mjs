@@ -52,7 +52,7 @@ try {
 		await page.getByRole("button", { name: "浏览项目：Skiff", exact: true }).click();
 		await page.getByRole("option", { name: "aiagent", exact: true }).click();
 		assert.match(await empty.locator(".file-workspace-project").innerText(), /^aiagent/);
-		await tool("Git Tree").click();
+		await tool("Git 历史").click();
 		await page.locator(".git-tree-workspace").waitFor();
 		await tool("文件").click();
 		await empty.waitFor();

@@ -55,6 +55,8 @@ function MetricsView({ state }) {
 	const toggle = () => setExpanded((value) => !value);
 	return React.createElement("div", { className: `chat-and-rail ${expanded ? "rail-expanded" : "rail-collapsed"}`, style: { height: "100vh" } },
 		React.createElement("div", { className: "chat-column" }, React.createElement("div", { style: { flex: 1 } }), React.createElement(ContextUsage, { metrics, notice: "模型已切换，当前使用预览线路。" })),
+		// Match VoyageWorkspace's middle resize column so the rail stays 260px wide.
+		expanded && !narrow ? React.createElement("div", { "aria-hidden": true }) : null,
 		expanded
 			? narrow
 				? React.createElement(Dialog, { className: "voyage-dialog", "aria-label": "航行台详情", returnFocusSelector: ".collapsed-toggle", onClose: toggle }, React.createElement(VoyageRail, { metrics, onCollapse: toggle }))

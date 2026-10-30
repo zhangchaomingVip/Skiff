@@ -15,8 +15,8 @@ try {
 		await page.goto(`${origin}/tests/preview.html?fixture=sidebar&theme=${theme}`);
 		await page.waitForFunction(() => document.querySelector(".sidebar")?.dataset.connected === "true");
 		const chat = await page.evaluate(() => JSON.parse(localStorage.getItem("skiff.workspace.v1")).activeId);
-		assert.deepEqual(await page.locator(".activity-button").evaluateAll((els) => els.map((el) => el.getAttribute("aria-label"))), ["对话", "文件", "Git Tree"]);
-		await tool("Git Tree").click();
+		assert.deepEqual(await page.locator(".activity-button").evaluateAll((els) => els.map((el) => el.getAttribute("aria-label"))), ["对话", "文件", "Git 历史"]);
+		await tool("Git 历史").click();
 		await page.locator(".commit-metadata h2").waitFor();
 		assert.equal(await page.getByRole("option").count(), 13);
 		await page.mouse.move(700, 700);
@@ -45,14 +45,14 @@ try {
 		await tool("文件").click();
 		await page.getByRole("tab", { name: "Commit", exact: true }).click();
 		await page.getByRole("textbox", { name: "提交信息", exact: true }).waitFor();
-		await tool("Git Tree").click();
+		await tool("Git 历史").click();
 		await page.locator(".commit-metadata h2").waitFor();
 		await page.getByRole("button", { name: "返回对话", exact: true }).click();
 		await page.locator(".git-tree-workspace").waitFor({ state: "detached" });
 		console.log(`PASS ${theme}: branches, graph, keyboard, details, diff, search, projects and tool switching`);
 	}
 	// Delayed responses from another project must not replace the visible history.
-	await tool("Git Tree").click();
+	await tool("Git 历史").click();
 	await page.locator(".commit-metadata h2").waitFor();
 	await page.evaluate(() => {
 		const original = window.__TAURI_INTERNALS__.invoke.bind(window.__TAURI_INTERNALS__);
@@ -88,7 +88,7 @@ try {
 	console.log("PASS delayed project responses, retry/empty states and load more");
 	await page.setViewportSize({ width: 600, height: 800 });
 	await page.goto(`${origin}/tests/preview.html?fixture=sidebar&theme=light`);
-	await tool("Git Tree").click();
+	await tool("Git 历史").click();
 	await page.getByRole("button", { name: "HEAD · 当前提交", exact: true }).click();
 	await page.locator(".commit-metadata h2").waitFor();
 	await page.screenshot({ path: "dist/git-tree/narrow.png" });
