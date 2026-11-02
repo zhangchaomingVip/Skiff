@@ -15,10 +15,7 @@ const GAUGE_LENGTH = 283;
 const DIAL_RADIUS = 30;
 const DIAL_CIRCUMFERENCE = 2 * Math.PI * DIAL_RADIUS;
 const DIAL_ARC_LENGTH = DIAL_CIRCUMFERENCE * .75;
-const TAP_DURATION_MS = 5000;
-const BUBBLE_DURATION_MS = 2000;
-const COMPANION_ART = { idle: "/companion/idle.webp", working: "/companion/working.webp", tap: "/companion/tap.webp", still: "/companion/idle.png" };
-const COMPANION_LINES = ["航线已确认", "交给我吧", "风向正好", "海面平稳"];
+const COMPANION_ART = { idle: "/companion/idle.webp", still: "/companion/idle.png" };
 const DECK_OPTIONS: { mode: DeckMode; label: string; icon: IconName }[] = [
 	{ mode: "companion", label: "领航员", icon: "sailboat" },
 	{ mode: "billing", label: "账单明细", icon: "tokens" },
@@ -184,42 +181,24 @@ function useReducedMotion(): boolean {
 	return reduced;
 }
 
-/** The navigator stage: a looping idle/working loop plus a one-shot tap pose. */
-function Companion({ streaming }: { streaming: boolean }) {
+/** The navigator stage: a resident standby loop with a static reduced-motion fallback. */
+function Companion() {
 	const reduced = useReducedMotion();
 	const [custom, setCustom] = useState<string | undefined>(() => readCompanion());
 	const [missing, setMissing] = useState<string[]>([]);
-	const [tapping, setTapping] = useState(false);
-	const [bubble, setBubble] = useState<string>();
 	const [notice, setNotice] = useState("");
 	const file = useRef<HTMLInputElement>(null);
-	const timers = useRef<{ tap?: number; bubble?: number; notice?: number }>({});
-	// Every pose is decoded up front so switching frames never flashes white.
-	useEffect(() => {
-		for (const source of Object.values(COMPANION_ART)) { const image = new Image(); image.src = source; }
-	}, []);
+	const noticeTimer = useRef<number>();
 	useEffect(() => () => {
-		window.clearTimeout(timers.current.tap);
-		window.clearTimeout(timers.current.bubble);
-		window.clearTimeout(timers.current.notice);
+		window.clearTimeout(noticeTimer.current);
 	}, []);
-	useEffect(() => { setTapping(false); }, [streaming]);
-	const pose = reduced ? "still" : tapping ? "tap" : streaming ? "working" : "idle";
-	const candidates = custom ? [custom, COMPANION_ART.idle, COMPANION_ART.still] : pose === "idle" ? [COMPANION_ART.idle, COMPANION_ART.still] : [COMPANION_ART[pose], COMPANION_ART.idle, COMPANION_ART.still];
+	const pose = reduced ? "still" : "idle";
+	const candidates = custom ? [custom, COMPANION_ART.idle, COMPANION_ART.still] : [COMPANION_ART[pose], COMPANION_ART.still];
 	const shown = candidates.find((candidate) => !missing.includes(candidate));
 	const announce = (message: string) => {
 		setNotice(message);
-		window.clearTimeout(timers.current.notice);
-		timers.current.notice = window.setTimeout(() => setNotice(""), 2400);
-	};
-	const tap = () => {
-		if (reduced) return;
-		setTapping(true);
-		setBubble(COMPANION_LINES[Math.floor(Math.random() * COMPANION_LINES.length)]);
-		window.clearTimeout(timers.current.tap);
-		window.clearTimeout(timers.current.bubble);
-		timers.current.tap = window.setTimeout(() => setTapping(false), TAP_DURATION_MS);
-		timers.current.bubble = window.setTimeout(() => setBubble(undefined), BUBBLE_DURATION_MS);
+		window.clearTimeout(noticeTimer.current);
+		noticeTimer.current = window.setTimeout(() => setNotice(""), 2400);
 	};
 	const pick = (event: ChangeEvent<HTMLInputElement>) => {
 		const selected = event.target.files?.[0];
@@ -244,15 +223,14 @@ function Companion({ streaming }: { streaming: boolean }) {
 		announce("已恢复默认领航员");
 	};
 	return <div className={`voyage-companion pose-${pose}`}>
-		<button type="button" className="voyage-companion-stage" aria-label="领航员，点击互动，右键更换" title="点击互动 · 右键更换领航员" onClick={tap} onContextMenu={(event) => { event.preventDefault(); file.current?.click(); }}>
-			{bubble && <span className="voyage-companion-bubble">{bubble}</span>}
+		<div className="voyage-companion-stage" aria-label="领航员，右键更换" title="右键更换领航员" onContextMenu={(event) => { event.preventDefault(); file.current?.click(); }}>
 			{shown ? <img className="voyage-companion-art" src={shown} alt="" draggable={false} onError={() => setMissing((list) => list.includes(shown) ? list : [...list, shown])} /> : <span className="voyage-companion-ghost" aria-hidden="true" />}
 			<svg className="voyage-companion-pedestal" viewBox="0 0 160 44" aria-hidden="true">
 				<ellipse className="voyage-pedestal-glow" cx="80" cy="22" rx="50" ry="14" />
 				<ellipse className="voyage-pedestal-ring" cx="80" cy="22" rx="58" ry="12" />
 				<ellipse className="voyage-pedestal-ripple" cx="80" cy="22" rx="34" ry="7" />
 			</svg>
-		</button>
+		</div>
 		<input ref={file} type="file" className="sr-only" aria-label="更换领航员" accept=".webp,.gif,.png,image/webp,image/gif,image/png" onChange={pick} />
 		{custom && <button type="button" className="voyage-companion-reset" title="恢复默认领航员" aria-label="恢复默认领航员" onClick={reset}><Icon name="refresh" size={14} /></button>}
 		<span className="sr-only" role="status">{notice}</span>
@@ -341,7 +319,7 @@ export function VoyageRail({ metrics, onCollapse }: { metrics: VoyageMetrics; on
 				<div className="voyage-deck-switch" role="group" aria-label="甲板视图">
 					{DECK_OPTIONS.map(({ mode, label, icon }) => <button key={mode} type="button" className={`voyage-deck-mode${deck === mode ? " is-active" : ""}`} aria-pressed={deck === mode} aria-label={label} title={label} onClick={() => selectDeck(mode)}><Icon name={icon} size={14} /></button>)}
 				</div>
-				{deck === "companion" && <Companion streaming={metrics.streaming} />}
+				{deck === "companion" && <Companion />}
 				{deck === "billing" && <div className="voyage-deck-bill"><TurnRecord metrics={metrics} /><ToolLog metrics={metrics} open /></div>}
 			</section>
 			{onCollapse && <IconButton type="button" className="voyage-rail-toggle voyage-collapse" onClick={onCollapse} aria-label="收起航行台"><Icon name="chevron" size={16} /></IconButton>}

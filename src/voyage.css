@@ -287,8 +287,7 @@
 	.voyage-deck-bill .voyage-tool-log { margin-top: 10px; }
 	/* One knob scales the whole stage: art, placeholder and pedestal keep their ratio. */
 	.voyage-companion { --companion-size: clamp(240px, 58%, 300px); position: relative; flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; min-height: 0; padding-top: 24px; }
-	.voyage-companion-stage { position: relative; display: flex; align-items: flex-end; justify-content: center; width: 100%; padding: 0; border: 0; background: transparent; cursor: pointer; }
-	.voyage-companion-stage:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: var(--radius-lg); }
+	.voyage-companion-stage { position: relative; display: flex; align-items: flex-end; justify-content: center; width: 100%; padding: 0; border: 0; background: transparent; }
 	.voyage-companion-art { position: relative; z-index: 1; display: block; width: min(var(--companion-size), 100%); height: auto; aspect-ratio: 1; margin-bottom: 10px; object-fit: contain; image-rendering: auto; }
 	.voyage-companion-ghost { width: calc(var(--companion-size) * .62); height: calc(var(--companion-size) * .62); margin-bottom: 26px; border: 1px dashed color-mix(in srgb, var(--accent) 22%, transparent); border-radius: var(--radius-full); }
 	.voyage-companion-pedestal { position: absolute; bottom: 0; left: 50%; z-index: 0; width: calc(var(--companion-size) * .8); height: calc(var(--companion-size) * .22); transform: translateX(-50%); pointer-events: none; }
@@ -296,9 +295,6 @@
 	.voyage-pedestal-ring { fill: none; stroke: color-mix(in srgb, var(--accent) 28%, transparent); stroke-width: 1; }
 	.voyage-pedestal-ripple { fill: none; stroke: color-mix(in srgb, var(--accent) 16%, transparent); stroke-width: 1; animation: voyage-ripple 3.6s ease-in-out infinite; }
 	@keyframes voyage-ripple { 50% { opacity: .3; } }
-	/* Anchored above the art: the character art has no transparent headroom to spare. */
-	.voyage-companion-bubble { position: absolute; bottom: calc(100% - 8px); left: 50%; z-index: 2; padding: 2px 8px; border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); border-radius: var(--radius-full); background: color-mix(in srgb, var(--bg) 78%, transparent); color: var(--secondary); font-size: var(--font-size-xs); line-height: 1.4; white-space: nowrap; transform: translateX(-50%); animation: voyage-bubble 2s ease-out both; }
-	@keyframes voyage-bubble { 0% { opacity: 0; transform: translate(-50%, 4px); } 12%, 82% { opacity: 1; transform: translate(-50%, 0); } 100% { opacity: 0; transform: translate(-50%, -4px); } }
 	.voyage-companion-reset { position: absolute; right: 2px; bottom: 2px; display: grid; place-items: center; width: 20px; height: 20px; padding: 0; border: 0; border-radius: var(--radius-md); background: transparent; color: var(--chat-meta); cursor: pointer; }
 	.voyage-companion-reset:hover { color: var(--text); background: var(--hover); }
 	@media (max-width: 760px) { .voyage-dashboard { width: 100%; padding: var(--space-3); } }

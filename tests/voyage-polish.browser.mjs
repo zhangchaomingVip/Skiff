@@ -34,11 +34,12 @@ try {
 	assert.equal(await page.locator(".voyage-companion, .voyage-turn").count(), 0);
 	await page.locator('[aria-label="领航员"]').click();
 	assert.equal(await page.locator(".voyage-companion").count(), 1);
+	assert.equal(await page.locator(".voyage-companion.pose-idle").count(), 1);
 	assert((await page.locator(".voyage-companion-art").getAttribute("src")).endsWith("/companion/idle.webp"));
 	await page.locator(".voyage-companion-stage").click();
-	assert.equal(await page.locator(".voyage-companion.pose-tap").count(), 1);
-	assert((await page.locator(".voyage-companion-art").getAttribute("src")).endsWith("/companion/tap.webp"));
-	assert.equal(await page.locator(".voyage-companion-bubble").count(), 1);
+	assert.equal(await page.locator(".voyage-companion.pose-idle").count(), 1);
+	assert((await page.locator(".voyage-companion-art").getAttribute("src")).endsWith("/companion/idle.webp"));
+	assert.equal(await page.locator(".voyage-companion-bubble").count(), 0);
 	await page.locator('[aria-label="账单明细"]').click();
 	assert.equal(await page.locator(".voyage-deck-billing .voyage-turn").count(), 1);
 	await page.reload();
