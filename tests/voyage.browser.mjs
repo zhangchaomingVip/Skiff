@@ -32,8 +32,8 @@ try {
 	await render(); await advance(100);
 	state.messages[state.messages.length - 1] = reply("思考", { blocks: [{ kind: "thinking", text: "思考" }] }); await render();
 	assert.equal((await read()).activity, "fishing");
-	assert.equal((await read()).status, "思考中");
-	assert.equal(await page.locator(".voyage-pill").textContent(), "航行中");
+	assert.equal((await read()).status, "运行中");
+	assert.equal(await page.locator(".voyage-pill").textContent(), "运行中");
 	assert.equal(await page.locator(".voyage-gauge-label").textContent(), "思考中");
 	await advance(100);
 	assert.equal((await read()).speed, 0);
@@ -116,12 +116,12 @@ try {
 		assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
 		await page.screenshot({ path: new URL(`${theme}-${width}-context.png`, screenshots).pathname.replace(/^\/(\w:)/, "$1"), fullPage: true, animations: "disabled" });
 		if (!(await page.locator(".voyage-rail.expanded").count())) await page.getByRole("button", { name: "航行台", exact: true }).click();
-		await page.locator(".voyage-rail.expanded .voyage-speed-stats").waitFor();
+		await page.locator(".voyage-rail.expanded .voyage-dials").waitFor();
 		await page.waitForTimeout(200);
-		assert(await page.locator(".voyage-rail.expanded .voyage-speed-stats").evaluate((element) => element.scrollWidth <= element.clientWidth));
+		assert(await page.locator(".voyage-rail.expanded .voyage-dials").evaluate((element) => element.scrollWidth <= element.clientWidth));
 		if (width === 600) {
 			assert(await page.locator(".voyage-dialog").evaluate((element) => element.scrollWidth <= element.clientWidth));
-			await page.locator(".voyage-dialog .voyage-turn").scrollIntoViewIfNeeded();
+			await page.locator(".voyage-dialog .voyage-deck").scrollIntoViewIfNeeded();
 			await page.screenshot({ path: new URL(`${theme}-${width}-details.png`, screenshots).pathname.replace(/^\/(\w:)/, "$1"), fullPage: true, animations: "disabled" });
 			await page.locator(".voyage-rail-header").scrollIntoViewIfNeeded();
 		}

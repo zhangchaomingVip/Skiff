@@ -27,6 +27,7 @@ const sampleBoat = () => page.locator(".voyage-gauge-svg .voyage-scene-boat").ev
 try {
 	await page.goto(`${base}/tests/voyage.html`);
 	await page.waitForFunction(() => window.voyageHarness?.render);
+	await page.evaluate(async () => { window.voyageStatus = (await import("/src/chat/sailing.ts")).voyageStatus; });
 	for (const theme of ["light", "dark"]) for (const [width, height] of [[1200, 800], [360, 640]]) {
 		await page.setViewportSize({ width, height });
 		await page.evaluate((theme) => { document.documentElement.dataset.theme = theme; }, theme);
@@ -40,7 +41,8 @@ try {
 			await page.locator(".voyage-gauge-svg").scrollIntoViewIfNeeded();
 			const activity = phase === "moored" ? "moored" : phase === "sailing" ? "sailing" : "fishing";
 			assert.equal(await page.evaluate(() => window.voyageHarness.metrics.activity), activity);
-			assert.equal(await page.locator(".voyage-status-pill").textContent(), phase === "moored" ? "已停止" : "航行中");
+			// The pill wording is voyageStatus(activity, phase); sampling decides it, not the phase label.
+			assert.equal(await page.locator(".voyage-status-pill").textContent(), await page.evaluate(() => window.voyageStatus(window.voyageHarness.metrics.activity, window.voyageHarness.metrics.phase)));
 			assert.equal(await page.locator(".voyage-status-pill .voyage-status-dot").getAttribute("class"), `voyage-status-dot ${phase === "moored" ? "stopped" : "running"}`);
 			const samples = await sampleBoat();
 			const drift = Math.max(...samples.map((sample) => sample.x)) - Math.min(...samples.map((sample) => sample.x));

@@ -20,12 +20,55 @@ let state;
 const read = () => page.evaluate(() => window.voyageHarness.metrics);
 const render = async () => { await page.evaluate((state) => window.voyageHarness.render(state), state); await page.waitForTimeout(30); };
 const advance = async (ms) => { await page.evaluate((ms) => window.voyageHarness.advance(ms), ms); await page.waitForTimeout(30); };
-const record = async () => page.locator(".voyage-turn dl > div").evaluateAll((rows) => Object.fromEntries(rows.map((row) => [row.querySelector("dt").textContent, row.querySelector("dd").textContent])));
+// The written bill lives in the lower deck; the navigator stage is the default view.
+const billing = async () => { if (!(await page.locator(".voyage-deck-billing").count())) await page.locator('[aria-label="账单明细"]').click(); await page.waitForTimeout(40); };
+const record = async () => { await billing(); return page.locator(".voyage-turn dl > div").evaluateAll((rows) => Object.fromEntries(rows.map((row) => [row.querySelector("dt").textContent, row.querySelector("dd").textContent]))); };
 const capture = (name) => page.screenshot({ path: fileURLToPath(new URL(name, screenshots)), fullPage: true, animations: "disabled" });
 
 try {
 	await page.goto(`${base}/tests/voyage.html`);
 	await page.waitForFunction(() => window.voyageHarness?.render);
+	// Three deck views: the navigator stage by default, the bill on request, stars alone.
+	assert.equal(await page.locator(".voyage-deck-companion .voyage-companion").count(), 1);
+	await page.locator('[aria-label="纯净星空"]').click();
+	assert.equal(await page.locator(".voyage-companion, .voyage-turn").count(), 0);
+	await page.locator('[aria-label="领航员"]').click();
+	assert.equal(await page.locator(".voyage-companion").count(), 1);
+	assert((await page.locator(".voyage-companion-art").getAttribute("src")).endsWith("/companion/idle.webp"));
+	await page.locator(".voyage-companion-stage").click();
+	assert.equal(await page.locator(".voyage-companion.pose-tap").count(), 1);
+	assert((await page.locator(".voyage-companion-art").getAttribute("src")).endsWith("/companion/tap.webp"));
+	assert.equal(await page.locator(".voyage-companion-bubble").count(), 1);
+	await page.locator('[aria-label="账单明细"]').click();
+	assert.equal(await page.locator(".voyage-deck-billing .voyage-turn").count(), 1);
+	await page.reload();
+	await page.waitForFunction(() => window.voyageHarness?.render);
+	assert.equal(await page.locator(".voyage-deck-billing .voyage-turn").count(), 1);
+	// The divider drags the deck taller, remembers the height and resets on double click.
+	const deckHeight = () => page.locator(".voyage-deck").evaluate((element) => element.getBoundingClientRect().height);
+	const split = () => page.locator(".voyage-dashboard").evaluate((element) => element.classList.contains("split"));
+	const before = await deckHeight();
+	const handle = await page.locator(".voyage-deck-handle").boundingBox();
+	await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
+	await page.mouse.down();
+	await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2 - 90, { steps: 8 });
+	await page.mouse.up();
+	const after = await deckHeight();
+	assert(after - before >= 60, `deck did not grow: ${before} -> ${after}`);
+	assert.equal(await split(), true);
+	assert(Math.abs(Number(await page.evaluate(() => localStorage.getItem("skiff.voyage.deckSize"))) - after) <= 2);
+	const instruments = await page.locator(".voyage-instruments").evaluate((element) => ({ scroll: element.scrollHeight, client: element.clientHeight }));
+	assert(instruments.scroll >= instruments.client, "cluster should keep its content and scroll");
+	await page.reload();
+	await page.waitForFunction(() => window.voyageHarness?.render);
+	assert.equal(await split(), true);
+	await page.locator(".voyage-deck-handle").focus();
+	await page.keyboard.press("ArrowUp");
+	const grown = await deckHeight();
+	assert(grown > after, `keyboard did not grow the deck: ${after} -> ${grown}`);
+	await page.locator(".voyage-deck-handle").dblclick();
+	assert.equal(await split(), false);
+	assert.equal(await page.evaluate(() => localStorage.getItem("skiff.voyage.deckSize")), null);
 	state = { messages: [user, { id: "first", role: "assistant", streaming: true, usage: usage(100, 40, 10), blocks: [call("first", "inspect_repository")] }], isStreaming: true,
 		activeRun: { startedAt: 1000, promptId: "prompt", turnId: "turn:user" }, model: { id: "mock", provider: "mock", contextWindow: 1000 } };
 	await render();
@@ -45,7 +88,7 @@ try {
 	await render(); assert.equal((await read()).context, 50);
 	state.voyageTimeline = { ...(await read()).timeline, contextUsed: 999999, contextLimit: 1000, contextEstimated: false };
 	await render(); assert.equal((await read()).context, 50);
-	assert((await page.locator(".voyage-progress-caption").textContent()).includes("50"));
+	assert((await page.locator(".voyage-dial-context .voyage-dial-caption").textContent()).includes("50"));
 
 	state = { sessionId: "estimate", messages: [{ ...user, blocks: [{ kind: "text", text: "问题" }] }, { id: "first", role: "assistant", blocks: [
 		{ kind: "thinking", text: "思考" }, { kind: "text", text: "abcd" }, call("estimate", "read", "abcdefgh"), result("estimate", "工具结果"),
@@ -53,7 +96,7 @@ try {
 	await render();
 	assert.equal((await read()).context, 11);
 	assert.equal((await read()).contextEstimated, true);
-	assert((await page.locator(".voyage-progress-caption").textContent()).includes("估算"));
+	assert((await page.locator(".voyage-dial-context").getAttribute("aria-label")).includes("估算"));
 	assert.equal((await record())["思考"], undefined);
 	assert.equal((await record())["新增 / 缓存"], "—");
 	await page.locator('[aria-label="收起航行台"]').click();
@@ -124,6 +167,7 @@ try {
 		{ id: "billed", role: "assistant", blocks: [], usage: usage(1000, 38000, 0, 2000, 640), durationMs: 6000, routeSnapshot: snapshot("CNY") },
 	] };
 	await render();
+	await billing();
 	assert.deepEqual([(await read()).turn.total, (await read()).turn.newInput, (await read()).turn.cacheRead], [41000, 1000, 38000]);
 	assert.equal(await page.locator(".voyage-turn-header span").textContent(), "41k tok");
 	assert.equal((await record())["本轮耗时"], "6s");
@@ -159,7 +203,7 @@ try {
 	assert(await page.locator(".voyage-gauge-svg").evaluate((svg) => [...svg.querySelectorAll(".voyage-gauge-limit")].every((label) => {
 		const box = label.getBBox();
 		const outsideArc = label.textContent === "0" ? box.x + box.width < 32 : box.x > 228;
-		return box.x >= -6 && box.x + box.width <= 266 && (label.textContent === "150" ? box.y + box.height < 36 : outsideArc && box.y + box.height < 151);
+		return box.x >= -6 && box.x + box.width <= 272 && (label.textContent === "150" ? box.y + box.height < 36 : outsideArc && box.y + box.height < 151);
 	})));
 	await capture("dark-1200-gauge-billing.png");
 	state.messages[3].usage = usage(100, 0, 0, 10, 0); await render();

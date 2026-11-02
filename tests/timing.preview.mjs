@@ -109,7 +109,9 @@ try {
 	render();
 	await until(() => latest?.connected, "Session did not connect");
 	panel.toggle();
-	await until(() => document.querySelector(".voyage-turn"), "Rail did not expand");
+	await until(() => document.querySelector(".voyage-deck"), "Rail did not expand");
+	document.querySelector('[aria-label="账单明细"]')?.click();
+	await until(() => document.querySelector(".voyage-turn"), "Billing deck did not open");
 	holdPrompts = true;
 	const sent = await takePrompt(() => latest.actions.prompt("慢速请求"));
 	await until(waiting, "Missing immediate assistant placeholder");

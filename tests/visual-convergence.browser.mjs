@@ -23,7 +23,8 @@ try {
 	for (const theme of ["dark", "light"]) for (const width of [240, 260, 480]) {
 		await page.evaluate(({ theme, width }) => {
 			document.documentElement.dataset.theme = theme;
-			document.querySelector(".chat-and-rail").style.gridTemplateColumns = `minmax(0, 1fr) ${width}px`;
+			// Mirror the shell grid: chat column, resize separator, rail.
+			document.querySelector(".chat-and-rail").style.gridTemplateColumns = `minmax(0, 1fr) 8px ${width}px`;
 		}, { theme, width });
 		const result = await page.evaluate(() => {
 			const failures = [];

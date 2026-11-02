@@ -51,6 +51,7 @@
       "--color-window-close",
       "--commit-author-width",
       "--commit-summary-width",
+      "--companion-size",
       "--composer-bg",
       "--composer-border",
       "--composer-shadow",
@@ -193,6 +194,7 @@
       "--transition-fast",
       "--transition-slow",
       "--user-bubble-border",
+      "--voyage-deck-size",
       "--voyage-progress",
       "--voyage-width",
       "--workspace-backdrop"

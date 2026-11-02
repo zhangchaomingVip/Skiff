@@ -27,7 +27,8 @@ const needle = () => page.evaluate(() => {
 	const element = document.querySelector(".voyage-gauge-needle");
 	const matrix = element ? new DOMMatrixReadOnly(getComputedStyle(element).transform) : undefined;
 	return { speed: window.voyageHarness.metrics.speed, angle: matrix ? Math.atan2(matrix.b, matrix.a) * 180 / Math.PI : undefined,
-		label: document.querySelector(".voyage-gauge-label").textContent, status: document.querySelector(".voyage-status-pill").textContent,
+		label: document.querySelector(".voyage-gauge-label").textContent, unit: document.querySelector(".voyage-gauge-unit").textContent,
+		status: document.querySelector(".voyage-status-pill").textContent, average: window.voyageHarness.metrics.averageSpeed,
 		peak: window.voyageHarness.metrics.peakSpeed, estimated: window.voyageHarness.metrics.speedEstimated };
 });
 const capture = (name) => page.screenshot({ path: fileURLToPath(new URL(name, screenshots)), fullPage: true, animations: "disabled" });
@@ -67,19 +68,39 @@ try {
 	const fast = await needle();
 	assert(fast.speed > slow.speed);
 	assert(fast.angle > slow.angle, `needle did not respond to increasing speed: ${JSON.stringify({ slow, fast })}`);
-	assert.equal(fast.status, "航行中");
+	assert.equal(fast.status, "运行中");
 	await capture("faster-output.png");
 	await send({ type: "message_end", message: { role: "assistant", content: [{ type: "text", text: "完成" }], usage: { input: 100, cacheRead: 0, cacheWrite: 0, output: 400, totalTokens: 500 }, stopReason: "stop" } });
 	await send({ type: "agent_end", durationMs: 1500 });
+	// agent_end is a no-op in the reducer; the session owns the streaming flag.
+	await page.evaluate(() => { window.needleState = { ...window.needleState, isStreaming: false }; window.voyageHarness.render(window.needleState); });
+	await settle();
 	const stopped = await needle();
 	assert.equal(stopped.speed, 0);
-	assert(Math.abs(stopped.angle + 90) < .1);
-	assert.equal(stopped.status, "已停止");
+	// The dial freezes on the turn average instead of falling back to a dead zero.
+	assert(stopped.average > 0, `average missing: ${JSON.stringify(stopped)}`);
+	assert(Math.abs(stopped.angle - (-90 + Math.min(1, stopped.average / 300) * 180)) < .1, `needle did not freeze on the average: ${JSON.stringify(stopped)}`);
+	assert.equal(stopped.label, "船速");
+	assert.equal(stopped.unit, "tok/s · 本轮均速");
+	assert.equal(stopped.status, "空闲");
 	assert.equal(stopped.estimated, false);
 	assert.equal(stopped.peak, fast.peak);
+	assert.equal(await page.locator(".voyage-gauge-number").textContent(), stopped.average.toFixed(1));
 	await capture("stopped-zero.png");
+	// A brand new voyage waits for departure instead of showing a large dead zero.
+	await page.evaluate(() => window.voyageHarness.render({ messages: [], isStreaming: false, model: { id: "preview", provider: "mock", contextWindow: 1000 } }));
+	await settle();
+	assert.equal(await page.locator(".voyage-gauge-number").textContent(), "—");
+	assert.equal(await page.locator(".voyage-gauge-label").textContent(), "等待启航");
+	assert.equal(await page.locator(".voyage-gauge-unit").textContent(), "tok/s");
+	assert(Math.abs((await needle()).angle + 90) < .1);
+	assert.equal(await page.locator(".voyage-dial-context .voyage-dial-value").textContent(), "—");
+	assert.equal(await page.locator(".voyage-dial-cache .voyage-dial-value").textContent(), "—");
+	// A cold cache stays on the quiet track colour: no warning tone for 0%.
+	assert.equal((await page.locator(".voyage-dial-cache").getAttribute("class")).includes("voyage-dial-quiet"), true);
+	await capture("empty-departure.png");
 	await page.evaluate(() => window.voyageHarness.unmount());
 	assert.equal(await page.evaluate(() => window.voyageHarness.intervalCount()), 0);
 	assert.deepEqual(errors, []);
-	console.log(`PASS needle: real reducer events, zero/stale streaming usage cannot override live speed, estimated label, thinking timer, live ${slow.speed.toFixed(1)} tok/s at ${slow.angle.toFixed(1)} deg, faster ${fast.speed.toFixed(1)} tok/s at ${fast.angle.toFixed(1)} deg, stopped 0 tok/s at -90 deg, historical peak retained; 3 screenshots`);
+	console.log(`PASS needle: real reducer events, zero/stale streaming usage cannot override live speed, estimated label, thinking timer, live ${slow.speed.toFixed(1)} tok/s at ${slow.angle.toFixed(1)} deg, faster ${fast.speed.toFixed(1)} tok/s at ${fast.angle.toFixed(1)} deg, stopped 0 tok/s frozen on ${stopped.average.toFixed(1)} tok/s average, historical peak retained; 3 screenshots`);
 } finally { await browser.close(); }

@@ -39,6 +39,8 @@ try {
 	state.messages[2].usage = usage(1, 0, 0, 1, 1);
 	await render();
 	assert.equal((await read()).context, 2);
+	// The written bill is the deck's billing view, not part of the instrument cluster.
+	await page.locator('[aria-label="账单明细"]').click();
 	assert((await page.locator(".voyage-turn").textContent()).includes("累计输入"));
 	assert((await page.locator(".voyage-turn").textContent()).includes("思考"));
 	state = { sessionId: "context-reset", messages: [], isStreaming: false, model: { id: "preview", provider: "mock", contextWindow: 1000 } };
@@ -77,7 +79,9 @@ try {
 		assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
 		for (const selector of [".voyage-tools", ".voyage-tool-active", ".voyage-tool-log ol"]) {
 			const bounds = await page.locator(selector).evaluate((element) => ({ scroll: element.scrollWidth, client: element.clientWidth }));
-			assert(bounds.scroll <= bounds.client, `${theme} ${width} ${selector}: ${JSON.stringify(bounds)}`);
+			// The rows sit in a scroll container with a stable gutter; sub-pixel flex widths
+			// can round the scroll width 1px past the client width without any visible clipping.
+			assert(bounds.scroll - bounds.client <= 1, `${theme} ${width} ${selector}: ${JSON.stringify(bounds)}`);
 		}
 		await screenshot(`${theme}-${width}-parallel-failure.png`);
 	}
@@ -152,8 +156,9 @@ try {
 	assert(await page.locator(".voyage-tool-active").evaluate((element) => element.scrollHeight > element.clientHeight && element.clientHeight <= 200));
 	state.messages[1].blocks.push(...Array.from({ length: 30 }, (_, index) => result(`many-${index}`, `result ${index}`, index % 3 === 0))); await render();
 	assert.equal((await read()).toolLog.length, 30);
-	// The log is collapsed by default; open it before checking its scroll bounds.
-	await page.locator(".voyage-tool-log summary").click(); await page.waitForTimeout(60);
+	// The billing deck opens the log; only a collapsed drawer needs the click.
+	if (!await page.locator(".voyage-tool-log").evaluate((element) => element.open)) await page.locator(".voyage-tool-log summary").click();
+	await page.waitForTimeout(60);
 	assert(await page.locator(".voyage-tool-log ol").evaluate((element) => element.scrollHeight > element.clientHeight && element.clientHeight <= 160));
 	assert.equal(await page.locator('.voyage-tool-log [aria-live="polite"]').getAttribute("aria-relevant"), "additions");
 	assert.equal(await page.locator('.voyage-tool-active').count(), 0);

@@ -8,7 +8,7 @@ const tokens = "src/tokens.css";
 const component = "src/components/VoyageRail.tsx";
 const rejected = (overrides, pattern) => assert.ok(auditStyles(overrides).errors.some((error) => pattern.test(error)), `Expected ${pattern}`);
 rejected({ [css]: `${read(css)}\n@layer pages { .voyage-gauge-new { font-size: 9px; } }` }, /Font outside scale/);
-rejected({ [tokens]: read(tokens).replace("--font-size-xs: 11px", "--font-size-xs: var(--font-size-tiny); --font-size-tiny: 9px") }, /Gauge font below minimum/);
+rejected({ [tokens]: read(tokens).replace("--font-size-lg: 16px", "--font-size-lg: var(--font-size-tiny); --font-size-tiny: 9px") }, /Gauge font below minimum/);
 rejected({ [component]: read(component).replace('<text x="26"', '<text fontSize="9px" x="26"') }, /Gauge font below minimum/);
 rejected({ [component]: read(component).replace('<text x="26"', '<text style={{ fontSize: "9px" }} x="26"') }, /Gauge font below minimum/);
 rejected({ [css]: `${read(css)}\n@layer pages { .voyage-gauge-scene { opacity: .5; } }` }, /Gauge text ancestor opacity/);
