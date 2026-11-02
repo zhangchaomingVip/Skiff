@@ -6,9 +6,10 @@ pub mod update;
 #[path = "git_push.rs"]
 mod push;
 use std::{
-	collections::hash_map::DefaultHasher,
+	collections::{hash_map::DefaultHasher, HashMap, HashSet},
 	fs,
 	hash::{Hash, Hasher},
+	io::Read,
 	path::{Component, Path, PathBuf},
 	process::{Command, Output, Stdio},
 	sync::{Arc, Mutex},
@@ -360,7 +361,7 @@ fn path_in_head(repo: &Path, path: &str) -> bool {
 	command.status().map(|status| status.success()).unwrap_or(false)
 }
 
-fn parse_status(repo: &Path, bytes: &[u8]) -> Vec<GitEntry> {
+fn parse_status(bytes: &[u8], head_paths: &HashSet<String>) -> Vec<GitEntry> {
 	let records = bytes.split(|byte| *byte == 0).filter(|part| !part.is_empty()).collect::<Vec<_>>();
 	let mut entries = Vec::new();
 	let mut index = 0;
@@ -386,31 +387,56 @@ fn parse_status(repo: &Path, bytes: &[u8]) -> Vec<GitEntry> {
 		else if x == 'D' || y == 'D' { "deleted" }
 		else if x == 'A' || y == 'A' { "added" }
 		else { "modified" }.to_string();
-		let rollbackable = kind != "untracked" && kind != "conflict" && path_in_head(repo, old_path.as_deref().unwrap_or(&path));
+		let rollbackable = kind != "untracked" && kind != "conflict" && head_paths.contains(old_path.as_deref().unwrap_or(&path));
 		entries.push(GitEntry { path, old_path, kind: kind.clone(), index_status: x.to_string(), worktree_status: y.to_string(), selectable: kind != "conflict", rollbackable });
 	}
 	entries
 }
 
-fn status_version(repo: &Path, head: &Option<String>, bytes: &[u8], entries: &[GitEntry]) -> String {
+fn status_version(repo: &Path, head: &Option<String>, bytes: &[u8], entries: &[GitEntry]) -> Result<String, String> {
 	let mut hash = DefaultHasher::new();
 	head.hash(&mut hash);
 	bytes.hash(&mut hash);
-	for entry in entries {
-		entry.path.hash(&mut hash);
-		let mut index = git_command(repo);
-		index.args(["ls-files", "-s", "--", &entry.path]);
-		if let Ok(output) = index.output() { output.stdout.hash(&mut hash); }
-		let absolute = repo.join(&entry.path);
-		if absolute.is_file() {
-			let mut worktree = git_command(repo);
-			worktree.args(["hash-object", "--no-filters", "--", &entry.path]);
-			if let Ok(output) = worktree.output() { output.stdout.hash(&mut hash); }
-		} else {
-			"missing".hash(&mut hash);
+	if entries.is_empty() { return Ok(format!("{:016x}", hash.finish())); }
+	// Read the index once, preserving all conflict stages and literal NUL-delimited
+	// paths. Spawning ls-files and hash-object per file dominates Windows latency.
+	let mut index = git_command(repo);
+	index.args(["ls-files", "--stage", "-z"]);
+	let index = checked(index, "读取暂存区版本")?.stdout;
+	let mut staged = HashMap::<&[u8], Vec<&[u8]>>::new();
+	for record in index.split(|byte| *byte == 0).filter(|record| !record.is_empty()) {
+		if let Some(tab) = record.iter().position(|byte| *byte == b'\t') {
+			staged.entry(&record[tab + 1..]).or_default().push(&record[..tab]);
 		}
 	}
-	format!("{:016x}", hash.finish())
+	let mut buffer = [0u8; 64 * 1024];
+	for entry in entries {
+		entry.path.hash(&mut hash);
+		staged.get(entry.path.as_bytes()).hash(&mut hash);
+		let absolute = repo.join(&entry.path);
+		let failure = |error| format!("无法校验文件 {}：{error}", entry.path);
+		let metadata = match fs::symlink_metadata(&absolute) {
+			Ok(metadata) => metadata,
+			Err(error) if error.kind() == std::io::ErrorKind::NotFound => { "missing".hash(&mut hash); continue; }
+			Err(error) => return Err(failure(error)),
+		};
+		if metadata.file_type().is_symlink() {
+			"symlink".hash(&mut hash);
+			fs::read_link(&absolute).map_err(failure)?.hash(&mut hash);
+		} else if metadata.is_file() {
+			"file".hash(&mut hash);
+			metadata.len().hash(&mut hash);
+			let mut file = fs::File::open(&absolute).map_err(failure)?;
+			loop {
+				let count = file.read(&mut buffer).map_err(failure)?;
+				if count == 0 { break; }
+				hash.write(&buffer[..count]);
+			}
+		} else {
+			"directory".hash(&mut hash);
+		}
+	}
+	Ok(format!("{:016x}", hash.finish()))
 }
 
 fn read_status(root: &Path) -> Result<GitStatus, String> {
@@ -419,8 +445,15 @@ fn read_status(root: &Path) -> Result<GitStatus, String> {
 	let bytes = status_bytes(&repo, &scope)?;
 	let head = current_head(&repo)?;
 	let branch = git_text(&repo, &["branch", "--show-current"], "读取分支")?;
-	let mut entries = parse_status(&repo, &bytes);
-	let version = status_version(&repo, &head, &bytes, &entries);
+	let mut head_paths = HashSet::new();
+	if head.is_some() && !bytes.is_empty() {
+		let mut tree = git_command(&repo);
+		tree.args(["ls-tree", "-r", "--full-tree", "--name-only", "-z", "HEAD"]);
+		let tree = checked(tree, "读取 HEAD 文件列表")?;
+		head_paths.extend(tree.stdout.split(|byte| *byte == 0).filter(|path| !path.is_empty()).map(|path| String::from_utf8_lossy(path).into_owned()));
+	}
+	let mut entries = parse_status(&bytes, &head_paths);
+	let version = status_version(&repo, &head, &bytes, &entries)?;
 	if !scope.is_empty() {
 		let prefix = format!("{}/", scope.trim_end_matches('/'));
 		for entry in &mut entries {
@@ -667,6 +700,63 @@ mod tests {
 		fs::write(repo.join("large.txt"), vec![b'x'; DIFF_LIMIT + 100]).unwrap();
 		let large = read_diff(&repo, "large.txt".into()).unwrap();
 		assert!(large.truncated); assert!(large.content.unwrap().len() <= DIFF_LIMIT);
+		fs::remove_dir_all(repo).unwrap();
+	}
+
+	#[test]
+	fn status_fingerprint_detects_worktree_and_index_changes_with_same_status() {
+		let repo = temporary_repo("status-fingerprint");
+		fs::create_dir(repo.join("sub")).unwrap();
+		for index in 0..11 { fs::write(repo.join(format!("sub/file-{index}.txt")), "base\n").unwrap(); }
+		commit_all(&repo, "base");
+		for index in 0..11 { fs::write(repo.join(format!("sub/file-{index}.txt")), "edit\n").unwrap(); }
+		for index in 0..7 { fs::write(repo.join(format!("sub/new [{index}] 中文.bin")), vec![index as u8; 256 * 1024]).unwrap(); }
+		let start = std::time::Instant::now();
+		let before = read_status(&repo).unwrap();
+		eprintln!("18-file status: {:?}", start.elapsed());
+		assert_eq!(before.entries.len(), 18);
+		assert_eq!(before.entries.iter().filter(|entry| entry.rollbackable).count(), 11);
+		assert_eq!(before.version, read_status(&repo).unwrap().version);
+		let bytes = status_bytes(&repo, "").unwrap();
+		fs::write(repo.join("sub/file-0.txt"), "late\n").unwrap();
+		let changed = read_status(&repo).unwrap();
+		assert_eq!(bytes, status_bytes(&repo, "").unwrap());
+		assert_ne!(before.version, changed.version);
+		assert!(ensure_expected(&changed, &before.version).is_err());
+		let mut add = git_command(&repo); add.args(["add", "sub/file-0.txt"]); checked(add, "stage").unwrap();
+		fs::write(repo.join("sub/file-0.txt"), "work\n").unwrap();
+		let staged = read_status(&repo).unwrap();
+		let bytes = status_bytes(&repo, "").unwrap();
+		fs::write(repo.join("sub/file-0.txt"), "next\n").unwrap();
+		let mut add = git_command(&repo); add.args(["add", "sub/file-0.txt"]); checked(add, "restage").unwrap();
+		fs::write(repo.join("sub/file-0.txt"), "work\n").unwrap();
+		let restaged = read_status(&repo).unwrap();
+		assert_eq!(bytes, status_bytes(&repo, "").unwrap());
+		assert_ne!(staged.version, restaged.version);
+		assert_eq!(restaged.entries[0].index_status, "M");
+		let scoped = read_status(&repo.join("sub")).unwrap();
+		assert_eq!(scoped.entries.len(), 18);
+		assert!(scoped.entries.iter().all(|entry| !entry.path.starts_with("sub/")));
+		fs::remove_dir_all(repo).unwrap();
+	}
+
+	#[test]
+	fn status_preserves_rollbackability_for_renames_and_literal_paths() {
+		let repo = temporary_repo("status-rename");
+		fs::write(repo.join("old [1] 中文.txt"), "base\n").unwrap();
+		fs::write(repo.join("delete.txt"), "base\n").unwrap();
+		commit_all(&repo, "base");
+		let mut rename = git_command(&repo); rename.args(["mv", "old [1] 中文.txt", "new [1] 中文.txt"]); checked(rename, "rename").unwrap();
+		fs::remove_file(repo.join("delete.txt")).unwrap();
+		fs::write(repo.join("added.txt"), "new\n").unwrap();
+		let mut add = git_command(&repo); add.args(["add", "added.txt"]); checked(add, "add").unwrap();
+		let status = read_status(&repo).unwrap();
+		assert_eq!(status.entries.len(), 3);
+		let renamed = status.entries.iter().find(|entry| entry.kind == "renamed").unwrap();
+		assert!(renamed.rollbackable);
+		assert_eq!(renamed.old_path.as_deref(), Some("old [1] 中文.txt"));
+		assert!(status.entries.iter().find(|entry| entry.kind == "deleted").unwrap().rollbackable);
+		assert!(!status.entries.iter().find(|entry| entry.kind == "added").unwrap().rollbackable);
 		fs::remove_dir_all(repo).unwrap();
 	}
 
