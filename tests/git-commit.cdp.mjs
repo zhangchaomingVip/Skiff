@@ -42,10 +42,19 @@ export async function verifyGitCommit(page, temporaryRoot, artifacts) {
 	await page.locator(".diff-preview", { hasText: "+selected change" }).waitFor();
 	const panel = page.locator(".git-panel");
 	const message = panel.getByRole("textbox", { name: "提交信息" });
+	await page.evaluate(() => {
+		window.gitCommitProgress = [];
+		// Observe the rendered stages: native Tauri internals are read-only.
+		new MutationObserver(() => {
+			const progress = document.querySelector('.git-commit-box [role="status"]')?.textContent;
+			if (progress && window.gitCommitProgress.at(-1) !== progress) window.gitCommitProgress.push(progress);
+		}).observe(document.querySelector(".git-commit-box"), { childList: true, subtree: true, characterData: true });
+	});
 	await panel.getByRole("checkbox", { name: "选择 selected.txt", exact: true }).check();
 	await message.fill("Local selected commit");
 	await panel.getByRole("button", { name: "Commit", exact: true }).click();
 	await panel.getByRole("status").filter({ hasText: "已创建本地提交" }).waitFor();
+	assert.deepEqual(await page.evaluate(() => window.gitCommitProgress), ["正在校验…", `已提交 ${await git("rev-parse", "--short", "HEAD")}`]);
 	assert.equal(await remoteHead(), base);
 	assert.equal(await git("diff", "--cached", "--name-only"), "other.txt");
 	assert.equal(await git("show", "HEAD:other.txt"), "base");
@@ -53,12 +62,33 @@ export async function verifyGitCommit(page, temporaryRoot, artifacts) {
 	await panel.getByRole("button", { name: "刷新 Git 状态", exact: true }).click();
 	await panel.getByRole("checkbox", { name: "选择 new.txt", exact: true }).check();
 	await message.fill("Commit and push new file");
+	// A real remote hook keeps the transport pending long enough to inspect its UI.
+	await writeFile(join(remote, "hooks", "pre-receive"), "#!/bin/sh\nsleep 2\n", { mode: 0o755 });
+	await page.evaluate(() => { window.gitCommitProgress = []; });
 	await panel.getByRole("button", { name: "Commit and Push", exact: true }).click();
+	await panel.getByRole("status").filter({ hasText: "正在校验…" }).waitFor();
+	await panel.getByRole("status").filter({ hasText: /已提交 .+ → 正在推送…/ }).waitFor();
+	await page.screenshot({ path: join(artifacts, "git-commit-pushing-cdp.png") });
 	await panel.getByRole("status").filter({ hasText: "已提交并推送" }).waitFor();
+	const pushedCommit = await git("rev-parse", "--short", "HEAD");
+	assert.deepEqual(await page.evaluate(() => window.gitCommitProgress), ["正在校验…", `已提交 ${pushedCommit}`, `已提交 ${pushedCommit} → 正在推送…`]);
 	assert.equal(await remoteHead(), await git("rev-parse", "HEAD"));
 	assert.equal(await git("diff", "--cached", "--name-only"), "other.txt");
 	assert.equal(await message.inputValue(), "");
 	await page.screenshot({ path: join(artifacts, "git-commit-cdp.png") });
-	console.log("Commit 全链路通过：只提交勾选文件、保留其他暂存内容、本地 Commit 不推送、Commit and Push 更新本地测试远程。");
+	await writeFile(join(remote, "hooks", "pre-receive"), "#!/bin/sh\nexit 1\n", { mode: 0o755 });
+	const remoteBeforeFailure = await remoteHead();
+	await writeFile(join(root, "rejected.txt"), "commit must survive push failure\n");
+	await panel.getByRole("button", { name: "刷新 Git 状态", exact: true }).click();
+	await panel.getByRole("checkbox", { name: "选择 rejected.txt", exact: true }).check();
+	await message.fill("Keep local commit after rejection");
+	await panel.getByRole("button", { name: "Commit and Push", exact: true }).click();
+	await panel.getByRole("alert").filter({ hasText: /本地提交 .+ 已创建并保留；推送失败/ }).waitFor();
+	assert.equal(await remoteHead(), remoteBeforeFailure);
+	assert.notEqual(await git("rev-parse", "HEAD"), remoteBeforeFailure);
+	assert.equal(await git("diff", "--cached", "--name-only"), "other.txt");
+	assert.equal(await message.inputValue(), "");
+	assert.equal(await panel.getByRole("status").filter({ hasText: "正在推送" }).count(), 0);
+	console.log("Commit 全链路通过：真实校验/已提交/推送阶段、本地 Commit 不推送、推送成功/失败、保留其他暂存内容与失败后的本地提交。");
 	return root;
 }

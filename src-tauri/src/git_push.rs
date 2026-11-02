@@ -50,14 +50,15 @@ fn push_commit(repo: &Path, destination: &PushTarget, commit: &str) -> Result<()
 	}
 }
 
-pub(super) fn commit_and_push(root: &Path, paths: &[String], message: &str, expected: &str) -> Result<GitWriteResult, String> {
+pub(super) fn commit_and_push(root: &Path, paths: &[String], message: &str, expected: &str, progress: &impl Fn(GitCommitProgress)) -> Result<GitWriteResult, String> {
 	let repo = repository_for(root)?;
 	let destination = target(&repo)?;
-	let mut result = commit_selected(root, paths, message, expected)?;
+	let mut result = commit_selected(root, paths, message, expected, progress)?;
 	// A push failure must not turn a successful local commit into a generic failure.
 	let pushed = current_head(&repo).and_then(|head| {
 		let head = head.ok_or("无法读取已创建的本地提交")?;
 		if !head.starts_with(result.commit.as_deref().unwrap_or("missing")) { return Err("提交后 HEAD 已变化，已停止推送".into()); }
+		progress(GitCommitProgress::Pushing { commit: result.commit.clone().unwrap_or_default() });
 		push_commit(&repo, &destination, &head)
 	});
 	match pushed { Ok(()) => result.pushed = true, Err(error) => result.push_error = Some(error) }
@@ -83,7 +84,11 @@ mod tests {
 		fs::write(repo.join("selected.txt"), "changed\n").unwrap();
 		fs::write(repo.join("other.txt"), "unrelated staged\n").unwrap();
 		let mut stage = git_command(&repo); stage.args(["add", "other.txt"]); checked(stage, "stage").unwrap();
-		let result = commit_and_push(&repo, &["selected.txt".into()], "selected only", &read_status(&repo).unwrap().version).unwrap();
+		let events = std::cell::RefCell::new(Vec::new());
+		let progress = |event| events.borrow_mut().push(event);
+		let result = commit_and_push(&repo, &["selected.txt".into()], "selected only", &read_status(&repo).unwrap().version, &progress).unwrap();
+		let created = result.commit.clone().unwrap();
+		assert_eq!(*events.borrow(), vec![GitCommitProgress::Checking, GitCommitProgress::Committed { commit: created.clone() }, GitCommitProgress::Pushing { commit: created }]);
 		assert!(result.pushed);
 		assert!(result.push_error.is_none());
 		assert_eq!(current_head(&repo).unwrap(), current_head(&remote).unwrap());
@@ -93,7 +98,10 @@ mod tests {
 		let mut reset = git_command(&repo); reset.args(["reset", "--soft", "HEAD~1"]); checked(reset, "reset").unwrap();
 		fs::write(repo.join("selected.txt"), "divergent\n").unwrap();
 		let remote_head = current_head(&remote).unwrap();
-		let result = commit_and_push(&repo, &["selected.txt".into()], "divergent", &read_status(&repo).unwrap().version).unwrap();
+		events.borrow_mut().clear();
+		let result = commit_and_push(&repo, &["selected.txt".into()], "divergent", &read_status(&repo).unwrap().version, &progress).unwrap();
+		let created = result.commit.clone().unwrap();
+		assert_eq!(*events.borrow(), vec![GitCommitProgress::Checking, GitCommitProgress::Committed { commit: created.clone() }, GitCommitProgress::Pushing { commit: created }]);
 		assert!(!result.pushed);
 		assert!(result.push_error.unwrap().contains("推送失败"));
 		assert_eq!(remote_head, current_head(&remote).unwrap());
@@ -107,7 +115,7 @@ mod tests {
 		fs::write(repo.join("file.txt"), "base\n").unwrap(); commit_all(&repo, "base");
 		let head = current_head(&repo).unwrap();
 		fs::write(repo.join("file.txt"), "changed\n").unwrap();
-		let error = commit_and_push(&repo, &["file.txt".into()], "must not commit", &read_status(&repo).unwrap().version).unwrap_err();
+		let error = commit_and_push(&repo, &["file.txt".into()], "must not commit", &read_status(&repo).unwrap().version, &|_| {}).unwrap_err();
 		assert!(error.contains("upstream")); assert_eq!(head, current_head(&repo).unwrap());
 		fs::remove_dir_all(repo).unwrap();
 	}

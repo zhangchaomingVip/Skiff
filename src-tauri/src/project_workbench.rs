@@ -101,6 +101,14 @@ pub struct GitWriteResult {
 	push_error: Option<String>,
 }
 
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(tag = "stage", rename_all = "camelCase")]
+pub enum GitCommitProgress {
+	Checking,
+	Committed { commit: String },
+	Pushing { commit: String },
+}
+
 fn display_path(path: &Path) -> String {
 	let mut value = path.to_string_lossy().to_string();
 	#[cfg(windows)]
@@ -564,7 +572,8 @@ fn short_head(repo: &Path) -> Result<String, String> {
 	git_text(repo, &["rev-parse", "--short", "HEAD"], "读取提交结果")
 }
 
-fn commit_selected(root: &Path, paths: &[String], message: &str, expected: &str) -> Result<GitWriteResult, String> {
+fn commit_selected(root: &Path, paths: &[String], message: &str, expected: &str, progress: &impl Fn(GitCommitProgress)) -> Result<GitWriteResult, String> {
+	progress(GitCommitProgress::Checking);
 	if message.trim().is_empty() { return Err("提交信息不能为空".to_string()); }
 	let before = read_status(root)?;
 	ensure_expected(&before, expected)?;
@@ -589,6 +598,8 @@ fn commit_selected(root: &Path, paths: &[String], message: &str, expected: &str)
 		let mut commit = git_command(&repo);
 		commit.env("GIT_INDEX_FILE", &index).args(["commit", "-m", message]);
 		checked(commit, "创建本地提交")?;
+		let created = short_head(&repo)?;
+		progress(GitCommitProgress::Committed { commit: created.clone() });
 		// The user's real index was never used for the commit. Rebase only the
 		// committed paths onto the new HEAD; unrelated staged intent stays byte-for-
 		// byte equivalent and cannot be swept into this commit.
@@ -596,22 +607,23 @@ fn commit_selected(root: &Path, paths: &[String], message: &str, expected: &str)
 		reconcile.args(["reset", "-q", "HEAD"]);
 		append_paths(&mut reconcile, &paths);
 		checked(reconcile, "协调提交后的暂存区")?;
-		Ok(())
+		Ok(created)
 	})();
 	let _ = fs::remove_file(&index);
-	result?;
+	let created = result?;
 	let after = read_status(root)?;
-	Ok(GitWriteResult { repository_root: after.repository_root, commit: Some(short_head(&repo)?), changed_paths: paths, version: after.version, pushed: false, push_error: None })
+	Ok(GitWriteResult { repository_root: after.repository_root, commit: Some(created), changed_paths: paths, version: after.version, pushed: false, push_error: None })
 }
 
 #[tauri::command]
-pub async fn commit_project_files(state: tauri::State<'_, WorkbenchState>, root: String, paths: Vec<String>, message: String, expected_version: String, push: Option<bool>) -> Result<GitWriteResult, String> {
+pub async fn commit_project_files(state: tauri::State<'_, WorkbenchState>, root: String, paths: Vec<String>, message: String, expected_version: String, push: Option<bool>, on_progress: tauri::ipc::Channel<GitCommitProgress>) -> Result<GitWriteResult, String> {
 	let lock = Arc::clone(&state.inner().write_lock);
 	tauri::async_runtime::spawn_blocking(move || {
 		let _guard = lock.lock().map_err(|_| "Git 写入锁不可用".to_string())?;
 		let root = canonical_root(&root)?;
-		if push.unwrap_or(false) { push::commit_and_push(&root, &paths, &message, &expected_version) }
-		else { commit_selected(&root, &paths, &message, &expected_version) }
+		let progress = |event| { let _ = on_progress.send(event); };
+		if push.unwrap_or(false) { push::commit_and_push(&root, &paths, &message, &expected_version, &progress) }
+		else { commit_selected(&root, &paths, &message, &expected_version, &progress) }
 	}).await.map_err(|error| error.to_string())?
 }
 
@@ -771,7 +783,7 @@ mod tests {
 		let mut add = git_command(&repo); add.args(["add", "other.txt"]); checked(add, "stage other").unwrap();
 		fs::write(repo.join("other.txt"), "worktree\n").unwrap();
 		let status = read_status(&repo).unwrap();
-		let result = commit_selected(&repo, &["selected.txt".into()], "selected only", &status.version).unwrap();
+		let result = commit_selected(&repo, &["selected.txt".into()], "selected only", &status.version, &|_| {}).unwrap();
 		assert!(result.commit.is_some());
 		assert_eq!(git_text(&repo, &["show", "HEAD:selected.txt"], "show").unwrap(), "two");
 		assert_eq!(git_text(&repo, &["show", "HEAD:other.txt"], "show").unwrap(), "base");
@@ -793,9 +805,14 @@ mod tests {
 		fs::write(repo.join(name), "first\n").unwrap();
 		let stale = read_status(&repo).unwrap();
 		fs::write(repo.join(name), "second\n").unwrap();
-		assert!(commit_selected(&repo, &[name.into()], "stale", &stale.version).unwrap_err().contains("已变化"));
+		let events = std::cell::RefCell::new(Vec::new());
+		let progress = |event| events.borrow_mut().push(event);
+		assert!(commit_selected(&repo, &[name.into()], "stale", &stale.version, &progress).unwrap_err().contains("已变化"));
+		assert_eq!(*events.borrow(), vec![GitCommitProgress::Checking]);
+		events.borrow_mut().clear();
 		let current = read_status(&repo).unwrap();
-		commit_selected(&repo, &[name.into()], "initial", &current.version).unwrap();
+		let result = commit_selected(&repo, &[name.into()], "initial", &current.version, &progress).unwrap();
+		assert_eq!(*events.borrow(), vec![GitCommitProgress::Checking, GitCommitProgress::Committed { commit: result.commit.unwrap() }]);
 		assert_eq!(git_text(&repo, &["show", &format!("HEAD:{name}")], "show").unwrap(), "second");
 		let _ = fs::remove_dir_all(repo);
 	}

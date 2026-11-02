@@ -126,6 +126,7 @@ function GitPanel({ project, onOpen, onMutated }: { project?: Project; onOpen: (
 	const [selected, setSelected] = useState<string[]>([]);
 	const [drafts, setDrafts] = useState<Record<string, string>>(() => ({ ...retainedGitDrafts }));
 	const [writing, setWriting] = useState(false);
+	const [writeProgress, setWriteProgress] = useState<string>();
 	const [notice, setNotice] = useState<string>();
 	const [confirmRollback, setConfirmRollback] = useState(false);
 	const draftKey = `${project?.id ?? ""}:${status?.repositoryRoot ?? ""}`;
@@ -144,26 +145,29 @@ function GitPanel({ project, onOpen, onMutated }: { project?: Project; onOpen: (
 	const counts = selectedChangeCounts(status?.entries ?? [], selected);
 	const commit = async (push = false) => {
 		if (!project || !status || !selected.length || !message.trim() || writing || loading || status.operation) return;
-		setWriting(true); setNotice(undefined); setWriteError(undefined); projectGitCache.pause(project.path, true);
+		setWriting(true); setWriteProgress("正在校验…"); setNotice(undefined); setWriteError(undefined); projectGitCache.pause(project.path, true);
 		try {
-			const result = await commitFiles(project.path, selected, message, status.version, push);
+			const result = await commitFiles(project.path, selected, message, status.version, push, (progress) => {
+				setWriteProgress(progress.stage === "checking" ? "正在校验…" : progress.stage === "committed" ? `已提交 ${progress.commit}` : `已提交 ${progress.commit} → 正在推送…`);
+			});
+			setWriteProgress(undefined);
 			projectDiffCache.invalidateRoot(project.path);
 			if (result.pushError) setWriteError(`本地提交 ${result.commit} 已创建并保留；${result.pushError}`);
 			else setNotice(result.pushed ? `已提交并推送 ${result.commit}` : `已创建本地提交 ${result.commit}`);
 			setDrafts((current) => { const next = { ...current, [draftKey]: "" }; retainedGitDrafts[draftKey] = ""; return next; }); retainedGitSelections.delete(draftKey); setSelected([]); onMutated(); await refresh();
-		} catch (reason) { setWriteError(String(reason)); await refresh(); }
-		finally { projectGitCache.pause(project.path, false); setWriting(false); }
+		} catch (reason) { setWriteProgress(undefined); setWriteError(String(reason)); await refresh(); }
+		finally { projectGitCache.pause(project.path, false); setWriting(false); setWriteProgress(undefined); }
 	};
 	const rollbackTargets = status?.entries.filter((entry) => selected.includes(entry.path) && entry.rollbackable) ?? [];
 	const rollback = async () => {
 		if (!project || !status || !rollbackTargets.length) return;
-		setWriting(true); setNotice(undefined); setWriteError(undefined); projectGitCache.pause(project.path, true);
+		setWriting(true); setWriteProgress("正在恢复所选文件…"); setNotice(undefined); setWriteError(undefined); projectGitCache.pause(project.path, true);
 		try {
 			await rollbackFiles(project.path, rollbackTargets.flatMap((entry) => [entry.path, ...(entry.oldPath ? [entry.oldPath] : [])]), status.version);
 			projectDiffCache.invalidateRoot(project.path);
 			setNotice(`已恢复 ${rollbackTargets.length} 个文件到 HEAD`); retainedGitSelections.delete(draftKey); setSelected([]); onMutated(); await refresh();
 		} catch (reason) { setWriteError(String(reason)); await refresh(); }
-		finally { projectGitCache.pause(project.path, false); setWriting(false); }
+		finally { projectGitCache.pause(project.path, false); setWriting(false); setWriteProgress(undefined); }
 	};
 	return <section className="workbench-section git-panel" aria-label="Git 变更">
 		<div className="workbench-tab-actions"><IconButton size="compact" variant="ghost" aria-label="刷新 Git 状态" title="刷新 Git 状态" onClick={() => { setWriteError(undefined); void refresh(); }} disabled={loading || writing}><Icon name="updateProject" /></IconButton></div>
@@ -179,7 +183,7 @@ function GitPanel({ project, onOpen, onMutated }: { project?: Project; onOpen: (
 				<div className="git-change-counts" aria-label="所选文件分类统计" aria-live="polite">{Object.entries(counts).filter(([, count]) => count > 0).map(([kind, count]) => <span key={kind} data-kind={kind}>{count} {kind}</span>)}</div>
 				<TextArea aria-label="提交信息" rows={5} placeholder="Commit Message" disabled={writing} value={message} onChange={(event) => setDrafts((current) => { const next = { ...current, [draftKey]: event.target.value }; retainedGitDrafts[draftKey] = event.target.value; return next; })} onKeyDown={(event) => { if ((event.ctrlKey || event.metaKey) && event.key === "Enter") { event.preventDefault(); void commit(); } }} />
 				<div className="git-commit-actions"><Button size="compact" variant="primary" disabled={writing || loading || !selected.length || !message.trim() || !!status.operation} onClick={() => void commit()}>Commit</Button><Button size="compact" disabled={writing || loading || !selected.length || !message.trim() || !!status.operation} title="提交所选文件，并推送当前分支到已配置的上游" onClick={() => void commit(true)}>Commit and Push</Button></div>
-				{writing && <span className="muted" role="status">正在执行 Git 操作…</span>}
+				{writing && writeProgress && <span className="muted" role="status" aria-live="polite" aria-atomic="true">{writeProgress}</span>}
 			</div>}
 		</>}
 		{confirmRollback && <Dialog className="project-dialog" aria-label="恢复所选文件" onClose={() => setConfirmRollback(false)}><div className="dialog-heading"><h2>恢复到当前 HEAD？</h2><IconButton aria-label="关闭" onClick={() => setConfirmRollback(false)}><Icon name="close" /></IconButton></div><p>项目：{project?.name}<br />将永久丢弃 {rollbackTargets.map((entry) => entry.path).join("、")} 的暂存区与工作区改动。未跟踪文件不会删除。</p><div className="dialog-actions"><Button onClick={() => setConfirmRollback(false)}>取消</Button><Button variant="danger" onClick={() => { setConfirmRollback(false); void rollback(); }}>确认恢复</Button></div></Dialog>}

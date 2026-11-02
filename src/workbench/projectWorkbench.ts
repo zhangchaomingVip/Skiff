@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { Channel, invoke } from "@tauri-apps/api/core";
 import type { Project } from "../chat/workspace";
 
 export type WorkbenchTool = "chats" | "files" | "git" | "git-tree";
@@ -61,6 +61,8 @@ export interface GitWriteResult {
 	pushed?: boolean;
 	pushError?: string;
 }
+
+export type GitCommitProgress = { stage: "checking" } | { stage: "committed" | "pushing"; commit: string };
 
 export function selectedChangeCounts(entries: GitEntry[], selected: string[]) {
 	const paths = new Set(selected);
@@ -130,5 +132,13 @@ export const readFile = (root: string, path: string) => invoke<FilePreview>("rea
 export const revealFile = (root: string, path: string) => invoke<void>("reveal_project_file", { root, path });
 export const gitStatus = (root: string) => invoke<GitStatus>("get_project_git_status", { root });
 export const gitDiff = (root: string, path: string) => invoke<DiffPreview>("get_project_git_diff", { root, path });
-export const commitFiles = (root: string, paths: string[], message: string, expectedVersion: string, push = false) => invoke<GitWriteResult>("commit_project_files", { root, paths, message, expectedVersion, push });
+export async function commitFiles(root: string, paths: string[], message: string, expectedVersion: string, push = false, onProgress?: (progress: GitCommitProgress) => void) {
+	const channel = new Channel<GitCommitProgress>(onProgress ?? (() => {}));
+	try {
+		return await invoke<GitWriteResult>("commit_project_files", { root, paths, message, expectedVersion, push, onProgress: channel });
+	} finally {
+		// A late message must not replace the final success or failure state.
+		channel.onmessage = () => {};
+	}
+}
 export const rollbackFiles = (root: string, paths: string[], expectedVersion: string) => invoke<GitWriteResult>("rollback_project_files", { root, paths, expectedVersion });

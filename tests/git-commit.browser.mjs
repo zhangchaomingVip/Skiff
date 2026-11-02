@@ -24,11 +24,14 @@ try {
 			const original = window.__TAURI_INTERNALS__.invoke.bind(window.__TAURI_INTERNALS__);
 			window.commitMode = "success";
 			window.__TAURI_INTERNALS__.invoke = async (command, args) => {
+				if (command === "commit_project_files" && window.commitMode === "defer") {
+					window.sendProgress = (progress) => args.onProgress.onmessage(progress);
+					return new Promise((resolve) => { window.finishCommit = async () => resolve(await original(command, args)); });
+				}
+				if (command === "commit_project_files" && window.commitMode === "reject") throw new Error("当前分支没有配置远程上游");
 				const result = await original(command, args);
 				if (command === "get_project_git_status") return { ...result, entries: ["modified", "added", "untracked", "deleted", "renamed"].map((kind) => ({ path: `src/${kind}.ts`, kind, selectable: true, rollbackable: kind !== "untracked", indexStatus: kind === "added" ? "A" : " ", worktreeStatus: "M" })) };
 				if (command === "commit_project_files") {
-					if (window.commitMode === "reject") throw new Error("当前分支没有配置远程上游");
-					if (window.commitMode === "defer") return new Promise((resolve) => { window.finishCommit = () => resolve(result); });
 					if (window.commitMode === "push-failure") return { ...result, pushed: false, pushError: "推送失败，请检查网络" };
 				}
 				return result;
@@ -62,9 +65,17 @@ try {
 		await page.waitForFunction(() => window.finishCommit);
 		assert.equal(await commit().isDisabled(), true); assert.equal(await push().isDisabled(), true);
 		assert.equal(await message().isDisabled(), true);
+		await panel().getByRole("status").filter({ hasText: "正在校验…" }).waitFor();
+		await page.evaluate(() => window.sendProgress({ stage: "committed", commit: "abc1234" }));
+		await panel().getByRole("status").filter({ hasText: /^已提交 abc1234$/ }).waitFor();
+		await page.evaluate(() => window.sendProgress({ stage: "pushing", commit: "abc1234" }));
+		await panel().getByRole("status").filter({ hasText: "已提交 abc1234 → 正在推送…" }).waitFor();
+		await page.screenshot({ path: `dist/git-commit/${theme}-pushing.png`, animations: "disabled" });
 		await page.evaluate(() => window.finishCommit());
 		await panel().getByRole("status").filter({ hasText: "已提交并推送" }).waitFor();
 		assert.equal(await message().inputValue(), "");
+		await page.evaluate(() => window.sendProgress({ stage: "checking" }));
+		assert.equal(await panel().getByRole("status").filter({ hasText: "正在校验" }).count(), 0);
 		assert.equal(await page.evaluate(() => window.skiffPreview.commands.findLast((item) => item.command === "commit_project_files").args.push), true);
 		await selectAll(); await message().fill("push will fail");
 		await page.evaluate(() => { window.commitMode = "push-failure"; });

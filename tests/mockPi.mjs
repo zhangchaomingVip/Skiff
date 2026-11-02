@@ -136,6 +136,7 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 	} };
 	target.__TAURI_INTERNALS__ = {
 		transformCallback(callback) { const id = ++sequence; callbacks.set(id, callback); return id; },
+		unregisterCallback(id) { callbacks.delete(id); },
 		async invoke(command, args) {
 			// Model discovery credentials must never enter the preview command log.
 			commands.push({ command, args: command === "discover_relay_models" ? { baseUrl: args.baseUrl } : command === "test_settings_connection" ? { ...args, relay: { ...args.relay, apiKey: "[redacted]" } } : command === "test_provider_connection" || command === "probe_relay_endpoint" ? { ...args, apiKey: "[redacted]" } : args });
@@ -181,7 +182,13 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 				{ path: "src/components/ProjectPreview.tsx", kind: "untracked", indexStatus: "?", worktreeStatus: "?", selectable: true, rollbackable: false },
 			] };
 			if (command === "get_project_git_diff") return { path: args.path, kind: "text", content: "diff --git a/src/App.tsx b/src/App.tsx\n--- a/src/App.tsx\n+++ b/src/App.tsx\n@@ -1,2 +1,3 @@\n import App from \"./App\";\n+import { ProjectPreview } from \"./components/ProjectPreview\";\n", truncated: false, version: "mock-git-v1" };
-			if (command === "commit_project_files") return { repositoryRoot: "D:\\workspace\\Skiff", commit: "a13fc921", changedPaths: args.paths, version: "mock-git-v2", pushed: !!args.push };
+			if (command === "commit_project_files") {
+				const events = [{ stage: "checking" }, { stage: "committed", commit: "a13fc921" }, ...(args.push ? [{ stage: "pushing", commit: "a13fc921" }] : [])];
+				const channel = callbacks.get(args.onProgress?.id);
+				events.forEach((message, index) => channel?.({ message, index }));
+				channel?.({ end: true, index: events.length });
+				return { repositoryRoot: "D:\\workspace\\Skiff", commit: "a13fc921", changedPaths: args.paths, version: "mock-git-v2", pushed: !!args.push };
+			}
 			if (command === "rollback_project_files") return { repositoryRoot: "D:\\workspace\\Skiff", changedPaths: args.paths, version: "mock-git-v2" };
 			if (command === "list_model_families") {
 				if (fixture === "loading") await new Promise(() => {});
