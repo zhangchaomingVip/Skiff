@@ -3,6 +3,7 @@ import { advanceVoyageContext, averageOutputSpeed, contextPressure, contextRemin
 import { advanceTimeline, refreshTimeline, startTimeline, toolFailureStatus, type VoyageTimeline, type VoyageTool } from "./voyageTimeline";
 import type { ChatMessage, ContextUsage, ModelInfo, SessionState } from "./types";
 import { summarizeCosts, type CostSummary } from "./cost";
+import { SPARK_SAMPLES } from "./sparkline";
 
 export interface VoyageMetrics {
 	speed: number;
@@ -27,6 +28,8 @@ export interface VoyageMetrics {
 	liveTurn?: { turnId?: string; durationMs: number };
 	sessionCost: CostSummary;
 	timeline?: VoyageTimeline;
+	/** Recent instantaneous speeds of the current run, oldest first. */
+	speedTrail: number[];
 	activeTools: VoyageTool[];
 	toolLog: VoyageTool[];
 	contextEstimated: boolean;
@@ -52,6 +55,8 @@ export function useVoyageMetrics(messages: ChatMessage[], model: ModelInfo | und
 	const input = useRef({ key, tokens, streaming, activeRun, turnMessages, error, abortedRunKey, eventTimeline });
 	input.current = { key, tokens, streaming, activeRun, turnMessages, error, abortedRunKey, eventTimeline };
 	const sampler = useRef<VoyageSample>();
+	// Only a running turn samples the sparkline; a finished curve stays frozen.
+	const trail = useRef<{ key: string; speeds: number[] }>({ key: "", speeds: [] });
 	const ledger = useRef<VoyageTimeline>();
 	const contextLedger = useRef<VoyageContext>();
 	const [reading, setReading] = useState<{ sample: VoyageSample; timeline?: VoyageTimeline }>();
@@ -75,6 +80,8 @@ export function useVoyageMetrics(messages: ChatMessage[], model: ModelInfo | und
 		const next = sampleVoyage(previous, current.tokens, now, current.streaming, nextTimeline?.phase === "response");
 		sampler.current = next;
 		ledger.current = nextTimeline;
+		if (trail.current.key !== current.key) trail.current = { key: current.key, speeds: [] };
+		if (current.streaming) trail.current.speeds = [...trail.current.speeds, Math.round(next.speed * 10) / 10].slice(-SPARK_SAMPLES);
 		setReading({ sample: next, timeline: nextTimeline });
 	};
 	useEffect(() => { tick(); }, [key, tokens, streaming, turnMessages, error, abortedRunKey, eventTimeline]);
@@ -127,6 +134,7 @@ export function useVoyageMetrics(messages: ChatMessage[], model: ModelInfo | und
 		liveTurn,
 		sessionCost,
 		timeline,
+		speedTrail: trail.current.key === key ? trail.current.speeds : [],
 		activeTools: timeline?.tools.filter((tool) => tool.status === "running") ?? [],
 		toolLog: timeline?.tools.filter((tool) => tool.status !== "running").sort((a, b) => a.completionOrder! - b.completionOrder!) ?? [],
 		contextEstimated: data?.estimated ?? true,

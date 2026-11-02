@@ -58,6 +58,9 @@ const paths = {
 	git: "M6 3v12M18 3a3 3 0 1 0 0 6 3 3 0 1 0 0-6ZM6 15a3 3 0 1 0 0 6 3 3 0 1 0 0-6ZM18 9a9 9 0 0 1-9 9",
 	commit: "M3 12h5m8 0h5M8 12a4 4 0 1 0 8 0 4 4 0 0 0-8 0Z",
 	laptop: "M5 4h14v12H5ZM3 16h18l1 4H2Z",
+	sound: "M11 5 6 9H2v6h4l5 4V5ZM15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13",
+	mute: "M11 5 6 9H2v6h4l5 4V5ZM22 9l-6 6M16 9l6 6",
+	heart: "M12 20s-7-4.35-9.33-8.06A5.5 5.5 0 0 1 12 6.5a5.5 5.5 0 0 1 9.33 5.44C19 15.65 12 20 12 20Z",
 };
 
 export type IconName = keyof typeof paths;

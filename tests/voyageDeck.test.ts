@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { COMPANION_KEY, COMPANION_LIMIT, DECK_MODE_KEY, DECK_SIZE_KEY, DECK_SIZE_MIN, readCompanion, readDeckMode, readDeckSize, saveCompanion, saveDeckMode, saveDeckSize, type PreferenceStorage } from "../src/chat/voyageDeck.ts";
+import { COMPANION_KEY, COMPANION_LIMIT, COMPANION_SOUND_KEY, DECK_MODE_KEY, DECK_SIZE_KEY, DECK_SIZE_MIN, readCompanion, readCompanionSound, readDeckMode, readDeckSize, saveCompanion, saveCompanionSound, saveDeckMode, saveDeckSize, type PreferenceStorage } from "../src/chat/voyageDeck.ts";
 
 const memory = (seed: Record<string, string> = {}): PreferenceStorage & { values: Map<string, string> } => {
 	const values = new Map(Object.entries(seed));
@@ -44,6 +44,21 @@ test("only inline images inside the storage budget are restored", () => {
 	assert.equal(readCompanion(memory({ [COMPANION_KEY]: "blob:http://localhost/companion" })), undefined);
 	assert.equal(readCompanion(memory({ [COMPANION_KEY]: "https://example.com/idle.webp" })), undefined);
 	assert.equal(readCompanion(memory({ [COMPANION_KEY]: `data:image/png;base64,${"A".repeat(COMPANION_LIMIT)}` })), undefined);
+});
+
+test("interaction sound stays off until it is switched on", () => {
+	assert.equal(readCompanionSound(memory()), false);
+	assert.equal(readCompanionSound(memory({ [COMPANION_SOUND_KEY]: "off" })), false);
+	assert.equal(readCompanionSound(memory({ [COMPANION_SOUND_KEY]: "yes" })), false);
+	assert.equal(readCompanionSound(memory({ [COMPANION_SOUND_KEY]: "on" })), true);
+	const storage = memory();
+	saveCompanionSound(true, storage);
+	assert.equal(storage.values.get(COMPANION_SOUND_KEY), "on");
+	saveCompanionSound(false, storage);
+	assert.equal(readCompanionSound(storage), false);
+	const broken: PreferenceStorage = { getItem: () => { throw new Error("blocked"); }, setItem: () => { throw new Error("blocked"); }, removeItem: () => { throw new Error("blocked"); } };
+	assert.equal(readCompanionSound(broken), false);
+	assert.doesNotThrow(() => saveCompanionSound(true, broken));
 });
 
 test("a custom companion can be replaced and cleared", () => {

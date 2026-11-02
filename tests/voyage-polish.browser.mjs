@@ -37,6 +37,10 @@ try {
 	assert.equal(await page.locator(".voyage-companion.pose-idle").count(), 1);
 	assert((await page.locator(".voyage-companion-art").getAttribute("src")).endsWith("/companion/idle.webp"));
 	await page.locator(".voyage-companion-stage").click();
+	// A poke borrows the art for a beat; the pose and its file come straight back.
+	assert.equal(await page.locator(".voyage-companion.pose-idle").count(), 1);
+	assert((await page.locator(".voyage-companion-art").getAttribute("src")).endsWith("/companion/tap.webp"));
+	await page.waitForTimeout(760);
 	assert.equal(await page.locator(".voyage-companion.pose-idle").count(), 1);
 	assert((await page.locator(".voyage-companion-art").getAttribute("src")).endsWith("/companion/idle.webp"));
 	assert.equal(await page.locator(".voyage-companion-bubble").count(), 0);

@@ -5,6 +5,7 @@ export type DeckMode = "companion" | "billing" | "blank";
 export const DECK_MODE_KEY = "skiff.voyage.deckMode";
 export const DECK_SIZE_KEY = "skiff.voyage.deckSize";
 export const COMPANION_KEY = "skiff.voyage.companion.v1";
+export const COMPANION_SOUND_KEY = "skiff.voyage.sound.v1";
 
 /** The deck may be dragged taller than its default floor, never shorter. */
 export const DECK_SIZE_MIN = 306;
@@ -67,6 +68,23 @@ export function readCompanion(storage: PreferenceStorage | undefined = browserSt
 		return stored?.startsWith("data:image/") && stored.length <= COMPANION_LIMIT ? stored : undefined;
 	} catch {
 		return undefined;
+	}
+}
+
+/** Sound is an opt-in easter egg: the deck stays silent until it is asked. */
+export function readCompanionSound(storage: PreferenceStorage | undefined = browserStorage()): boolean {
+	try {
+		return storage?.getItem(COMPANION_SOUND_KEY) === "on";
+	} catch {
+		return false;
+	}
+}
+
+export function saveCompanionSound(on: boolean, storage: PreferenceStorage | undefined = browserStorage()): void {
+	try {
+		storage?.setItem(COMPANION_SOUND_KEY, on ? "on" : "off");
+	} catch {
+		/* The toggle still works for this visit. */
 	}
 }
 
