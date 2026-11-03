@@ -37,7 +37,7 @@ try {
 			const mixed = page.locator(".msg.assistant .tool-run").filter({ hasText: "执行了命令" }).filter({ hasText: "搜索网页" });
 			assert.equal(await mixed.count(), 1, `${fixture} ${theme}: mixed command and web group exists`);
 			const iconPath = await mixed.locator(":scope > summary .process-row-icon path").getAttribute("d");
-			assert.equal(iconPath, "M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76Z", `${fixture} ${theme}: mixed group uses the neutral wrench icon`);
+			assert.equal(iconPath, "M12 3 3 8l9 5 9-5-9-5ZM3 13l9 5 9-5M3 18l9 5 9-5", `${fixture} ${theme}: mixed group uses the layers icon`);
 			assert.deepEqual(errors, [], `${fixture} ${theme}: no browser errors`);
 			const shot = `${shots}/${fixture}-${theme}.png`;
 			await page.screenshot({ path: shot, fullPage: true });
@@ -47,7 +47,7 @@ try {
 			await groupRow.click();
 			const expandedShot = `${shots}/${fixture}-${theme}-expanded.png`;
 			await page.screenshot({ path: expandedShot, fullPage: true });
-			console.log(`${fixture} ${theme}: text=${bodyTexts.length}, labels=${labels.join(" | ")}, icon=wrench, screenshots=${shot}, ${expandedShot}`);
+			console.log(`${fixture} ${theme}: text=${bodyTexts.length}, labels=${labels.join(" | ")}, icon=layers, screenshots=${shot}, ${expandedShot}`);
 			await page.close();
 		}
 	}

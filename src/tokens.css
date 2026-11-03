@@ -80,6 +80,7 @@
 		--voyage-inset-border: transparent;
 		--voyage-inset-shadow: none;
 		--voyage-island-bg: color-mix(in srgb, var(--surface) 76%, transparent);
+		--voyage-card-bg: color-mix(in srgb, var(--surface) 60%, var(--subtle));
 		--voyage-island-border: color-mix(in srgb, var(--border) 80%, transparent);
 		--voyage-island-shadow: var(--shadow-xs);
 		--voyage-island-radius: 18px;

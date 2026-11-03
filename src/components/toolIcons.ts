@@ -11,5 +11,5 @@ export const TOOL_ICONS: Record<ToolKind, IconName> = {
 	command: "terminal",
 	search: "search",
 	web: "search",
-	other: "wrench",
+	other: "layers",
 };

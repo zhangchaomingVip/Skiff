@@ -2,6 +2,7 @@ import { isValidElement, memo, useMemo, useState, type ReactNode } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
+import type { PluggableList } from "unified";
 import { highlightCode } from "../chat/highlight";
 import { remarkLooseStrong } from "../chat/remarkLooseStrong";
 import { CopyButton } from "./CopyButton";
@@ -27,7 +28,7 @@ function CodeBlock({ children, streaming }: { children?: ReactNode; streaming: b
 	</div>;
 }
 
-const plugins = [remarkGfm, remarkLooseStrong, remarkBreaks];
+const plugins: PluggableList = [[remarkGfm, { singleTilde: false }], remarkLooseStrong, remarkBreaks];
 
 export const Markdown = memo(function Markdown({ text, streaming = false, replyKey }: { text: string; streaming?: boolean; replyKey?: string }) {
 	const components = useMemo<Components>(() => ({

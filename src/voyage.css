@@ -132,10 +132,10 @@
 @layer pages {
 	.chat-and-rail { grid-template-columns: minmax(0, 1fr); }
 	.chat-and-rail.rail-expanded { grid-template-columns: minmax(360px, 1fr) 8px minmax(0, var(--voyage-width, 260px)); }
-	/* The shell-coloured gutter frames the water scene instead of tinting the rail. */
-	.voyage-rail.expanded { padding: var(--space-1-5); overflow-y: auto; overflow-x: hidden; background: var(--sidebar-backdrop); }
+	/* The rail divider is the dashboard's only outer boundary. */
+	.voyage-rail.expanded { padding: 0; overflow-y: auto; overflow-x: hidden; background: var(--sidebar-backdrop); }
 	/* The navigator uses a shared orbit stage; alternate views keep the split deck. */
-	.voyage-dashboard { position: relative; display: flex; flex-direction: column; width: 100%; min-width: 0; min-height: 100%; padding: 0 var(--space-3) var(--space-2-5); border: 1.5px solid var(--voyage-frame-border); outline: 1px solid var(--voyage-frame-ring); border-radius: var(--radius-2xl); background: var(--voyage-frame-bg); box-shadow: var(--voyage-frame-shadow); color: var(--text); font-size: var(--font-size-sm); container-type: inline-size; }
+	.voyage-dashboard { position: relative; display: flex; flex-direction: column; width: 100%; min-width: 0; min-height: 100%; padding: 0 var(--space-3) var(--space-2-5); border: 0; border-radius: 0; background: transparent; color: var(--text); font-size: var(--font-size-sm); container-type: inline-size; }
 	.voyage-instruments { display: flex; flex-direction: column; flex: none; min-width: 0; }
 	/* A compact header leaves the card cluster and navigator room to breathe. */
 	.voyage-dashboard-header { min-height: 44px; margin-bottom: var(--space-1); }
@@ -159,9 +159,9 @@
 	.voyage-status-dot.response { background: var(--voyage-sky); }
 	.voyage-status-pill .voyage-status-dot.stopped { background: var(--secondary); }
 	@keyframes voyage-pulse { 50% { opacity: .4; } }
-	/* Three independent cream islands float directly on the sea. */
+	/* Soft surfaces and spacing separate the readings without card outlines. */
 	.voyage-bento { display: grid; grid-template-columns: minmax(0, 1.12fr) minmax(0, .88fr); gap: var(--space-2); align-items: stretch; margin-top: var(--space-1); }
-	.voyage-dial, .voyage-card-dial { border: 1.5px solid var(--voyage-island-border); border-radius: var(--voyage-island-radius); background: var(--voyage-island-bg); box-shadow: var(--voyage-island-shadow); backdrop-filter: blur(12px); }
+	.voyage-dial, .voyage-card-dial { border: 0; border-radius: var(--voyage-island-radius); background: var(--voyage-card-bg); }
 	/* The dial card is deliberately small: the stage owns the height. */
 	.voyage-card-dial { display: flex; flex-direction: column; justify-content: space-between; padding: var(--space-1) var(--space-1) var(--space-1-5); }
 	.voyage-gauge-scene { position: relative; width: 100%; margin: 0; }
@@ -299,7 +299,7 @@
 	.voyage-dashboard-header .voyage-collapse { position: static; width: 20px; min-width: 20px; height: 24px; }
 	.voyage-dashboard .voyage-collapse { color: var(--secondary); }
 
-	/* Lower deck shares the framed water scene with the cards above. */
+	/* Lower deck shares the rail surface with the cards above. */
 	/* The floor keeps room for the stage art and its headroom on short windows. */
 	/* The stage is the flexible band: it absorbs a short window instead of pushing
 	   the pet chips below the fold. */
@@ -362,10 +362,10 @@
 	/* Dozing off: two drifting z's above the head. */
 	.voyage-companion-bubble { position: absolute; top: 6%; right: 10%; z-index: 2; color: var(--secondary); font-size: var(--font-size-sm); letter-spacing: .14em; pointer-events: none; animation: voyage-doze 3s ease-in-out infinite; }
 	@keyframes voyage-doze { 0%, 100% { opacity: 0; transform: translateY(4px) scale(.92); } 45% { opacity: 1; transform: translateY(-6px) scale(1); } }
-	/* Quiet line icons rest on a translucent tray at the navigator's feet.
+	/* Individual pills rest directly beneath the navigator.
 	   One press borrows the pose until live progress takes it back. */
-	.voyage-companion-actions { position: relative; z-index: 2; display: flex; flex: none; align-items: center; justify-content: center; gap: var(--space-0-5); max-width: 100%; margin-top: 0; padding: var(--space-1); border: 1px solid var(--voyage-tray-border); border-radius: var(--radius-full); background: var(--voyage-tray-bg); box-shadow: var(--voyage-tray-shadow); backdrop-filter: blur(12px); }
-	.voyage-companion-chip { display: inline-flex; align-items: center; gap: var(--space-0-5); height: 30px; padding: 0 var(--space-1) 0 var(--space-0-5); border: 1px solid var(--voyage-inset-border); border-radius: var(--radius-full); background: transparent; color: var(--text); font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); line-height: 1; white-space: nowrap; box-shadow: none; cursor: pointer; transition: transform var(--transition-fast), box-shadow var(--transition-fast), border-color var(--transition-fast); }
+	.voyage-companion-actions { position: relative; z-index: 2; display: flex; flex: none; align-items: center; justify-content: center; gap: var(--space-0-5); max-width: 100%; margin-top: 0; padding: 0; }
+	.voyage-companion-chip { display: inline-flex; align-items: center; gap: var(--space-0-5); height: 30px; padding: 0 var(--space-1) 0 var(--space-0-5); border: 1px solid var(--voyage-inset-border); border-radius: var(--radius-full); background: var(--voyage-card-bg); color: var(--text); font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); line-height: 1; white-space: nowrap; box-shadow: none; cursor: pointer; transition: transform var(--transition-fast), background-color var(--transition-fast), border-color var(--transition-fast); }
 	.voyage-chip-dot { display: grid; place-items: center; width: 16px; height: 16px; flex: none; color: var(--accent); }
 	.voyage-companion-chip:hover { transform: translateY(-1px); background: var(--hover); color: var(--text); }
 	.voyage-companion-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -386,7 +386,7 @@
 	.voyage-orbit-scene { --orbit-portrait: min(100cqw, 456px, max(216px, calc(100dvh - 368px)));
 		position: relative; display: flex; flex-direction: column; width: 100%; min-height: 0; }
 	.voyage-stage-orbit .voyage-bento { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: minmax(104px, auto) auto; align-items: stretch; gap: var(--space-2); margin: 0; }
-	.voyage-portal-card { min-width: 0; padding: var(--space-2); border: 1px solid var(--voyage-island-border); border-radius: var(--radius-lg); background: var(--voyage-island-bg); box-shadow: var(--voyage-island-shadow); backdrop-filter: blur(12px); }
+	.voyage-portal-card { min-width: 0; padding: var(--space-2); border: 0; border-radius: var(--radius-lg); background: var(--voyage-card-bg); }
 	.voyage-portal-card h2, .voyage-portal-gauge-title { margin: 0; color: var(--secondary); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); }
 	.voyage-portal-status { grid-column: 1; grid-row: 1; display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-1); }
 	.voyage-portal-status > b { font-size: var(--font-size-2xl); font-weight: var(--font-weight-semibold); font-variant-numeric: tabular-nums; }
@@ -398,7 +398,7 @@
 	.voyage-stage-orbit .voyage-dial-value { font-size: var(--font-size-2xl); }
 	.voyage-stage-orbit .voyage-dial-caption { display: none; }
 	.voyage-stage-orbit .voyage-dial-meter { height: 3px; }
-	.voyage-stage-orbit .voyage-card-dial { grid-column: 2; grid-row: 1; gap: var(--space-1); min-width: 0; padding: var(--space-2); border-width: 1px; border-radius: var(--radius-lg); }
+	.voyage-stage-orbit .voyage-card-dial { grid-column: 2; grid-row: 1; gap: var(--space-1); min-width: 0; padding: var(--space-2); border-radius: var(--radius-lg); }
 	.voyage-stage-orbit .voyage-gauge-scene { display: flex; align-items: center; gap: var(--space-1); margin: auto 0; }
 	.voyage-stage-orbit .voyage-gauge-svg { flex: none; width: 40%; max-width: 64px; }
 	.voyage-stage-orbit .voyage-gauge-label { display: none; }
@@ -427,7 +427,7 @@
 	.voyage-stage-orbit .voyage-deck-companion { flex: 1 0 auto; margin: var(--space-8) 0 0; padding: 0; }
 	.voyage-stage-orbit .voyage-companion { width: 100%; flex: 1; justify-content: flex-start; gap: var(--space-3); padding: 0 0 var(--space-3); container-type: normal; }
 	.voyage-stage-orbit .voyage-companion-stage { width: var(--orbit-portrait); }
-	.voyage-stage-orbit .voyage-companion-actions { width: fit-content; max-width: 100%; gap: var(--space-1); padding: var(--space-1); }
+	.voyage-stage-orbit .voyage-companion-actions { width: fit-content; max-width: 100%; gap: var(--space-1); }
 	.voyage-stage-orbit .voyage-companion-chip { min-width: 0; height: 32px; gap: var(--space-1); padding: 0 var(--space-2); color: var(--secondary); font-size: var(--font-size-sm); }
 	.voyage-chip-label { min-width: 0; }
 	.voyage-chip-label-full { display: none; }
