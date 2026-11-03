@@ -828,7 +828,7 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 								<label htmlFor="relay-timeout">超时</label>
 								<div className="editor-control">
 									<Input id="relay-timeout" type="number" min={5} max={600} value={relay.timeoutSeconds} onChange={(event) => patchRelay({ timeoutSeconds: Number(event.target.value) })} disabled={pending} />
-									<small>超过此时间会终止请求并提示超时。</small>
+									<small>聊天请求连续此时间无输出才会超时；连接测试按总时长计时。</small>
 								</div>
 							</div>
 							{!draft.isNew && <p className="muted">已保存密钥指纹：{relays.find((item) => item.id === relay.id)?.apiKey ? keyHint(relays.find((item) => item.id === relay.id)!.apiKey) : "未设置密钥"}</p>}

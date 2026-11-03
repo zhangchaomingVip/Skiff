@@ -139,7 +139,7 @@ export interface TestResult {
 export const FAMILY_LABELS: Record<string, string> = { deepseek: "DeepSeek", kimi: "Kimi", glm: "GLM", auto: "Auto" };
 
 export function blankRelay(): RelaySpec {
-	return { id: "", name: "", baseUrl: "", apiKey: "", protocol: DEFAULT_RELAY_PROTOCOL, timeoutSeconds: 60, enabled: true, billingAccountId: "", excludedModelIds: [] };
+	return { id: "", name: "", baseUrl: "", apiKey: "", protocol: DEFAULT_RELAY_PROTOCOL, timeoutSeconds: 300, enabled: true, billingAccountId: "", excludedModelIds: [] };
 }
 
 export function blankRoute(relayId = ""): RouteSpec {

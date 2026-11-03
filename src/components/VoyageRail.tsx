@@ -46,7 +46,7 @@ function statusText(metrics: VoyageMetrics): string {
 	return metrics.status;
 }
 
-function Gauge({ metrics }: { metrics: VoyageMetrics }) {
+function Gauge({ metrics, compact = false }: { metrics: VoyageMetrics; compact?: boolean }) {
 	const phaseTimer = metrics.streaming && (metrics.phase === "thinking" || metrics.phase === "tool");
 	const average = metrics.averageSpeed;
 	// A finished turn freezes the needle on its average instead of dropping to a dead zero.
@@ -59,26 +59,31 @@ function Gauge({ metrics }: { metrics: VoyageMetrics }) {
 	const label = phaseTimer ? phaseLabel : metrics.streaming ? "船速 · 输出" : settled ? "船速" : "等待启航";
 	const unit = phaseTimer ? "本阶段用时" : settled ? "tok/s · 本轮均速" : metrics.streaming ? metrics.speedEstimated ? "tok/s · 估算" : "tok/s · 实测" : "tok/s";
 	const readingDetail = phaseTimer ? `${phaseLabel}，已用时 ${gaugeNumber}` : settled ? `本轮均速 ${gaugeNumber} tok/s${metrics.peakSpeed === undefined ? "" : `，峰值 ${metrics.peakSpeed.toFixed(1)}`}` : metrics.streaming ? `船速 ${gaugeNumber} token 每秒` : "等待启航";
-	return <section className="voyage-card voyage-card-dial" role="group" aria-label="今日航速">
+	return <section className="voyage-card voyage-card-dial" role="group" aria-label="输出速度">
+		{compact && <h2 className="voyage-portal-gauge-title">{phaseTimer ? phaseLabel : "输出速度"}</h2>}
 		<div className="voyage-gauge-scene"><svg className="voyage-gauge-svg" viewBox="-6 0 278 180" role="img" aria-label={readingDetail}>
-		<defs><linearGradient id="voyage-speed-gradient" gradientUnits="userSpaceOnUse" x1="40" y1="130" x2="220" y2="130"><stop offset="0" stopColor="var(--accent)" /><stop offset=".45" stopColor="var(--color-success)" /><stop offset=".78" stopColor="var(--color-warning)" /><stop offset="1" stopColor="var(--danger)" /></linearGradient></defs>
+		<defs><linearGradient id="voyage-speed-gradient" gradientUnits="userSpaceOnUse" x1="40" y1="130" x2="220" y2="130"><stop offset="0" stopColor="var(--voyage-sky)" /><stop offset=".38" stopColor="var(--voyage-mint)" /><stop offset=".72" stopColor="var(--voyage-butter)" /><stop offset="1" stopColor="var(--voyage-coral)" /></linearGradient></defs>
 		<g className="voyage-wave-move voyage-wave" opacity=".15"><path d="M0 155 Q12 151 24 155 T48 155 T72 155 T96 155 T120 155 T144 155 T168 155 T192 155 T216 155 T240 155 T264 155" fill="none" stroke="var(--accent)" strokeWidth="1.5" /><path d="M0 162 Q12 158 24 162 T48 162 T72 162 T96 162 T120 162 T144 162 T168 162 T192 162 T216 162 T240 162 T264 162" fill="none" stroke="var(--accent)" strokeWidth="1.5" /></g>
 		<path d="M40 130 A90 90 0 0 1 220 130" className="voyage-gauge-rainbow" stroke="url(#voyage-speed-gradient)" strokeOpacity=".34" />
 		<path d="M40 130 A90 90 0 0 1 220 130" className="voyage-gauge-track" /><path d="M40 130 A90 90 0 0 1 220 130" className={`voyage-gauge-fill ${phaseTimer ? `timer-${metrics.phase}` : ""}`} strokeDasharray={phaseTimer ? undefined : `${(GAUGE_LENGTH * position).toFixed(1)} ${GAUGE_LENGTH}`} />
 		<g className="voyage-gauge-ticks" stroke="var(--gauge-track)" strokeWidth="1.2"><line x1="45" y1="125" x2="45" y2="118" /><line x1="75" y1="75" x2="78" y2="82" /><line x1="110" y1="45" x2="110" y2="52" /><line x1="150" y1="45" x2="150" y2="52" /><line x1="185" y1="75" x2="182" y2="82" /><line x1="215" y1="125" x2="215" y2="118" /></g>
-		{!phaseTimer && <g className="voyage-gauge-needle" style={{ transform: `rotate(${angle}deg)` }}><line x1="130" y1="130" x2="130" y2="50" /><path d="M130 50 L126 58 L134 58 Z" fill="var(--accent)" /></g>}<circle cx="130" cy="130" r="7" className="voyage-gauge-hub" /><circle cx="130" cy="130" r="3.5" fill="var(--accent)" />
+		{!phaseTimer && <g className="voyage-gauge-needle" style={{ transform: `rotate(${angle}deg)` }}><line x1="130" y1="130" x2="130" y2="50" /><path d="M130 50 L126 58 L134 58 Z" fill="var(--voyage-sky)" /></g>}<circle cx="130" cy="130" r="7" className="voyage-gauge-hub" /><circle cx="130" cy="130" r="3.5" fill="var(--voyage-sky)" />
 		<g className="voyage-scene-layout" transform="translate(22 12)"><g className="voyage-scene-boat"><path className="voyage-wake-dash" d="M75 145 L95 145 M75 150 L95 150" fill="none" stroke="var(--accent)" strokeWidth="1" opacity=".4" /><path d="M95 143 L115 143 L120 139 Q122 137 121 141 Q117 150 100 150 Q92 150 92 145 Z" fill="var(--text)" /><path d="M103 143 L106 133 L113 133 L115 143 Z" fill="var(--accent)" /></g></g>
-	</svg><div className="voyage-gauge-readout" title={readingDetail}><span className="voyage-gauge-label">{label}</span><strong className="voyage-gauge-number">{gaugeNumber}</strong><small className="voyage-gauge-unit">{unit}</small></div></div>
-		<Sparkline trail={metrics.speedTrail} />
+	</svg><div className="voyage-gauge-readout" title={readingDetail}><span className="voyage-gauge-label">{compact && !phaseTimer && (metrics.streaming || settled) ? "船速" : label}</span><strong className="voyage-gauge-number">{gaugeNumber}</strong><small className="voyage-gauge-unit" title={unit}>{compact && !phaseTimer ? "tok/s" : unit}</small></div></div>
+		{!compact && <Sparkline trail={metrics.speedTrail} />}
+		{compact && <PhaseSummary metrics={metrics} />}
 	</section>;
 }
 
 /** The trailing speed curve: a filled area under a hairline, frozen when the run stops. */
-function Sparkline({ trail }: { trail: number[] }) {
+function Sparkline({ trail, ambient = false }: { trail: number[]; ambient?: boolean }) {
 	const shape = sparkGeometry(trail);
-	return <svg className="voyage-spark" viewBox="0 0 100 28" preserveAspectRatio="none" aria-hidden="true">
-		<defs><linearGradient id="voyage-spark-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="var(--accent)" stopOpacity=".38" /><stop offset="1" stopColor="var(--accent)" stopOpacity="0" /></linearGradient></defs>
+	const quiet = ambient && !shape.line;
+	return <svg className={`voyage-spark${quiet ? " is-ambient" : ""}`} viewBox="0 0 100 28" preserveAspectRatio="none" aria-hidden="true">
+		{quiet && <title>暂无航速数据 · 海浪装饰</title>}
+		<defs><linearGradient id="voyage-spark-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="var(--voyage-sky)" stopOpacity=".38" /><stop offset="1" stopColor="var(--voyage-sky)" stopOpacity="0" /></linearGradient></defs>
 		<line className="voyage-spark-base" x1="0" y1="24" x2="100" y2="24" />
+		{quiet && <><path className="voyage-spark-area" d="M0 18 Q12.5 12 25 18 T50 18 T75 18 T100 18 V28 H0 Z" fill="url(#voyage-spark-fill)" /><path className="voyage-spark-line voyage-spark-wave" d="M0 18 Q12.5 12 25 18 T50 18 T75 18 T100 18" vectorEffect="non-scaling-stroke" /></>}
 		{shape.area && <path className="voyage-spark-area" d={shape.area} fill="url(#voyage-spark-fill)" />}
 		{shape.line && <polyline className="voyage-spark-line" points={shape.line} vectorEffect="non-scaling-stroke" />}
 		{shape.last && <circle className="voyage-spark-dot" cx={shape.last.x} cy={shape.last.y} r="1.4" vectorEffect="non-scaling-stroke" />}
@@ -87,11 +92,11 @@ function Sparkline({ trail }: { trail: number[] }) {
 
 type DialTone = "normal" | "warning" | "critical" | "supply" | "quiet";
 
-/** A white inset block inside the frosted tray: colored dot, big reading, soft bar. */
+/** A floating instrument card: colored dot, big reading, soft bar. */
 function Dial({ name, tone = "normal", ratio, value, label, icon, caption, hint }: { name: "context" | "cache"; tone?: DialTone; ratio: number; value: string; label: string; icon: IconName; caption: ReactNode; hint: string }) {
 	const filled = `${Math.round(Math.min(1, Math.max(0, ratio)) * 100)}%`;
 	return <div className={`voyage-dial voyage-dial-${name} voyage-dial-${tone}`} role="group" aria-label={hint}>
-		<div className="voyage-dial-head"><span className="voyage-dial-icon" aria-hidden="true"><Icon name={icon} size={11} /></span><span className="voyage-dial-label">{label}</span></div>
+		<div className="voyage-dial-head"><span className="voyage-dial-icon" aria-hidden="true"><Icon name={icon} size={11} /></span><span className="voyage-dial-label" title={label}><span className="voyage-dial-label-full">{label}</span><span className="voyage-dial-label-short" aria-hidden="true">{label}</span></span></div>
 		<strong className="voyage-dial-value">{value}</strong>
 		<span className="voyage-dial-meter" aria-hidden="true"><i style={{ width: filled }} /></span>
 		<span className="voyage-dial-caption">{caption}</span>
@@ -105,7 +110,7 @@ function ContextDial({ metrics }: { metrics: VoyageMetrics }) {
 	const capacity = metrics.limit === undefined ? "—" : number(metrics.limit);
 	const caption = context === undefined ? `— / ${capacity}` : `${number(context)} / ${capacity}`;
 	const percentage = context === undefined ? "—" : `${(metrics.ratio * 100).toFixed(1)}%`;
-	return <Dial name="context" tone={tone} ratio={ratio} value={percentage} label="鲸鱼能量" icon="anchor" caption={caption} hint={`${metrics.contextEstimated ? "估算" : "实测"}上下文占用${context === undefined ? "" : ` ${percentage}`}，${caption} token`} />;
+	return <Dial name="context" tone={tone} ratio={ratio} value={percentage} label="上下文" icon="anchor" caption={caption} hint={`${metrics.contextEstimated ? "估算" : "实测"}上下文占用${context === undefined ? "" : ` ${percentage}`}，${caption} token`} />;
 }
 
 function CacheDial({ metrics }: { metrics: VoyageMetrics }) {
@@ -119,15 +124,27 @@ function CacheDial({ metrics }: { metrics: VoyageMetrics }) {
 	const priced = formatCosts(metrics.sessionCost, 4) !== "—";
 	const caption = priced ? <CostButton className="voyage-dial-cost" cost={metrics.sessionCost} label="会话费用" /> : turn.newInput === undefined ? "暂无费用" : `+${number(turn.newInput)} 新增`;
 	const hint = hitRate === undefined ? "本轮缓存命中率暂无数据" : `本轮缓存命中率 ${(ratio * 100).toFixed(1)}%，命中越多重复上下文越省`;
-	return <Dial name="cache" tone={tone} ratio={ratio} value={value} label="亲密补给" icon="heart" caption={caption} hint={hint} />;
+	return <Dial name="cache" tone={tone} ratio={ratio} value={value} label="缓存命中" icon="heart" caption={caption} hint={hint} />;
 }
 
 const PHASE_LEGEND: { phase: VoyagePhase; label: string }[] = [{ phase: "response", label: "航行" }, { phase: "thinking", label: "思考" }, { phase: "tool", label: "工具" }];
 
-function PhaseBar({ timeline }: { timeline: VoyageTimeline }) {
-	const total = Math.max(1, timeline.durationMs);
-	const totals: Record<VoyagePhase, number> = { response: timeline.segments.filter((item) => item.phase === "response").reduce((sum, item) => sum + (item.endedAt ?? timeline.at) - item.startedAt, 0), thinking: timeline.thinkingMs, tool: timeline.toolMs };
-	return <div className="voyage-phase-section"><div className="voyage-phase-bar" aria-hidden="true">{timeline.segments.map((segment, index) => <span key={index} className={`phase-${segment.phase}`} style={{ width: `${Math.max(0, ((segment.endedAt ?? timeline.at) - segment.startedAt) / total * 100)}%` }} />)}</div><div className="voyage-phase-legend">{PHASE_LEGEND.map(({ phase, label }) => <div key={phase} className={`${timeline.endedAt === undefined && timeline.phase === phase ? "current" : ""}${totals[phase] === 0 ? " is-zero" : ""}`}><div className="voyage-phase-label"><i className={`phase-${phase}`} />{label}</div><div className="voyage-phase-value">{formatDuration(totals[phase])}</div></div>)}</div></div>;
+function PhaseBar({ timeline, compact = false }: { timeline?: VoyageTimeline; compact?: boolean }) {
+	const total = Math.max(1, timeline?.durationMs ?? 0);
+	const totals: Record<VoyagePhase, number> = { response: timeline?.segments.filter((item) => item.phase === "response").reduce((sum, item) => sum + (item.endedAt ?? timeline.at) - item.startedAt, 0) ?? 0, thinking: timeline?.thinkingMs ?? 0, tool: timeline?.toolMs ?? 0 };
+	const phases = compact ? PHASE_LEGEND.filter(({ phase }) => totals[phase] > 0) : PHASE_LEGEND;
+	const showDetails = !compact || totals.thinking > 0 || totals.tool > 0;
+	const hint = timeline ? phases.map(({ phase, label }) => `${label} ${formatDuration(totals[phase])}`).join(" · ") : "暂无阶段数据";
+	return <div className="voyage-phase-section"><div className="voyage-phase-bar" title={hint} aria-label={hint} role="img">{timeline?.segments.map((segment, index) => <span key={index} className={`phase-${segment.phase}`} style={{ width: `${Math.max(0, ((segment.endedAt ?? timeline.at) - segment.startedAt) / total * 100)}%` }} />)}</div>{showDetails && <div className="voyage-phase-legend">{phases.map(({ phase, label }) => <div key={phase} className={`${timeline && timeline.endedAt === undefined && timeline.phase === phase ? "current" : ""}${totals[phase] === 0 ? " is-zero" : ""}`}><div className="voyage-phase-label"><i className={`phase-${phase}`} />{label}</div><div className="voyage-phase-value">{timeline ? formatDuration(totals[phase]) : "—"}</div></div>)}</div>}</div>;
+}
+
+function PhaseSummary({ metrics }: { metrics: VoyageMetrics }) {
+	const { timeline } = metrics;
+	const duration = <span className="voyage-portal-duration"><Icon name="clock" size={11} /><span>耗时</span><strong>{metrics.turn.durationMs === undefined ? "—" : formatDuration(metrics.turn.durationMs)}</strong></span>;
+	if (timeline && (timeline.thinkingMs > 0 || timeline.toolMs > 0)) {
+		return <details className="voyage-portal-phases" aria-label="阶段耗时"><summary>{duration}<Icon name="chevron" size={10} /></summary><PhaseBar timeline={timeline} compact /></details>;
+	}
+	return <div className="voyage-portal-phases" role="group" aria-label="阶段耗时">{duration}<PhaseBar timeline={timeline} compact /></div>;
 }
 
 function toolIcon(tool: VoyageTool) {
@@ -240,11 +257,10 @@ function useCompanionMood(metrics: VoyageMetrics) {
 
 /** The navigator stage: five live poses driven by the voyage, with a static
  *  reduced-motion fallback and a pettable, squishable body. */
-function Companion({ pose, press, reduced }: { pose: CompanionPose | "still"; press: (pose: CompanionPose, ms: number) => void; reduced: boolean }) {
+function Companion({ pose, press, reduced, sound }: { pose: CompanionPose | "still"; press: (pose: CompanionPose, ms: number) => void; reduced: boolean; sound: boolean }) {
 	const [custom, setCustom] = useState<string | undefined>(() => readCompanion());
 	const [missing, setMissing] = useState<string[]>([]);
 	const [notice, setNotice] = useState("");
-	const [sound, setSound] = useState(() => readCompanionSound());
 	const [tapped, setTapped] = useState(false);
 	const file = useRef<HTMLInputElement>(null);
 	const art = useRef<HTMLImageElement>(null);
@@ -316,13 +332,6 @@ function Companion({ pose, press, reduced }: { pose: CompanionPose | "still"; pr
 		press(target, MANUAL_POSE_MS);
 		announce(`${label} · ${POSE_MOOD[target]}`);
 	};
-	const toggleSound = () => {
-		const next = !sound;
-		setSound(next);
-		saveCompanionSound(next);
-		if (next) playCompanionVoice("happy");
-		announce(next ? "互动音效已开启" : "互动音效已关闭");
-	};
 	return <div className={`voyage-companion pose-${pose}`}>
 		<div className="voyage-companion-stage" aria-label={`领航员，${pose === "still" ? "静止" : POSE_MOOD[pose]}，右键更换`} title="单击互动，双击捏扁，右键更换领航员" onContextMenu={(event) => { event.preventDefault(); file.current?.click(); }} onClick={poke} onDoubleClick={squash}>
 			<svg className="voyage-stage-decor" viewBox="0 0 200 200" aria-hidden="true">
@@ -331,6 +340,7 @@ function Companion({ pose, press, reduced }: { pose: CompanionPose | "still"; pr
 				<path className="voyage-drift-c" d="M150 118c8-7 18-6 22-2-4 6-14 9-22 2Zm0 0-6-5v10Z" />
 				<path className="voyage-sparkle-a" d="m64 44 2.4 6.2 6.2 2.4-6.2 2.4L64 61.2l-2.4-6.2L55.4 52.6l6.2-2.4Z" />
 				<path className="voyage-sparkle-b" d="m142 150 1.8 4.4 4.4 1.8-4.4 1.8-1.8 4.4-1.8-4.4-4.4-1.8 4.4-1.8Z" />
+				<g className="voyage-floor-bubbles"><circle cx="168" cy="181" r="6" /><circle cx="185" cy="169" r="3.5" /><path d="M164 179q1-3 4-3M183 168q.5-1.5 2-1.5" /></g>
 			</svg>
 			{shownNow ? <img ref={art} className="voyage-companion-art" src={shownNow} alt="" draggable={false} onError={() => setMissing((list) => list.includes(shownNow) ? list : [...list, shownNow])} /> : <span className="voyage-companion-ghost" aria-hidden="true" />}
 			{pose === "sleep" && <span className="voyage-companion-bubble" aria-hidden="true">z z</span>}
@@ -341,8 +351,7 @@ function Companion({ pose, press, reduced }: { pose: CompanionPose | "still"; pr
 			</svg>
 		</div>
 		<div className="voyage-companion-actions" role="group" aria-label="领航员互动">
-			{POSE_CHIPS.map(({ pose: target, label, short, icon, voice }) => <button key={target} type="button" className={`voyage-companion-chip chip-${target}${pose === target ? " is-active" : ""}`} title={`${label} · ${POSE_MOOD[target]}`} onClick={() => prompt(target, label, voice)}><span className="voyage-chip-dot" aria-hidden="true"><Icon name={icon} size={11} /></span>{short}</button>)}
-			<button type="button" className="voyage-companion-chip voyage-companion-sound" aria-pressed={sound} aria-label={sound ? "关闭互动音效" : "开启互动音效"} title={sound ? "关闭互动音效" : "开启互动音效"} onClick={toggleSound}><span className="voyage-chip-dot" aria-hidden="true"><Icon name={sound ? "sound" : "mute"} size={11} /></span></button>
+			{POSE_CHIPS.map(({ pose: target, label, short, icon, voice }) => <button key={target} type="button" className={`voyage-companion-chip chip-${target}${pose === target ? " is-active" : ""}`} aria-label={short} title={`${label} · ${POSE_MOOD[target]}`} onClick={() => prompt(target, label, voice)}><span className="voyage-chip-dot" aria-hidden="true"><Icon name={icon} size={11} /></span><span className="voyage-chip-label"><span className="voyage-chip-label-full">{label}</span><span className="voyage-chip-label-short">{short}</span></span></button>)}
 		</div>
 		<input ref={file} type="file" className="sr-only" aria-label="更换领航员" accept=".webp,.gif,.png,image/webp,image/gif,image/png" onChange={pick} />
 		{custom && <button type="button" className="voyage-companion-reset" title="恢复默认领航员" aria-label="恢复默认领航员" onClick={reset}><Icon name="refresh" size={14} /></button>}
@@ -402,6 +411,13 @@ function DeckHandle({ getValue, getMax, onResize, onCommit, onReset }: { getValu
 /** `onCollapse` is only wired for the narrow-screen dialog, where the title bar toggle is covered. */
 export function VoyageRail({ metrics, onCollapse }: { metrics: VoyageMetrics; onCollapse?: () => void }) {
 	const [deck, setDeck] = useState<DeckMode>(() => readDeckMode());
+	const [sound, setSound] = useState(() => readCompanionSound());
+	const toggleSound = () => {
+		const next = !sound;
+		setSound(next);
+		saveCompanionSound(next);
+		if (next) playCompanionVoice("happy");
+	};
 	const [deckSize, setDeckSize] = useState<number | undefined>(() => readDeckSize());
 	const dashboard = useRef<HTMLDivElement>(null);
 	const deckSection = useRef<HTMLElement>(null);
@@ -419,37 +435,54 @@ export function VoyageRail({ metrics, onCollapse }: { metrics: VoyageMetrics; on
 	}, []);
 	const titleStatus = statusText(metrics);
 	const mood = useCompanionMood(metrics);
-	// The banner keeps a compact mood word: the full caption lives in the stage tooltip.
-	const moodPose: CompanionPose = mood.pose === "still" ? "idle" : mood.pose;
-	const contextShare = metrics.context !== undefined && metrics.limit ? `${Math.round(metrics.ratio * 100)}% 上下文` : undefined;
+	const moodPose = mood.pose === "still" ? "idle" : mood.pose;
+	const split = deck !== "companion" && deckSize !== undefined;
 	return <aside id="voyage-rail" className={`voyage-rail expanded voyage-${metrics.pressure} voyage-${metrics.activity}`} aria-label="Skiff 航行台">
-		<div ref={dashboard} className={`voyage-dashboard${deckSize === undefined ? "" : " split"}`} style={deckSize === undefined ? undefined : { "--voyage-deck-size": `${deckSize}px` } as CSSProperties}>
-			<header className="voyage-dashboard-header voyage-rail-header"><h1><span className="voyage-badge" aria-hidden="true"><Icon name="sailboat" size={12} /></span>Skiff 航行台</h1><div className="voyage-status-pill voyage-pill"><span className={`voyage-status-dot ${metrics.streaming ? "running" : "stopped"}`} />{titleStatus}</div></header>
-			<div className="voyage-mood" data-pose={moodPose} title={`领航员心情：${POSE_MOOD[moodPose]}；${titleStatus}`}>
-				<i className="voyage-mood-dot" aria-hidden="true" />
-				<strong className="voyage-mood-text">{POSE_MOOD[moodPose]}</strong>
-				{contextShare && <span className="voyage-mood-meta">{contextShare}</span>}
-			</div>
+		<div ref={dashboard} className={`voyage-dashboard${deck === "companion" ? " voyage-dashboard-orbit" : ""}${split ? " split" : ""}`} style={split ? { "--voyage-deck-size": `${deckSize}px` } as CSSProperties : undefined}>
+			<header className="voyage-dashboard-header voyage-rail-header"><h1 title={`Skiff 航行台 · ${titleStatus}`}><span className="voyage-badge" aria-hidden="true"><Icon name="sailboat" size={12} /></span><span className="voyage-title">Skiff 航行台</span></h1>
+				<div className="voyage-deck-switch" role="group" aria-label="甲板视图">
+					{DECK_OPTIONS.map(({ mode, label, icon }) => <button key={mode} type="button" className={`voyage-deck-mode${deck === mode ? " is-active" : ""}`} aria-pressed={deck === mode} aria-label={label} title={label} onClick={() => selectDeck(mode)}><Icon name={icon} size={14} /></button>)}
+				</div>
+				{deck === "companion" && <button type="button" className="voyage-deck-mode voyage-companion-sound" aria-pressed={sound} aria-label={sound ? "关闭互动音效" : "开启互动音效"} title={sound ? "关闭互动音效" : "开启互动音效"} onClick={toggleSound}><Icon name={sound ? "sound" : "mute"} size={14} /></button>}
+				{onCollapse && <IconButton type="button" className="voyage-rail-toggle voyage-collapse" onClick={onCollapse} aria-label="收起航行台"><Icon name="chevron" size={16} /></IconButton>}
+			</header>
+			{deck === "companion" ? <>
+				<section className="voyage-stage-orbit" aria-label="领航员环绕舞台">
+					<div className="voyage-orbit-scene">
+						<div className="voyage-mood" data-pose={moodPose} title={`领航员心情：${POSE_MOOD[moodPose]}；${titleStatus}`}><i className="voyage-mood-dot" aria-hidden="true" /><strong className="voyage-mood-text">{POSE_MOOD[moodPose].split(" · ").slice(1).join(" · ")} · {titleStatus}</strong></div>
+						<div className="voyage-bento" role="group" aria-label="领航员数据块">
+							<section className="voyage-portal-status voyage-portal-card" aria-label="本轮 Token">
+								<h2>本轮 Token</h2><b>{metrics.turn.total === undefined ? "—" : number(metrics.turn.total)}</b>
+								<div className="voyage-portal-trend" role="group" aria-label="航迹趋势"><span className="voyage-portal-token" title="本轮新增输入 Token">+{metrics.turn.newInput === undefined ? "—" : number(metrics.turn.newInput)}<small>新增</small></span><Sparkline trail={metrics.speedTrail} ambient /></div>
+							</section>
+							<section className="voyage-portal-vitals voyage-portal-card" aria-label="上下文与缓存命中">
+								<div className="voyage-dials"><ContextDial metrics={metrics} /><CacheDial metrics={metrics} /></div>
+							</section>
+							<Gauge metrics={metrics} compact />
+						</div>
+						<section className="voyage-deck voyage-deck-companion" aria-label="领航员甲板">
+							<Companion pose={mood.pose} press={mood.press} reduced={mood.reduced} sound={sound} />
+						</section>
+					</div>
+				</section>
+				{(metrics.timeline || metrics.activeTools.length > 0 || metrics.toolLog.length > 0) && <div className="voyage-orbit-log">
+					<ToolCapsule metrics={metrics} /><ToolLog metrics={metrics} />
+				</div>}
+			</> : <>
 			<div className="voyage-instruments">
 				<div className="voyage-bento">
-					<section className="voyage-card voyage-card-vitals" role="group" aria-label="领航员数据块">
-						<div className="voyage-dials"><ContextDial metrics={metrics} /><CacheDial metrics={metrics} /></div>
-					</section>
+					<div className="voyage-dials" role="group" aria-label="领航员数据块"><ContextDial metrics={metrics} /><CacheDial metrics={metrics} /></div>
 					<Gauge metrics={metrics} />
 				</div>
 				{metrics.timeline && <PhaseBar timeline={metrics.timeline} />}
 				<ToolCapsule metrics={metrics} />
-				{deck !== "billing" && <ToolLog metrics={metrics} />}
+				{deck === "blank" && <ToolLog metrics={metrics} />}
 			</div>
 			<section ref={deckSection} className={`voyage-deck voyage-deck-${deck}`} aria-label="领航员甲板">
 				<DeckHandle getValue={currentDeckSize} getMax={maxDeckSize} onResize={setDeckSize} onCommit={commitDeckSize} onReset={resetDeckSize} />
-				<div className="voyage-deck-switch" role="group" aria-label="甲板视图">
-					{DECK_OPTIONS.map(({ mode, label, icon }) => <button key={mode} type="button" className={`voyage-deck-mode${deck === mode ? " is-active" : ""}`} aria-pressed={deck === mode} aria-label={label} title={label} onClick={() => selectDeck(mode)}><Icon name={icon} size={14} /></button>)}
-				</div>
-				{deck === "companion" && <Companion pose={mood.pose} press={mood.press} reduced={mood.reduced} />}
 				{deck === "billing" && <div className="voyage-deck-bill"><TurnRecord metrics={metrics} /><ToolLog metrics={metrics} open /></div>}
 			</section>
-			{onCollapse && <IconButton type="button" className="voyage-rail-toggle voyage-collapse" onClick={onCollapse} aria-label="收起航行台"><Icon name="chevron" size={16} /></IconButton>}
+			</>}
 		</div>
 	</aside>;
 }

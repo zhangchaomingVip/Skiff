@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { reduce } from "../src/chat/reducer.ts";
 import { initialSessionState, type SessionState } from "../src/chat/types.ts";
+import { parseMessages } from "../src/chat/parse.ts";
+import { supersededReplyIds, turnReplyText } from "../src/chat/turns.ts";
 
 function failedAttempt(state: SessionState, errorMessage = "503 server busy"): SessionState {
 	state = reduce(state, { type: "message_start", message: { role: "assistant" } });
@@ -55,4 +57,56 @@ test("exhaustion, cancellation and process exit terminate retry state; a new pro
 
 test("malformed retry events do not enter maintenance state", () => {
 	for (const attempt of [0, -1, 6, 1.5, Infinity]) assert.equal(reduce(initialSessionState, { type: "auto_retry_start", attempt, maxAttempts: 5 }), initialSessionState);
+});
+
+test("a retried partial reply is superseded only after replacement content arrives, without changing the transcript", () => {
+	let state = reduce(initialSessionState, { type: "message_start", message: { role: "user", content: "检查配置" } });
+	state = reduce(state, { type: "message_start", message: { role: "assistant" } });
+	state = reduce(state, { type: "message_end", message: { role: "assistant", content: "首先检查配置。未完成", stopReason: "error", usage: { input: 10, output: 5 } } });
+	const failed = state.messages[1];
+	state = reduce(state, { type: "auto_retry_start", attempt: 1, maxAttempts: 5, errorMessage: "request timeout" });
+	state = reduce(state, { type: "message_start", message: { role: "assistant" } });
+	assert.equal(supersededReplyIds(state.messages).size, 0);
+	assert.equal(turnReplyText(state.messages), "首先检查配置。未完成");
+	state = reduce(state, { type: "message_update", assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: "首先检查配置。完整结论。" } });
+	assert.deepEqual([...supersededReplyIds(state.messages)], [failed.id]);
+	assert.equal(turnReplyText(state.messages), "首先检查配置。完整结论。");
+	assert.equal(state.messages[1], failed);
+	assert.equal(state.messages[1].usage?.output, 5);
+	assert.equal(state.messages[1].blocks[0].kind === "text" && state.messages[1].blocks[0].text, "首先检查配置。未完成");
+});
+
+test("restored retries use the same display/copy policy and keep the last failed partial on exhaustion", () => {
+	const raw = [
+		{ role: "user", content: "检查配置" },
+		{ role: "assistant", content: "第一个失败片段", stopReason: "error" },
+		{ role: "assistant", content: "最后一个失败片段", stopReason: "error" },
+	];
+	const exhausted = parseMessages(raw);
+	assert.deepEqual([...supersededReplyIds(exhausted)], [exhausted[1].id]);
+	assert.equal(turnReplyText(exhausted), "最后一个失败片段");
+	const restored = parseMessages([...raw, { role: "assistant", content: "完整结论", stopReason: "stop" }]);
+	assert.equal(supersededReplyIds(restored).size, 2);
+	assert.equal(turnReplyText(restored), "完整结论");
+});
+
+test("retry projection keeps successful tool steps, manual stops and failures from earlier user turns", () => {
+	const messages = parseMessages([
+		{ role: "user", content: "上一轮" },
+		{ role: "assistant", content: "上一轮失败片段", stopReason: "error" },
+		{ role: "user", content: "当前轮" },
+		{ role: "assistant", content: "先读取文件", stopReason: "toolUse" },
+		{ role: "assistant", content: "失败片段", stopReason: "error" },
+		{ role: "assistant", content: "手动停止的片段", stopReason: "aborted" },
+		{ role: "assistant", content: "续写结果", stopReason: "stop" },
+	]);
+	assert.deepEqual([...supersededReplyIds(messages)], [messages[4].id]);
+	assert.equal(turnReplyText(messages), "上一轮失败片段\n\n先读取文件\n\n手动停止的片段\n\n续写结果");
+	const stoppedBeforeToken = parseMessages([
+		{ role: "user", content: "检查配置" },
+		{ role: "assistant", content: "保留有用的片段", stopReason: "error" },
+		{ role: "assistant", content: "  ", stopReason: "aborted" },
+	]);
+	assert.equal(supersededReplyIds(stoppedBeforeToken).size, 0);
+	assert.equal(turnReplyText(stoppedBeforeToken), "保留有用的片段");
 });

@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChatMessage, ModelInfo, SessionState } from "../chat/types";
-import { groupTurns, turnContentTails } from "../chat/turns";
+import { groupTurns, supersededReplyIds, turnContentTails } from "../chat/turns";
 import { MessageItem } from "./MessageItem";
 import { Icon } from "./Icon";
 import type { MessageReveal } from "../chat/useConversationSearch";
@@ -18,6 +18,7 @@ export function MessageList({ runStartedAt, retryAttempts, messages, pendingProm
 	const [expandedGroups, setExpandedGroups] = useState<ReadonlySet<string>>(() => new Set());
 	const displayMessages = useMemo(() => pendingPrompt?.userMessage ? [...messages, pendingPrompt.userMessage] : messages, [messages, pendingPrompt?.userMessage]);
 	const turns = useMemo(() => groupTurns(displayMessages), [displayMessages]);
+	const superseded = useMemo(() => supersededReplyIds(displayMessages), [displayMessages]);
 	// Tool calls produce multiple pi messages, but their reply shares one visual container.
 	const replyRows = useMemo(() => {
 		const rows: { key: string; assistant: boolean; indices: number[] }[] = [];
@@ -106,7 +107,7 @@ export function MessageList({ runStartedAt, retryAttempts, messages, pendingProm
 	}
 
 	const messageItems = displayMessages.map((message, index) => (
-		<Fragment key={message.id}><MessageItem runStartedAt={runStartedAt} onEdit={onEdit} onContinue={onContinue} continuing={continuing} turnOutcome={(() => { const group = messagesByTurn.get(turns[index].turnId) ?? []; const final = [...group].reverse().find((entry) => entry.role === "assistant"); return group.find((entry) => entry.turnResult)?.turnResult ?? (lastOutcome?.turnId === turns[index].turnId ? lastOutcome.reason : final?.stopReason); })()} searchQuery={revealMessage?.messageId === message.id ? revealMessage.query : undefined} key={message.id} message={message} processPresentation={process.presentation.get(message.id)} processDuration={turnDurationLabel(messagesByTurn.get(turns[index].turnId) ?? [])} expandedGroups={expandedGroups} onExpandedChange={setProcessExpanded} turnMessages={message.role === "assistant" && turnTails.get(turns[index].turnId) === index ? messagesByTurn.get(turns[index].turnId) : undefined} compact={message.role === "assistant" && displayMessages[index - 1]?.role === "assistant"} running={running} turnRunning={running && turns[index].turnId === processTurnId} turnHead={turns[index].head} isLast={message.role === "assistant" ? index === lastAssistant && displayMessages[displayMessages.length - 1]?.role === "assistant" : index === displayMessages.length - 1} readOnly={readOnly} />
+		<Fragment key={message.id}><MessageItem runStartedAt={runStartedAt} onEdit={onEdit} onContinue={onContinue} continuing={continuing} turnOutcome={(() => { const group = messagesByTurn.get(turns[index].turnId) ?? []; const final = [...group].reverse().find((entry) => entry.role === "assistant"); return group.find((entry) => entry.turnResult)?.turnResult ?? (lastOutcome?.turnId === turns[index].turnId ? lastOutcome.reason : final?.stopReason); })()} searchQuery={revealMessage?.messageId === message.id ? revealMessage.query : undefined} key={message.id} message={message} superseded={superseded.has(message.id)} processPresentation={process.presentation.get(message.id)} processDuration={turnDurationLabel(messagesByTurn.get(turns[index].turnId) ?? [])} expandedGroups={expandedGroups} onExpandedChange={setProcessExpanded} turnMessages={message.role === "assistant" && turnTails.get(turns[index].turnId) === index ? messagesByTurn.get(turns[index].turnId) : undefined} compact={message.role === "assistant" && displayMessages[index - 1]?.role === "assistant"} running={running} turnRunning={running && turns[index].turnId === processTurnId} turnHead={turns[index].head} isLast={message.role === "assistant" ? index === lastAssistant && displayMessages[displayMessages.length - 1]?.role === "assistant" : index === displayMessages.length - 1} readOnly={readOnly} />
 		{retryAttempts?.filter((retry) => retry.afterMessageId === message.id).map((retry) => <div key={retry.id} className="retry-progress" role="status"><ProcessRow icon="wifi" label={`${retryReason(retry.error)}，正在重新连接 ${retry.attempt}/${retry.maxAttempts}`} /></div>)}
 		</Fragment>
 	));

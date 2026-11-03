@@ -11,9 +11,41 @@ const cli = process.argv[2];
 if (!cli) throw new Error("Usage: node tests/pi.retry.integration.mjs <pi-cli.js>");
 const directory = await mkdtemp(join(tmpdir(), "skiff-retry-"));
 let count = 0, mode = "recover";
+const requests = [];
 const server = createServer(async (request, response) => {
-	for await (const chunk of request) { /* Consume the local request. */ }
+	let body = ""; for await (const chunk of request) body += chunk;
+	requests.push(JSON.parse(body));
 	count++;
+	const chunk = (delta, finishReason = null) => response.write(`data: ${JSON.stringify({ id: "test", choices: [{ index: 0, delta, finish_reason: finishReason }] })}\n\n`);
+	const finish = (reason = "stop") => { chunk({}, reason); response.end("data: [DONE]\n\n"); };
+	if (["streaming", "thinking", "toolargs"].includes(mode) && count === 1) {
+		response.writeHead(200, { "Content-Type": "text/event-stream" });
+		const args = JSON.stringify({ path: join(directory, "sample.txt") });
+		if (mode === "toolargs") chunk({ tool_calls: [{ index: 0, id: "read-local", type: "function", function: { name: "read", arguments: "" } }] });
+		let step = 0;
+		const timer = setInterval(() => {
+			if (mode === "toolargs") {
+				const size = Math.ceil(args.length / 12);
+				chunk({ tool_calls: [{ index: 0, function: { arguments: args.slice(step * size, ++step * size) } }] });
+			} else { step++; chunk(mode === "thinking" ? { reasoning_content: "继续思考。" } : { content: "继续输出。" }); }
+			if (step === 12) {
+				clearInterval(timer);
+				if (mode === "thinking") chunk({ content: "Recovered" });
+				finish(mode === "toolargs" ? "tool_calls" : "stop");
+			}
+		}, 40);
+		response.on("close", () => clearInterval(timer));
+		return;
+	}
+	if (mode === "partial" && count === 1) {
+		response.writeHead(200, { "Content-Type": "text/event-stream" });
+		chunk({ content: "首先检查配置。" });
+		return; // A genuinely stalled stream must still retry.
+	}
+	if (["streaming", "thinking", "toolargs", "partial"].includes(mode)) {
+		response.writeHead(200, { "Content-Type": "text/event-stream" });
+		chunk({ content: mode === "partial" ? "首先检查配置。完整结论。" : "Recovered" }); finish(); return;
+	}
 	if (mode === "timeout" && count < 6) return;
 	if (mode === "network" && count < 6) { request.socket.destroy(); return; }
 	if (!["recover", "timeout", "network"].includes(mode) || count < 6) {
@@ -26,10 +58,11 @@ const server = createServer(async (request, response) => {
 await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
 let child;
 try {
+	await writeFile(join(directory, "sample.txt"), "Local tool argument progress test");
 	await writeFile(join(directory, "settings.json"), JSON.stringify({ retry: { enabled: true, maxRetries: 5, baseDelayMs: 5, maxAgentDelayMs: 20 } }));
 	await writeFile(join(directory, "models.json"), JSON.stringify({ providers: { "retry-test": { baseUrl: `http://127.0.0.1:${server.address().port}/v1`, api: "openai-completions", models: [{ id: "local", reasoning: false, input: ["text"], contextWindow: 32000, maxTokens: 64 }] } } }));
 	await writeFile(join(directory, "auth.json"), JSON.stringify({ "retry-test": { type: "api_key", key: "dummy-local-key" } }));
-	const route = { providerKey: "retry-test", keyEnv: "SKIFF_RETRY_TEST_KEY", baseUrl: `http://127.0.0.1:${server.address().port}/v1`, timeoutSeconds: .1, tools: true, streaming: true, models: [{ id: "local", reasoning: false, input: ["text"], contextWindow: 32000, maxTokens: 64 }] };
+	const route = { providerKey: "retry-test", keyEnv: "SKIFF_RETRY_TEST_KEY", baseUrl: `http://127.0.0.1:${server.address().port}/v1`, timeoutSeconds: .2, tools: true, streaming: true, models: [{ id: "local", reasoning: false, input: ["text"], contextWindow: 32000, maxTokens: 64 }] };
 	child = spawn(process.execPath, [cli, "--mode", "rpc", "--provider", "retry-test", "--model", "local", "--no-extensions", "--extension", resolve("src-tauri/src/pi_extensions/model_families.js"), "--no-skills", "--no-approve", "--no-context-files", "--offline"], { cwd: directory, env: { ...process.env, PI_CODING_AGENT_DIR: directory, PI_OFFLINE: "1", SKIFF_FAMILY_RUNTIME: JSON.stringify([route]), SKIFF_RETRY_TEST_KEY: "dummy-local-key" }, stdio: ["pipe", "pipe", "pipe"] });
 	const events = [], pending = new Map(); let sequence = 0, stderr = "";
 	child.stderr.on("data", (chunk) => { stderr += chunk; });
@@ -51,8 +84,8 @@ try {
 		while (!predicate()) { if (Date.now() > deadline) throw new Error(`Event timeout: ${stderr.slice(-500)}`); await new Promise((resolve) => setTimeout(resolve, 10)); }
 	};
 	await rpc({ type: "get_state" });
-	for (const scenario of ["recover", "timeout", "network", "exhaust", "unauthorized", "cancel"]) {
-		mode = scenario; count = 0;
+	for (const scenario of ["recover", "timeout", "network", "exhaust", "unauthorized", "cancel", "streaming", "thinking", "toolargs", "partial"]) {
+		mode = scenario; count = 0; requests.length = 0;
 		await rpc({ type: "new_session" });
 		const offset = events.length;
 		await rpc({ type: "prompt", message: "Local retry test" });
@@ -68,6 +101,16 @@ try {
 			assert.equal(count, 6, "One initial request plus five retries");
 			assert.equal(run.findLast((event) => event.type === "auto_retry_end").success, scenario !== "exhaust");
 			if (scenario === "timeout") assert.ok(retries.every((event) => /提供商请求超时/.test(event.errorMessage)));
+		} else if (["streaming", "thinking", "toolargs"].includes(scenario)) {
+			assert.equal(retries.length, 0, "Continuous model progress must outlive the configured timeout");
+			assert.equal(count, scenario === "toolargs" ? 2 : 1);
+			assert.equal(run.findLast((event) => event.type === "message_end" && event.message?.role === "assistant").message.stopReason, "stop");
+		} else if (scenario === "partial") {
+			assert.equal(retries.length, 1); assert.equal(count, 2);
+			assert.match(retries[0].errorMessage, /连续 0.2 秒无输出/);
+			assert.equal(requests[1].messages.filter(message => message.role === "user").length, 1);
+			assert.equal(requests[1].messages.some(message => message.role === "assistant" && JSON.stringify(message.content).includes("首先检查配置")), false);
+			assert.equal(run.findLast(event => event.type === "auto_retry_end").success, true);
 		} else if (scenario === "unauthorized") { assert.equal(retries.length, 0); assert.equal(count, 1); }
 		else { const stopped = count; await new Promise((resolve) => setTimeout(resolve, 80)); assert.equal(count, stopped); assert.ok(count < 6); }
 		const transcript = await rpc({ type: "get_messages" });

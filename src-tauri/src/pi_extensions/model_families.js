@@ -36,6 +36,27 @@ const ADAPTERS = {
 /** Only Chat Completions has a plain-JSON response Skiff can re-present as SSE. */
 const NON_STREAMING_AWARE = new Set(["openai-completions"]);
 
+/** Bound silence, not the lifetime of a healthy streaming response. */
+function idleTimeout(timeoutMs, parentSignal) {
+	const controller = new AbortController();
+	let timer;
+	const clear = () => clearTimeout(timer);
+	const reset = () => {
+		clear();
+		if (!controller.signal.aborted && !parentSignal?.aborted) {
+			timer = setTimeout(() => controller.abort(), timeoutMs);
+			timer.unref?.();
+		}
+	};
+	parentSignal?.addEventListener("abort", clear, { once: true });
+	reset();
+	return {
+		signal: controller.signal,
+		reset,
+		dispose() { clear(); parentSignal?.removeEventListener("abort", clear); },
+	};
+}
+
 export default function modelFamilies(pi) {
 	const runtimeFile = process.env.SKIFF_FAMILY_RUNTIME_FILE;
 	let runtime = process.env.SKIFF_FAMILY_RUNTIME ?? "[]";
@@ -51,8 +72,8 @@ export default function modelFamilies(pi) {
 		// Family routes serve arbitrary relays: pi cannot infer their protocol,
 		// tool support or capability profile from our provider key or URL.
 		const base = { ...model, api, compat: api === "openai-completions" ? { ...model.compat, supportsDeveloperRole: false } : model.compat };
-		const timeout = AbortSignal.timeout(route.timeoutSeconds * 1000);
-		const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
+		const timeout = idleTimeout(route.timeoutSeconds * 1000, options.signal);
+		const signal = options.signal ? AbortSignal.any([options.signal, timeout.signal]) : timeout.signal;
 		const optionsForUpstream = {
 			...options, maxTokens: options.maxTokens ?? model.maxTokens, signal,
 			timeoutMs: route.timeoutSeconds * 1000, apiKey: process.env[route.keyEnv],
@@ -75,23 +96,32 @@ export default function modelFamilies(pi) {
 				return adaptResponse(await doFetch(input, init));
 			};
 		}
-		const upstream = ADAPTERS[api]().streamSimple(base, context, optionsForUpstream);
+		let upstream;
+		try { upstream = ADAPTERS[api]().streamSimple(base, context, optionsForUpstream); }
+		catch (error) { timeout.dispose(); throw error; }
 		const stream = createAssistantMessageEventStream();
 		(async () => {
-			for await (const event of upstream) {
-				if (event.type === "error") {
-					const key = process.env[route.keyEnv];
-					if (key && event.error.errorMessage) event.error.errorMessage = event.error.errorMessage.replaceAll(key, "[密钥已隐藏]");
-					if (timeout.aborted && !options.signal?.aborted) {
-						event.error.stopReason = "error";
-						// Keep the transport marker so pi recognises this translated error as retryable.
-						event.error.errorMessage = `提供商请求超时（${route.timeoutSeconds} 秒） · request timeout`;
-						event.reason = "error";
+			try {
+				for await (const event of upstream) {
+					// Text, thinking and tool arguments all count as model progress.
+					// Local start/end events must not extend the response deadline.
+					if (event.type.endsWith("_delta") && event.delta?.length) timeout.reset();
+					if (event.type === "error") {
+						const key = process.env[route.keyEnv];
+						if (key && event.error.errorMessage) event.error.errorMessage = event.error.errorMessage.replaceAll(key, "[密钥已隐藏]");
+						if (timeout.signal.aborted && !options.signal?.aborted) {
+							event.error.stopReason = "error";
+							// Keep the transport marker so pi recognises this translated error as retryable.
+							event.error.errorMessage = `提供商请求超时（连续 ${route.timeoutSeconds} 秒无输出） · request timeout`;
+							event.reason = "error";
+						}
 					}
+					stream.push(event);
 				}
-				stream.push(event);
+			} finally {
+				timeout.dispose();
+				stream.end();
 			}
-			stream.end();
 		})();
 		return stream;
 	};

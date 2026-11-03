@@ -68,6 +68,34 @@
 		--chat-meta: #9ca3af;
 		--chat-action-hover: color-mix(in srgb, var(--text) 9%, transparent);
 		--gauge-track: var(--boundary);
+		/* Voyage shares the shell surfaces; sea-salt color stays near the pedestal. */
+		--voyage-frame-bg: var(--sidebar);
+		--voyage-frame-border: var(--border);
+		--voyage-frame-ring: transparent;
+		--voyage-frame-shadow: none;
+		--voyage-tray-bg: color-mix(in srgb, var(--surface) 82%, transparent);
+		--voyage-tray-border: color-mix(in srgb, var(--border) 80%, transparent);
+		--voyage-tray-shadow: var(--shadow-xs);
+		--voyage-inset-bg: color-mix(in srgb, var(--surface) 65%, transparent);
+		--voyage-inset-border: transparent;
+		--voyage-inset-shadow: none;
+		--voyage-island-bg: color-mix(in srgb, var(--surface) 76%, transparent);
+		--voyage-island-border: color-mix(in srgb, var(--border) 80%, transparent);
+		--voyage-island-shadow: var(--shadow-xs);
+		--voyage-island-radius: 18px;
+		--voyage-avatar-bg: linear-gradient(180deg, #315779, #22374e);
+		--voyage-side-bg: transparent;
+		--voyage-chip-foreground: #ffffff;
+		--voyage-chip-blue: linear-gradient(145deg, #8dceff, #5aa9ff);
+		--voyage-chip-yellow: linear-gradient(145deg, #ffdd96, #ffcb6b);
+		--voyage-chip-pink: linear-gradient(145deg, #ffb0c5, #ff8fab);
+		--voyage-chip-mint: linear-gradient(145deg, #8ce6c4, #5cd6a9);
+		--voyage-sky: #7cc0ff;
+		--voyage-mint: #79dda3;
+		--voyage-butter: #ffd479;
+		--voyage-coral: #ff9ebb;
+		--voyage-track-soft: rgba(124, 192, 255, .16);
+		--voyage-stage-glow: radial-gradient(ellipse at center, rgba(124, 192, 255, .18), transparent 68%);
 		--bubble-bg: var(--panel);
 		--bubble-border: var(--boundary);
 		/* A user bubble sits directly on the backdrop; its edge is theme-controlled so it
@@ -184,6 +212,27 @@
 	}
 
 	[data-theme="light"] {
+		--voyage-frame-bg: var(--sidebar);
+		--voyage-frame-border: var(--border);
+		--voyage-frame-ring: transparent;
+		--voyage-frame-shadow: none;
+		--voyage-tray-bg: color-mix(in srgb, var(--surface) 82%, transparent);
+		--voyage-tray-border: color-mix(in srgb, var(--border) 80%, transparent);
+		--voyage-tray-shadow: var(--shadow-xs);
+		--voyage-inset-bg: color-mix(in srgb, var(--surface) 65%, transparent);
+		--voyage-inset-border: transparent;
+		--voyage-inset-shadow: none;
+		--voyage-island-bg: color-mix(in srgb, var(--surface) 76%, transparent);
+		--voyage-avatar-bg: linear-gradient(180deg, #a8d8ff, #dff0ff);
+		--voyage-side-bg: transparent;
+		--voyage-island-border: color-mix(in srgb, var(--border) 80%, transparent);
+		--voyage-island-shadow: var(--shadow-xs);
+		--voyage-sky: #5aa9ff;
+		--voyage-mint: #5cd6a9;
+		--voyage-butter: #ffcb6b;
+		--voyage-coral: #ff8fab;
+		--voyage-track-soft: rgba(90, 169, 255, .16);
+		--voyage-stage-glow: radial-gradient(ellipse at center, rgba(90, 169, 255, .22), transparent 68%);
 		--color-bg-primary: #ffffff;
 		--color-bg-secondary: #ffffff;
 		--color-bg-tertiary: #edf1f6;

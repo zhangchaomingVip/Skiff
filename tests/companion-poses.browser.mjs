@@ -34,8 +34,8 @@ try {
 	assert.equal(await page.locator(".voyage-companion-bubble").count(), 0);
 	assert.equal(await page.locator(".voyage-companion-sound").getAttribute("aria-pressed"), "false");
 	assert.equal(await page.evaluate(() => localStorage.getItem("skiff.voyage.sound.v1")), null);
-	// The four chips stay inside the 260px rail.
-	assert.equal(await page.locator(".voyage-companion-chip").count(), 4);
+	// The three action chips stay inside the 260px rail; sound lives in the header.
+	assert.equal(await page.locator(".voyage-companion-chip").count(), 3);
 	assert(await page.locator(".voyage-companion-chip").evaluateAll((elements) => elements.every((element) => element.scrollWidth <= element.clientWidth)));
 	assert(await page.locator(".voyage-companion-actions").evaluate((element) => element.getBoundingClientRect().width <= element.parentElement.getBoundingClientRect().width));
 

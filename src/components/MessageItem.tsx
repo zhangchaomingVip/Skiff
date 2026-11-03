@@ -28,7 +28,7 @@ const formatMessageTime = (ts?: number): string | undefined => {
 	return new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 };
 type Tool = Extract<ContentBlock, { kind: "tool" }>;
-export const MessageItem = memo(function MessageItem({ runStartedAt, onEdit, onContinue, continuing, turnOutcome, searchQuery, message, processPresentation, processDuration, turnMessages, compact, running, turnRunning = false, turnHead, expandedGroups, onExpandedChange, isLast, readOnly = false }: {
+export const MessageItem = memo(function MessageItem({ runStartedAt, onEdit, onContinue, continuing, turnOutcome, searchQuery, message, processPresentation, processDuration, turnMessages, compact, running, superseded = false, turnRunning = false, turnHead, expandedGroups, onExpandedChange, isLast, readOnly = false }: {
 	runStartedAt?: number;
 	processPresentation?: ProcessPresentation;
 	processDuration?: string;
@@ -37,6 +37,7 @@ export const MessageItem = memo(function MessageItem({ runStartedAt, onEdit, onC
 	searchQuery?: string;
 	turnMessages?: ChatMessage[]; readOnly?: boolean;
 	turnRunning?: boolean;
+	superseded?: boolean;
 	message: ChatMessage; compact: boolean; running: boolean; turnHead: boolean; isLast: boolean;
 }) {
 	const isUser = message.role === "user";
@@ -99,7 +100,7 @@ export const MessageItem = memo(function MessageItem({ runStartedAt, onEdit, onC
 					{processPresentation?.head && renderProcess(processPresentation.head)}
 					{showContinue && <Button disabled={continuing} onClick={onContinue}>继续</Button>}
 				</div>}
-				{!nodes.length && showTyping ? <span className="typing">正在思考…</span> : nodes}
+				{superseded && nodes.length > 0 ? <ProcessDisclosure className="retry-superseded" icon="wifi" label="已中断的回复 · 已重新生成" expanded={searchQuery ? true : undefined}>{nodes}</ProcessDisclosure> : !nodes.length && showTyping ? <span className="typing">正在思考…</span> : nodes}
 			</div>}
 			{showCards && <ResultCards ops={fileOps} />}
 		{(showActions || showUsage || showTime) && <div className={`message-actions${showUsage ? " with-usage" : ""}${!isUser && !isLast ? " is-historical" : ""}`}>

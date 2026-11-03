@@ -82,7 +82,7 @@ test("keys and base urls are masked for display", () => {
 	assert.equal(maskBaseUrl("https://relay.example.com/customer-secret/v1"), "relay.example.com/…");
 	assert.equal(maskBaseUrl("not a url"), "not a url");
 	assert.equal(blankRelay().enabled, true);
-	assert.equal(blankRelay().timeoutSeconds, 60);
+	assert.equal(blankRelay().timeoutSeconds, 300);
 	assert.equal(blankRoute().streaming, true);
 	assert.equal(blankRoute().tools, true);
 	assert.equal(blankRoute().vision, false);

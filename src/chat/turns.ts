@@ -63,9 +63,26 @@ export function turnContentTails(messages: ChatMessage[], turns: TurnInfo[]): Ma
 
 /** Copy the complete assistant reply in reading order, excluding process details. */
 export function turnReplyText(messages: ChatMessage[]): string {
-	return messages.filter((message) => message.role === "assistant")
+	const superseded = supersededReplyIds(messages);
+	return messages.filter((message) => message.role === "assistant" && !superseded.has(message.id))
 		.flatMap((message) => message.blocks.filter((block): block is Extract<ChatMessage["blocks"][number], { kind: "text" }> => block.kind === "text"))
 		.map((block) => block.text).filter((text) => text.trim()).join("\n\n");
+}
+
+/** Keep failed attempts available for inspection without repeating them in the reply.
+ * Derive this from the transcript so live and restored conversations agree. A blank
+ * retry does not replace partial output if the user stops before any new content.
+ */
+export function supersededReplyIds(messages: ChatMessage[]): ReadonlySet<string> {
+	const superseded = new Set<string>();
+	let hasReplacement = false;
+	for (let index = messages.length - 1; index >= 0; index--) {
+		const message = messages[index];
+		if (message.role === "user") { hasReplacement = false; continue; }
+		if (message.stopReason === "error" && hasReplacement) superseded.add(message.id);
+		if (message.blocks.some((block) => block.kind === "text" || block.kind === "thinking" ? !!block.text.trim() : true)) hasReplacement = true;
+	}
+	return superseded;
 }
 
 export function userForTurn(messages: ChatMessage[], id: string): ChatMessage | undefined {

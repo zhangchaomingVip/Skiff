@@ -121,7 +121,7 @@ fn default_true() -> bool {
 }
 
 fn default_timeout() -> u64 {
-	60
+	300
 }
 
 fn default_schema_version() -> u64 {

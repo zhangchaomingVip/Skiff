@@ -35,6 +35,34 @@ try {
 		assert.equal(await page.evaluate(() => window.retryFixture.currentSession.state.lastOutcome.reason), "manual");
 		assert.ok(await page.evaluate(() => window.retryFixture.mock.commands.some((item) => item.command === "rpc_send" && JSON.parse(item.args.message).type === "abort")));
 		console.log(`PASS ${theme}: inline 1/5–5/5, no error toast, stopping during backoff sends abort`);
+
+		await input.fill("验证中断回复"); await input.press("Enter");
+		await wait(() => window.retryFixture.currentSession.state.isStreaming);
+		await page.evaluate(() => { const f = window.retryFixture; const process = [...f.mock.processes.values()].find((p) => p.file === f.currentSession.sessionFile); clearTimeout(process.timer); process.isStreaming = false; });
+		const partial = "首先检查配置。未完成的片段。";
+		const completed = "首先检查配置。完整结论。";
+		await emit({ type: "message_start", message: { role: "assistant" } });
+		await emit({ type: "message_end", message: { role: "assistant", content: partial, stopReason: "error", errorMessage: "request timeout" } });
+		await emit({ type: "auto_retry_start", attempt: 1, maxAttempts: 5, errorMessage: "request timeout" });
+		await emit({ type: "message_start", message: { role: "assistant" } });
+		assert.equal(await page.getByText(partial, { exact: true }).isVisible(), true, "Keep the partial reply until a replacement arrives");
+		await emit({ type: "message_update", assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: completed } });
+		await emit({ type: "message_end", message: { role: "assistant", content: completed, stopReason: "stop" } });
+		await emit({ type: "auto_retry_end", success: true });
+		await emit({ type: "agent_settled" });
+		const reply = page.locator(".assistant-reply").last();
+		const old = reply.locator(".retry-superseded");
+		await old.waitFor();
+		assert.equal(await page.getByText(partial, { exact: true }).isVisible(), false);
+		assert.equal(await page.getByText(completed, { exact: true }).isVisible(), true);
+		await old.getByRole("button", { name: "已中断的回复 · 已重新生成" }).click();
+		assert.equal(await page.getByText(partial, { exact: true }).isVisible(), true, "The failed attempt remains inspectable");
+		await old.getByRole("button", { name: "已中断的回复 · 已重新生成" }).click();
+		await page.evaluate(() => { navigator.clipboard.writeText = async (text) => { window.retryCopiedText = text; }; });
+		await reply.getByRole("button", { name: "复制消息", exact: true }).click();
+		assert.equal(await page.evaluate(() => window.retryCopiedText), completed);
+		if (output) await page.screenshot({ path: `${output}/recovered-${theme}.png` });
+		console.log(`PASS ${theme}: partial reply folds after recovery, remains inspectable, copy contains only the replacement`);
 	}
 	assert.deepEqual(errors, []);
 } finally { await browser.close(); }
