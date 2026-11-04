@@ -40,20 +40,21 @@ try {
 	assert.equal(await page.locator(".chat-header button[aria-label='诊断日志']").count(), 0, "Header must not expose the raw log drawer");
 	assert.equal(await page.locator(".chat-header button[aria-haspopup='dialog']").count(), 0, "Header must not expose background sessions");
 	assert.equal(await page.locator(".chat-header button[aria-label='分享对话']").count(), 0, "Header must not expose a share entry");
-	await page.keyboard.press("Control+Comma"); assert.equal(await dialog().count(), 0);
+	await open();
 	await page.keyboard.press("Escape");
+	await dialog().waitFor({ state: "detached" });
 	assert.equal(await page.locator(".chat-header button[aria-label='系统提示词']").count(), 0, "Prompt entry must live in settings only");
 	assert.equal(await page.locator(".chat-header .header-settings").count(), 0);
 	assert.equal(await page.locator(".chat-header button[aria-label^='主题']").count(), 0);
-	await page.getByRole("button", { name: "设置", exact: true }).click();
-	await wait(() => document.activeElement?.textContent === "外观");
+	await page.locator(".settings-trigger").click();
+	await dialog().waitFor();
 	await page.keyboard.press("Escape");
-	assert.equal(await page.locator(".settings-trigger").evaluate((el) => el === document.activeElement), true);
-	await page.getByRole("button", { name: "设置", exact: true }).click();
+	await dialog().waitFor({ state: "detached" });
+	assert.equal(await page.locator(".settings-trigger").evaluate((el) => el === document.activeElement), true, "Sidebar entry regains focus after closing settings");
 	await open();
-	assert.equal(await page.locator(".settings-menu").count(), 0, "Shortcut must dismiss the underlying menu");
+	assert.equal(await page.locator(".settings-menu").count(), 0, "Settings opens without an intermediate menu");
 	await page.keyboard.press("Escape");
-	assert.equal(await dialog().count(), 0, "One Escape closes settings after menu handoff");
+	assert.equal(await dialog().count(), 0, "One Escape closes settings");
 
 	const input = page.getByRole("textbox", { name: "聊天消息" });
 	await input.fill("切换主题后保留的草稿");
@@ -263,7 +264,7 @@ try {
 		await page.keyboard.press("Escape");
 		await button("快捷键").click(); await checkLayout();
 		await close();
-		assert.equal(await page.locator(".settings-trigger").evaluate((el) => el === document.activeElement), true, "Narrow return target must be the title bar settings entry");
+		assert.equal(await page.locator(".settings-trigger").evaluate((el) => el === document.activeElement), true, "Narrow return target is the activity rail settings entry");
 	}
 
 	// Active generation allows appearance/help while protecting configuration.
@@ -272,11 +273,6 @@ try {
 	await input.fill("运行中设置验证"); await input.press("Enter");
 	await page.getByRole("button", { name: "停止生成", exact: true }).waitFor();
 	await page.evaluate(() => { for (const process of window.skiffPreview.processes.values()) clearTimeout(process.timer); });
-	await page.locator(".settings-trigger").click();
-	const menuProvider = page.locator(".settings-menu").getByRole("button", { name: "供应商", exact: true });
-	assert.equal(await menuProvider.isDisabled(), true);
-	await assertNoDisabledFrame(menuProvider);
-	await page.keyboard.press("Escape");
 	await open();
 	assert.equal(await button("供应商").isDisabled(), true);
 	assert.equal(await button("路线").isDisabled(), true);

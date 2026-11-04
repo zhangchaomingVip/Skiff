@@ -34,6 +34,10 @@
 	/* Composer toolbar: unified quiet pills, frameless so only the composer frame draws an edge. */
 	.composer-context .ui-button { height: var(--control-compact); padding: 0 var(--space-2-5); border-color: transparent; border-radius: var(--radius-full); background: transparent; color: var(--secondary); font-size: var(--font-size-sm); font-weight: var(--font-weight-regular); }
 	.composer-context .ui-button:hover:not(:disabled) { background: var(--hover); color: var(--foreground); border-color: transparent; }
+	/* An open model/reasoning menu keeps its trigger in the same quiet pressed tone,
+	   and flips its caret so the control reads as expanded rather than idle. */
+	.composer-context .ui-button[aria-expanded=true] { background: var(--hover); color: var(--foreground); }
+	.composer-context .ui-button[aria-expanded=true] .chev-caret { transform: rotate(-90deg); }
 	.composer-context .ui-icon-button { width: var(--control-compact); padding: 0; }
 	.composer-context .ui-button.active, .composer-context .ui-button[aria-pressed=true] { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); border-color: transparent; box-shadow: none; }
 	.composer-actions .ui-button { border-radius: var(--radius-full); }

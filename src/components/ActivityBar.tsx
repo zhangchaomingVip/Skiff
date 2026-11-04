@@ -10,9 +10,13 @@ const tools: Array<{ id: WorkbenchTool; label: string; icon: IconName }> = [
 	{ id: "git-tree", label: "Git 历史", icon: "git" },
 ];
 
-export function ActivityBar({ active, panelOpen, onSelect }: { active: WorkbenchTool; panelOpen: boolean; onSelect: (tool: WorkbenchTool) => void }) {
+export function ActivityBar({ active, panelOpen, onSelect, onOpenSettings }: { active: WorkbenchTool; panelOpen: boolean; onSelect: (tool: WorkbenchTool) => void; onOpenSettings: () => void }) {
 	const selected = active === "git" ? "files" : active;
 	// The pressed state means "this tool is open", so a collapsed panel clears it; the
 	// hint opens sideways because a 40px rail has no room for a bubble underneath.
-	return <nav className="activity-bar" aria-label="工作区工具">{tools.map((tool) => <Tooltip key={tool.id} text={tool.label} side="right"><button className="activity-button" aria-label={tool.label} aria-pressed={selected === tool.id && panelOpen} aria-expanded={selected === tool.id && panelOpen} onClick={() => onSelect(tool.id)}><Icon name={tool.icon} size={18} /></button></Tooltip>)}</nav>;
+	// Preferences anchor to the foot of the rail, always reachable even when the panel is closed.
+	return <nav className="activity-bar" aria-label="工作区工具">
+		{tools.map((tool) => <Tooltip key={tool.id} text={tool.label} side="right"><button className="activity-button" aria-label={tool.label} aria-pressed={selected === tool.id && panelOpen} aria-expanded={selected === tool.id && panelOpen} onClick={() => onSelect(tool.id)}><Icon name={tool.icon} size={18} /></button></Tooltip>)}
+		<div className="activity-footer"><Tooltip text="设置" side="right"><button className="activity-button settings-trigger" aria-label="设置" aria-haspopup="dialog" onClick={onOpenSettings}><Icon name="settings" size={18} /></button></Tooltip></div>
+	</nav>;
 }

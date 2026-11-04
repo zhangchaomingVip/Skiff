@@ -189,6 +189,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 /* The row keeps its shortcut quiet until hover/focus, then fades plain grey text in. */
 .new-chat .shortcut { opacity: 0; padding: 0; background: transparent; transition: opacity var(--transition-fast) ease; }
 .new-chat:hover:not(:disabled) .shortcut, .new-chat:focus-visible .shortcut { opacity: 1; }
+/* Preferences anchor to the foot of the activity rail, always reachable even when
+   the panel is closed and clear of the window controls in the title bar. */
+.activity-footer { margin-top: auto; display: flex; flex-direction: column; align-items: center; }
 .shortcut { margin-left: auto; font-size: var(--font-size-sm); letter-spacing: .2px; color: var(--muted); background: var(--bg); border-radius: var(--radius-sm); padding: 1px 6px; }
 .sidebar-scroll { flex: 1; min-height: 0; overflow-y: auto; }
 /* A capsule thumb appears on hover, without native end buttons. */
@@ -570,14 +573,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 /* The level pill mirrors the model pill. A level is a setting, not a switched-on
    state, so only raised levels tint their star instead of filling the pill. */
 .reasoning-trigger.is-elevated:not(:disabled) > .ui-button-content > svg { color: var(--accent); }
-.chev-caret { display: inline-flex; transform: rotate(90deg); flex-shrink: 0; opacity: .7; }
-.model-setting-row { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 10px 12px; border-radius: var(--radius-sm); }
-.model-setting-row:focus-within { background: var(--selected); }
-.model-setting-row > span, .model-setting-row > label { flex-shrink: 0; font-size: var(--font-size-base); }
-.level-options { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; }
-.level-options button { border: 1px solid var(--border); border-radius: var(--radius-xs); background: transparent; color: var(--secondary); font-size: var(--font-size-sm); padding: 4px 9px; text-transform: capitalize; }
-.level-options button:hover:not(:disabled) { background: var(--hover); color: var(--text); }
-.level-options button.selected { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+.chev-caret { display: inline-flex; transform: rotate(90deg); flex-shrink: 0; opacity: .7; transition: transform var(--transition-fast); }
 .menu-hint { font-size: var(--font-size-sm); color: var(--muted); margin: 8px 12px 3px; line-height: 1.6; }
 
 /* Quiet completion footer; accounting details open from the more icon. */
@@ -891,65 +887,124 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .route-authorization-copy small { color: var(--muted); }
 .route-authorization-actions { display: flex; flex: 0 1 auto; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: var(--space-2); }
 .route-authorization-actions .ui-button { white-space: nowrap; }
+}
+
+@layer components {
+/* Model and reasoning popovers share one skeleton: a hairline top bar, compact
+   rows and a full-width footer action. They sit in the components layer so the
+   shared .ui-button/.ui-input base in ui.css cannot outrank their own styling. */
 .ui-popover.model-popover { padding: 0; border-color: var(--border); border-radius: var(--radius-xl); overflow: hidden; }
 .family-picker { display: flex; flex-direction: column; min-height: 0; max-height: inherit; }
-.family-picker .model-search { flex-shrink: 0; margin: var(--space-2-5); padding: 0 var(--space-2-5); border-radius: var(--radius-lg); color: var(--muted); }
-.family-picker .model-search .ui-input { height: var(--control-primary); padding-block: 0; font-size: var(--font-size-base); }
-.family-groups { max-height: min(380px, 45dvh); min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 0 var(--space-1-5) var(--space-1-5); scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
-.family-group + .family-group { margin-top: var(--space-1); }
-.family-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: var(--space-1-5); padding: var(--space-2) var(--space-2-5) var(--space-1); background: var(--surface); color: var(--muted); font-size: var(--font-size-sm); }
+/* An embedded command-palette search: part of the menu's top bar, never a form field. */
+.family-picker .model-search { flex-shrink: 0; margin: 0; padding: var(--space-2) var(--space-3); border: 0; border-bottom: 1px solid var(--border); border-radius: 0; color: var(--muted); transition: color var(--transition-fast), border-color var(--transition-fast); }
+.family-picker .model-search:focus-within { border-bottom-color: var(--boundary); color: var(--text); }
+.family-picker .model-search .ui-input { height: auto; padding: 0; font-size: var(--font-size-base); }
+.family-groups { max-height: min(380px, 45dvh); min-height: 0; overflow: auto; overscroll-behavior: contain; padding: var(--space-1); mask-image: linear-gradient(to bottom, transparent 0, black var(--space-2), black calc(100% - var(--space-2)), transparent 100%); }
+/* Chromium's native scrollbar brings stepper arrows and a full-height track that
+   cuts into the popover's rounded corners; a bare thumb reads quieter. */
+.family-groups::-webkit-scrollbar { width: var(--space-2); }
+.family-groups::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+.family-groups::-webkit-scrollbar-track { margin-block: var(--space-1); background: transparent; }
+.family-groups::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: var(--radius-full); background-color: var(--border); background-clip: padding-box; }
+.family-groups::-webkit-scrollbar-thumb:hover { background-color: var(--boundary); }
+.family-group + .family-group { margin-top: var(--space-2); padding-top: var(--space-1); border-top: 1px solid color-mix(in srgb, var(--border) 50%, transparent); }
+/* Group labels scroll with their rows. A sticky header would pin over the list
+   and slice whichever row passes under it, leaving a stray sliver of that row's
+   background hanging below the header. */
+.family-head { display: flex; align-items: center; gap: var(--space-1-5); padding: var(--space-2) var(--space-2-5) var(--space-1-5) var(--space-3); color: var(--muted); font-size: var(--font-size-sm); }
 .family-provider-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.family-model-count { margin-left: auto; font-size: var(--font-size-xs); font-variant-numeric: tabular-nums; }
-.family-option { position: relative; display: flex; align-items: center; gap: var(--space-2); width: 100%; min-height: var(--control-regular); padding: var(--space-2) var(--space-3) var(--space-2) var(--space-4); border: 0; background: transparent; color: var(--text); text-align: left; border-radius: var(--radius-lg); }
-.family-option:hover { background: var(--hover); }
-.family-option.focused { background: color-mix(in srgb, var(--selected) 60%, var(--surface)); color: var(--accent); }
-.family-option.focused::before { content: ""; position: absolute; left: var(--space-1); top: var(--space-2); bottom: var(--space-2); width: 3px; border-radius: var(--radius-xs); background: var(--accent); }
-.family-option[aria-selected=true] { color: var(--accent); }
-.family-option-label { display: inline-flex; align-items: center; gap: var(--space-1-5); min-width: 0; margin-right: auto; }
-.family-option-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-family-mono); font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); }
-.family-option-current { display: inline-flex; flex-shrink: 0; color: var(--muted); }
+.family-model-count { margin-left: auto; color: var(--muted); font-size: var(--font-size-xs); font-variant-numeric: tabular-nums; opacity: .6; }
+/* Rows sit under the provider's name (icon + gap + header inset), so the group
+   header reads as a parent label instead of colliding with the first model. */
+.family-option { display: flex; align-items: center; gap: var(--space-2); width: 100%; min-height: var(--control-regular); padding: var(--space-1-5) var(--space-2-5) var(--space-1-5) calc(var(--space-3) + var(--space-4) + var(--space-1-5)); border: 0; border-radius: var(--radius-md); background: transparent; color: var(--text); text-align: left; transition: background-color var(--transition-fast), color var(--transition-fast); }
+/* Hover and keyboard focus share one quiet tint; the current model is the only
+   element that carries the accent, so the two states never compete for the eye. */
+.family-option:hover, .family-option.focused { background: var(--hover); color: var(--text); }
+.family-option[aria-selected=true] { background: color-mix(in srgb, var(--selected) 55%, transparent); color: var(--accent); }
+/* The current model keeps its tint when the pointer or the keyboard reaches it,
+   so moving off it never makes the selection look cancelled. */
+.family-option[aria-selected=true]:hover, .family-option[aria-selected=true].focused { background: color-mix(in srgb, var(--selected) 75%, transparent); }
+.family-option-label { display: inline-flex; align-items: center; min-width: 0; margin-right: auto; }
+.family-option-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-family-base); font-size: var(--font-size-sm); font-weight: var(--font-weight-regular); font-variant-numeric: tabular-nums; }
+/* Selection is carried by tint, accent and weight together, matching the reasoning menu. */
+.family-option[aria-selected=true] .family-option-name { font-weight: var(--font-weight-medium); }
+.family-option-current { display: inline-flex; flex: none; margin-left: var(--space-1); color: var(--accent); }
 .model-multiplier { flex-shrink: 0; padding: 1px var(--space-1-5); border: 1px solid color-mix(in srgb, var(--color-success) 22%, transparent); border-radius: var(--radius-full); background: color-mix(in srgb, var(--color-success) 8%, transparent); color: var(--color-success); font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); font-variant-numeric: tabular-nums; }
 .model-multiplier.is-premium { color: var(--color-warning); border-color: color-mix(in srgb, var(--color-warning) 22%, transparent); background: color-mix(in srgb, var(--color-warning) 8%, transparent); }
-.family-picker-foot { flex-shrink: 0; border-top: 1px solid var(--border); padding: var(--space-2) var(--space-2-5); }
-.family-picker-foot .ui-button { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-1-5); border-color: var(--border); border-radius: var(--radius-full); color: var(--secondary); box-shadow: none; }
+.family-picker-foot { flex-shrink: 0; padding: var(--space-1); border-top: 1px solid var(--border); }
+.family-picker-foot .family-picker-manage { display: flex; align-items: center; gap: var(--space-2); width: 100%; height: var(--control-regular); padding: 0 var(--space-2-5); border: 0; border-radius: var(--radius-md); background: transparent; color: var(--secondary); font-size: var(--font-size-sm); text-align: left; }
+.family-picker-foot .family-picker-manage:hover:not(:disabled) { background: var(--hover); color: var(--text); }
+.family-picker-foot .family-picker-manage > svg { flex: none; color: var(--muted); }
 
+/* Reasoning levels are a single-choice menu, not a row of bare labels: one row
+   per level, a trailing check on the current one, and one quiet footnote. The
+   frame is unpadded so the footnote rule can span it, exactly like the model
+   menu's footer; the gutter below keeps every label on one left edge. */
+.ui-popover.reasoning-popover { --reasoning-gutter: calc(var(--space-2) + var(--space-2-5)); width: min(240px, calc(100vw - 24px)); padding: 0; border-color: var(--border); border-radius: var(--radius-xl); }
+.reasoning-popover-title { padding: var(--space-2-5) var(--reasoning-gutter) var(--space-1); color: var(--muted); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); }
+.reasoning-popover .level-options { display: flex; flex-direction: column; gap: var(--space-0-5); padding: 0 var(--space-2) var(--space-2); }
+.reasoning-popover .level-option { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); width: 100%; height: var(--control-regular); padding: 0 var(--space-2-5); border: 0; border-radius: var(--radius-md); background: transparent; color: var(--text); font-size: var(--font-size-sm); font-weight: var(--font-weight-regular); text-align: left; }
+.reasoning-popover .level-option:hover:not(:disabled) { background: var(--hover); }
+.reasoning-popover .level-option[aria-checked=true] { background: color-mix(in srgb, var(--selected) 60%, var(--surface)); color: var(--accent); font-weight: var(--font-weight-medium); }
+.reasoning-popover .level-option > svg { flex: none; color: var(--accent); }
+.reasoning-popover .level-option-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 }
 
 @layer components {
 /* Unified settings. The shell stays mounted while only its content changes. */
-.settings-menu .ui-button { width: 100%; justify-content: flex-start; }
-.settings-menu small { display: block; padding: 0 var(--space-3) var(--space-2); color: var(--secondary); }
 .ui-dialog.settings-dialog { --accent: var(--settings-accent); --action: var(--settings-action); --action-hover: var(--settings-action-hover); --action-active: var(--settings-action-active); --selected: var(--settings-selected); width: min(960px, calc(100vw - 24px)); height: min(740px, calc(100dvh - 24px)); padding: 0; overflow: hidden; accent-color: var(--accent); }
 .settings-dialog[open] { display: flex; flex-direction: column; }
-.settings-heading { display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; gap: var(--space-3); padding: var(--space-3) var(--space-5); border-bottom: 1px solid var(--border); }
-.settings-heading h1 { margin: 0; font-size: var(--font-size-xl); }
+.settings-heading { display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; gap: var(--space-3); padding: var(--space-3) var(--space-4) var(--space-3) var(--space-5); border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent); }
+.settings-heading h1 { margin: 0; font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold); letter-spacing: -.01em; }
 .settings-layout { display: grid; grid-template-columns: 188px minmax(0, 1fr); flex: 1; min-height: 0; }
-.settings-nav { padding: var(--space-4) var(--space-3); border-right: 1px solid var(--border); background: var(--panel-2); overflow: auto; }
-.settings-nav .ui-button { width: 100%; justify-content: flex-start; margin-bottom: var(--space-2); }
-.settings-nav .ui-button[aria-pressed=false] { color: var(--text); }
+/* Navigation is a quiet rail: a faint tinted column and a pill hover carry the
+   separation, so no full-height rule and no check mark on the current page. */
+.settings-nav { padding: var(--space-3) var(--space-2); background: color-mix(in srgb, var(--subtle) 45%, var(--surface)); overflow: auto; }
+.settings-nav .ui-button { width: 100%; justify-content: flex-start; margin-bottom: var(--space-0-5); padding-inline: var(--space-2-5); border-color: transparent; border-radius: var(--radius-md); color: var(--secondary); font-weight: var(--font-weight-regular); }
+.settings-nav .ui-button-content { gap: var(--space-2-5); }
+.settings-nav .ui-button-content > svg { flex: none; color: var(--muted); transition: color var(--transition-fast); }
+.settings-nav .ui-button:hover:not(:disabled):not([aria-pressed=true]) { background: color-mix(in srgb, var(--text) 5%, transparent); color: var(--text); }
+.settings-nav .ui-button:hover:not(:disabled):not([aria-pressed=true]) .ui-button-content > svg { color: var(--secondary); }
+.settings-nav .ui-button[aria-pressed=true]:not(:disabled), .settings-nav .ui-button[aria-pressed=true]:not(:disabled):hover { background: var(--selected); border-color: transparent; color: var(--accent); font-weight: var(--font-weight-medium); box-shadow: none; }
+.settings-nav .ui-button[aria-pressed=true] .ui-button-content > svg { color: var(--accent); }
 .settings-nav p { font-size: var(--font-size-sm); color: var(--secondary); }
-.settings-content { min-width: 0; min-height: 0; overflow: auto; padding: var(--space-5); scrollbar-gutter: stable; overflow-wrap: anywhere; }
+.settings-content { min-width: 0; min-height: 0; overflow: auto; padding: var(--space-5) var(--space-6) var(--space-6); scrollbar-gutter: stable; overflow-wrap: anywhere; }
 .settings-content h2 { font-size: var(--font-size-lg); margin: 0 0 var(--space-3); }
 .settings-content .editor-head h2 { margin: 0; }
 .settings-content .muted { margin-bottom: var(--space-4); }
 .settings-config { min-width: 0; margin: 0; padding: 0; border: 0; }
-.settings-themes { display: flex; flex-wrap: wrap; gap: var(--space-3); }
-.settings-section-label { margin: var(--space-5) 0 var(--space-3); font-size: var(--font-size-base); font-weight: var(--font-weight-label); }
-.settings-content h2 + .muted + .settings-section-label { margin-top: 0; }
-.settings-theme-colors { display: grid; grid-template-columns: repeat(auto-fit, minmax(104px, 1fr)); gap: var(--space-3); }
-.settings-theme-color.ui-button { height: auto; min-height: 82px; padding: var(--space-2); }
-.settings-theme-color .ui-button-content { position: relative; display: grid; grid-template-columns: 1fr auto; width: 100%; gap: var(--space-2); }
-.settings-theme-color-preview { --preview-background: var(--theme-swatch-yellow); --preview-accent: var(--theme-swatch-yellow-accent); grid-column: 1 / -1; display: flex; align-items: center; justify-content: center; height: 38px; border: 1px solid var(--border); border-radius: var(--radius-base); background: var(--preview-background); }
-.settings-theme-color-preview > span { width: 80%; height: 26px; border: 6px solid var(--action-foreground); border-left-width: 20px; border-radius: var(--radius-base); background: var(--action-foreground); box-shadow: inset 4px 0 0 var(--preview-accent), var(--shadow-xs); }
-.settings-theme-color[data-theme-color-option="purple"] .settings-theme-color-preview { --preview-background: var(--theme-swatch-purple); --preview-accent: var(--theme-swatch-purple-accent); }
-.settings-theme-color[data-theme-color-option="yellow"] .settings-theme-color-preview { --preview-background: var(--theme-swatch-yellow); --preview-accent: var(--theme-swatch-yellow-accent); }
-.settings-theme-color[data-theme-color-option="green"] .settings-theme-color-preview { --preview-background: var(--theme-swatch-green); --preview-accent: var(--theme-swatch-green-accent); }
-.settings-theme-color[data-theme-color-option="blue"] .settings-theme-color-preview { --preview-background: var(--theme-swatch-blue); --preview-accent: var(--theme-swatch-blue-accent); }
-.settings-dark-color-preview { --preview-background: var(--theme-swatch-star-black); --preview-accent: var(--theme-swatch-star-black-accent); }
-.settings-theme-color[data-dark-theme-color-option="star-blue"] .settings-theme-color-preview { --preview-background: var(--theme-swatch-star-blue); --preview-accent: var(--theme-swatch-star-blue-accent); }
-.settings-dark-color-preview > span { border-color: var(--preview-accent); background: var(--preview-background); }
-.settings-stars-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); margin-top: var(--space-5); }
-.settings-stars-row .muted { margin: var(--space-1) 0 0; font-size: var(--font-size-sm); }
+/* Appearance: inset cards of label/control rows. Swatches read as two-tone chips;
+   the selected one lifts a hair and takes a soft accent ring instead of a frame. */
+.settings-page { max-width: 640px; }
+.settings-page > h2 { margin: 0 0 var(--space-1); font-size: var(--font-size-xl); font-weight: var(--font-weight-semibold); letter-spacing: -.01em; }
+.settings-page > .muted { margin: 0 0 var(--space-5); font-size: var(--font-size-sm); }
+.settings-group { border: 1px solid color-mix(in srgb, var(--border) 80%, transparent); border-radius: var(--radius-xl); background: color-mix(in srgb, var(--text) 4%, var(--surface)); }
+.settings-group + .settings-group { margin-top: var(--space-3); }
+.settings-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); padding: var(--space-3) var(--space-4); }
+.settings-row + .settings-row { border-top: 1px solid color-mix(in srgb, var(--border) 60%, transparent); }
+.settings-row.is-stacked { flex-direction: column; align-items: stretch; }
+.settings-row-text { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+.settings-row-title { color: var(--text); font-size: var(--font-size-base); font-weight: var(--font-weight-medium); line-height: var(--line-height-tight); }
+.settings-row-hint { color: var(--secondary); font-size: var(--font-size-sm); line-height: var(--line-height-base); }
+.settings-row > .ui-segmented { flex: none; }
+.settings-row > .ui-segmented .ui-button { height: var(--control-regular); min-width: 72px; padding-inline: var(--space-3); }
+.settings-row > .switch { flex: none; margin: 0; }
+.settings-swatches { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-2); }
+.settings-theme-color.ui-button { --swatch-bg: var(--theme-swatch-yellow); --swatch-ink: var(--theme-swatch-yellow-ink); width: auto; height: auto; padding: var(--space-2) var(--space-1) var(--space-2-5); border-color: transparent; border-radius: var(--radius-lg); background: transparent; color: var(--secondary); transition: background-color var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast); }
+.ui-button.settings-theme-color:hover:not(:disabled) { background: color-mix(in srgb, var(--text) 4%, transparent); border-color: transparent; color: var(--text); }
+.ui-button.settings-theme-color[data-variant=setting][aria-pressed=true] { background: color-mix(in srgb, var(--swatch-ink) 12%, var(--surface)); border-color: color-mix(in srgb, var(--accent) 40%, transparent); color: var(--text); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent); transform: translateY(-1px); }
+.ui-button.settings-theme-color[data-variant=setting][aria-pressed=true]:hover:not(:disabled) { background: color-mix(in srgb, var(--swatch-ink) 18%, var(--surface)); }
+.settings-theme-color .ui-button-content { display: flex; flex-direction: column; align-items: center; gap: var(--space-2); width: 100%; }
+.settings-swatch-art { position: relative; display: grid; place-items: center; width: 44px; height: 44px; border-radius: var(--radius-full); background-image: var(--swatch-stars, none), var(--swatch-bg); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 10%, transparent); }
+.settings-swatch-art::before { content: ""; width: 16px; height: 16px; border-radius: var(--radius-full); background: var(--swatch-ink); box-shadow: 0 1px 2px var(--shadow-color); }
+.settings-swatch-label { font-size: var(--font-size-sm); line-height: var(--line-height-tight); white-space: nowrap; }
+.ui-button.settings-theme-color[data-variant=setting][aria-pressed=true] .settings-swatch-label { font-weight: var(--font-weight-medium); }
+.settings-theme-color[data-theme-color-option="purple"] { --swatch-bg: var(--theme-swatch-purple); --swatch-ink: var(--theme-swatch-purple-ink); }
+.settings-theme-color[data-theme-color-option="yellow"] { --swatch-bg: var(--theme-swatch-yellow); --swatch-ink: var(--theme-swatch-yellow-ink); }
+.settings-theme-color[data-theme-color-option="green"] { --swatch-bg: var(--theme-swatch-green); --swatch-ink: var(--theme-swatch-green-ink); }
+.settings-theme-color[data-theme-color-option="blue"] { --swatch-bg: var(--theme-swatch-blue); --swatch-ink: var(--theme-swatch-blue-ink); }
+.settings-theme-color[data-dark-theme-color-option="star-black"] { --swatch-bg: var(--theme-swatch-star-black); --swatch-ink: var(--theme-swatch-star-black-ink); --swatch-stars: var(--theme-swatch-star-black-stars); }
+.settings-theme-color[data-dark-theme-color-option="star-blue"] { --swatch-bg: var(--theme-swatch-star-blue); --swatch-ink: var(--theme-swatch-star-blue-ink); --swatch-stars: var(--theme-swatch-star-blue-stars); }
 .settings-font-controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); gap: var(--space-4); }
 .settings-font-controls label { display: block; margin-bottom: var(--space-2); }
 .settings-font-controls select { width: 100%; }
@@ -973,8 +1028,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .settings-content:has(.preset-editor) > .settings-config, .settings-editor:has(> .preset-editor) { display: flex; flex: 1; min-height: 0; }
 @media (max-width: 760px) {
 	.settings-layout { display: flex; flex-direction: column; }
-	.settings-nav { display: flex; flex-wrap: wrap; gap: var(--space-1); flex-shrink: 0; padding: var(--space-2); border-right: 0; border-bottom: 1px solid var(--border); }
+	.settings-nav { display: flex; flex-wrap: wrap; gap: var(--space-1); flex-shrink: 0; padding: var(--space-2); border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent); }
 	.settings-nav .ui-button { width: auto; margin: 0; padding-inline: var(--space-2); }
+	.settings-swatches { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 	.settings-nav p { flex-basis: 100%; margin: var(--space-1); }
 	.settings-content { flex: 1; padding: var(--space-3); }
 	.providers-toolbar { flex-wrap: wrap; }
@@ -1253,15 +1309,17 @@ span.provider-mark.generic { display: inline-flex; align-items: center; justify-
 .provider-model-editor-columns { align-items: center; min-height: 32px; padding: 0 var(--space-2); border-bottom: 1px solid var(--border); color: var(--muted); font-size: var(--font-size-sm); }
 .provider-model-editor-columns > span:nth-child(4) { text-align: right; }
 .provider-model-editor-columns > span:nth-child(5) { text-align: center; }
-.provider-model-editor-row { align-items: start; margin-top: 0; padding: var(--space-2); border-bottom: 1px solid var(--border); }
+/* Dense flow lets the delete button backfill the result row when a failure detail claims a full-width row below. */
+.provider-model-editor-row { align-items: start; margin-top: 0; padding: var(--space-2); border-bottom: 1px solid var(--border); grid-auto-flow: dense; }
 .provider-model-editor-row > .ui-input { width: 100%; min-width: 0; padding: 0 var(--space-2); background: var(--panel-2); }
 .provider-model-id-cell { min-width: 0; }
 .provider-model-id-cell > .ui-input { font-family: var(--mono, monospace); font-size: var(--font-size-sm); }
 .provider-model-id-cell small { display: block; margin-top: 3px; color: var(--muted); font-size: var(--font-size-sm); }
 .provider-model-id-cell .provider-model-family-needed { color: var(--color-warning); }
-/* Per-model test cell: the result text never reflows, so rows keep one height. */
+/* Per-model test cell: the summary keeps to one line; a failure reason wraps on its own full-width line instead of hiding behind the tooltip. */
 .provider-model-test { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-1); min-width: 0; }
 .provider-model-test > .test-result { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; overflow-wrap: normal; text-align: right; }
+.provider-model-test-error { grid-column: 1 / -1; }
 .provider-model-family-select { grid-column: 1 / -1; display: flex; align-items: center; gap: var(--space-2); color: var(--secondary); font-size: var(--font-size-sm); }
 .provider-model-family-select .ui-input { width: min(220px, 100%); }
 .provider-model-list-notice { display: block; margin-top: var(--space-2); color: var(--muted); font-size: var(--font-size-sm); }

@@ -1,4 +1,4 @@
-import { Input, Button } from "./ui";
+import { Input } from "./ui";
 import { useEffect, useId, useMemo, useState, type KeyboardEvent } from "react";
 import type { ModelInfo } from "../chat/types";
 import { Icon } from "./Icon";
@@ -58,7 +58,7 @@ export function ModelPicker({ models, familyOf, current, onSelect, onManage, con
 						const index = rendered++;
 						const rowBadge = !uniform && formatPriceMultiplier(model.priceMultiplier);
 						return <button type="button" key={`${model.provider}/${model.id}`} id={`${id}-${index}`} className={`family-option ${index === active ? "focused" : ""}`} role="option" aria-selected={sameModel(model, current)} aria-label={`选择 ${model.familyName ?? familyOf(model)?.name ?? ""} ${group.name} ${model.id}`} title={subtitle(model)} disabled={disabled} onMouseMove={() => setActive(index)} onClick={() => onSelect(model)}>
-							<span className="family-option-label"><span className="family-option-name">{pickerModelName(model)}</span>{sameModel(model, current) && <span className="family-option-current" title="当前模型" aria-hidden="true"><Icon name="check" size={12} /></span>}</span>{rowBadge && <span className={`model-multiplier ${model.priceMultiplier! > 1 ? "is-premium" : ""}`}>{rowBadge}</span>}
+							<span className="family-option-label"><span className="family-option-name">{pickerModelName(model)}</span></span>{rowBadge && <span className={`model-multiplier ${model.priceMultiplier! > 1 ? "is-premium" : ""}`}>{rowBadge}</span>}{sameModel(model, current) && <span className="family-option-current" title="当前模型" aria-hidden="true"><Icon name="check" size={14} /></span>}
 						</button>;
 					})}
 				</div>;
@@ -66,6 +66,6 @@ export function ModelPicker({ models, familyOf, current, onSelect, onManage, con
 			{!groups.length && <p className="menu-hint">没有匹配的模型</p>}
 		</div>
 		{configurationHint && <p className="menu-hint" role="status">{configurationHint}</p>}
-		<div className="family-picker-foot"><Button size="compact" onClick={onManage} disabled={disabled}><Icon name="settings" size={13} />管理提供商…</Button></div>
+		<div className="family-picker-foot"><button type="button" className="family-picker-manage" onClick={onManage} disabled={disabled}><Icon name="settings" size={13} />管理提供商…</button></div>
 	</div>;
 }

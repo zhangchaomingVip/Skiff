@@ -499,18 +499,21 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 		}
 		setRunningTestModels((previous) => previous.filter((item) => item !== modelId));
 	};
-	/** Status plus action for a model row; the cell always renders so rows keep their shape. */
+	/** Status plus action for a model row; the cell stays one line, while a failure reason gets its own full-width line below. */
 	const providerModelTest = (entry: ProviderModelDraft, relay: RelaySpec, preset?: ProviderPreset) => {
 		const modelId = entry.model.modelId.trim();
 		const running = runningTestModels.includes(modelId) || testBatch.includes(modelId) && testing && !completedTestModels.includes(modelId);
 		const tested = testResults.find((item) => item.modelId === modelId);
 		const text = running ? "正在测试…" : tested ? `${tested.ok ? "成功" : "失败"} · ${tested.latencyMs} ms${!tested.ok && tested.status ? ` · HTTP ${tested.status}` : ""}${tested.error ? ` · ${tested.error}` : ""}` : "";
-		return <div className="provider-model-test">
-			{tested && <span className={`test-result ${running ? "muted" : tested.ok ? "ok" : "bad"}`} role="status" title={`${modelId} · ${text}`}>{text}</span>}
-			{running
-				? <Button type="button" variant="secondary" size="compact" onClick={() => stopProviderModelTest(modelId)}>停止</Button>
-				: <Button type="button" variant="secondary" size="compact" disabled={pending || !modelId || !relay.baseUrl.trim() || (!relay.apiKey && !preset?.keyOptional)} onClick={() => void testProviderModel(modelId)}>测试</Button>}
-		</div>;
+		return <>
+			<div className="provider-model-test">
+				{tested && <span className={`test-result ${running ? "muted" : tested.ok ? "ok" : "bad"}`} role="status" title={`${modelId} · ${text}`}>{text}</span>}
+				{running
+					? <Button type="button" variant="secondary" size="compact" onClick={() => stopProviderModelTest(modelId)}>停止</Button>
+					: <Button type="button" variant="secondary" size="compact" disabled={pending || !modelId || !relay.baseUrl.trim() || (!relay.apiKey && !preset?.keyOptional)} onClick={() => void testProviderModel(modelId)}>测试</Button>}
+			</div>
+			{tested && !tested.ok && tested.error && <div className={`test-result provider-model-test-error ${running ? "muted" : "bad"}`} aria-hidden="true">{tested.error}</div>}
+		</>;
 	};
 
 	const submitRelay = async (event: FormEvent) => {

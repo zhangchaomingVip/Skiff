@@ -414,6 +414,21 @@ pub fn load(dir: &Path) -> Result<FamiliesConfig, String> {
 		}
 	}
 	config.families.sort_by_key(|family| FAMILY_IDS.iter().position(|id| *id == family.id).unwrap_or(usize::MAX));
+	// Older files (and hand edits) may store an output ceiling equal to the
+	// whole window; clamp on read so projections, offers and the settings UI
+	// agree. The repair persists on the next save.
+	for family in &mut config.families {
+		for route in &mut family.routes {
+			for model in &mut route.models {
+				model.max_tokens = usable_max_tokens(model.max_tokens, model.context_window);
+			}
+		}
+	}
+	for relay in &mut config.relays {
+		for model in &mut relay.unassigned_models {
+			model.max_tokens = usable_max_tokens(model.max_tokens, model.context_window);
+		}
+	}
 	validate_config(&config)?;
 	Ok(config)
 }
@@ -570,6 +585,25 @@ fn normalize_relay(mut relay: RelaySpec, config: &FamiliesConfig) -> Result<Rela
 	Ok(relay)
 }
 
+/// Conservative default budget for a stored output "limit" that is not one.
+/// models.dev (mirroring provider pages) lists an output ceiling equal to the
+/// whole context window for Kimi models — K3 advertises a 1M maximum
+/// `max_completion_tokens`. Spending that as the per-request budget asks pi to
+/// reserve nearly the whole window for completion, and the relay rejects the
+/// request the moment its own input count exceeds pi's estimate by more than
+/// pi's 4096-token margin (a small miss for CJK prompts).
+pub(crate) const FALLBACK_MAX_OUTPUT: u64 = 32768;
+
+/// The default output budget handed to pi. Values below the window are a
+/// deliberate choice and kept; anything at or beyond it is a ceiling, not a
+/// budget, and falls back to a conservative cap that leaves room for input.
+pub(crate) fn usable_max_tokens(max_tokens: u64, context_window: u64) -> u64 {
+	if context_window == 0 || max_tokens < context_window {
+		return max_tokens;
+	}
+	(context_window / 2).min(FALLBACK_MAX_OUTPUT).max(1)
+}
+
 /// Validates the models of one route and their uniqueness within the route.
 fn normalize_models(models: &[ModelSpec]) -> Result<Vec<ModelSpec>, String> {
 	let mut normalized = Vec::with_capacity(models.len());
@@ -597,11 +631,11 @@ fn normalize_models(models: &[ModelSpec]) -> Result<Vec<ModelSpec>, String> {
 			cache_read_cost,
 			cache_write_cost,
 			currency: model.currency,
-			max_tokens: model.max_tokens,
+			max_tokens: usable_max_tokens(model.max_tokens, model.context_window),
 			context_window: model.context_window,
-		});
-	}
-	Ok(normalized)
+			});
+			}
+			Ok(normalized)
 }
 
 fn validate_config(config: &FamiliesConfig) -> Result<(), String> {
@@ -703,7 +737,7 @@ fn project_model(family_id: &str, route: &RouteSpec, item: &ModelSpec, key: &str
 	json!({
 		"id": item.model_id, "name": if item.alias.is_empty() { item.model_id.clone() } else { item.alias.clone() }, "api": api, "provider": key,
 		"cost": { "input": item.input_cost * multiplier, "output": item.output_cost * multiplier, "cacheRead": item.cache_read_cost * multiplier, "cacheWrite": item.cache_write_cost * multiplier },
-		"currency": item.currency, "contextWindow": item.context_window, "maxTokens": item.max_tokens,
+		"currency": item.currency, "contextWindow": item.context_window, "maxTokens": usable_max_tokens(item.max_tokens, item.context_window),
 		"input": vision, "reasoning": reasoning,
 		// Only reasoning models get a map: pi lists `xhigh` and `max` from it.
 		"thinkingLevelMap": if reasoning && !declared.is_empty() { thinking_level_map(&declared) } else { Value::Null },
@@ -930,9 +964,9 @@ pub fn runtime_offers(config: &FamiliesConfig) -> Vec<RuntimeOffer> {
 					cache_read_cost: model.cache_read_cost * relay.price_multiplier.unwrap_or(1.0),
 					cache_write_cost: model.cache_write_cost * relay.price_multiplier.unwrap_or(1.0),
 					currency: model.currency,
-					max_tokens: model.max_tokens,
+					max_tokens: usable_max_tokens(model.max_tokens, model.context_window),
 					context_window: model.context_window,
-				});
+					});
 			}
 		}
 	}
@@ -1323,6 +1357,37 @@ mod tests {
 	}
 
 	#[test]
+	fn full_window_output_ceilings_are_repaired_on_load_and_clamped_on_projection() {
+		let dir = std::env::temp_dir().join(format!("skiff-max-output-repair-{}", std::process::id()));
+		std::fs::create_dir_all(&dir).unwrap();
+		let relay: RelaySpec = serde_json::from_value(json!({ "id": "moonshot", "name": "Moonshot", "baseUrl": "https://api.moonshot.cn/v1", "apiKey": "sk-test" })).unwrap();
+		let routes: Vec<RelayRouteSpec> = serde_json::from_value(json!([{ "familyId": "kimi", "route": { "relayId": "moonshot", "models": [
+			{ "modelId": "kimi-k3", "inputCost": 20, "outputCost": 100, "contextWindow": 1048576, "maxTokens": 1048576 },
+			{ "modelId": "kept", "inputCost": 1, "outputCost": 2, "contextWindow": 200000, "maxTokens": 64000 }
+		] } }])).unwrap();
+		save_relay_with_routes_in(&dir, relay, routes).unwrap();
+		// A ceiling equal to the window is not a budget: it is clamped at save
+		// and on load; values below the window stay untouched.
+		let reloaded = load_plain(&dir).unwrap();
+		let kimi = reloaded.families.iter().find(|family| family.id == "kimi").unwrap();
+		assert_eq!(kimi.routes[0].models[0].max_tokens, FALLBACK_MAX_OUTPUT);
+		assert_eq!(kimi.routes[0].models[1].max_tokens, 64000);
+		assert_eq!(runtime_offers(&reloaded)[0].max_tokens, FALLBACK_MAX_OUTPUT);
+		// pi's projection never carries a full-window budget.
+		let projected = providers::read_config(&dir.join("models.json")).unwrap();
+		let models = projected["providers"][provider_key("kimi", "moonshot")]["models"].as_array().unwrap();
+		assert_eq!(models[0]["maxTokens"], json!(32768));
+		assert_eq!(models[1]["maxTokens"], json!(64000));
+		// Even a hand-edited file with the old ceiling is repaired on load.
+		let written = std::fs::read_to_string(config_path(&dir)).unwrap().replace("\"maxTokens\":32768", "\"maxTokens\":1048576");
+		std::fs::write(config_path(&dir), written).unwrap();
+		let repaired = load_plain(&dir).unwrap();
+		let kimi = repaired.families.iter().find(|family| family.id == "kimi").unwrap();
+		assert_eq!(kimi.routes[0].models[0].max_tokens, FALLBACK_MAX_OUTPUT);
+		std::fs::remove_dir_all(dir).unwrap();
+	}
+
+	#[test]
 	fn relay_and_discovered_routes_save_together_and_preserve_existing_settings() {
 		let dir = std::env::temp_dir().join(format!("skiff-discovered-routes-test-{}", std::process::id()));
 		std::fs::create_dir_all(&dir).unwrap();
@@ -1436,6 +1501,10 @@ mod tests {
 		assert_eq!(url, "https://api.example.com/v1/chat/completions");
 		assert_eq!(auth, "bearer");
 		assert_eq!(body["max_tokens"], 128);
+		// Relays that require a boolean reject an omitted `stream` as None.
+		assert_eq!(body["stream"], false);
+		let (_, body, _) = connection_test_request("kimi", "https://api.example.com/v1", "k", "m");
+		assert_eq!(body["stream"], false);
 	}
 
 	#[test]
@@ -1753,8 +1822,10 @@ fn connection_test_request(protocol: &str, base: &str, key: &str, model: &str) -
 			"contents": [{ "role": "user", "parts": [{ "text": PROMPT }] }],
 			"generationConfig": { "maxOutputTokens": MAX_TOKENS },
 		}), "query"),
+		// `stream` is sent explicitly: some relays type it as a required boolean
+		// and reject an omitted field as `stream = None`.
 		_ => (format!("{base}/chat/completions"), json!({
-			"model": model, "messages": [{ "role": "user", "content": PROMPT }], "max_tokens": MAX_TOKENS,
+			"model": model, "messages": [{ "role": "user", "content": PROMPT }], "max_tokens": MAX_TOKENS, "stream": false,
 		}), "bearer"),
 	}
 }

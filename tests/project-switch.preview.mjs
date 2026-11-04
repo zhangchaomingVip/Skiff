@@ -125,21 +125,16 @@ try {
 	const beforeConfig = count("rpc_start");
 	// Every chat with a live process restarts once on a configuration change.
 	const liveSessions = mock.processes.size;
-	// Settings live behind the title bar menu now: pick a category, then navigate
-	// inside the dialog with the aria-pressed nav buttons.
+	// The sidebar footer opens settings directly; categories are picked with the
+	// aria-pressed nav buttons inside the dialog.
 	const openSettings = async (label) => {
 		if (!document.querySelector("dialog[open]")) {
 			click('[aria-label="设置"]');
-			await until(() => document.querySelector(".settings-menu"), "Settings menu not open");
-			const entry = [...document.querySelectorAll(".settings-menu button")].find((item) => item.textContent.trim() === label);
-			assert(entry, `Settings menu entry ${label} missing`);
-			entry.click();
-		} else {
-			const nav = [...document.querySelectorAll(".settings-nav button")].find((item) => item.textContent.trim() === label);
-			assert(nav, `Settings nav entry ${label} missing`);
-			nav.click();
+			await until(() => document.querySelector("dialog[open]"), "Settings not open");
 		}
-		await until(() => document.querySelector('dialog[open]'), "Settings not open");
+		const nav = [...document.querySelectorAll(".settings-nav button")].find((item) => item.textContent.trim() === label);
+		assert(nav, `Settings nav entry ${label} missing`);
+		nav.click();
 	};
 	// The failover toggle lives in 路线 (routes), next to the family cards.
 	await openSettings("路线");

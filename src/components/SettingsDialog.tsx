@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ComponentProps } from "react";
 import { darkThemeColors, setDarkThemeColor, setThemeColor, setThemePreference, setThemeStars, themeColors, useDarkThemeColor, useThemeColor, useThemePreference, useThemeStars } from "../theme";
 import { ArchivedSessions } from "./ArchivedSessions";
@@ -7,14 +7,14 @@ import { PromptSettings } from "./PromptSettings";
 import { ProvidersSettingsContent, type ProvidersSettingsProps } from "./ProvidersSettings";
 import { ModelsSettingsContent, type ModelsSettingsProps } from "./ModelsSettings";
 import { RoutesSettingsContent, type RoutesSettingsProps } from "./RoutesSettings";
-import { Button, Dialog, IconButton } from "./ui";
+import { Button, Dialog, IconButton, SegmentedControl } from "./ui";
 import { isMacPlatform, settingsCategories, type SettingsCategory, type SettingsRestrictions, type SettingsLocation } from "./settingsNavigation";
 import type { SettingsEditorHandle } from "./settingsEditor";
 import type { WebSearchControls } from "../chat/webSearch";
 import { WebSearchSettings } from "./WebSearchSettings";
 import { FontSettings } from "./FontSettings";
 
-export function SettingsDialog({ initialCategory, restrictions, prompt, providers, models, routes, archives, search, onRetryModels, onClose }: {
+export function SettingsDialog({ initialCategory, restrictions, prompt, providers, models, routes, archives, search, onRetryModels, onClose, onCategoryChange }: {
 	initialCategory: SettingsCategory;
 	restrictions: SettingsRestrictions;
 	prompt: ComponentProps<typeof PromptSettings>;
@@ -25,9 +25,12 @@ export function SettingsDialog({ initialCategory, restrictions, prompt, provider
 	search: WebSearchControls;
 	onRetryModels: () => void;
 	onClose: () => void;
+	/** Lets the shell reopen preferences on the tab the user left. */
+	onCategoryChange?: (category: SettingsCategory) => void;
 }) {
 	const [category, setCategoryRaw] = useState(initialCategory);
 	const [location, setLocation] = useState<SettingsLocation>();
+	useEffect(() => { onCategoryChange?.(category); }, [category, onCategoryChange]);
 	const [{ locked, pending }, setInteraction] = useState({ locked: false, pending: false });
 	const setCategory = useCallback((next: SettingsCategory, location?: SettingsLocation) => { setInteraction({ locked: false, pending: false }); setCategoryRaw(next); setLocation(location); }, []);
 	const updateInteraction = useCallback((locked: boolean, pending: boolean) => setInteraction({ locked, pending }), []);
@@ -47,30 +50,39 @@ export function SettingsDialog({ initialCategory, restrictions, prompt, provider
 	const modifier = isMacPlatform() ? "Cmd" : "Ctrl";
 	const close = () => { if (!editor.current?.pending) onClose(); };
 	const escape = () => { if (editor.current?.pending) return; if (editor.current?.editing) editor.current.back(); else close(); };
-	return <Dialog className="settings-dialog" aria-labelledby="settings-title" onClose={close} onEscape={escape} pending={pending} returnFocusSelector=".titlebar-tools .settings-trigger">
+	return <Dialog className="settings-dialog" aria-labelledby="settings-title" onClose={close} onEscape={escape} pending={pending} returnFocusSelector=".settings-trigger">
 		<div className="settings-heading"><h1 id="settings-title">设置</h1><IconButton aria-label="关闭设置" disabled={pending} onClick={close}><Icon name="close" /></IconButton></div>
 		<div className="settings-layout">
-			<nav className="settings-nav" aria-label="设置分类">{settingsCategories.map(({ id, label, icon }) => <Button key={id} variant="ghost" aria-pressed={category === id} disabled={navigationLocked || !!restrictions[id]} title={navigationLocked ? "请先返回列表或等待保存完成" : restrictions[id]} onClick={() => switchCategory(id)}><Icon name={icon} size={16} />{label}{category === id && <Icon name="check" size={14} />}</Button>)}
+			<nav className="settings-nav" aria-label="设置分类">{settingsCategories.map(({ id, label, icon }) => <Button key={id} variant="ghost" aria-pressed={category === id} disabled={navigationLocked || !!restrictions[id]} title={navigationLocked ? "请先返回列表或等待保存完成" : restrictions[id]} onClick={() => switchCategory(id)}><Icon name={icon} size={16} />{label}</Button>)}
 			</nav>
 			<div className="settings-content">
 				{category === "fonts" && <FontSettings />}
-				{category === "appearance" && <section aria-labelledby="appearance-title"><h2 id="appearance-title">外观</h2><p className="muted">选择应用主题与主题色，立即生效。</p>
-					<h3 className="settings-section-label">应用主题</h3>
-					<div className="settings-themes" role="group" aria-label="应用主题">{([
-						["system", "跟随系统", "monitor"], ["light", "浅色", "sun"], ["dark", "深色", "moon"],
-					] as const).map(([value, label, icon]) => <Button key={value} variant="setting" aria-pressed={theme === value} onClick={() => setThemePreference(value)}><Icon name={icon} />{label}{theme === value && <Icon name="check" size={14} />}</Button>)}</div>
-					<h3 className="settings-section-label">浅色配色</h3>
-					<div className="settings-theme-colors" role="group" aria-label="浅色配色">{themeColors.map(({ value, label }) => <Button key={value} variant="setting" className="settings-theme-color" data-theme-color-option={value} aria-pressed={themeColor === value} onClick={() => setThemeColor(value)}>
-						<span className="settings-theme-color-preview" aria-hidden="true"><span /></span><span>{label}</span>{themeColor === value && <Icon name="check" size={14} />}
-					</Button>)}</div>
-					<h3 className="settings-section-label">深色背景</h3>
-					<p className="muted">仅在深色模式下生效，浅色模式保留上方主题色。</p>
-					<div className="settings-theme-colors" role="group" aria-label="深色背景">{darkThemeColors.map(({ value, label }) => <Button key={value} variant="setting" className="settings-theme-color" data-dark-theme-color-option={value} aria-pressed={darkThemeColor === value} onClick={() => setDarkThemeColor(value)}>
-						<span className="settings-theme-color-preview settings-dark-color-preview" aria-hidden="true"><span /></span><span>{label}</span>{darkThemeColor === value && <Icon name="check" size={14} />}
-					</Button>)}</div>
-					<div className="settings-stars-row">
-						<div><label htmlFor="settings-theme-stars">显示星星</label><p id="settings-theme-stars-description" className="muted">细小星点静止，部分亮星缓慢呼吸；关闭后保留底色。</p></div>
-						<label className="switch"><input id="settings-theme-stars" type="checkbox" checked={themeStars} aria-describedby="settings-theme-stars-description" onChange={(event) => setThemeStars(event.target.checked)} /><span className="slider" /></label>
+				{category === "appearance" && <section className="settings-page" aria-labelledby="appearance-title"><h2 id="appearance-title">外观</h2><p className="muted">选择应用主题与主题色，立即生效。</p>
+					<div className="settings-group">
+						<div className="settings-row">
+							<div className="settings-row-text"><span className="settings-row-title">主题模式</span><span className="settings-row-hint">跟随系统时，自动匹配操作系统的浅色或深色设置。</span></div>
+							<SegmentedControl label="应用主题" value={theme} onChange={(value) => setThemePreference(value)} options={[{ value: "system", label: "跟随系统" }, { value: "light", label: "浅色" }, { value: "dark", label: "深色" }]} />
+						</div>
+						<div className="settings-row is-stacked">
+							<div className="settings-row-text"><span className="settings-row-title">主题色</span><span className="settings-row-hint">决定侧边栏、标题栏与控件的基础色；切换浅色或深色时保持不变。</span></div>
+							<div className="settings-swatches" role="group" aria-label="浅色配色">{themeColors.map(({ value, label }) => <Button key={value} variant="setting" className="settings-theme-color" data-theme-color-option={value} aria-pressed={themeColor === value} onClick={() => setThemeColor(value)}>
+								<span className="settings-swatch-art" aria-hidden="true" /><span className="settings-swatch-label">{label}</span>
+							</Button>)}</div>
+						</div>
+					</div>
+					<div className="settings-group">
+						<div className="settings-row is-stacked">
+							<div className="settings-row-text"><span className="settings-row-title">深色背景</span><span className="settings-row-hint">仅在深色模式下生效，浅色模式保留上方主题色。</span></div>
+							<div className="settings-swatches" role="group" aria-label="深色背景">{darkThemeColors.map(({ value, label }) => <Button key={value} variant="setting" className="settings-theme-color" data-dark-theme-color-option={value} aria-pressed={darkThemeColor === value} onClick={() => setDarkThemeColor(value)}>
+								<span className="settings-swatch-art" aria-hidden="true" /><span className="settings-swatch-label">{label}</span>
+							</Button>)}</div>
+						</div>
+					</div>
+					<div className="settings-group">
+						<div className="settings-row">
+							<div className="settings-row-text"><label className="settings-row-title" htmlFor="settings-theme-stars">显示星星</label><span id="settings-theme-stars-description" className="settings-row-hint">细小星点静止，部分亮星缓慢呼吸；关闭后保留底色。</span></div>
+							<label className="switch"><input id="settings-theme-stars" type="checkbox" checked={themeStars} aria-describedby="settings-theme-stars-description" onChange={(event) => setThemeStars(event.target.checked)} /><span className="slider" /></label>
+						</div>
 					</div>
 				</section>}
 				{category === "websearch" && <section aria-labelledby="websearch-title"><h2 id="websearch-title">联网搜索</h2><p className="muted">为 pi 配置 web_search 工具，引擎可在 Tavily 与 Exa 之间选择；开关作用于当前 pi 会话。</p><WebSearchSettings search={search} /></section>}

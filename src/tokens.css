@@ -198,17 +198,22 @@
 		--settings-action-active: var(--action-active);
 		--settings-selected: var(--selected);
 		--theme-swatch-purple: linear-gradient(135deg, #e9e0fb 0%, #f3efff 100%);
-		--theme-swatch-purple-accent: #eee3fc;
 		--theme-swatch-yellow: linear-gradient(135deg, #ffefdf 0%, #fbf4ec 100%);
-		--theme-swatch-yellow-accent: #fbf1e5;
 		--theme-swatch-green: linear-gradient(135deg, #c3dac6 0%, #e5f3e4 100%);
-		--theme-swatch-green-accent: #e1f1e4;
 		--theme-swatch-blue: linear-gradient(135deg, #c0e3ff 0%, #e5f3ff 100%);
-		--theme-swatch-blue-accent: #d5ecfe;
 		--theme-swatch-star-black: linear-gradient(135deg, #14151d, #252631);
-		--theme-swatch-star-black-accent: #343440;
 		--theme-swatch-star-blue: linear-gradient(135deg, #111b33, #233b65);
-		--theme-swatch-star-blue-accent: #304569;
+		/* Swatch ink: the accent dot inside a palette chip, tuned to read on its own
+		   gradient rather than on the page surface. */
+		--theme-swatch-purple-ink: #7c5aa6;
+		--theme-swatch-yellow-ink: #a5713f;
+		--theme-swatch-green-ink: #3f8460;
+		--theme-swatch-blue-ink: #3f7fb5;
+		--theme-swatch-star-black-ink: #e8eaf6;
+		--theme-swatch-star-blue-ink: #cfe2ff;
+		/* A few pin-prick stars keep the dark chips recognisable at ~40px. */
+		--theme-swatch-star-black-stars: radial-gradient(circle at 30% 26%, rgb(255 255 255 / 85%) 0 1px, transparent 1.6px), radial-gradient(circle at 68% 62%, rgb(255 255 255 / 55%) 0 1px, transparent 1.6px), radial-gradient(circle at 42% 78%, rgb(255 255 255 / 35%) 0 1px, transparent 1.6px);
+		--theme-swatch-star-blue-stars: radial-gradient(circle at 30% 26%, rgb(207 226 255 / 90%) 0 1px, transparent 1.6px), radial-gradient(circle at 68% 62%, rgb(207 226 255 / 60%) 0 1px, transparent 1.6px), radial-gradient(circle at 42% 78%, rgb(207 226 255 / 40%) 0 1px, transparent 1.6px);
 		--starfield: none;
 	}
 

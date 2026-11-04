@@ -328,8 +328,9 @@ struct CatalogCache {
 
 const CATALOG_URL: &str = "https://models.dev/api.json";
 const CATALOG_TTL_SECS: i64 = 24 * 60 * 60;
-/// v2 added cache prices and per-entry currency (CNY-pinned lists).
-const CATALOG_CACHE_VERSION: u32 = 2;
+/// v2 added cache prices and per-entry currency (CNY-pinned lists); v3 clamps
+/// full-window output ceilings down to a usable default budget.
+const CATALOG_CACHE_VERSION: u32 = 3;
 /// Keep CN moonshot before the global twin so dedupe prefers it.
 const CATALOG_PROVIDERS: [&str; 4] = ["deepseek", "moonshotai-cn", "moonshotai", "zhipuai"];
 
@@ -375,6 +376,11 @@ fn prune_catalog(value: &Value) -> Vec<CatalogModel> {
 				None => (input, output, cost["cache_read"].as_f64(), cost["cache_write"].as_f64(), "USD"),
 			};
 			let modalities = model["modalities"]["input"].as_array().map(|items| items.iter().filter_map(|item| item.as_str()).collect::<Vec<_>>()).unwrap_or_default();
+			// A published output ceiling equal to the window (Kimi reports 1M) is a
+			// limit, not a default budget: importing it would have pi reserve nearly
+			// the whole context for completion and overflow on the first request.
+			let context_window = model["limit"]["context"].as_u64().unwrap_or(0);
+			let max_tokens = crate::families::usable_max_tokens(model["limit"]["output"].as_u64().unwrap_or(0), context_window);
 			models.push(CatalogModel {
 				provider: short.to_string(),
 				model_id: id.clone(),
@@ -384,8 +390,8 @@ fn prune_catalog(value: &Value) -> Vec<CatalogModel> {
 				cache_read_cost,
 				cache_write_cost,
 				currency: currency.to_string(),
-				context_window: model["limit"]["context"].as_u64().unwrap_or(0),
-				max_tokens: model["limit"]["output"].as_u64().unwrap_or(0),
+				context_window,
+				max_tokens,
 				vision: modalities.iter().any(|item| *item == "image"),
 				tools: model["tool_call"].as_bool().unwrap_or(false),
 				reasoning: model["reasoning"].as_bool().unwrap_or(false),
@@ -671,6 +677,22 @@ mod tests {
 		assert_eq!(legacy.currency, "USD");
 		assert!(models.iter().any(|model| model.model_id == "glm-old" && model.status.as_deref() == Some("deprecated")));
 		assert!(!models.iter().any(|model| model.model_id == "gpt-x" || model.model_id == "no-price"));
+	}
+	#[test]
+	fn pruned_output_ceiling_at_the_window_becomes_a_usable_budget() {
+		let value = serde_json::json!({
+			"moonshotai-cn": { "models": {
+				"kimi-k3": { "cost": { "input": 3.08, "output": 15.39, "cache_read": 0.31, "cache_write": 3.08 }, "limit": { "context": 1048576, "output": 1048576 }, "modalities": { "input": ["text", "image"] }, "reasoning": true },
+				"kimi-mini": { "cost": { "input": 0.5, "output": 2 }, "limit": { "context": 128000, "output": 16384 } }
+			}}
+		});
+		let models = prune_catalog(&value);
+		// A ceiling equal to the window is not a usable default budget; anything
+		// already below the window is kept as published.
+		let k3 = models.iter().find(|model| model.model_id == "kimi-k3").unwrap();
+		assert_eq!(k3.max_tokens, 32_768);
+		let mini = models.iter().find(|model| model.model_id == "kimi-mini").unwrap();
+		assert_eq!(mini.max_tokens, 16384);
 	}
 	#[test]
 	fn catalog_cache_from_older_builds_is_discarded() {

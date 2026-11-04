@@ -39,6 +39,7 @@ try {
 		const result = settings.locator(".provider-model-test .test-result").first();
 		await result.getByText(/失败.*HTTP 200.*HTML/).waitFor();
 		assert.match(await result.getAttribute("class"), /bad/);
+		await settings.locator(".provider-model-test-error").getByText(/HTML 网页/).waitFor();
 		await page.screenshot({ path: join(output, `invalid-reply-${theme}.png`) });
 	}
 	assert.deepEqual(errors, []);
