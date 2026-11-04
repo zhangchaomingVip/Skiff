@@ -614,6 +614,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .attachment-remove { position: absolute; right: -5px; top: -5px; display: grid; place-items: center; background: var(--text); color: var(--bg); width: 18px; height: 18px; padding: 0; border: 0; border-radius: var(--radius-full); }
 .attachment-error { font-size: var(--font-size-sm); color: var(--danger); margin: 0 4px 10px; }
 .message-image { display: block; width: auto; max-width: 100%; max-height: 280px; object-fit: contain; border: 1px solid var(--border); border-radius: var(--radius-md); margin: 8px 0; }
+/* Sent images stay thumbnails like a chat attachment; the lightbox holds the full size. */
+.msg.user .message-attachments { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-2); }
+.msg.user > .message-attachments { margin-bottom: var(--space-2); }
+.msg.user .message-attachments .image-trigger { flex: none; }
+.msg.user .message-attachments .message-image { width: 100px; height: 76px; margin: 0; object-fit: cover; }
 
 /* Compatible provider configuration */
 .provider-dialog { width: min(530px, calc(100vw - 32px)); max-height: calc(100dvh - 40px); overflow-y: auto; }
@@ -621,21 +626,26 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .provider-dialog textarea { font: inherit; font-size: var(--font-size-sm); resize: vertical; }
 .provider-field { margin-top: 14px; }
 .provider-field small { display: block; color: var(--muted); font-size: var(--font-size-sm); margin-top: 5px; }
-.search-health { display: grid; gap: var(--space-2); margin-top: var(--space-4); padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--panel-2); }
-.search-health-row { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: var(--space-3); font-size: var(--font-size-sm); }
-.search-health-row > span:first-child { color: var(--secondary); }
-.search-health-row > span:last-child { overflow-wrap: anywhere; text-align: right; }
-.search-health-row[data-state=ready] > span:last-child, .search-ready { color: var(--color-success); }
-.search-health-row[data-state=error] > span:last-child, .search-health-message { color: var(--danger); }
-.search-health-row[data-state=missing] > span:last-child { color: var(--color-warning); }
-.search-health-message, .search-ready { display: flex; align-items: flex-start; gap: var(--space-2); margin: 0; font-size: var(--font-size-sm); overflow-wrap: anywhere; }
-.search-ready { align-items: center; }
-.search-config-path { overflow-wrap: anywhere; }
-.search-dialog-actions { flex-wrap: wrap; }
-.search-dialog-actions > .ui-button:last-child { margin-left: auto; }
-.web-search-toggle-row { display: flex; align-items: center; gap: var(--space-2-5); margin-top: var(--space-2); }
-.web-search-toggle-row > span { font-weight: var(--font-weight-medium); }
-.web-search-key-form { margin-top: var(--space-2); }
+/* Web search settings: appearance-style cards, controls on the right; key identity,
+   test and clear stay inline while health reads as status dots. */
+.web-search-form { margin-top: var(--space-3); }
+.web-search-key-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.web-search-key-row > .ui-input { flex: 1 1 240px; min-width: 0; }
+.web-search-badge { display: inline-flex; align-items: center; gap: var(--space-2); flex: none; max-width: 100%; padding: var(--space-0-5) var(--space-2); border: 1px solid color-mix(in srgb, var(--border) 80%, transparent); border-radius: var(--radius-full); background: var(--surface); color: var(--secondary); font-size: var(--font-size-sm); white-space: nowrap; }
+.web-search-dot { width: 7px; height: 7px; flex: none; border-radius: var(--radius-full); background: var(--muted); }
+.web-search-badge[data-state=ready] .web-search-dot, .web-search-chip[data-state=ready] .web-search-dot { background: var(--color-success); }
+.web-search-badge[data-state=pending] .web-search-dot, .web-search-badge[data-state=checking] .web-search-dot, .web-search-badge[data-state=missing] .web-search-dot, .web-search-chip[data-state=pending] .web-search-dot, .web-search-chip[data-state=checking] .web-search-dot, .web-search-chip[data-state=missing] .web-search-dot { background: var(--color-warning); }
+.web-search-badge[data-state=error] .web-search-dot, .web-search-chip[data-state=error] .web-search-dot { background: var(--danger); }
+.web-search-badge[data-state=ready], .web-search-chip[data-state=ready] { color: var(--color-success); border-color: color-mix(in srgb, var(--color-success) 35%, transparent); }
+.web-search-badge[data-state=error], .web-search-chip[data-state=error] { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 35%, transparent); }
+.web-search-badge[data-state=missing], .web-search-chip[data-state=missing] { color: var(--color-warning); border-color: color-mix(in srgb, var(--color-warning) 35%, transparent); }
+.web-search-message { margin: 0; color: var(--danger); font-size: var(--font-size-sm); overflow-wrap: anywhere; }
+.web-search-status-row { flex-wrap: wrap; }
+.web-search-status { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); min-width: 0; }
+.web-search-chip { display: inline-flex; align-items: center; gap: var(--space-1-5); color: var(--secondary); font-size: var(--font-size-sm); white-space: nowrap; }
+.web-search-status-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-1); margin-left: auto; }
+.web-search-path { color: var(--muted); font-size: var(--font-size-sm); font-family: var(--font-family-mono); overflow-wrap: anywhere; }
+.web-search-footer { display: flex; justify-content: flex-end; margin-top: var(--space-4); }
 .field-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 7px; }
 .field-heading label { margin: 0; }
 .provider-capabilities { display: flex; gap: 22px; margin-top: 16px; }
@@ -653,7 +663,6 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 	.composer-actions { width: auto; }
 	.model-trigger, .reasoning-trigger { max-width: 210px; }
 }
-@media (max-width: 560px) { .search-dialog-actions > .ui-button:last-child { flex: 1 0 100%; margin-left: 0; } }
 @media (max-width: 600px) { .model-trigger, .reasoning-trigger { max-width: 175px; } }
 
 .resize-separator { --resize-line-offset: calc(-1 * var(--space-px)); position: relative; z-index: 2; flex: 0 0 8px; min-width: 8px; align-self: stretch; padding: 0; border: 0; background: transparent; cursor: col-resize; touch-action: none; user-select: none; }

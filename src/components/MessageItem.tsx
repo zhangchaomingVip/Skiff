@@ -1,7 +1,7 @@
 import { outcomeLabel } from "../chat/interactions";
 import { Button } from "./ui";
 import { SearchText } from "./SearchText";
-import { memo, useMemo } from "react";
+import { memo, useMemo, type ReactNode } from "react";
 import type { ChatMessage, ContentBlock } from "../chat/types";
 import { splitAttachments } from "../chat/textAttachments";
 import { shouldShowThinking } from "../chat/thinking";
@@ -46,6 +46,7 @@ export const MessageItem = memo(function MessageItem({ runStartedAt, onEdit, onC
 	const showTyping = message.streaming && !processPresentation;
 	const renderProcess = (group: NonNullable<ProcessPresentation["head"]>) => <TurnProcessGroup key={group.id} group={group} startedAt={runStartedAt} durationLabel={processDuration} running={turnRunning} outcome={turnOutcome} expanded={expandedGroups.has(group.id)} onExpandedChange={onExpandedChange} />;
 	const nodes = [];
+	const attachments: ReactNode[] = [];
 	for (let index = 0; index < rendered.length; index++) {
 		const entry = rendered[index];
 		const block = entry.block;
@@ -65,7 +66,8 @@ export const MessageItem = memo(function MessageItem({ runStartedAt, onEdit, onC
 			if (parsed?.attachments.length) nodes.push(<div key={entry.key} className="text-with-attachments" data-reply-text={`${message.id}:${entry.key}`}>{parsed.text && <Markdown text={parsed.text} />}{parsed.attachments.map((attachment, i) => <TextAttachmentBlock key={i} attachment={attachment} />)}</div>);
 			else nodes.push(<Markdown key={entry.key} replyKey={`${message.id}:${entry.key}`} text={block.text} streaming={message.streaming} />);
 		}
-		else if (block.kind === "image") nodes.push(<ImagePreview key={entry.key} src={`data:${block.mimeType};base64,${block.data}`} />);
+		// Sent images read as attachments: small thumbnails above the text, click to zoom.
+		else if (block.kind === "image") (isUser ? attachments : nodes).push(<ImagePreview key={entry.key} src={`data:${block.mimeType};base64,${block.data}`} />);
 		else if (block.kind === "thinking") {
 			// Short filler reasoning disappears once the turn settles.
 			if (!shouldShowThinking(block.text, !!message.streaming)) continue;
@@ -73,6 +75,10 @@ export const MessageItem = memo(function MessageItem({ runStartedAt, onEdit, onC
 		}
 		else nodes.push(<ProcessDisclosure key={entry.key} className={`tool-result ${block.isError ? "err" : ""}`} icon={TOOL_ICONS[toolKind(block.name)]} label="执行结果">{block.isError && <div className="tool-output-heading">error</div>}<pre>{block.text}</pre></ProcessDisclosure>);
 	}
+	// Images ride above the text bubble like a chat attachment; an image-only
+	// message keeps them inside so the bubble still holds its time and actions.
+	const attachmentRow = attachments.length > 0 && nodes.length > 0;
+	if (attachments.length && !attachmentRow) nodes.unshift(<div key="message-attachments" className="message-attachments">{attachments}</div>);
 	// Keep action buttons in the DOM so keyboard users can reach earlier replies.
 	const copyText = isUser ? text : turnMessages ? turnReplyText(turnMessages) : "";
 	const canCopy = !!copyText.trim();
@@ -92,6 +98,7 @@ export const MessageItem = memo(function MessageItem({ runStartedAt, onEdit, onC
 	const showTime = message.timestamp !== undefined && !showUsage && (isUser || !!turnMessages);
 	const MessageTag = isUser ? "article" : "div";
 	return <MessageTag data-message-id={message.id} data-search-hit={searchQuery ? "true" : undefined} className={`msg ${isUser ? "user" : "assistant"}${compact ? " compact" : ""}${metadataOnly ? " metadata-only" : ""}${searchQuery ? " search-message-hit" : ""}`} aria-label={isUser ? "你的消息" : undefined}>
+		{isUser && attachmentRow && <div className="message-attachments">{attachments}</div>}
 		<div className={isUser ? "message-bubble" : "message-segment"}>
 		{searchQuery && <details open className="search-source"><summary>搜索命中原文</summary><pre><SearchText text={text} query={searchQuery} /></pre></details>}
 			{!metadataOnly && <div className="msg-body">

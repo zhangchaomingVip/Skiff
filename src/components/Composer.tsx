@@ -8,6 +8,7 @@ import { isWordFile } from "../chat/wordAttachments";
 import { ModelMenu } from "./ModelMenu";
 import { ReasoningChip } from "./ReasoningChip";
 import { Icon } from "./Icon";
+import { ImageLightbox } from "./ImagePreview";
 import type { PiCommand } from "../chat/usePiSession";
 import type { DraftAttachment } from "../chat/drafts";
 
@@ -75,6 +76,7 @@ export function Composer({
 	const replacementRef = useRef<string>();
 	const [images, setImages] = useState<ImageAttachment[]>([]);
 	const [files, setFiles] = useState<TextAttachment[]>([]);
+	const [previewImage, setPreviewImage] = useState<ImageAttachment>();
 	const attachmentsRef = useRef({ images, files }); attachmentsRef.current = { images, files };
 	const updateAttachments = (nextImages: ImageAttachment[], nextFiles: TextAttachment[], replacementId?: string) => {
 		attachmentsRef.current = { images: nextImages, files: nextFiles };
@@ -167,7 +169,8 @@ export function Composer({
 				{slash ? <>{options.map((command, index) => <button key={command.name} className={index === activeOption ? "focused" : ""} onClick={() => { onTextChange(`/${command.name} `); inputRef.current?.focus(); }} aria-label={`使用命令 ${command.name}`}><strong>/{command.name}</strong><span>{command.description}</span></button>)}{!options.length && <p>{commandError ? "无法读取 pi 命令，请重新连接后重试" : "暂无匹配命令"}</p>}</> : <p>输入项目相对路径，按 Enter 引用。<br />例如 @src/App.tsx · 外部文件可通过 + 添加文本或 Word 文件。</p>}
 			</div>}
 			{files.length > 0 && <div className="text-attachments">{files.map((file) => <div key={file.id}><Icon name={/\.docx$/i.test(file.name) ? "file" : "code"} size={14} /><span>{file.name}</span><button disabled={disabled || sendingRef.current} aria-label={`移除文件 ${file.name}`} onClick={() => updateAttachments(images, files.filter((item) => item.id !== file.id))}><Icon name="close" size={12} /></button></div>)}</div>}
-			{images.length > 0 && <div className="attachment-list">{images.map((image) => <div className="attachment" key={image.id}><img src={`data:${image.mimeType};base64,${image.data}`} alt={image.name} /><button className="attachment-remove" aria-label={`移除图片 ${image.name}`} disabled={disabled || sendingRef.current} onClick={() => updateAttachments(images.filter((item) => item.id !== image.id), files)}><Icon name="close" size={12} /></button><span title={image.name}>{image.name}</span></div>)}</div>}
+			{images.length > 0 && <div className="attachment-list">{images.map((image) => <div className="attachment" key={image.id}><button className="image-trigger" aria-label={`放大图片：${image.name}`} onClick={() => setPreviewImage(image)}><img src={`data:${image.mimeType};base64,${image.data}`} alt={image.name} /></button><button className="attachment-remove" aria-label={`移除图片 ${image.name}`} disabled={disabled || sendingRef.current} onClick={() => updateAttachments(images.filter((item) => item.id !== image.id), files)}><Icon name="close" size={12} /></button><span title={image.name}>{image.name}</span></div>)}</div>}
+			{previewImage && <ImageLightbox src={`data:${previewImage.mimeType};base64,${previewImage.data}`} alt={previewImage.name} onClose={() => setPreviewImage(undefined)} />}
 			{(imageError || (images.length > 0 && !canUseImages)) && <p className="attachment-error" role="alert">{imageError ?? IMAGE_CAPABILITY_ERROR}</p>}
 			<TextArea
 				appearance="plain"

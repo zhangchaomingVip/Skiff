@@ -1,6 +1,6 @@
 import { seedPolishPreview } from "./polishFixture.mjs";
 
-export const fixtures = ["launcher", "single", "multi", "unknown", "empty", "loading", "error", "chat", "long", "settings", "settings-info", "picker", "voyage", "voyage-output", "voyage-thinking", "voyage-tool", "voyage-moored", "voyage-high", "authorization", "sidebar", "project-limit", "archive", "visual", "tool-spacing", "process-rows", "repeated-process", "process-folding", "process-actions", "file-discovery", "content-replay-a", "content-replay-b", "chat-polish-031"];
+export const fixtures = ["launcher", "single", "multi", "unknown", "empty", "loading", "error", "chat", "long", "settings", "settings-info", "picker", "voyage", "voyage-output", "voyage-thinking", "voyage-tool", "voyage-moored", "voyage-high", "authorization", "sidebar", "project-limit", "archive", "visual", "tool-spacing", "process-rows", "repeated-process", "process-folding", "process-actions", "file-discovery", "content-replay-a", "content-replay-b", "chat-polish-031", "message-images"];
 
 // This entry runs only on the separate preview origin. It never uses real pi.
 export function preparePreview(target) {
@@ -291,6 +291,20 @@ export function preparePreview(target) {
 		if (fixture === "visual" || fixture === "tool-spacing") workspace.chats[0].routeSnapshots = sessions["polish-preview.jsonl"].filter((message) => message.role === "assistant").map((message) => message.routeSnapshot ?? null);
 		workspace.chats[0].selectedModel = { provider: "skiff-relay-r1-deepseek", id: "deepseek-chat", modelId: "deepseek-chat", routeId: "route-deepseek-r1", offerId: "route-deepseek-r1/deepseek-chat" };
 		storage.setItem("skiff.workspace.v1", JSON.stringify(workspace));
+	} else if (fixture === "message-images") {
+		const image = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aD1sAAAAASUVORK5CYII=";
+		const project = { id: "message-images-project", name: "Skiff", path: "D:\\workspace\\Skiff" };
+		const chat = {
+			id: "message-images-chat", projectId: project.id, title: "图片消息", hasMessages: true,
+			sessionFile: "message-images.jsonl", createdAt: now, updatedAt: now,
+			selectedModel: { provider: "skiff-relay-r1-deepseek", id: "deepseek-chat", modelId: "deepseek-chat", routeId: "route-deepseek-r1", offerId: "route-deepseek-r1/deepseek-chat" },
+		};
+		storage.setItem("skiff.test.sessions", JSON.stringify({ [chat.sessionFile]: [
+			{ role: "user", content: [{ type: "text", text: "两张图一起看" }, { type: "image", mimeType: "image/png", data: image }, { type: "image", mimeType: "image/png", data: image }] },
+			{ role: "assistant", content: "收到。" },
+			{ role: "user", content: [{ type: "image", mimeType: "image/png", data: image }] },
+		] }));
+		storage.setItem("skiff.workspace.v1", JSON.stringify({ version: 1, projects: [project], chats: [chat], activeId: chat.id }));
 	} else {
 		storage.setItem("skiff.workspace.v1", JSON.stringify({ version: 1, projects: [{ id: "preview-project", name: "Skiff 示例项目", path: "D:\\workspace\\demo" }], chats: [{ id: "preview-chat", projectId: "preview-project", title: "新聊天", hasMessages: false, updatedAt: now }], activeId: "preview-chat" }));
 	}

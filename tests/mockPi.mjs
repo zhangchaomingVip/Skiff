@@ -15,6 +15,10 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 	const tickets = new Map(); const latestTests = new Map(); const cancelledTests = new Set();
 	let failBatch = false; let failOrder = false;
 	let webSearchProvider = "tavily";
+	let webSearchConfigured = false;
+	let webSearchValidated = null;
+	let webSearchReadUrl = false;
+	const webSearchStatus = () => ({ agentDir: "D:\\mock\\pi", provider: webSearchProvider, configured: webSearchConfigured, keyHint: webSearchConfigured ? "…6d93" : null, extensionInstalled: false, enabled: false, readUrlEnabled: webSearchReadUrl, validated: webSearchValidated });
 	const connection = (relay) => JSON.stringify([relay.baseUrl.replace(/\/+$/, ""), relay.apiKey, relay.protocol ?? "openai", relay.timeoutSeconds]);
 	const persistMetadata = () => storage?.setItem("skiff.test.metadata.v1", JSON.stringify({ ...metadata, connections: Object.fromEntries(Object.entries(metadata.connections).map(([id, entry]) => [id, { version: entry.version }])) }));
 	const syncMetadata = () => {
@@ -340,11 +344,12 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 				return;
 			}
 			if (command === "rpc_stop") { target.clearTimeout(processes.get(args.instanceId)?.timer); processes.delete(args.instanceId); return; }
-			if (command === "get_web_search_status") return { agentDir: "D:\\mock\\pi", provider: webSearchProvider, configured: false, extensionInstalled: false, enabled: false, readUrlEnabled: false, validated: null };
-			if (command === "validate_web_search") return { agentDir: "D:\\mock\\pi", provider: webSearchProvider, configured: false, extensionInstalled: false, enabled: false, readUrlEnabled: false, validated: null };
+			if (command === "get_web_search_status") return webSearchStatus();
+			if (command === "validate_web_search") { webSearchValidated = webSearchConfigured ? true : null; return webSearchStatus(); }
 			if (command === "set_web_search_provider") { webSearchProvider = args.provider === "exa" ? "exa" : "tavily"; return; }
-			if (command === "set_web_search_read_url") return;
-			if (command === "save_web_search_key" || command === "clear_web_search_key") return;
+			if (command === "set_web_search_read_url") { webSearchReadUrl = !!args.enabled; return; }
+			if (command === "save_web_search_key") { webSearchConfigured = true; webSearchValidated = null; return; }
+			if (command === "clear_web_search_key") { webSearchConfigured = false; webSearchValidated = null; return; }
 			if (command === "install_web_search_extension") return false;
 			if (command !== "rpc_send") throw new Error(`Unknown mock command: ${command}`);
 			if (failSend) { failSend = false; throw new Error("Simulated transport failure"); }

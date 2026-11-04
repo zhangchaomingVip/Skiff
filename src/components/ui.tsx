@@ -117,8 +117,8 @@ export function Tooltip({ text, children, align = "end", side = "bottom" }: { te
 	const [dismissed, setDismissed] = useState(false);
 	return <span className="ui-tooltip-wrap" onFocus={() => setDismissed(false)} onMouseEnter={() => setDismissed(false)} onKeyDown={(event) => { if (event.key === "Escape") setDismissed(true); }}>{isValidElement(children) ? cloneElement(children as ReactElement<HTMLAttributes<HTMLElement>>, { "aria-describedby": [children.props["aria-describedby"], id].filter(Boolean).join(" ") }) : children}<span className="ui-tooltip" data-align={align} data-side={side} hidden={dismissed} id={id} role="tooltip">{text}</span></span>;
 }
-export function SegmentedControl<T extends string>({ value, onChange, options, label }: { value: T; onChange: (value: T) => void; options: { value: T; label: string }[]; label: string }) {
-	return <div className="ui-segmented" role="group" aria-label={label}>{options.map((option, index) => <Button key={option.value} size="compact" variant="ghost" aria-pressed={value === option.value} tabIndex={value === option.value ? 0 : -1} onClick={() => onChange(option.value)} onKeyDown={(event) => {
+export function SegmentedControl<T extends string>({ value, onChange, options, label, disabled }: { value: T; onChange: (value: T) => void; options: { value: T; label: string }[]; label: string; disabled?: boolean }) {
+	return <div className="ui-segmented" role="group" aria-label={label}>{options.map((option, index) => <Button key={option.value} size="compact" variant="ghost" disabled={disabled} aria-pressed={value === option.value} tabIndex={value === option.value ? 0 : -1} onClick={() => onChange(option.value)} onKeyDown={(event) => {
 		if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
 		event.preventDefault();
 		const next = event.key === "Home" ? 0 : event.key === "End" ? options.length - 1 : (index + (event.key === "ArrowRight" ? 1 : -1) + options.length) % options.length;

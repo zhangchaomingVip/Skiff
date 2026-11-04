@@ -48,6 +48,13 @@ try {
 			Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aD1sAAAAASUVORK5CYII=", "base64").copy(png);
 			await choose(add, { name: "maximum.png", mimeType: "image/png", buffer: png });
 			await page.getByRole("button", { name: "移除图片 maximum.png", exact: true }).waitFor();
+			const thumbnail = page.getByRole("button", { name: "放大图片：maximum.png", exact: true });
+			assert.equal(await thumbnail.evaluate((element) => element.tagName), "BUTTON", "Attachment thumbnail must be clickable");
+			await thumbnail.click();
+			await page.getByRole("dialog", { name: "图片预览", exact: true }).waitFor();
+			await page.screenshot({ path: `dist/attachment-lightbox-${theme}.png` });
+			await page.getByRole("button", { name: "关闭图片预览", exact: true }).click();
+			await page.getByRole("dialog", { name: "图片预览", exact: true }).waitFor({ state: "detached" });
 			await page.evaluate(() => window.retrievalFixture.drafts.flush());
 			await page.goto(`${base}/tests/retrievability.html?restore=1`); await ready();
 			await page.getByRole("img", { name: "maximum.png", exact: true }).waitFor();
