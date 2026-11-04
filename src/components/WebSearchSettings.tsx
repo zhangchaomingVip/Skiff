@@ -25,9 +25,12 @@ export function WebSearchSettings({ search }: { search: WebSearchControls }) {
 	const [apiKey, setApiKey] = useState("");
 	const [error, setError] = useState<string>();
 	const [pending, setPending] = useState(false);
+	// A saved key starts read-only; editing reveals an empty field for a replacement.
+	const [editing, setEditing] = useState(false);
 	const isExa = search.provider === "exa";
 	const providerLabel = isExa ? "Exa" : "Tavily";
 	const copy = PROVIDER_COPY[search.provider];
+	const editingKey = editing || !search.configured;
 
 	const save = async (event: FormEvent) => {
 		event.preventDefault();
@@ -37,6 +40,7 @@ export function WebSearchSettings({ search }: { search: WebSearchControls }) {
 		try {
 			await invoke("save_web_search_key", { provider: search.provider, apiKey });
 			setApiKey("");
+			setEditing(false);
 			// 保存（新填或替换）Key 是唯一会自动调用引擎校验的入口，会消耗额度。
 			await search.verify();
 		} catch (e) {
@@ -53,6 +57,7 @@ export function WebSearchSettings({ search }: { search: WebSearchControls }) {
 		try {
 			await invoke("clear_web_search_key");
 			setApiKey("");
+			setEditing(false);
 			await search.refresh();
 		} catch (e) {
 			setError(String(e));
@@ -61,22 +66,25 @@ export function WebSearchSettings({ search }: { search: WebSearchControls }) {
 		}
 	};
 
+	const cancelEdit = () => { setApiKey(""); setEditing(false); setError(undefined); };
+	const switchProvider = (value: WebSearchProvider) => { cancelEdit(); void search.setProvider(value); };
+
 	const active = search.available && search.configured && search.validated !== false && search.enabled;
 	const togglePending = search.busy || search.validating;
 	const editable = !pending && !search.busy;
 
 	const keyState = !search.statusLoaded
-		? "正在读取配置…"
+		? "正在读取配置"
 		: search.validating
-			? `正在验证 ${providerLabel} 密钥…`
-			: !search.configured
-				? "尚未配置密钥"
-				: search.validated === true
-					? "密钥验证通过"
-					: search.validated === false
-						? "密钥验证失败"
-						: `密钥已保存${search.keyHint ? ` · ${search.keyHint}` : ""}`;
-	const keyTone: State = !search.statusLoaded ? "checking" : search.validating ? "checking" : !search.configured ? "missing" : search.validated === true ? "ready" : search.validated === false ? "error" : "pending";
+			? "正在验证"
+			: search.validated === true
+				? "验证通过"
+				: search.validated === false
+					? "验证失败"
+					: "待验证";
+	const keyTone: State = !search.statusLoaded ? "checking" : search.validating ? "checking" : search.validated === true ? "ready" : search.validated === false ? "error" : "pending";
+	// 已保存的 Key 只以掩码示人，尾号来自 Rust 返回的 hint（`…6d93`）。
+	const maskedKey = `${"•".repeat(12)}${(search.keyHint ?? "").replace(/^…/, "")}`;
 	const extensionState: { tone: State; label: string } = search.available
 		? { tone: "ready", label: "扩展已载入" }
 		: search.extensionInstalled
@@ -129,18 +137,29 @@ export function WebSearchSettings({ search }: { search: WebSearchControls }) {
 						<span className="settings-row-title">搜索引擎</span>
 						<span className="settings-row-hint">{copy.engine}</span>
 					</div>
-					<SegmentedControl label="搜索引擎" value={search.provider} onChange={(value) => void search.setProvider(value)} disabled={!editable} options={[{ value: "tavily", label: "Tavily" }, { value: "exa", label: "Exa" }]} />
+					<SegmentedControl label="搜索引擎" value={search.provider} onChange={switchProvider} disabled={!editable} options={[{ value: "tavily", label: "Tavily" }, { value: "exa", label: "Exa" }]} />
 				</div>
 				<div className="settings-row is-stacked">
 					<div className="settings-row-text">
-						<label className="settings-row-title" htmlFor="web-search-key">{providerLabel} API Key</label>
+						<div className="web-search-key-heading">
+							<label className="settings-row-title" htmlFor="web-search-key">{providerLabel} API Key</label>
+							{!editingKey && <span className="web-search-badge" data-state={keyTone} aria-live="polite"><span className="web-search-dot" aria-hidden="true" />{keyState}</span>}
+						</div>
 						<span className="settings-row-hint">{copy.key}</span>
 					</div>
 					<div className="web-search-key-row">
-						<Input id="web-search-key" type="password" autoComplete="off" placeholder={search.configured ? "填写新的 Key 会替换已保存的值" : isExa ? "exa-…" : "tvly-…"} value={apiKey} onChange={(event) => setApiKey(event.target.value)} disabled={pending} />
-						{search.configured && <Button type="button" variant="ghost" size="compact" aria-label="测试已保存的 Key" onClick={() => void search.verify()} disabled={pending || search.validating}><Icon name="refresh" size={14} />{search.validated === undefined ? "测试" : "重新测试"}</Button>}
-						{search.configured && <Button type="button" variant="ghost" size="compact" aria-label="清除已保存的 Key" onClick={() => void clear()} disabled={!editable}>清除</Button>}
-						<span className="web-search-badge" data-state={keyTone} aria-live="polite"><span className="web-search-dot" aria-hidden="true" />{keyState}</span>
+						{editingKey
+							? <>
+								<Input id="web-search-key" type="password" autoComplete="off" placeholder={search.configured ? "输入新的 Key 以替换已保存的" : isExa ? "exa-…" : "tvly-…"} value={apiKey} onChange={(event) => setApiKey(event.target.value)} disabled={pending} />
+								{search.configured && <Button type="button" variant="ghost" size="compact" onClick={cancelEdit} disabled={pending}>取消</Button>}
+							</>
+							: <>
+								<Input id="web-search-key" className="web-search-key-masked" readOnly value={maskedKey} aria-label={`${providerLabel} API Key 已保存`} />
+								<Button type="button" variant="secondary" size="compact" aria-label="测试已保存的 Key" onClick={() => void search.verify()} disabled={pending || search.validating}><Icon name="refresh" size={14} />{search.validated === undefined ? "测试" : "重新测试"}</Button>
+								<Button type="button" variant="ghost" size="compact" aria-label="修改已保存的 Key" onClick={() => setEditing(true)} disabled={!editable}><Icon name="edit" size={14} />修改</Button>
+								<Button type="button" variant="ghost" size="compact" aria-label="清除已保存的 Key" onClick={() => void clear()} disabled={!editable}>清除</Button>
+							</>
+						}
 					</div>
 					{search.validated === false && search.validationMessage && <p className="web-search-message" role="status">{search.validationMessage}</p>}
 				</div>
@@ -169,9 +188,9 @@ export function WebSearchSettings({ search }: { search: WebSearchControls }) {
 				</div>}
 			</div>
 			{(error || search.error) && <p className="form-error" role="alert">{error || search.error}</p>}
-			<div className="web-search-footer">
+			{editingKey && <div className="web-search-footer">
 				<Button type="submit" variant="primary" size="primary" disabled={pending || !apiKey.trim()}>{pending ? "保存并验证中…" : "保存并验证"}</Button>
-			</div>
+			</div>}
 		</form>
 	</div>;
 }

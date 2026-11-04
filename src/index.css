@@ -629,8 +629,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 /* Web search settings: appearance-style cards, controls on the right; key identity,
    test and clear stay inline while health reads as status dots. */
 .web-search-form { margin-top: var(--space-3); }
+.web-search-settings .settings-row-hint { line-height: 1.5; }
+.web-search-key-heading { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); }
 .web-search-key-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .web-search-key-row > .ui-input { flex: 1 1 240px; min-width: 0; }
+.web-search-key-masked { color: var(--secondary); letter-spacing: .06em; }
 .web-search-badge { display: inline-flex; align-items: center; gap: var(--space-2); flex: none; max-width: 100%; padding: var(--space-0-5) var(--space-2); border: 1px solid color-mix(in srgb, var(--border) 80%, transparent); border-radius: var(--radius-full); background: var(--surface); color: var(--secondary); font-size: var(--font-size-sm); white-space: nowrap; }
 .web-search-dot { width: 7px; height: 7px; flex: none; border-radius: var(--radius-full); background: var(--muted); }
 .web-search-badge[data-state=ready] .web-search-dot, .web-search-chip[data-state=ready] .web-search-dot { background: var(--color-success); }
@@ -990,7 +993,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .settings-group { border: 1px solid color-mix(in srgb, var(--border) 80%, transparent); border-radius: var(--radius-xl); background: color-mix(in srgb, var(--text) 4%, var(--surface)); }
 .settings-group + .settings-group { margin-top: var(--space-3); }
 .settings-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); padding: var(--space-3) var(--space-4); }
-.settings-row + .settings-row { border-top: 1px solid color-mix(in srgb, var(--border) 60%, transparent); }
+.settings-row + .settings-row { border-top: 1px solid color-mix(in srgb, var(--border) 80%, transparent); }
 .settings-row.is-stacked { flex-direction: column; align-items: stretch; }
 .settings-row-text { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
 .settings-row-title { color: var(--text); font-size: var(--font-size-base); font-weight: var(--font-weight-medium); line-height: var(--line-height-tight); }
