@@ -6,6 +6,7 @@ import { deriveTitle } from "./conversationDisplay";
 import { useRuntimeRoutes } from "./useRuntimeRoutes";
 import { conversationStatus } from "./sessionStatus";
 import { snapshotsForMessages } from "./routeSnapshot";
+import { performancesForMessages } from "./turnPerformance";
 import { isArchived, type Conversation, type Project } from "./workspace";
 
 type PiSession = ReturnType<typeof usePiSession> & ReturnType<typeof useRuntimeRoutes>;
@@ -44,6 +45,8 @@ function SessionRuntime({ target, chat, offers, configuration, report, updateCha
 		if (chat.modelAlias !== alias) patch.modelAlias = alias;
 		const routeSnapshots = snapshotsForMessages(state.messages);
 		if (JSON.stringify(chat.routeSnapshots) !== JSON.stringify(routeSnapshots)) patch.routeSnapshots = routeSnapshots;
+		const turnPerformances = performancesForMessages(state.messages);
+		if (JSON.stringify(chat.turnPerformances) !== JSON.stringify(turnPerformances)) patch.turnPerformances = turnPerformances;
 		updateChat(target.id, patch);
 	}, [session.isCurrent, session.loadedId, session.sessionFile, session.elapsedMs, session.state.messages, session.state.model, target.id]);
 	return null;
@@ -59,7 +62,7 @@ export function usePiSessions(activeId: string | undefined, chats: Conversation[
 	const visited = useRef(new Set<string>());
 	const targets = chats.flatMap((chat) => {
 		const project = projects.find((item) => item.id === chat.projectId);
-		return project && !isArchived(chat) ? [{ chat, target: { id: chat.id, cwd: project.path, sessionFile: chat.hasMessages ? chat.sessionFile : undefined, elapsedMs: chat.elapsedMs, model: chat.selectedModel, routeSnapshots: chat.routeSnapshots } satisfies SessionTarget }] : [];
+		return project && !isArchived(chat) ? [{ chat, target: { id: chat.id, cwd: project.path, sessionFile: chat.hasMessages ? chat.sessionFile : undefined, elapsedMs: chat.elapsedMs, model: chat.selectedModel, routeSnapshots: chat.routeSnapshots, turnPerformances: chat.turnPerformances } satisfies SessionTarget }] : [];
 	});
 	const activeTarget = targets.find(({ chat }) => chat.id === activeId)?.target;
 	const activeKey = activeTarget ? sessionKey(activeTarget) : undefined;

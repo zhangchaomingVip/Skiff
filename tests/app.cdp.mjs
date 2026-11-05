@@ -54,7 +54,7 @@ const server = createServer((request, response) => {
 	if (request.method === "POST" && request.url === "/v1/chat/completions") {
 		let body = "";
 		request.on("data", (chunk) => { body += chunk; });
-		request.on("end", () => {
+		request.on("end", async () => {
 			try {
 				const parsed = JSON.parse(body);
 				const systemText = (parsed.messages ?? []).filter((message) => message.role === "system" || message.role === "developer")
@@ -73,7 +73,10 @@ const server = createServer((request, response) => {
 					{ choices: [{ index: 0, delta: { role: "assistant", content: REPLY }, finish_reason: null }] },
 					{ choices: [{ index: 0, delta: {}, finish_reason: "stop" }] },
 					{ choices: [], usage: { prompt_tokens: 12, completion_tokens: 20, total_tokens: 32 } },
-				]) response.write(`data: ${JSON.stringify({ ...base, ...chunk })}\n\n`);
+				]) {
+					response.write(`data: ${JSON.stringify({ ...base, ...chunk })}\n\n`);
+					await sleep(30);
+				}
 				response.end("data: [DONE]\n\n");
 			} catch (error) { send(500, String(error)); }
 		});
@@ -223,6 +226,20 @@ try {
 	if (!requests.length) throw new Error("UI 渲染了回复，但本地 mock 没有收到请求，链路不完整。");
 	if (requests[0].model !== MODEL_ID) throw new Error(`pi 请求了错误的模型：${requests[0].model}`);
 	assert.ok(requests[0].systemText.includes(SKIFF_IDENTITY_PROMPT), "Built-in identity must reach the provider even with an explicitly empty preference");
+
+	// Performance receipts must survive a full WebView reload and pi history restore.
+	await page.waitForFunction(() => {
+		const workspace = JSON.parse(localStorage.getItem("skiff.workspace.v1"));
+		return workspace.chats.find((chat) => chat.id === workspace.activeId)?.turnPerformances?.some((receipt) => receipt?.decodeMs > 0);
+	});
+	await page.getByRole("button", { name: "航行台", exact: true }).click();
+	const performanceReading = { speed: await page.locator(".voyage-weather-speed strong").textContent(), timing: await page.locator(".voyage-weather-speed p").textContent() };
+	assert.notEqual(performanceReading.speed, "—");
+	await page.reload({ waitUntil: "domcontentloaded" });
+	await page.waitForSelector(".composer-input", { timeout: 60_000 });
+	await page.getByRole("button", { name: "航行台", exact: true }).click();
+	await page.waitForFunction((expected) => document.querySelector(".voyage-weather-speed strong")?.textContent === expected.speed && document.querySelector(".voyage-weather-speed p")?.textContent === expected.timing, performanceReading);
+	console.log("性能记录验证通过：首字延迟与平均解码航速在 WebView 重载和真实 pi 历史恢复后保持一致。");
 
 	// Save through the real settings UI and restart the session. Both the built-in
 	// identity and user-authored multiline text must reach the next provider request.

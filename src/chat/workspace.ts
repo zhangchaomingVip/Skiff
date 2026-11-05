@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { RouteSnapshot } from "./types";
 import type { RouteEvent } from "./routeAudit";
 import { normalizeRouteEvents } from "./routeAudit";
+import { normalizeTurnPerformances, type TurnPerformance } from "./turnPerformance";
 
 export interface Project {
 	id: string;
@@ -33,6 +34,7 @@ export interface Conversation {
 	selectedModel?: { provider: string; id: string; routeId?: string; modelId?: string; offerId?: string };
 	/** Snapshots are ordered by completed assistant reply, independent of pi's transcript IDs. */
 	routeSnapshots?: Array<RouteSnapshot | null>;
+	turnPerformances?: Array<TurnPerformance | null>;
 	routeEvents?: RouteEvent[];
 	pinned?: boolean;
 	archivedAt?: number;
@@ -95,6 +97,8 @@ export function normalizeWorkspace(value: unknown): Workspace | null {
 			if (selected) chat.selectedModel = selected; else delete chat.selectedModel;
 			const snapshots = normalizeRouteSnapshots(chat.routeSnapshots);
 			if (snapshots) chat.routeSnapshots = snapshots; else delete chat.routeSnapshots;
+			const performances = normalizeTurnPerformances(chat.turnPerformances);
+			if (performances) chat.turnPerformances = performances; else delete chat.turnPerformances;
 			const events = normalizeRouteEvents(chat.routeEvents);
 			if (events) chat.routeEvents = events; else delete chat.routeEvents;
 			if (chat.createdAt !== undefined && (typeof chat.createdAt !== "number" || !Number.isFinite(chat.createdAt))) delete chat.createdAt;

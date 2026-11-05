@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useRef, useState, type ChangeEvent, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ChangeEvent, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { IconButton } from "./ui";
 import { Icon, type IconName } from "./Icon";
-import { gaugePosition, type VoyagePhase } from "../chat/sailing";
-import { sparkGeometry } from "../chat/sparkline";
+import type { VoyagePhase } from "../chat/sailing";
+import { VoyageBento } from "./VoyageBento";
 import type { VoyageMetrics } from "../chat/useVoyageMetrics";
 import { formatDuration, formatTokens } from "../chat/usage";
 import { costTooltip, formatCosts, type CostSummary } from "../chat/cost";
@@ -13,7 +13,6 @@ import { companionPose, latestToolFailed, POSE_MOOD, type CompanionPose } from "
 import { playCompanionVoice, type CompanionVoice } from "../chat/companionSound";
 import { DECK_SIZE_MIN, readCompanion, readCompanionSound, readDeckMode, readDeckSize, saveCompanion, saveCompanionSound, saveDeckMode, saveDeckSize, type DeckMode } from "../chat/voyageDeck";
 
-const GAUGE_LENGTH = 283;
 /** The poke frame: pressing the navigator shows the tap art for a beat. */
 const TAP_ART = "/companion/tap.webp";
 const TAP_MS = 640;
@@ -25,15 +24,8 @@ const COMPANION_ART: Record<CompanionPose | "still", string> = {
 	angry: "/companion/angry.webp",
 	still: "/companion/idle.png",
 };
-/** A pressed chip keeps the stage for a moment; live progress then wins it back. */
-const MANUAL_POSE_MS = 4000;
 /** The squashed frown lasts about three stomps. */
 const SQUASH_MS = 3000;
-const POSE_CHIPS: { pose: CompanionPose; label: string; short: string; icon: IconName; voice: CompanionVoice }[] = [
-	{ pose: "idle", label: "转圈待机", short: "待机", icon: "refresh", voice: "poke" },
-	{ pose: "eat", label: "投喂小鱼", short: "投喂", icon: "tokens", voice: "eat" },
-	{ pose: "happy", label: "开心鼓励", short: "鼓励", icon: "spark", voice: "happy" },
-];
 const DECK_OPTIONS: { mode: DeckMode; label: string; icon: IconName }[] = [
 	{ mode: "companion", label: "领航员", icon: "sailboat" },
 	{ mode: "billing", label: "账单明细", icon: "tokens" },
@@ -46,87 +38,6 @@ function statusText(metrics: VoyageMetrics): string {
 	return metrics.status;
 }
 
-function Gauge({ metrics, compact = false }: { metrics: VoyageMetrics; compact?: boolean }) {
-	const phaseTimer = metrics.streaming && (metrics.phase === "thinking" || metrics.phase === "tool");
-	const average = metrics.averageSpeed;
-	// A finished turn freezes the needle on its average instead of dropping to a dead zero.
-	const settled = !metrics.streaming && average !== undefined;
-	const reading = metrics.streaming ? metrics.speed : average ?? 0;
-	const position = gaugePosition(reading);
-	const angle = -90 + position * 180;
-	const phaseLabel = metrics.phase === "thinking" ? "思考中" : "工具执行中";
-	const gaugeNumber = phaseTimer ? formatDuration(metrics.statusDurationMs ?? 0) : settled ? average.toFixed(1) : metrics.streaming ? metrics.speed.toFixed(1) : "—";
-	const label = phaseTimer ? phaseLabel : metrics.streaming ? "船速 · 输出" : settled ? "船速" : "等待启航";
-	const unit = phaseTimer ? "本阶段用时" : settled ? "tok/s · 本轮均速" : metrics.streaming ? metrics.speedEstimated ? "tok/s · 估算" : "tok/s · 实测" : "tok/s";
-	const readingDetail = phaseTimer ? `${phaseLabel}，已用时 ${gaugeNumber}` : settled ? `本轮均速 ${gaugeNumber} tok/s${metrics.peakSpeed === undefined ? "" : `，峰值 ${metrics.peakSpeed.toFixed(1)}`}` : metrics.streaming ? `船速 ${gaugeNumber} token 每秒` : "等待启航";
-	return <section className="voyage-card voyage-card-dial" role="group" aria-label="输出速度">
-		{compact && <h2 className="voyage-portal-gauge-title">{phaseTimer ? phaseLabel : "输出速度"}</h2>}
-		<div className="voyage-gauge-scene"><svg className="voyage-gauge-svg" viewBox="-6 0 278 180" role="img" aria-label={readingDetail}>
-		<defs><linearGradient id="voyage-speed-gradient" gradientUnits="userSpaceOnUse" x1="40" y1="130" x2="220" y2="130"><stop offset="0" stopColor="var(--voyage-sky)" /><stop offset=".38" stopColor="var(--voyage-mint)" /><stop offset=".72" stopColor="var(--voyage-butter)" /><stop offset="1" stopColor="var(--voyage-coral)" /></linearGradient></defs>
-		<g className="voyage-wave-move voyage-wave" opacity=".15"><path d="M0 155 Q12 151 24 155 T48 155 T72 155 T96 155 T120 155 T144 155 T168 155 T192 155 T216 155 T240 155 T264 155" fill="none" stroke="var(--accent)" strokeWidth="1.5" /><path d="M0 162 Q12 158 24 162 T48 162 T72 162 T96 162 T120 162 T144 162 T168 162 T192 162 T216 162 T240 162 T264 162" fill="none" stroke="var(--accent)" strokeWidth="1.5" /></g>
-		<path d="M40 130 A90 90 0 0 1 220 130" className="voyage-gauge-rainbow" stroke="url(#voyage-speed-gradient)" strokeOpacity=".34" />
-		<path d="M40 130 A90 90 0 0 1 220 130" className="voyage-gauge-track" /><path d="M40 130 A90 90 0 0 1 220 130" className={`voyage-gauge-fill ${phaseTimer ? `timer-${metrics.phase}` : ""}`} strokeDasharray={phaseTimer ? undefined : `${(GAUGE_LENGTH * position).toFixed(1)} ${GAUGE_LENGTH}`} />
-		<g className="voyage-gauge-ticks" stroke="var(--gauge-track)" strokeWidth="1.2"><line x1="45" y1="125" x2="45" y2="118" /><line x1="75" y1="75" x2="78" y2="82" /><line x1="110" y1="45" x2="110" y2="52" /><line x1="150" y1="45" x2="150" y2="52" /><line x1="185" y1="75" x2="182" y2="82" /><line x1="215" y1="125" x2="215" y2="118" /></g>
-		{!phaseTimer && <g className="voyage-gauge-needle" style={{ transform: `rotate(${angle}deg)` }}><line x1="130" y1="130" x2="130" y2="50" /><path d="M130 50 L126 58 L134 58 Z" fill="var(--voyage-sky)" /></g>}<circle cx="130" cy="130" r="7" className="voyage-gauge-hub" /><circle cx="130" cy="130" r="3.5" fill="var(--voyage-sky)" />
-		<g className="voyage-scene-layout" transform="translate(22 12)"><g className="voyage-scene-boat"><path className="voyage-wake-dash" d="M75 145 L95 145 M75 150 L95 150" fill="none" stroke="var(--accent)" strokeWidth="1" opacity=".4" /><path d="M95 143 L115 143 L120 139 Q122 137 121 141 Q117 150 100 150 Q92 150 92 145 Z" fill="var(--text)" /><path d="M103 143 L106 133 L113 133 L115 143 Z" fill="var(--accent)" /></g></g>
-	</svg><div className="voyage-gauge-readout" title={readingDetail}><span className="voyage-gauge-label">{compact && !phaseTimer && (metrics.streaming || settled) ? "船速" : label}</span><strong className="voyage-gauge-number">{gaugeNumber}</strong><small className="voyage-gauge-unit" title={unit}>{compact && !phaseTimer ? "tok/s" : unit}</small></div></div>
-		{!compact && <Sparkline trail={metrics.speedTrail} />}
-		{compact && <PhaseSummary metrics={metrics} />}
-	</section>;
-}
-
-/** The trailing speed curve: a filled area under a hairline, frozen when the run stops. */
-function Sparkline({ trail, ambient = false }: { trail: number[]; ambient?: boolean }) {
-	const shape = sparkGeometry(trail);
-	const quiet = ambient && !shape.line;
-	return <svg className={`voyage-spark${quiet ? " is-ambient" : ""}`} viewBox="0 0 100 28" preserveAspectRatio="none" aria-hidden="true">
-		{quiet && <title>暂无航速数据 · 海浪装饰</title>}
-		<defs><linearGradient id="voyage-spark-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="var(--voyage-sky)" stopOpacity=".38" /><stop offset="1" stopColor="var(--voyage-sky)" stopOpacity="0" /></linearGradient></defs>
-		<line className="voyage-spark-base" x1="0" y1="24" x2="100" y2="24" />
-		{quiet && <><path className="voyage-spark-area" d="M0 18 Q12.5 12 25 18 T50 18 T75 18 T100 18 V28 H0 Z" fill="url(#voyage-spark-fill)" /><path className="voyage-spark-line voyage-spark-wave" d="M0 18 Q12.5 12 25 18 T50 18 T75 18 T100 18" vectorEffect="non-scaling-stroke" /></>}
-		{shape.area && <path className="voyage-spark-area" d={shape.area} fill="url(#voyage-spark-fill)" />}
-		{shape.line && <polyline className="voyage-spark-line" points={shape.line} vectorEffect="non-scaling-stroke" />}
-		{shape.last && <circle className="voyage-spark-dot" cx={shape.last.x} cy={shape.last.y} r="1.4" vectorEffect="non-scaling-stroke" />}
-	</svg>;
-}
-
-type DialTone = "normal" | "warning" | "critical" | "supply" | "quiet";
-
-/** A floating instrument card: colored dot, big reading, soft bar. */
-function Dial({ name, tone = "normal", ratio, value, label, icon, caption, hint }: { name: "context" | "cache"; tone?: DialTone; ratio: number; value: string; label: string; icon: IconName; caption: ReactNode; hint: string }) {
-	const filled = `${Math.round(Math.min(1, Math.max(0, ratio)) * 100)}%`;
-	return <div className={`voyage-dial voyage-dial-${name} voyage-dial-${tone}`} role="group" aria-label={hint}>
-		<div className="voyage-dial-head"><span className="voyage-dial-icon" aria-hidden="true"><Icon name={icon} size={11} /></span><span className="voyage-dial-label" title={label}><span className="voyage-dial-label-full">{label}</span><span className="voyage-dial-label-short" aria-hidden="true">{label}</span></span></div>
-		<strong className="voyage-dial-value">{value}</strong>
-		<span className="voyage-dial-meter" aria-hidden="true"><i style={{ width: filled }} /></span>
-		<span className="voyage-dial-caption">{caption}</span>
-	</div>;
-}
-
-function ContextDial({ metrics }: { metrics: VoyageMetrics }) {
-	const context = metrics.context;
-	const ratio = context === undefined ? 0 : Math.min(1, Math.max(0, metrics.ratio));
-	const tone: DialTone = context === undefined ? "quiet" : ratio > .9 ? "critical" : ratio > .75 ? "warning" : "normal";
-	const capacity = metrics.limit === undefined ? "—" : number(metrics.limit);
-	const caption = context === undefined ? `— / ${capacity}` : `${number(context)} / ${capacity}`;
-	const percentage = context === undefined ? "—" : `${(metrics.ratio * 100).toFixed(1)}%`;
-	return <Dial name="context" tone={tone} ratio={ratio} value={percentage} label="上下文" icon="anchor" caption={caption} hint={`${metrics.contextEstimated ? "估算" : "实测"}上下文占用${context === undefined ? "" : ` ${percentage}`}，${caption} token`} />;
-}
-
-function CacheDial({ metrics }: { metrics: VoyageMetrics }) {
-	const { turn } = metrics;
-	const hitRate = turn.input !== undefined && turn.input > 0 ? turn.hitRate : undefined;
-	const total = turn.total ?? (turn.input === undefined && turn.output === undefined ? undefined : (turn.input ?? 0) + (turn.output ?? 0));
-	const ratio = hitRate === undefined ? 0 : Math.min(1, Math.max(0, hitRate));
-	// A cold cache is not a warning: only a real hit rate earns color.
-	const tone: DialTone = hitRate === undefined || hitRate <= 0 ? "quiet" : hitRate >= .7 ? "supply" : "normal";
-	const value = hitRate === undefined ? total === undefined ? "—" : number(total) : `${(ratio * 100).toFixed(1)}%`;
-	const priced = formatCosts(metrics.sessionCost, 4) !== "—";
-	const caption = priced ? <CostButton className="voyage-dial-cost" cost={metrics.sessionCost} label="会话费用" /> : turn.newInput === undefined ? "暂无费用" : `+${number(turn.newInput)} 新增`;
-	const hint = hitRate === undefined ? "本轮缓存命中率暂无数据" : `本轮缓存命中率 ${(ratio * 100).toFixed(1)}%，命中越多重复上下文越省`;
-	return <Dial name="cache" tone={tone} ratio={ratio} value={value} label="缓存命中" icon="heart" caption={caption} hint={hint} />;
-}
-
 const PHASE_LEGEND: { phase: VoyagePhase; label: string }[] = [{ phase: "response", label: "航行" }, { phase: "thinking", label: "思考" }, { phase: "tool", label: "工具" }];
 
 function PhaseBar({ timeline, compact = false }: { timeline?: VoyageTimeline; compact?: boolean }) {
@@ -136,15 +47,6 @@ function PhaseBar({ timeline, compact = false }: { timeline?: VoyageTimeline; co
 	const showDetails = !compact || totals.thinking > 0 || totals.tool > 0;
 	const hint = timeline ? phases.map(({ phase, label }) => `${label} ${formatDuration(totals[phase])}`).join(" · ") : "暂无阶段数据";
 	return <div className="voyage-phase-section"><div className="voyage-phase-bar" title={hint} aria-label={hint} role="img">{timeline?.segments.map((segment, index) => <span key={index} className={`phase-${segment.phase}`} style={{ width: `${Math.max(0, ((segment.endedAt ?? timeline.at) - segment.startedAt) / total * 100)}%` }} />)}</div>{showDetails && <div className="voyage-phase-legend">{phases.map(({ phase, label }) => <div key={phase} className={`${timeline && timeline.endedAt === undefined && timeline.phase === phase ? "current" : ""}${totals[phase] === 0 ? " is-zero" : ""}`}><div className="voyage-phase-label"><i className={`phase-${phase}`} />{label}</div><div className="voyage-phase-value">{timeline ? formatDuration(totals[phase]) : "—"}</div></div>)}</div>}</div>;
-}
-
-function PhaseSummary({ metrics }: { metrics: VoyageMetrics }) {
-	const { timeline } = metrics;
-	const duration = <span className="voyage-portal-duration"><Icon name="clock" size={11} /><span>耗时</span><strong>{metrics.turn.durationMs === undefined ? "—" : formatDuration(metrics.turn.durationMs)}</strong></span>;
-	if (timeline && (timeline.thinkingMs > 0 || timeline.toolMs > 0)) {
-		return <details className="voyage-portal-phases" aria-label="阶段耗时"><summary>{duration}<Icon name="chevron" size={10} /></summary><PhaseBar timeline={timeline} compact /></details>;
-	}
-	return <div className="voyage-portal-phases" role="group" aria-label="阶段耗时">{duration}<PhaseBar timeline={timeline} compact /></div>;
 }
 
 function toolIcon(tool: VoyageTool) {
@@ -226,8 +128,7 @@ function useReducedMotion(): boolean {
 	return reduced;
 }
 
-/** One mood drives both the banner and the stage: live progress wins over a
- *  pressed chip, and the reduced-motion preference wins over both. */
+/** Live progress wins over the squash reaction; reduced motion keeps a still pose. */
 function useCompanionMood(metrics: VoyageMetrics) {
 	const reduced = useReducedMotion();
 	const automatic = companionPose({
@@ -327,11 +228,6 @@ function Companion({ pose, press, reduced, sound }: { pose: CompanionPose | "sti
 		press("angry", SQUASH_MS);
 		announce("领航员被捏扁了，正在跺脚");
 	};
-	const prompt = (target: CompanionPose, label: string, voice: CompanionVoice) => {
-		speak(voice);
-		press(target, MANUAL_POSE_MS);
-		announce(`${label} · ${POSE_MOOD[target]}`);
-	};
 	return <div className={`voyage-companion pose-${pose}`}>
 		<div className="voyage-companion-stage" aria-label={`领航员，${pose === "still" ? "静止" : POSE_MOOD[pose]}，右键更换`} title="单击互动，双击捏扁，右键更换领航员" onContextMenu={(event) => { event.preventDefault(); file.current?.click(); }} onClick={poke} onDoubleClick={squash}>
 			<svg className="voyage-stage-decor" viewBox="0 0 200 200" aria-hidden="true">
@@ -349,9 +245,6 @@ function Companion({ pose, press, reduced, sound }: { pose: CompanionPose | "sti
 				<ellipse className="voyage-pedestal-ring" cx="80" cy="22" rx="58" ry="12" />
 				<ellipse className="voyage-pedestal-ripple" cx="80" cy="22" rx="34" ry="7" />
 			</svg>
-		</div>
-		<div className="voyage-companion-actions" role="group" aria-label="领航员互动">
-			{POSE_CHIPS.map(({ pose: target, label, short, icon, voice }) => <button key={target} type="button" className={`voyage-companion-chip chip-${target}${pose === target ? " is-active" : ""}`} aria-label={short} title={`${label} · ${POSE_MOOD[target]}`} onClick={() => prompt(target, label, voice)}><span className="voyage-chip-dot" aria-hidden="true"><Icon name={icon} size={11} /></span><span className="voyage-chip-label"><span className="voyage-chip-label-full">{label}</span><span className="voyage-chip-label-short">{short}</span></span></button>)}
 		</div>
 		<input ref={file} type="file" className="sr-only" aria-label="更换领航员" accept=".webp,.gif,.png,image/webp,image/gif,image/png" onChange={pick} />
 		{custom && <button type="button" className="voyage-companion-reset" title="恢复默认领航员" aria-label="恢复默认领航员" onClick={reset}><Icon name="refresh" size={14} /></button>}
@@ -435,7 +328,6 @@ export function VoyageRail({ metrics, onCollapse }: { metrics: VoyageMetrics; on
 	}, []);
 	const titleStatus = statusText(metrics);
 	const mood = useCompanionMood(metrics);
-	const moodPose = mood.pose === "still" ? "idle" : mood.pose;
 	const split = deck !== "companion" && deckSize !== undefined;
 	return <aside id="voyage-rail" className={`voyage-rail expanded voyage-${metrics.pressure} voyage-${metrics.activity}`} aria-label="Skiff 航行台">
 		<div ref={dashboard} className={`voyage-dashboard${deck === "companion" ? " voyage-dashboard-orbit" : ""}${split ? " split" : ""}`} style={split ? { "--voyage-deck-size": `${deckSize}px` } as CSSProperties : undefined}>
@@ -449,17 +341,7 @@ export function VoyageRail({ metrics, onCollapse }: { metrics: VoyageMetrics; on
 			{deck === "companion" ? <>
 				<section className="voyage-stage-orbit" aria-label="领航员环绕舞台">
 					<div className="voyage-orbit-scene">
-						<div className="voyage-mood" data-pose={moodPose} title={`领航员心情：${POSE_MOOD[moodPose]}；${titleStatus}`}><i className="voyage-mood-dot" aria-hidden="true" /><strong className="voyage-mood-text">{POSE_MOOD[moodPose].split(" · ").slice(1).join(" · ")} · {titleStatus}</strong></div>
-						<div className="voyage-bento" role="group" aria-label="领航员数据块">
-							<section className="voyage-portal-status voyage-portal-card" aria-label="本轮 Token">
-								<h2>本轮 Token</h2><b>{metrics.turn.total === undefined ? "—" : number(metrics.turn.total)}</b>
-								<div className="voyage-portal-trend" role="group" aria-label="航迹趋势"><span className="voyage-portal-token" title="本轮新增输入 Token">+{metrics.turn.newInput === undefined ? "—" : number(metrics.turn.newInput)}<small>新增</small></span><Sparkline trail={metrics.speedTrail} ambient /></div>
-							</section>
-							<section className="voyage-portal-vitals voyage-portal-card" aria-label="上下文与缓存命中">
-								<div className="voyage-dials"><ContextDial metrics={metrics} /><CacheDial metrics={metrics} /></div>
-							</section>
-							<Gauge metrics={metrics} compact />
-						</div>
+						<VoyageBento metrics={metrics} />
 						<section className="voyage-deck voyage-deck-companion" aria-label="领航员甲板">
 							<Companion pose={mood.pose} press={mood.press} reduced={mood.reduced} sound={sound} />
 						</section>
@@ -470,10 +352,7 @@ export function VoyageRail({ metrics, onCollapse }: { metrics: VoyageMetrics; on
 				</div>}
 			</> : <>
 			<div className="voyage-instruments">
-				<div className="voyage-bento">
-					<div className="voyage-dials" role="group" aria-label="领航员数据块"><ContextDial metrics={metrics} /><CacheDial metrics={metrics} /></div>
-					<Gauge metrics={metrics} />
-				</div>
+				<VoyageBento metrics={metrics} />
 				{metrics.timeline && <PhaseBar timeline={metrics.timeline} />}
 				<ToolCapsule metrics={metrics} />
 				{deck === "blank" && <ToolLog metrics={metrics} />}

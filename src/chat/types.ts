@@ -1,4 +1,5 @@
 import type { VoyageTimeline } from "./voyageTimeline";
+import type { TurnPerformance } from "./turnPerformance";
 import type { ExtensionDialog, QueueSnapshot } from "./interactions";
 
 /** Model descriptor as reported by pi's `get_available_models` / `get_state`. */
@@ -84,6 +85,8 @@ export interface ChatMessage {
 	turnResult?: string;
 	/** Wall-clock duration of the turn, attached when the agent run settles. */
 	durationMs?: number;
+	/** Completed-turn performance survives navigation and transcript restoration. */
+	performance?: TurnPerformance;
 	/** pi message time in ms; for the settling assistant message it is the turn's completion time. */
 	timestamp?: number;
 }

@@ -29,13 +29,16 @@ export function summarizeCosts(messages: ChatMessage[], models: ModelInfo[], cur
 			: candidates.length === 1 ? candidates[0] : !candidates.length && current && matches(current) ? current : undefined;
 		const inputPrice = model?.cost?.input;
 		const outputPrice = model?.cost?.output;
+		const cacheReadPrice = model?.cost?.cacheRead ?? inputPrice;
+		const cacheWritePrice = model?.cost?.cacheWrite ?? inputPrice;
 		if (inputPrice === undefined || outputPrice === undefined || !Number.isFinite(inputPrice) || !Number.isFinite(outputPrice) || inputPrice < 0 || outputPrice < 0 || (inputPrice === 0 && outputPrice === 0)) {
 			result.unconfigured = true;
 			continue;
 		}
+		if (cacheReadPrice === undefined || cacheWritePrice === undefined || !Number.isFinite(cacheReadPrice) || !Number.isFinite(cacheWritePrice) || cacheReadPrice < 0 || cacheWritePrice < 0) { result.unconfigured = true; continue; }
 		const usage = summarizeUsage([message]);
 		const currency = model?.currency ?? "CNY";
-		const cost = usage.inputTotal / 1e6 * inputPrice + usage.output / 1e6 * outputPrice;
+		const cost = (usage.input * inputPrice + usage.cacheRead * cacheReadPrice + usage.cacheWrite * cacheWritePrice + usage.output * outputPrice) / 1e6;
 		result.totals[currency] = (result.totals[currency] ?? 0) + cost;
 	}
 	return result;
@@ -49,6 +52,20 @@ export function formatCost(amount: number, currency: Currency): string {
 	const rounded = Number(amount.toPrecision(4));
 	const decimals = Math.max(0, 3 - Math.floor(Math.log10(rounded)));
 	return symbol + rounded.toFixed(Math.min(100, decimals)).replace(/0+$/, "");
+}
+
+/** Compare the same turn with cache reads charged as fresh input. Never add currencies. */
+export function cacheSavingsRatio(messages: ChatMessage[], models: ModelInfo[], current?: ModelInfo): number | undefined {
+	const actual = summarizeCosts(messages, models, current);
+	const full = summarizeCosts(messages.map((message) => message.usage ? { ...message, usage: {
+		...message.usage, input: message.usage.input + message.usage.cacheRead, cacheRead: 0,
+	} } : message), models, current);
+	const currencies = Object.keys(full.totals) as Currency[];
+	if (actual.unconfigured || full.unconfigured || currencies.length !== 1) return undefined;
+	const currency = currencies[0];
+	const baseline = full.totals[currency];
+	if (!baseline || actual.totals[currency] === undefined) return undefined;
+	return Math.max(0, Math.min(1, 1 - actual.totals[currency]! / baseline));
 }
 
 export function formatCosts(summary?: CostSummary, fractionDigits?: number): string {

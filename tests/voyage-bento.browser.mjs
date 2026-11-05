@@ -1,135 +1,117 @@
-// Simulated bridge and controlled clock; never contacts pi or a provider.
+// Controlled mock bridge; no pi, credentials or user workspace storage.
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 
-const { chromium } = createRequire(import.meta.url)("playwright");
-const browser = await chromium.launch({ headless: true, channel: process.env.SKIFF_BROWSER_CHANNEL ?? "msedge" });
-const base = process.argv[2] ?? "http://localhost:1424";
-const screenshots = new URL(process.argv[3] ?? "../features/014-voyage-panel-polish/screenshots/bento/", import.meta.url);
+const { chromium } = createRequire(new URL("../.playwright-cli/package.json", import.meta.url))("playwright-core");
+const base = process.argv[2] ?? "http://localhost:1421";
+const screenshots = new URL(process.argv[3] ?? "../.playwright-cli/weather-bento/", import.meta.url);
 await fs.mkdir(screenshots, { recursive: true });
+const browser = await chromium.launch({ headless: true, channel: process.env.SKIFF_BROWSER_CHANNEL ?? "msedge" });
 const page = await browser.newPage({ viewport: { width: 1200, height: 900 } });
 const errors = [];
 page.on("pageerror", (error) => errors.push(error.message));
-const user = { id: "user", role: "user", blocks: [{ kind: "text", text: "检查仪表盘" }], timestamp: 1000 };
-const usage = (input, cacheRead = 0, cacheWrite = 0, output = 0) => ({ input, cacheRead, cacheWrite, output, reasoning: 0, totalTokens: 999999 });
-const render = async (state) => { await page.evaluate((state) => window.voyageHarness.render(state), state); await page.waitForTimeout(60); };
-const advance = async (ms) => { await page.evaluate((ms) => window.voyageHarness.advance(ms), ms); await page.waitForTimeout(40); };
-const capture = (name) => page.screenshot({ path: fileURLToPath(new URL(name, screenshots)), fullPage: true, animations: "disabled" });
-const mood = () => page.locator(".voyage-mood").getAttribute("data-pose");
-const state = { sessionId: "bento", messages: [user, { id: "reply", role: "assistant", streaming: true, blocks: [{ kind: "text", text: "开始" }] }], isStreaming: true,
-	activeRun: { startedAt: 1000, promptId: "bento", turnId: "turn:user" }, model: { id: "mock", provider: "mock", contextWindow: 1000 } };
+const render = async (state) => { await page.evaluate((state) => window.voyageHarness.render(state), state); await page.waitForTimeout(50); };
+const advance = async (ms) => { await page.evaluate((ms) => window.voyageHarness.advance(ms), ms); await page.waitForTimeout(30); };
+const capture = (name) => page.locator(".voyage-dashboard").screenshot({ path: fileURLToPath(new URL(name, screenshots)), animations: "disabled" });
+const user = { id: "user", role: "user", blocks: [], timestamp: 1000 };
+const model = { id: "mock", provider: "mock", contextWindow: 200000 };
+const state = { sessionId: "weather", messages: [user, { id: "reply", role: "assistant", streaming: true, blocks: [{ kind: "thinking", text: "思考" }] }], isStreaming: true, activeRun: { startedAt: 1000, promptId: "weather", turnId: "turn:user" }, model };
+const snapshot = { routeId: "mock", providerKey: "mock", familyId: "mock", familyName: "Mock", modelId: "mock", relayId: "mock", relayName: "Mock", currency: "USD", inputCost: 2, outputCost: 4, cacheReadCost: .2 };
 
 try {
 	await page.goto(`${base}/tests/voyage.html`);
 	await page.waitForFunction(() => window.voyageHarness?.render);
-	// Banner: badge, title, run status pill, and a mood ribbon on its own line.
-	await render({ messages: [], isStreaming: false, model: state.model });
-	assert.equal(await page.locator(".voyage-badge").count(), 1);
-	assert.equal(await page.locator(".voyage-dashboard-header h1").textContent(), "Skiff 航行台");
-	assert.equal(await page.locator(".voyage-status-pill").textContent(), "空闲");
-	assert.equal(await page.locator(".voyage-mood-text").textContent(), "待机 · 顺风巡航");
-	assert.equal(await mood(), "idle");
-	// The mood keeps its own line, so the title and status pill still share a centre.
-	assert(await page.locator(".voyage-dashboard-header").evaluate((element) => {
-		const title = element.querySelector("h1").getBoundingClientRect();
-		const pill = element.querySelector(".voyage-pill").getBoundingClientRect();
-		return Math.abs(title.y + title.height / 2 - pill.y - pill.height / 2) < 1;
-	}));
-	assert.equal(await page.locator(".voyage-dial-value").first().textContent(), "—");
-	assert.equal(await page.locator(".voyage-dial-quiet").count(), 2);
-
-	// Bento plate: a frosted tray of white blocks beside the compact gauge card.
-	assert.equal(await page.locator(".voyage-card-vitals .voyage-dial").count(), 2);
-	assert.equal(await page.locator(".voyage-card-dial").count(), 1);
-	assert.equal(await page.locator(".voyage-spark").count(), 1);
-	assert((await page.locator(".voyage-gauge-fill").evaluate((element) => getComputedStyle(element).stroke)).includes("voyage-speed-gradient"));
-	for (const name of ["context", "cache"]) {
-		assert.equal(await page.locator(`.voyage-dial-${name} .voyage-dial-meter i`).count(), 1);
-		assert.equal(await page.locator(`.voyage-dial-${name} .voyage-dial-meter i`).evaluate((element) => element.style.width), "0%");
-	}
-	await capture("light-1200-empty.png");
-
-	// A leading reply fills the sparkline; a stopped turn freezes it.
-	await render(state); await advance(100);
-	for (let step = 0; step < 8; step++) {
-		state.messages[1].blocks[0].text += "并刷新航行仪表";
-		await render(state); await advance(100);
-	}
-	const points = await page.locator(".voyage-spark-line").getAttribute("points");
-	assert(points.split(" ").length >= 5, `sparkline did not grow: ${points}`);
-	assert.equal(await page.locator(".voyage-companion-art").count(), 1);
-	state.messages[1].streaming = false;
-	state.messages[1].usage = usage(100, 400, 0, 400);
-	state.isStreaming = false; delete state.activeRun;
-	await render(state); await advance(10000);
-	const frozen = await page.locator(".voyage-spark-line").getAttribute("points");
-	assert.equal(frozen.split(" ").length, points.split(" ").length);
-
-	// Context 60% fills three fifths of the meter, drives the mood ribbon meta and a
-	// warm cache hands the stage back happy.
-	state.messages = [user, { id: "reply", role: "assistant", streaming: false, blocks: [{ kind: "text", text: "完成" }], usage: usage(100, 450, 0, 50) }];
+	assert.equal(await page.locator(".voyage-weather-grid > section").count(), 4);
+	assert.deepEqual(await page.locator(".voyage-weather-card h2").allTextContents(), ["输出航速", "本轮消耗", "上下文容量", "缓存命中"]);
+	assert.equal(await page.locator(".voyage-weather-speed strong").textContent(), "—");
+	assert.equal(await page.locator(".voyage-weather-cache strong").textContent(), "—");
+	assert.equal(await page.locator(".voyage-weather-spark-line").count(), 0);
+	await render(state); await advance(380);
+	assert.match(await page.locator(".voyage-weather-speed p").textContent(), /等待模型首字/);
+	state.messages[1].blocks.push({ kind: "text", text: "开始" });
 	await render(state);
-	assert.equal((await page.evaluate(() => window.voyageHarness.metrics)).ratio, .6);
-	assert.equal(await page.locator(".voyage-dial-context .voyage-dial-meter i").evaluate((element) => element.style.width), "60%");
-	assert.equal(await page.locator(".voyage-mood-meta").textContent(), "60% 上下文");
-	assert.equal(await mood(), "happy");
-
-	// The failed tool capsule keeps its round icon and capsule border.
-	state.messages = [user, { id: "tools", role: "assistant", streaming: true, blocks: [
-		{ kind: "tool", id: "ok", name: "read", argsText: "", done: true },
-		{ kind: "tool", id: "bad", name: "inspect_repository_and_permissions", argsText: "D:/workspace/Skiff/", done: true },
-	] }];
-	state.isStreaming = true; state.activeRun = { startedAt: 9000, promptId: "tools", turnId: "turn:user" };
-	await render(state); await advance(100);
-	state.messages[1].blocks = [
-		{ kind: "tool", id: "ok", name: "read", argsText: "", done: true },
-		{ kind: "toolResult", id: "ok", name: "read", text: "完成", isError: false },
-		{ kind: "tool", id: "bad", name: "inspect_repository_and_permissions", argsText: "D:/workspace/Skiff/", done: true },
-		{ kind: "toolResult", id: "bad", name: "inspect_repository_and_permissions", text: "权限不足", isError: true },
-	];
-	state.messages[1].streaming = false;
-	state.isStreaming = false; delete state.activeRun;
-	await render(state);
-	await page.locator(".voyage-tool-log summary").click();
-	const rows = page.locator(".voyage-tool-log .voyage-tool-row");
-	assert.equal(await rows.count(), 2);
-	const shapes = await rows.evaluateAll((elements) => elements.map((element) => ({
-		radius: parseFloat(getComputedStyle(element).borderTopLeftRadius),
-		height: element.getBoundingClientRect().height,
-		icon: element.querySelector(".voyage-tool-icon").getBoundingClientRect(),
-		iconRadius: parseFloat(getComputedStyle(element.querySelector(".voyage-tool-icon")).borderTopLeftRadius),
-	})));
-	for (const shape of shapes) {
-		// radius-full rounds harder than the box, so both corners become a stadium.
-		assert(shape.radius > shape.height, JSON.stringify(shape));
-		assert.equal(Math.round(shape.icon.width), 20);
-		assert.equal(Math.round(shape.icon.height), 20);
-		assert(shape.iconRadius > shape.icon.height, JSON.stringify(shape));
+	for (let step = 0; step < 10; step++) {
+		await advance(100);
+		state.messages[1].blocks[1].text += "顺风航行";
+		await render(state);
 	}
-	assert.equal(await mood(), "angry");
-	assert.equal(await page.locator(".voyage-mood-text").textContent(), "生气 · 急需补给");
-
-	// Both themes and the narrow width keep the plate and capsules inside the rail.
+	assert.equal((await page.evaluate(() => window.voyageHarness.metrics)).ttftMs, 380);
+	assert(Number(await page.locator(".voyage-weather-speed strong").textContent()) > 0);
+	assert(Number(await page.evaluate(() => window.voyageHarness.metrics.turn.total)) > 0);
+	assert.match(await page.locator(".voyage-weather-spark-line").getAttribute("d"), / Q/);
+	const trail = await page.locator(".voyage-weather-spark-line").getAttribute("d");
+	state.isStreaming = false; delete state.activeRun;
+	state.messages[1].streaming = false;
+	state.messages[1].usage = { input: 2000, cacheRead: 32000, cacheWrite: 0, output: 2800, reasoning: 1200, totalTokens: 36800 };
+	state.messages[1].routeSnapshot = snapshot;
+	await render(state);
+	const frozen = await page.locator(".voyage-weather-speed strong").textContent();
+	assert.equal(frozen, "1600.0"); // 1600 answer tokens / 1s decode, not total turn time.
+	assert.equal(await page.locator(".voyage-weather-tokens strong").textContent(), "36.8k");
+	assert.equal(await page.locator(".voyage-weather-tokens p").textContent(), "思考 1.2k · 新增 3.6k");
+	assert.equal(await page.locator(".voyage-weather-context strong").textContent(), "18.4%");
+	assert.match(await page.locator(".voyage-weather-context p").textContent(), /36.8k \/ 200k · 空间极其充裕/);
+	assert.equal(await page.locator(".voyage-weather-cache strong").textContent(), "94.1%");
+	assert.match(await page.locator(".voyage-weather-cache p").textContent(), /节省约 73% 费用 · 复用 32k/);
+	await advance(10000);
+	assert.equal(await page.locator(".voyage-weather-speed strong").textContent(), frozen);
+	assert.equal(await page.locator(".voyage-weather-spark-line").getAttribute("d"), trail);
+	await page.locator(".voyage-weather-tokens").focus();
+	assert(await page.locator(".voyage-weather-tokens [role=tooltip]").isVisible());
+	assert.match(await page.locator(".voyage-weather-tokens [role=tooltip]").textContent(), /会话累计 36.8k Token；本轮预估费用/);
+	await page.locator(".voyage-weather-cache").hover();
+	assert(await page.locator(".voyage-weather-cache [role=tooltip]").isVisible());
+	await page.locator(".voyage-dashboard-header h1").click();
 	for (const theme of ["light", "dark"]) {
-		await page.evaluate((theme) => { document.documentElement.dataset.theme = theme; }, theme);
-		for (const [width, height] of [[1200, 900], [360, 780]]) {
-			await page.setViewportSize({ width, height }); await page.waitForTimeout(80);
-			assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
-			for (const selector of [".voyage-card-dial", ".voyage-dial-context", ".voyage-dial-cache", ".voyage-mood", ".voyage-tool-row"]) {
-				assert(await page.locator(selector).evaluateAll((elements) => elements.every((element) => element.scrollWidth <= element.clientWidth)), `${theme} ${width} ${selector}`);
-			}
-			await page.locator(".voyage-instruments").scrollIntoViewIfNeeded();
-			await capture(`${theme}-${width}-plate.png`);
+		await page.evaluate((theme) => document.documentElement.dataset.theme = theme, theme);
+		for (const width of [240, 260, 360, 480]) {
+			await page.evaluate((width) => document.querySelector(".chat-and-rail").style.setProperty("--voyage-width", `${width}px`), width);
+			const cards = await page.locator(".voyage-weather-card").evaluateAll((elements) => elements.map((element) => {
+				const box = element.getBoundingClientRect(); const style = getComputedStyle(element);
+				const summary = element.querySelector(".voyage-weather-summary").getBoundingClientRect();
+				const viz = element.querySelector(".voyage-weather-viz").getBoundingClientRect();
+				return { x: box.x, y: box.y, width: box.width, height: box.height, summaryTop: summary.top - box.top, summaryBottom: summary.bottom - box.top, summaryHeight: summary.height, vizTop: viz.top - box.top, overflow: element.scrollWidth > element.clientWidth, radius: style.borderRadius, blur: style.backdropFilter };
+			}));
+			assert.equal(cards.length, 4);
+			assert(Math.abs(cards[0].y - cards[1].y) < 1 && cards[2].y > cards[0].y);
+			assert(Math.max(...cards.map((card) => card.height)) - Math.min(...cards.map((card) => card.height)) < 1, JSON.stringify(cards));
+			assert(cards.every((card) => !card.overflow && card.radius === "16px" && card.blur === "blur(16px)"), JSON.stringify(cards));
+			assert(cards.every((card) => card.summaryHeight === 33), JSON.stringify(cards));
+			for (const key of ["summaryTop", "summaryBottom", "vizTop"]) assert(Math.max(...cards.map((card) => card[key])) - Math.min(...cards.map((card) => card[key])) < 1, `${key}: ${JSON.stringify(cards)}`);
+			await capture(`${theme}-${width}.png`);
 		}
 	}
-	await page.setViewportSize({ width: 1200, height: 900 });
-	await page.waitForTimeout(80);
+	const warning = structuredClone(state);
+	warning.messages[1].usage = { input: 170000, cacheRead: 0, cacheWrite: 0, output: 0, reasoning: 0, totalTokens: 170000 };
+	await render(warning);
+	assert.match(await page.locator(".voyage-weather-context p").textContent(), /已消耗 85% · 建议开启新话题/);
+	assert(await page.locator(".voyage-weather-context").evaluate((element) => element.classList.contains("is-warning")));
+	assert.equal(await page.locator(".voyage-weather-cache strong").textContent(), "0.0%");
+	assert.equal(await page.locator(".voyage-weather-cache p").textContent(), "本次全量传输 · 未命中缓存");
+	for (const name of ["账单明细", "纯净星空", "领航员"]) {
+		await page.getByRole("button", { name, exact: true }).click();
+		assert.equal(await page.locator(".voyage-weather-grid > section").count(), 4);
+	}
+	await page.locator(".voyage-companion-stage").click();
+	assert.equal(await page.locator(".voyage-companion-art").getAttribute("src"), "/companion/tap.webp");
+	await page.emulateMedia({ reducedMotion: "reduce" });
+	assert.equal(await page.locator(".voyage-weather-needle").evaluate((element) => getComputedStyle(element).transitionDuration), "0s");
+	await page.setViewportSize({ width: 360, height: 640 });
+	assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+	await capture("mobile.png");
+	// Full application previews run on the isolated Vite origin.
+	await page.setViewportSize({ width: 1440, height: 900 });
+	for (const theme of ["light", "dark"]) {
+		await page.goto(`${base}/tests/preview.html?theme=${theme}&fixture=voyage-moored`);
+		await page.getByRole("button", { name: "航行台", exact: true }).click();
+		await page.locator(".voyage-weather-grid").waitFor();
+		await page.screenshot({ path: fileURLToPath(new URL(`${theme}-app.png`, screenshots)), animations: "disabled" });
+	}
 	assert.deepEqual(errors, []);
-	console.log("PASS bento: banner badge/mood pill, gradient gauge card, sparkline growth+freeze, 12-cell batteries, capsule tool rows, 2 themes x 2 widths; 5 screenshots");
-	console.log(`Browser: ${browser.version()}`);
+	console.log("PASS weather bento: streaming/TTFT/decode, token growth/freeze, priced cache savings, warning/empty states, tooltip keyboard access, 3 decks, companion, reduced motion, light/dark × 4 widths, mobile and app previews");
 } catch (error) {
-	await capture("failure.png");
+	await page.screenshot({ path: fileURLToPath(new URL("failure.png", screenshots)), fullPage: true });
 	throw error;
 } finally { await browser.close(); }

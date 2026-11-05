@@ -11,6 +11,7 @@ import { initialSessionState, type ContextUsage, type ImageAttachment, type Mode
 import type { RuntimeOffer } from "./modelFamilies";
 import { resolveSelection } from "./modelFamilies";
 import { attachHistoricalSnapshots } from "./routeSnapshot";
+import { attachHistoricalPerformances, performancesForMessages, type TurnPerformance } from "./turnPerformance";
 import type { FamiliesConfig } from "./useModelFamilies";
 
 export interface SessionTarget {
@@ -20,6 +21,7 @@ export interface SessionTarget {
 	elapsedMs?: number;
 	model?: ModelInfo;
 	routeSnapshots?: Array<import("./types").RouteSnapshot | null>;
+	turnPerformances?: Array<TurnPerformance | null>;
 }
 
 export interface PiCommand {
@@ -367,7 +369,7 @@ export function usePiSession(target?: SessionTarget, runtimeOffers: readonly Run
 				// A failed set_model must never expose pi's default as an applied choice.
 				// History remains readable while the user repairs or replaces the selection.
 				const restoredModel = selectionError ? undefined : unavailableModel ? preferred : (parsedModel && preferred ? { ...parsedModel, offerId: preferred.offerId, routeId: preferred.routeId, modelId: preferred.modelId, familyId: preferred.familyId, familyName: preferred.familyName, relayId: preferred.relayId } : parsedModel);
-				const messages = attachHistoricalSnapshots(parseMessages(transcript.messages), selected.routeSnapshots);
+				const messages = attachHistoricalPerformances(attachHistoricalSnapshots(parseMessages(transcript.messages), selected.routeSnapshots), targetRef.current?.turnPerformances ?? selected.turnPerformances);
 				const user = [...messages].reverse().find((message) => message.role === "user");
 				const startedAt = Boolean(data.isStreaming) ? runStarted.current ?? user?.timestamp ?? Date.now() : undefined;
 				runStarted.current = startedAt;
@@ -463,7 +465,7 @@ export function usePiSession(target?: SessionTarget, runtimeOffers: readonly Run
 				forked = true;
 				const [transcript, data] = await Promise.all([rpc.request<{ messages: unknown }>({ type: "get_messages" }), rpc.request<Record<string, unknown>>({ type: "get_state" })]);
 				if (!ownsRpc(rpc)) return false;
-				setState((s) => ({ ...s, messages: parseMessages(transcript.messages), lastError: undefined }));
+				setState((s) => ({ ...s, messages: attachHistoricalPerformances(parseMessages(transcript.messages), performancesForMessages(s.messages)), voyageTimeline: undefined, lastError: undefined }));
 				// A fork creates a new branch projection; never reuse the old branch's
 				// context while the fresh stats request is in flight.
 				contextVersionRef.current++;

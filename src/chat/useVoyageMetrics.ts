@@ -1,15 +1,22 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { advanceVoyageContext, averageOutputSpeed, contextPressure, contextReminder, currentTurnMessages, currentTurnStats, sampleVoyage, startVoyage, turnOutput, visibleReplyUnits, voyageStatus, type VoyageActivity, type VoyageContext, type VoyagePhase, type VoyageSample } from "./sailing";
+import { advanceVoyageContext, contextPressure, contextReminder, currentTurnMessages, currentTurnStats, sampleVoyage, startVoyage, turnOutput, visibleOutputUnits, visibleReplyUnits, voyageStatus, type VoyageActivity, type VoyageContext, type VoyagePhase, type VoyageSample } from "./sailing";
 import { advanceTimeline, refreshTimeline, startTimeline, toolFailureStatus, type VoyageTimeline, type VoyageTool } from "./voyageTimeline";
 import type { ChatMessage, ContextUsage, ModelInfo, SessionState } from "./types";
-import { summarizeCosts, type CostSummary } from "./cost";
+import { cacheSavingsRatio, summarizeCosts, type CostSummary } from "./cost";
 import { SPARK_SAMPLES } from "./sparkline";
+import { decodeReading, decodeTiming } from "./voyageBento";
+import { summarizeUsage } from "./usage";
 
 export interface VoyageMetrics {
 	speed: number;
 	averageSpeed?: number;
 	peakSpeed?: number;
 	averageEstimated: boolean;
+	ttftMs?: number;
+	decodeMs?: number;
+	sessionTokens?: number;
+	cacheSavings?: number;
+	tokenTrail?: number[];
 	activity: VoyageActivity;
 	reminder?: string;
 	streaming: boolean;
@@ -56,7 +63,7 @@ export function useVoyageMetrics(messages: ChatMessage[], model: ModelInfo | und
 	input.current = { key, tokens, streaming, activeRun, turnMessages, error, abortedRunKey, eventTimeline };
 	const sampler = useRef<VoyageSample>();
 	// Only a running turn samples the sparkline; a finished curve stays frozen.
-	const trail = useRef<{ key: string; speeds: number[] }>({ key: "", speeds: [] });
+	const trail = useRef<{ key: string; speeds: number[]; tokens: number[]; units: number; at: number }>({ key: "", speeds: [], tokens: [], units: 0, at: 0 });
 	const ledger = useRef<VoyageTimeline>();
 	const contextLedger = useRef<VoyageContext>();
 	const [reading, setReading] = useState<{ sample: VoyageSample; timeline?: VoyageTimeline }>();
@@ -75,13 +82,23 @@ export function useVoyageMetrics(messages: ChatMessage[], model: ModelInfo | und
 		const sourceTimeline = current.eventTimeline?.key === current.key ? current.eventTimeline : undefined;
 		const interruptedSource = sourceTimeline && aborted && sourceTimeline.endedAt !== undefined && sourceTimeline.tools.some((tool) => tool.status === "missing" || tool.status === "running");
 		const timeline = interruptedSource ? { ...sourceTimeline, tools: sourceTimeline.tools.map((tool) => tool.status === "missing" || tool.status === "running" ? { ...tool, status: "interrupted" as const } : tool) } : sourceTimeline ? refreshTimeline(sourceTimeline, now) : ledger.current?.key === current.key ? ledger.current : current.streaming ? startTimeline(current.key, now, current.activeRun?.startedAt) : undefined;
-		const nextTimeline = sourceTimeline ? timeline : timeline ? advanceTimeline(timeline, { key: current.key, now, messages: current.turnMessages, running: current.streaming,
+		let nextTimeline = sourceTimeline ? timeline : timeline ? advanceTimeline(timeline, { key: current.key, now, messages: current.turnMessages, running: current.streaming,
 			unresolvedStatus: aborted ? "interrupted" : failed ? toolFailureStatus(current.error ?? "error") : "missing" }) : undefined;
+		// Transcript previews have no lifecycle output event; retain the first observed text.
+		if (!sourceTimeline && nextTimeline && current.streaming && current.tokens > previous.tokens && nextTimeline.outputStartedAt === undefined) nextTimeline = { ...nextTimeline, outputStartedAt: now };
 		const next = sampleVoyage(previous, current.tokens, now, current.streaming, nextTimeline?.phase === "response");
 		sampler.current = next;
 		ledger.current = nextTimeline;
-		if (trail.current.key !== current.key) trail.current = { key: current.key, speeds: [] };
-		if (current.streaming) trail.current.speeds = [...trail.current.speeds, Math.round(next.speed * 10) / 10].slice(-SPARK_SAMPLES);
+		if (trail.current.key !== current.key) trail.current = { key: current.key, speeds: [], tokens: [], units: current.activeRun?.promptId ? 0 : visibleOutputUnits(current.turnMessages), at: now };
+		if (current.streaming) {
+			trail.current.speeds = [...trail.current.speeds, Math.round(next.speed * 10) / 10].slice(-SPARK_SAMPLES);
+			const units = visibleOutputUnits(current.turnMessages);
+			if (now > trail.current.at) {
+				trail.current.tokens = [...trail.current.tokens, Math.max(0, units - trail.current.units) * 1000 / (now - trail.current.at)].slice(-SPARK_SAMPLES);
+				trail.current.units = units;
+				trail.current.at = now;
+			}
+		}
 		setReading({ sample: next, timeline: nextTimeline });
 	};
 	useEffect(() => { tick(); }, [key, tokens, streaming, turnMessages, error, abortedRunKey, eventTimeline]);
@@ -108,16 +125,30 @@ export function useVoyageMetrics(messages: ChatMessage[], model: ModelInfo | und
 	const turn = useMemo(() => belongs ? currentTurnStats(messages, pricingModels, model) : {}, [messages, pricingModels, model, belongs]);
 	const durationMs = timeline?.durationMs ?? turn.durationMs;
 	const output = turnOutput(turnMessages, streaming);
+	const savedPerformance = !streaming ? [...turnMessages].reverse().find((message) => message.performance)?.performance : undefined;
+	const timing = savedPerformance ? { ttftMs: savedPerformance.ttftMs, decodeMs: savedPerformance.decodeMs } : decodeTiming(timeline);
+	const pending = turnMessages.filter((message) => message.streaming || !message.usage);
+	const pendingOutput = Math.ceil(visibleOutputUnits(pending));
+	const reportedPending = summarizeUsage(pending).output;
+	const liveOutput = Math.max(0, pendingOutput - reportedPending);
+	const pendingReasoning = Math.ceil(visibleOutputUnits(pending.map((message) => ({ ...message, blocks: message.blocks.filter((block) => block.kind === "thinking") }))));
+	const reasoning = turn.reasoning === undefined ? pendingReasoning > 0 ? pendingReasoning : undefined : turn.reasoning + Math.max(0, pendingReasoning - (summarizeUsage(pending).reasoning ?? 0));
+	const average = savedPerformance ?? decodeReading(turnMessages, streaming, timing.decodeMs);
 	const statusDurationMs = timeline ? phase === "tool" ? timeline.toolMs : phase === "thinking" ? timeline.thinkingMs : timeline.durationMs : undefined;
 	// Cumulative usage (often zero while streaming) cannot measure instantaneous speed.
 	const speedEstimated = streaming || output.estimated;
 	const liveTurn = useMemo(() => streaming && durationMs !== undefined ? { turnId: activeRun?.turnId, durationMs } : undefined, [streaming, durationMs, activeRun?.turnId]);
 	const sessionCost = useMemo(() => summarizeCosts(messages, pricingModels, model), [messages, pricingModels, model]);
+	const cacheSavings = useMemo(() => streaming ? undefined : cacheSavingsRatio(turnMessages, pricingModels, model), [turnMessages, pricingModels, model, streaming]);
 	return {
 		speed: activity === "sailing" ? currentSample?.speed ?? 0 : 0,
-		averageSpeed: averageOutputSpeed(output.output, streaming ? durationMs : turn.durationMs ?? durationMs),
+		averageSpeed: average.averageSpeed,
 		peakSpeed: currentSample?.peak,
-		averageEstimated: output.estimated,
+		averageEstimated: average.averageEstimated,
+		...timing,
+		sessionTokens: summarizeUsage(messages).total + (streaming ? liveOutput : 0),
+		cacheSavings,
+		tokenTrail: trail.current.key === key ? trail.current.tokens : [],
 		activity,
 		reminder: contextReminder(data?.context, data?.limit, data?.estimated),
 		streaming,
@@ -129,7 +160,7 @@ export function useVoyageMetrics(messages: ChatMessage[], model: ModelInfo | und
 		phase,
 		arrived,
 		pressure: contextPressure(ratio),
-		turn: { ...turn, input: data.input, durationMs },
+		turn: { ...turn, input: data.input, durationMs, reasoning, output: streaming ? (turn.output ?? 0) + liveOutput : turn.output, total: streaming ? (turn.total ?? 0) + liveOutput : turn.total },
 		recentRequestInput: data.lastRequestInput,
 		liveTurn,
 		sessionCost,

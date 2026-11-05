@@ -5,6 +5,8 @@ import type { RpcEvent } from "../rpc/RpcClient";
 import type { RuntimeOffer } from "./modelFamilies";
 import { snapshotForResponse } from "./routeSnapshot";
 import { processEvent, type VoyageEvent } from "./voyageTimeline";
+import { decodeReading, decodeTiming } from "./voyageBento";
+import { performanceFingerprint } from "./turnPerformance";
 
 let seq = 0;
 const nextId = (prefix: string): string => `${prefix}_${++seq}_${Date.now().toString(36)}`;
@@ -356,6 +358,17 @@ export function reduce(state: SessionState, event: RpcEvent, options: ReducerOpt
 	for (const voyageEvent of events) {
 		if (!timeline && voyageEvent.type !== "run_start") timeline = processEvent(undefined, { type: "run_start", key: `run:${state.activeRun?.promptId ?? state.activeRun?.startedAt ?? voyageEvent.at}`, at: voyageEvent.at, phase: "thinking" });
 		timeline = processEvent(timeline, voyageEvent);
+	}
+	if ((event.type === "agent_settled" || event.type === "bridge_exit") && timeline?.outputStartedAt !== undefined) {
+		const userIndex = lastIndexOfRole(next.messages, "user");
+		const assistantIndex = lastAssistantIndex(next.messages);
+		if (userIndex >= 0 && assistantIndex > userIndex && (!state.activeRun?.turnId || state.activeRun.turnId === `turn:${next.messages[userIndex].id}`)) {
+			const timing = decodeTiming(timeline);
+			const performance = { fingerprint: performanceFingerprint(next.messages, assistantIndex), ttftMs: timing.ttftMs!, decodeMs: timing.decodeMs, ...decodeReading(next.messages.slice(userIndex + 1).filter((message) => message.role === "assistant"), false, timing.decodeMs) };
+			const messages = [...next.messages];
+			messages[assistantIndex] = { ...messages[assistantIndex], performance };
+			return { ...next, messages, voyageTimeline: timeline };
+		}
 	}
 	return { ...next, voyageTimeline: timeline };
 }

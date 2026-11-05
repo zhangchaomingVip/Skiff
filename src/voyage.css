@@ -138,19 +138,11 @@
 	.voyage-dashboard { position: relative; display: flex; flex-direction: column; width: 100%; min-width: 0; min-height: 100%; padding: 0 var(--space-3) var(--space-2-5); border: 0; border-radius: 0; background: transparent; color: var(--text); font-size: var(--font-size-sm); container-type: inline-size; }
 	.voyage-instruments { display: flex; flex-direction: column; flex: none; min-width: 0; }
 	/* A compact header leaves the card cluster and navigator room to breathe. */
-	.voyage-dashboard-header { min-height: 44px; margin-bottom: var(--space-1); }
+	.voyage-dashboard-header { min-height: 44px; margin-bottom: var(--space-2-5); }
 	.voyage-dashboard-header h1 { display: flex; align-items: center; gap: var(--space-1); min-width: 0; margin: 0; font-size: var(--font-size-base); font-weight: var(--font-weight-semibold); white-space: nowrap; }
 	.voyage-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 	.voyage-dashboard-header .voyage-pill { align-self: center; margin-top: 0; }
-	/* The mood floats above the navigator as a small speech bubble. */
 	.voyage-badge { display: grid; place-items: center; width: 20px; height: 20px; flex: none; border: 1px solid var(--voyage-tray-border); border-radius: var(--radius-full); background: var(--voyage-inset-bg); color: var(--voyage-sky); box-shadow: var(--voyage-inset-shadow); }
-	.voyage-mood { position: absolute; top: 2%; left: 2%; z-index: 2; display: flex; align-items: center; gap: var(--space-1-5); width: fit-content; max-width: 96%; min-width: 0; margin: 0; padding: var(--space-1-5) var(--space-3); border: 1px solid var(--voyage-island-border); border-radius: var(--radius-full); background: var(--voyage-island-bg); color: var(--secondary); font-size: var(--font-size-xs); line-height: 1.4; box-shadow: var(--voyage-island-shadow); backdrop-filter: blur(12px); pointer-events: none; }
-	.voyage-mood::after { content: ""; position: absolute; top: 100%; right: 22%; width: 10px; height: 7px; background: var(--voyage-island-bg); clip-path: polygon(0 0, 100% 0, 30% 100%); }
-	.voyage-mood-dot { width: 6px; height: 6px; flex: none; border-radius: var(--radius-full); background: var(--voyage-sky); animation: voyage-mood-pulse 2.6s ease-in-out infinite; }
-	.voyage-mood[data-pose="sleep"] .voyage-mood-dot { background: var(--secondary); }
-	.voyage-mood[data-pose="eat"] .voyage-mood-dot { background: var(--voyage-butter); }
-	.voyage-mood[data-pose="angry"] .voyage-mood-dot { background: var(--voyage-coral); animation-duration: 1.1s; }
-	.voyage-mood-text { min-width: 0; overflow: hidden; color: var(--text); font-weight: var(--font-weight-medium); text-overflow: ellipsis; white-space: nowrap; }
 	@keyframes voyage-mood-pulse { 50% { opacity: .35; } }
 	.voyage-status-pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border: 1px solid var(--voyage-tray-border); border-radius: var(--radius-full); background: var(--voyage-inset-bg); box-shadow: var(--voyage-inset-shadow); color: var(--secondary); font-size: var(--font-size-sm); }
 	.voyage-status-dot { display: inline-block; width: 6px; height: 6px; flex: none; border-radius: var(--radius-full); background: var(--voyage-sky); }
@@ -159,51 +151,6 @@
 	.voyage-status-dot.response { background: var(--voyage-sky); }
 	.voyage-status-pill .voyage-status-dot.stopped { background: var(--secondary); }
 	@keyframes voyage-pulse { 50% { opacity: .4; } }
-	/* Soft surfaces and spacing separate the readings without card outlines. */
-	.voyage-bento { display: grid; grid-template-columns: minmax(0, 1.12fr) minmax(0, .88fr); gap: var(--space-2); align-items: stretch; margin-top: var(--space-1); }
-	.voyage-dial, .voyage-card-dial { border: 0; border-radius: var(--voyage-island-radius); background: var(--voyage-card-bg); }
-	/* The dial card is deliberately small: the stage owns the height. */
-	.voyage-card-dial { display: flex; flex-direction: column; justify-content: space-between; padding: var(--space-1) var(--space-1) var(--space-1-5); }
-	.voyage-gauge-scene { position: relative; width: 100%; margin: 0; }
-	.voyage-gauge-svg { display: block; width: 100%; max-width: 320px; height: auto; margin: 0 auto; overflow: visible; }
-	/* A chunky jelly ring: at ~90px wide the stroke has to carry the card. The
-	   rainbow base ring is decorative; the sampled track is a hairline inside it,
-	   so the contrast guard still reads a real colour. */
-	.voyage-gauge-rainbow, .voyage-gauge-track, .voyage-gauge-fill { fill: none; stroke-linecap: round; }
-	.voyage-gauge-rainbow { stroke-width: 12; stroke-opacity: .38; }
-	[data-theme="light"] .voyage-gauge-rainbow { stroke-opacity: .48; }
-	.voyage-gauge-track { stroke: var(--gauge-track); stroke-width: 1.5; }
-	/* Blue → mint → amber → coral: the arc reads as a sea chart, not a warning lamp. */
-	.voyage-gauge-fill { stroke: url(#voyage-speed-gradient); stroke-width: 12; transition: stroke-dasharray .3s ease-out; }
-	/* The trailing speed curve under the reading. */
-	.voyage-spark { display: block; width: 100%; height: 22px; margin-top: 2px; overflow: visible; }
-	.voyage-spark-base { stroke: var(--voyage-track-soft); stroke-width: 1; stroke-dasharray: 3 5; }
-	.voyage-spark-line { fill: none; stroke: var(--voyage-sky); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
-	.voyage-spark-dot { fill: var(--voyage-sky); }
-	.voyage-spark.is-ambient { opacity: .65; }
-	.voyage-gauge-fill.timer-thinking { stroke: var(--voyage-sky); stroke-dasharray: 70 999 !important; animation: voyage-phase-sweep 2s linear infinite; }
-	.voyage-gauge-fill.timer-tool { stroke: var(--voyage-butter); stroke-dasharray: 70 999 !important; animation: voyage-phase-sweep 2s linear infinite; }
-	@keyframes voyage-phase-sweep { to { stroke-dashoffset: -283; } }
-	.voyage-gauge-label, .voyage-gauge-number, .voyage-gauge-unit { fill: var(--secondary); color: var(--secondary); font-family: inherit; }
-	/* Compact readout: the caption rides above the number and the unit sits inline. */
-	.voyage-gauge-readout { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: center; column-gap: 3px; margin-top: 2px; }
-	.voyage-gauge-label { flex-basis: 100%; order: -1; color: var(--secondary); font-size: var(--font-size-xs); letter-spacing: .3px; line-height: 1.4; }
-	.voyage-gauge-number { color: var(--text); font-size: var(--font-size-2xl); line-height: 1.1; font-weight: var(--font-weight-semibold); font-variant-numeric: tabular-nums; }
-	.voyage-gauge-unit { color: var(--muted); font-size: var(--font-size-xs); }
-	/* Ice-blue needle and a white-cored hub, like a toy compass. */
-	.voyage-gauge-needle { transform-origin: 130px 130px; transition: transform .3s ease-out; }
-	.voyage-gauge-needle line { stroke: var(--voyage-sky); stroke-width: 4.5; stroke-linecap: round; }
-	.voyage-gauge-hub { fill: var(--voyage-inset-bg); stroke: var(--voyage-sky); stroke-width: 3; }
-	.voyage-wave-move { animation: voyage-wave-slide 2.5s linear infinite; }
-	.voyage-wave { animation: none; }
-	.voyage-sailing .voyage-wave { animation: voyage-wave-slide 2.5s linear infinite; }
-	.voyage-wave-move path { animation: voyage-wave-slide 2.5s linear infinite; }
-	/* Outer SVG group places the scene; only the inner group animates. */
-	.voyage-scene-boat { animation: voyage-boat-bob 1.8s ease-in-out infinite; }
-	.voyage-wake-dash { stroke-dasharray: 9 18; animation: voyage-wake-dash 1.2s linear infinite; }
-	@keyframes voyage-boat-bob { from, to { transform: translateY(0); } 50% { transform: translateY(-3px); } }
-	@keyframes voyage-wave-slide { to { transform: translateX(-24px); } }
-	@keyframes voyage-wake-dash { to { stroke-dashoffset: -27px; } }
 	/* One compact strip: a 4px phase ribbon over three inline legends. */
 	.voyage-phase-section { margin: 8px 0 0; }
 	.voyage-phase-bar { display: flex; height: 4px; margin-bottom: 5px; border-radius: var(--radius-full); background: var(--voyage-track-soft); overflow: hidden; }
@@ -251,36 +198,6 @@
 	.voyage-tool-row.tool-completed .voyage-tool-time, .voyage-tool-row.tool-failed .voyage-tool-time, .voyage-tool-row.tool-timeout .voyage-tool-time { color: var(--secondary); font-weight: var(--font-weight-medium); }
 	.voyage-tool-row.tool-short .voyage-tool-time { color: transparent; }
 	@keyframes voyage-tool-fall { from { opacity: 0; transform: translateY(-20px) scale(.92); } to { opacity: 1; transform: translateY(0) scale(1); } }
-	/* Each small island holds its own reading and jelly capsule meter. */
-	.voyage-dials { display: grid; gap: var(--space-1-5); margin: 0; }
-	.voyage-dial { display: grid; gap: var(--space-0-5); min-width: 0; padding: var(--space-2); }
-	.voyage-dial-head { display: flex; align-items: center; gap: var(--space-1); min-width: 0; }
-	.voyage-dial-label { min-width: 0; overflow: hidden; color: var(--secondary); font-size: var(--font-size-xs); line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
-	.voyage-dial-label-short { display: none; }
-	.voyage-dial-icon { display: grid; place-items: center; width: 16px; height: 16px; flex: none; border-radius: var(--radius-full); background: color-mix(in srgb, var(--voyage-sky) 18%, transparent); color: var(--accent); }
-	.voyage-dial-value { color: var(--text); font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold); line-height: 1.2; font-variant-numeric: tabular-nums; white-space: nowrap; }
-	/* One soft capsule instead of a battery of cells. */
-	.voyage-dial-meter { display: block; height: 7px; margin: 1px 0; border-radius: var(--radius-full); background: var(--voyage-track-soft); overflow: hidden; }
-	.voyage-dial-meter i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--voyage-sky), var(--voyage-mint)); }
-	.voyage-dial-caption { max-width: 100%; overflow: hidden; color: var(--secondary); font-size: var(--font-size-xs); line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
-	.voyage-dial-warning .voyage-dial-icon { background: color-mix(in srgb, var(--color-warning) 18%, transparent); color: var(--color-warning); }
-	.voyage-dial-warning .voyage-dial-value { color: var(--color-warning); }
-	.voyage-dial-warning .voyage-dial-meter i { background: linear-gradient(90deg, color-mix(in srgb, var(--color-warning) 55%, var(--color-success)), var(--color-warning)); }
-	.voyage-dial-critical .voyage-dial-icon { background: color-mix(in srgb, var(--danger) 18%, transparent); color: var(--danger); }
-	.voyage-dial-critical .voyage-dial-value { color: var(--danger); }
-	.voyage-dial-critical .voyage-dial-meter i { background: linear-gradient(90deg, color-mix(in srgb, var(--danger) 55%, var(--color-warning)), var(--danger)); }
-	.voyage-dial-supply .voyage-dial-icon { background: color-mix(in srgb, var(--color-success) 18%, transparent); color: var(--color-success); }
-	.voyage-dial-supply .voyage-dial-value { color: var(--color-success); }
-	.voyage-dial-supply .voyage-dial-meter i { background: linear-gradient(90deg, var(--voyage-coral), var(--voyage-butter)); }
-	.voyage-dial-quiet .voyage-dial-icon { background: color-mix(in srgb, var(--border) 60%, transparent); color: var(--secondary); }
-	.voyage-dial-quiet .voyage-dial-value { color: var(--secondary); }
-	.voyage-dial-quiet .voyage-dial-meter i { background: var(--gauge-track); }
-	/* Cache supply keeps its coral heart in every state; readings retain semantic colours. */
-	.voyage-dial-cache .voyage-dial-icon { background: color-mix(in srgb, var(--voyage-coral) 20%, transparent); color: var(--voyage-coral); }
-	.voyage-dial-cost { max-width: 100%; padding: 0; border: 0; background: transparent; color: var(--secondary); font: inherit; cursor: pointer; }
-	.voyage-dial-cost:hover:not(:disabled) { color: var(--accent); }
-	.voyage-dial-cost:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-	.voyage-dial-cost:disabled { color: var(--chat-meta); cursor: default; }
 	.voyage-turn-header { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: var(--font-size-base); }
 	.voyage-turn-header strong, .voyage-turn-header span { font-weight: var(--font-weight-semibold); }
 	.voyage-turn-header span { flex-shrink: 0; font-size: var(--font-size-sm); font-variant-numeric: tabular-nums; }
@@ -326,12 +243,8 @@
 	.voyage-deck-bill { flex: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; padding: 0 0 4px; }
 	.voyage-deck-bill .voyage-turn { margin-top: 0; padding-top: 0; border-top: 0; }
 	.voyage-deck-bill .voyage-tool-log { margin-top: 10px; }
-	/* The stage owns the rail: the art takes the full column width and floats in the
-	   same water scene as the cards. */
-	/* A size container: the stage measures itself against the deck's width *and*
-	   height, so a short window shrinks the navigator instead of pushing the pet
-	   chips below the fold. */
-	.voyage-companion { --companion-size: min(420px, 56vh); position: relative; flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: var(--space-1-5); min-height: 0; padding: var(--space-6) 0 var(--space-2); container-type: size; }
+	/* A larger portrait fills the lower deck while short windows keep it bounded. */
+	.voyage-companion { --companion-size: min(96cqw, 320px, max(0px, calc(100dvh - 420px))); position: relative; flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 0; padding: var(--space-6) 0 var(--space-2); container-type: size; }
 	/* A soft pool of light under the navigator ties the stage to the water scene. */
 	.voyage-companion-stage::before { content: ""; position: absolute; inset: auto 8% -3%; height: 22%; background: var(--voyage-stage-glow); pointer-events: none; }
 	.voyage-companion-stage { position: relative; display: flex; align-items: flex-end; justify-content: center; flex: none; width: min(var(--companion-size), 100cqw, max(0px, calc(100cqh - 50px))); aspect-ratio: 1; padding: 0; border: 0; background: transparent; cursor: pointer; touch-action: manipulation; user-select: none; }
@@ -362,78 +275,21 @@
 	/* Dozing off: two drifting z's above the head. */
 	.voyage-companion-bubble { position: absolute; top: 6%; right: 10%; z-index: 2; color: var(--secondary); font-size: var(--font-size-sm); letter-spacing: .14em; pointer-events: none; animation: voyage-doze 3s ease-in-out infinite; }
 	@keyframes voyage-doze { 0%, 100% { opacity: 0; transform: translateY(4px) scale(.92); } 45% { opacity: 1; transform: translateY(-6px) scale(1); } }
-	/* Individual pills rest directly beneath the navigator.
-	   One press borrows the pose until live progress takes it back. */
-	.voyage-companion-actions { position: relative; z-index: 2; display: flex; flex: none; align-items: center; justify-content: center; gap: var(--space-0-5); max-width: 100%; margin-top: 0; padding: 0; }
-	.voyage-companion-chip { display: inline-flex; align-items: center; gap: var(--space-0-5); height: 30px; padding: 0 var(--space-1) 0 var(--space-0-5); border: 1px solid var(--voyage-inset-border); border-radius: var(--radius-full); background: var(--voyage-card-bg); color: var(--text); font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); line-height: 1; white-space: nowrap; box-shadow: none; cursor: pointer; transition: transform var(--transition-fast), background-color var(--transition-fast), border-color var(--transition-fast); }
-	.voyage-chip-dot { display: grid; place-items: center; width: 16px; height: 16px; flex: none; color: var(--accent); }
-	.voyage-companion-chip:hover { transform: translateY(-1px); background: var(--hover); color: var(--text); }
-	.voyage-companion-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-	.voyage-companion-chip.is-active { border-color: var(--voyage-island-border); background: color-mix(in srgb, var(--accent) 8%, transparent); color: var(--text); }
 	.voyage-companion-sound { flex: none; }
 	.voyage-companion-sound[aria-pressed="true"] { color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
 	@container (max-width: 215px) {
-		.voyage-companion-chip { gap: var(--space-px); padding: 0 var(--space-px); }
 		.voyage-companion-sound { padding: 0 var(--space-0-5); }
 	}
 	.voyage-companion-reset { position: absolute; top: 0; right: 0; z-index: 2; display: grid; place-items: center; width: 20px; height: 20px; padding: 0; border: 0; border-radius: var(--radius-md); background: transparent; color: var(--chat-meta); cursor: pointer; }
 	.voyage-companion-reset:hover { color: var(--text); background: var(--hover); }
-	/* Compact instruments stay above the navigator; the stage and Dock flow
-	   together so expanded phase details never overlap the character. */
+	/* The lower scene expands with the rail and centers the navigator in its space. */
 	.voyage-dashboard-orbit { flex: 1 0 auto; height: auto; gap: 0; }
 	.voyage-dashboard-orbit .voyage-dashboard-header { flex: none; }
-	.voyage-stage-orbit { position: relative; flex: 1 0 auto; min-width: 0; margin-top: var(--space-2); isolation: isolate; container-type: inline-size; }
-	.voyage-orbit-scene { --orbit-portrait: min(100cqw, 456px, max(216px, calc(100dvh - 368px)));
-		position: relative; display: flex; flex-direction: column; width: 100%; min-height: 0; }
-	.voyage-stage-orbit .voyage-bento { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: minmax(104px, auto) auto; align-items: stretch; gap: var(--space-2); margin: 0; }
-	.voyage-portal-card { min-width: 0; padding: var(--space-2); border: 0; border-radius: var(--radius-lg); background: var(--voyage-card-bg); }
-	.voyage-portal-card h2, .voyage-portal-gauge-title { margin: 0; color: var(--secondary); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); }
-	.voyage-portal-status { grid-column: 1; grid-row: 1; display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-1); }
-	.voyage-portal-status > b { font-size: var(--font-size-2xl); font-weight: var(--font-weight-semibold); font-variant-numeric: tabular-nums; }
-	.voyage-portal-vitals { grid-column: 1 / -1; grid-row: 2; display: flex; align-items: center; padding: var(--space-2) var(--space-3); }
-	.voyage-portal-vitals .voyage-dials { width: 100%; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
-	.voyage-stage-orbit .voyage-dial { gap: var(--space-1); padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
-	.voyage-stage-orbit .voyage-dial-head { gap: 0; }
-	.voyage-stage-orbit .voyage-dial-icon { display: none; }
-	.voyage-stage-orbit .voyage-dial-value { font-size: var(--font-size-2xl); }
-	.voyage-stage-orbit .voyage-dial-caption { display: none; }
-	.voyage-stage-orbit .voyage-dial-meter { height: 3px; }
-	.voyage-stage-orbit .voyage-card-dial { grid-column: 2; grid-row: 1; gap: var(--space-1); min-width: 0; padding: var(--space-2); border-radius: var(--radius-lg); }
-	.voyage-stage-orbit .voyage-gauge-scene { display: flex; align-items: center; gap: var(--space-1); margin: auto 0; }
-	.voyage-stage-orbit .voyage-gauge-svg { flex: none; width: 40%; max-width: 64px; }
-	.voyage-stage-orbit .voyage-gauge-label { display: none; }
-	.voyage-stage-orbit .voyage-gauge-readout { flex: 1; min-width: 0; gap: var(--space-0-5); }
-	.voyage-stage-orbit .voyage-gauge-number { font-size: var(--font-size-2xl); }
-	.voyage-stage-orbit .voyage-gauge-unit { text-align: center; overflow-wrap: anywhere; }
-	.voyage-portal-trend { width: 100%; margin-top: auto; }
-	.voyage-portal-token { display: flex; align-items: baseline; justify-content: flex-end; gap: var(--space-1); color: var(--secondary); font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); font-variant-numeric: tabular-nums; }
-	.voyage-portal-token small { color: var(--secondary); font-size: var(--font-size-xs); font-weight: var(--font-weight-regular); }
-	.voyage-portal-trend .voyage-spark { height: 14px; margin-top: var(--space-0-5); }
-	.voyage-portal-phases { margin-top: auto; color: var(--secondary); font-size: var(--font-size-xs); }
-	.voyage-portal-duration { display: flex; align-items: center; gap: var(--space-1); font-variant-numeric: tabular-nums; }
-	.voyage-portal-duration > strong { margin-left: auto; color: var(--text); font-weight: var(--font-weight-medium); }
-	.voyage-portal-duration svg { flex: none; }
-	.voyage-portal-phases > summary { display: flex; align-items: center; gap: var(--space-1); list-style: none; cursor: pointer; }
-	.voyage-portal-phases > summary::-webkit-details-marker { display: none; }
-	.voyage-portal-phases > summary .voyage-portal-duration { flex: 1; }
-	.voyage-portal-phases > summary > svg { flex: none; transform: rotate(90deg); }
-	.voyage-portal-phases[open] > summary > svg { transform: rotate(-90deg); }
-	.voyage-portal-phases > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--radius-sm); }
-	.voyage-portal-phases .voyage-phase-section { width: 100%; margin: var(--space-1) 0 0; }
-	.voyage-portal-phases .voyage-phase-bar { margin: 0; height: 3px; }
-	.voyage-portal-phases .voyage-phase-legend { grid-template-columns: minmax(0, 1fr); gap: var(--space-1); margin-top: var(--space-2); }
-	.voyage-portal-phases .voyage-phase-legend > div { justify-content: space-between; gap: var(--space-1); }
-	.voyage-portal-phases .voyage-phase-label { gap: var(--space-1); }
+	.voyage-stage-orbit { position: relative; display: flex; flex-direction: column; flex: 1 0 auto; min-width: 0; isolation: isolate; container-type: inline-size; }
+	.voyage-orbit-scene { position: relative; display: flex; flex-direction: column; flex: 1; width: 100%; min-height: 0; }
 	.voyage-stage-orbit .voyage-deck-companion { flex: 1 0 auto; margin: var(--space-8) 0 0; padding: 0; }
-	.voyage-stage-orbit .voyage-companion { width: 100%; flex: 1; justify-content: flex-start; gap: var(--space-3); padding: 0 0 var(--space-3); container-type: normal; }
-	.voyage-stage-orbit .voyage-companion-stage { width: var(--orbit-portrait); }
-	.voyage-stage-orbit .voyage-companion-actions { width: fit-content; max-width: 100%; gap: var(--space-1); }
-	.voyage-stage-orbit .voyage-companion-chip { min-width: 0; height: 32px; gap: var(--space-1); padding: 0 var(--space-2); color: var(--secondary); font-size: var(--font-size-sm); }
-	.voyage-chip-label { min-width: 0; }
-	.voyage-chip-label-full { display: none; }
-	.voyage-chip-label-short { display: inline; }
-	.voyage-stage-orbit .voyage-mood { position: static; flex: none; max-width: 100%; margin: 0 0 var(--space-3); padding: 0 var(--space-1); border: 0; border-radius: 0; background: transparent; box-shadow: none; backdrop-filter: none; font-size: var(--font-size-sm); }
-	.voyage-stage-orbit .voyage-mood::after { display: none; }
+	.voyage-stage-orbit .voyage-companion { width: 100%; flex: 1; padding: 0 0 var(--space-3); container-type: normal; }
+	.voyage-stage-orbit .voyage-companion-stage { width: var(--companion-size); }
 	.voyage-stage-orbit .voyage-companion-bubble { top: 15%; right: 6%; }
 	.voyage-orbit-log { flex: none; min-height: 0; max-height: 240px; overflow: auto; overscroll-behavior: contain; }
 	@container (max-width: 320px) {
@@ -442,10 +298,43 @@
 		.voyage-deck-switch { gap: var(--space-px); }
 		.voyage-deck-mode { width: 20px; }
 		.voyage-dashboard-header .voyage-collapse { width: 18px; min-width: 18px; }
-		.voyage-stage-orbit .voyage-gauge-number { font-size: var(--font-size-xl); }
-		.voyage-portal-card { padding: var(--space-2); }
-		.voyage-stage-orbit .voyage-companion-chip { padding: 0 var(--space-1-5); }
 	}
+	/* Four equal weather instruments share one vertical rhythm in every deck. */
+	.voyage-weather-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: 1fr; gap: var(--space-2); min-width: 0; }
+	.voyage-weather-card { position: relative; display: grid; grid-template-rows: 17px 36px 32px 33px; align-content: space-between; gap: var(--space-1); min-width: 0; padding: var(--space-2-5) var(--space-3); border: 1px solid var(--voyage-glass-border); border-radius: var(--radius-2xl); background: var(--voyage-glass-bg); box-shadow: var(--voyage-glass-shadow); backdrop-filter: blur(16px); }
+	.voyage-weather-card h2 { display: flex; align-items: center; gap: var(--space-1); min-width: 0; margin: 0; color: var(--secondary); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); line-height: 1.4; }
+	.voyage-weather-card h2 svg { flex: none; opacity: .75; }
+	.voyage-weather-card h2 span { min-width: 0; }
+	.voyage-weather-reading { display: flex; flex-wrap: wrap; align-items: baseline; align-content: start; column-gap: var(--space-0-5); min-width: 0; font-variant-numeric: tabular-nums; }
+	.voyage-weather-reading strong { color: var(--voyage-reading); font-size: clamp(var(--font-size-xl), 6cqi, var(--font-size-voyage-reading)); font-weight: var(--font-weight-medium); line-height: 1.15; letter-spacing: -.025em; white-space: nowrap; }
+	.voyage-weather-reading small { color: var(--secondary); font-size: var(--font-size-xs); line-height: 1.15; }
+	.voyage-weather-viz { display: flex; align-items: center; min-width: 0; height: 32px; }
+	.voyage-weather-summary { display: flex; flex-wrap: wrap; align-content: end; align-self: end; min-height: 33px; height: 33px; margin: 0; color: var(--secondary); font-size: var(--font-size-xs); line-height: 1.5; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+	.voyage-weather-summary > span { display: inline-block; max-width: 100%; }
+	.voyage-weather-gauge { display: block; width: 100%; height: 32px; overflow: visible; }
+	.voyage-weather-arc { fill: none; stroke: var(--voyage-track-soft); stroke-width: 3; }
+	.voyage-weather-ticks { stroke: var(--secondary); stroke-width: 1; opacity: .5; }
+	.voyage-weather-needle { transform-origin: 56px 31px; transition: transform .35s ease-out; }
+	.voyage-weather-needle path { fill: none; stroke: var(--voyage-sky); stroke-width: 2; stroke-linecap: round; }
+	.voyage-weather-needle circle, .voyage-weather-hub { fill: var(--voyage-sky); }
+	.voyage-weather-spark { display: block; width: 100%; height: 32px; overflow: visible; }
+	.voyage-weather-spark-line { fill: none; stroke: var(--voyage-sky); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+	.voyage-weather-spark-empty { fill: none; stroke: var(--voyage-track-soft); stroke-width: 1; stroke-dasharray: 2 4; }
+	.voyage-weather-context-bar, .voyage-weather-cache-bar { position: relative; width: 100%; height: 6px; border-radius: var(--radius-full); }
+	.voyage-weather-context-bar { margin: 0 var(--space-1); width: calc(100% - var(--space-2)); background: var(--voyage-context-spectrum); }
+	.voyage-weather-context-bar i { position: absolute; top: 50%; left: var(--context-position); width: 9px; height: 9px; border: 2px solid var(--voyage-cursor); border-radius: var(--radius-full); background: var(--voyage-cursor); box-shadow: var(--voyage-cursor-shadow); transform: translate(-50%, -50%); transition: left .35s ease-out; }
+	.voyage-weather-context-bar.is-unknown { opacity: .35; }
+	.voyage-weather-context-bar.is-unknown i { display: none; }
+	.voyage-weather-cache-bar { background: var(--voyage-track-soft); overflow: hidden; }
+	.voyage-weather-cache-bar i { display: block; height: 100%; border-radius: inherit; background: var(--voyage-cache-spectrum); transition: width .35s ease-out; }
+	.voyage-weather-card.is-saving .voyage-weather-reading strong { color: var(--voyage-cache-reading); }
+	.voyage-weather-card.is-saving .voyage-weather-cache-bar i { background: var(--voyage-cache-saving-spectrum); }
+	.voyage-weather-card.is-quiet .voyage-weather-reading strong { color: var(--secondary); }
+	.voyage-weather-card.is-warning .voyage-weather-summary { color: var(--color-warning); }
+	.voyage-weather-tooltip { position: absolute; left: 0; right: 0; top: calc(100% + var(--space-1)); z-index: 8; display: none; padding: var(--space-2); border-radius: var(--radius-lg); background: var(--tooltip-bg); color: var(--tooltip-text); font-size: var(--font-size-xs); line-height: 1.6; overflow-wrap: anywhere; box-shadow: var(--shadow-elevation-2); pointer-events: none; }
+	.voyage-weather-card:hover, .voyage-weather-card:focus-visible { z-index: 5; }
+	.voyage-weather-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+	.voyage-weather-card:hover .voyage-weather-tooltip, .voyage-weather-card:focus-visible .voyage-weather-tooltip { display: block; }
 	@media (max-width: 760px) { .voyage-dashboard { width: 100%; padding: var(--space-3); } }
 	@media (prefers-reduced-motion: reduce) { .voyage-dashboard *, .voyage-rail * { animation: none !important; transition: none !important; } }
 }
