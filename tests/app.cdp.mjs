@@ -1,5 +1,6 @@
 // CDP 全链路验证：附身真实桌面窗口（WebView2），一次跑通 UI → Tauri IPC → Rust → pi → provider。
 // 用法：node tests/app.cdp.mjs
+// 模型切换专项：node tests/app.cdp.mjs --model-picker（跳过附件恢复和 Git 用例）
 //
 // 与 `pi.integration.mjs` 同样的思路：临时 agent 目录 + 本地 mock OpenAI 服务，
 // 不发外部请求、不消耗 token、不触碰 ~/.pi 下的真实会话与配置。区别在于这里
@@ -25,6 +26,7 @@ import { verifyProviderModels } from "./provider-models.cdp.mjs";
 import { verifyDraftAttachments } from "./draft-attachments.cdp.mjs";
 
 const CDP_PORT = 9222;
+const modelPickerOnly = process.argv.includes("--model-picker");
 const MODEL_ID = "skiff-cdp-test";
 const REPLY = "CDP 全链路验证成功：UI → Tauri IPC → Rust → pi → 本地 mock 模型。";
 const repoRoot = process.cwd();
@@ -208,7 +210,7 @@ try {
 	console.log("已在启动台点击「开始聊天」，等待聊天视图…");
 
 	await page.waitForSelector(".composer-input", { timeout: 60_000 });
-	await verifyDraftAttachments(page);
+	if (!modelPickerOnly) await verifyDraftAttachments(page);
 	await page.fill(".composer-input", "请原样回复一句话，用于验证链路。");
 	await page.click(".send-btn", { timeout: 60_000 });
 	console.log("消息已发送，等待 pi 经由本地 mock 返回流式回复…");
@@ -261,11 +263,13 @@ try {
 	}
 
 	await verifyProviderModels(page, agentDir, requests, MODEL_ID, REPLY, artifacts, () => devLog.join("").match(/\[skiff\] rpc_start instance=/g)?.length ?? 0);
-	await verifyFileTreeRefresh(page, root, artifacts, MODEL_ID, REPLY);
-	await verifyGitTree(page, root, artifacts);
-	const commitRoot = await verifyGitCommit(page, root, artifacts);
-	await verifyFileContextMenu(page, commitRoot, artifacts);
-	assert.deepEqual(pageErrors, [], "No uncaught errors after Git Tree verification");
+	if (!modelPickerOnly) {
+		await verifyFileTreeRefresh(page, root, artifacts, MODEL_ID, REPLY);
+		await verifyGitTree(page, root, artifacts);
+		const commitRoot = await verifyGitCommit(page, root, artifacts);
+		await verifyFileContextMenu(page, commitRoot, artifacts);
+	}
+	assert.deepEqual(pageErrors, [], "No uncaught errors after full-chain verification");
 	console.log(`\n验证通过：\n- mock 收到 ${requests.length} 次请求，model=${requests[0].model}，messages=${requests[0].messageCount}\n- 回复已渲染到真实窗口 DOM\n- 页面无未捕获异常\n- 截图：${shotPath}`);
 } catch (error) {
 	if (page) await page.screenshot({ path: join(artifacts, "cdp-failure.png") }).catch(() => {});

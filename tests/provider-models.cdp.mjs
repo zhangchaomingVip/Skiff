@@ -12,6 +12,7 @@ export async function verifyProviderModels(page, agentDir, requests, modelId, re
 	const choose = async (provider) => {
 		await waitIdle();
 		await page.getByRole("button", { name: "选择模型", exact: true }).click();
+		await page.getByRole("button", { name: "更多模型…", exact: true }).click();
 		await page.getByRole("option", { name: new RegExp(`${provider} ${modelId}$`) }).click();
 		await page.waitForFunction(({ provider, modelId }) => { const value = JSON.parse(localStorage.getItem("skiff.workspace.v1")); const chat = value.chats.find((item) => item.id === value.activeId); return chat.selectedModel?.provider === provider && chat.selectedModel.id === modelId; }, { provider: provider === "CDP 另一供应商" ? "skiff-relay-local-second" : "skiff-relay-local-mock", modelId });
 	};

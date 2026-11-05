@@ -175,7 +175,8 @@ try {
 	await waitUntil(() => !document.querySelector(".model-trigger")?.disabled, "Model menu remained disabled after chat selection");
 	await modelTrigger.press("Enter");
 	await waitUntil(() => document.querySelector(".model-trigger")?.getAttribute("aria-expanded") === "true", "Keyboard did not open the model menu");
-	const modelPicker = page.getByRole("dialog", { name: "选择模型" });
+	await page.getByRole("button", { name: "更多模型…", exact: true }).click();
+	const modelPicker = page.getByRole("dialog", { name: "切换模型" });
 	const modelSearch = modelPicker.getByRole("combobox", { name: "搜索家族、提供商或模型" });
 	await modelSearch.waitFor();
 	await modelSearch.fill("deepseek-chat");

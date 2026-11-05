@@ -7,7 +7,6 @@ import { readImages } from "../chat/images";
 import { appendTextFiles, readTextFiles, type TextAttachment } from "../chat/textAttachments";
 import { isWordFile } from "../chat/wordAttachments";
 import { ModelMenu } from "./ModelMenu";
-import { ReasoningChip } from "./ReasoningChip";
 import { Icon } from "./Icon";
 import { ImageLightbox } from "./ImagePreview";
 import type { PiCommand } from "../chat/usePiSession";
@@ -186,7 +185,7 @@ export function Composer({
 				onKeyDown={onKeyDown}
 				onPaste={(event) => { const selected = Array.from(event.clipboardData.files); if (selected.length) { event.preventDefault(); void addAttachments(selected); } }}
 			/>
-			<div className="composer-bottom"><span className="composer-context"><IconButton  onClick={() => pickAttachments()} disabled={disabled || reading || sendingRef.current} aria-label="添加图片、文本或 Word 文件" title="添加图片、UTF-8 文本或 Word（.docx）文件（支持拖放或粘贴）；Word 提取正文，单个最大 10 MiB"><Icon name="plus" size={20} /></IconButton><ModelMenu models={models} model={model} onModel={onSelectModel} disabled={modelDisabled} /><ReasoningChip level={thinkingLevel} levels={thinkingLevels} disabled={!connected || modelDisabled} onLevel={onThinkingLevel} />{reading && <span>读取中…</span>}</span><input ref={fileRef} type="file" hidden multiple accept="image/png,image/jpeg,image/webp,image/gif,text/*,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx,.log,.json,.ts,.tsx,.js,.rs,.py,.yaml,.yml,.toml" onChange={(event) => { const replacementId = replacementRef.current; replacementRef.current = undefined; void addAttachments(Array.from(event.target.files ?? []), replacementId); event.target.value = ""; }} /><div className="composer-actions">
+			<div className="composer-bottom"><span className="composer-context"><IconButton  onClick={() => pickAttachments()} disabled={disabled || reading || sendingRef.current} aria-label="添加图片、文本或 Word 文件" title="添加图片、UTF-8 文本或 Word（.docx）文件（支持拖放或粘贴）；Word 提取正文，单个最大 10 MiB"><Icon name="plus" size={20} /></IconButton><ModelMenu models={models} model={model} onModel={onSelectModel} disabled={modelDisabled} thinkingLevel={thinkingLevel} thinkingLevels={thinkingLevels} thinkingDisabled={!connected} onThinkingLevel={onThinkingLevel} />{reading && <span>读取中…</span>}</span><input ref={fileRef} type="file" hidden multiple accept="image/png,image/jpeg,image/webp,image/gif,text/*,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx,.log,.json,.ts,.tsx,.js,.rs,.py,.yaml,.yml,.toml" onChange={(event) => { const replacementId = replacementRef.current; replacementRef.current = undefined; void addAttachments(Array.from(event.target.files ?? []), replacementId); event.target.value = ""; }} /><div className="composer-actions">
 				{streaming && !hasContent ? (
 					<IconButton className="send-btn" variant="primary" size="primary" onClick={onAbort} disabled={stopping || !connected} aria-label="停止生成" title="停止生成（Ctrl+Shift+Backspace）">
 						<Icon name="stop" size={17} />

@@ -6,7 +6,7 @@ import { Icon } from "./Icon";
 const ELEVATED_LEVELS = new Set(["high", "xhigh", "max"]);
 
 /** One short Chinese name per pi key; the pill only rewords "off" as "no reasoning". */
-const LEVEL_LABELS: Record<string, string> = { off: "关闭", minimal: "极简", low: "低", medium: "标准", high: "高", xhigh: "极高", max: "最高" };
+export const LEVEL_LABELS: Record<string, string> = { off: "关闭", minimal: "极简", low: "低", medium: "标准", high: "高", xhigh: "极高", max: "最高" };
 
 /** Thinking-level pill; hidden when the selected model cannot reason. */
 export function ReasoningChip({ level, levels, disabled, onLevel }: {
