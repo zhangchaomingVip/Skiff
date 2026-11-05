@@ -46,12 +46,12 @@ export interface ModelSpec {
 export const blankModel = (): ModelSpec => ({ modelId: "", alias: "", inputCost: 0, outputCost: 0, cacheReadCost: 0, cacheWriteCost: 0, currency: "CNY", maxTokens: 8192, contextWindow: 128000 });
 
 export function validateModels(models: ModelSpec[]): string | undefined {
-	if (!models.length) return "请至少添加一个模型，补全路线配置";
+	if (!models.length) return "请至少添加一个模型，补全模型配置";
 	const ids = new Set<string>();
 	for (const model of models) {
 		const id = model.modelId.trim();
 		if (!id) return "模型 ID 不能为空";
-		if (ids.has(id)) return "同一路线内模型 ID 不能重复";
+		if (ids.has(id)) return "同一供应商内模型 ID 不能重复";
 		ids.add(id);
 		if (!Number.isSafeInteger(model.contextWindow) || model.contextWindow <= 0 || !Number.isSafeInteger(model.maxTokens) || model.maxTokens <= 0) return "上下文窗口和默认最大输出必须为正整数";
 		if (model.maxTokens > model.contextWindow) return "默认最大输出不能超过上下文窗口";
@@ -76,8 +76,21 @@ export type RelayProtocol = (typeof RELAY_PROTOCOLS)[number]["id"];
 
 export const DEFAULT_RELAY_PROTOCOL: RelayProtocol = "openai";
 
-/** A relay is one access point: a base URL plus one API key, shared by routes. */
+/** A model and its capabilities belong directly to one provider. */
+export interface ProviderModel extends ModelSpec {
+	familyId: string;
+	enabled: boolean;
+	streaming: boolean;
+	tools: boolean;
+	reasoning: boolean;
+	legacyRouteIds?: string[];
+	legacyProviderKeys?: string[];
+}
+
+export const providerModel = (model: ModelSpec, familyId = ""): ProviderModel => ({ enabled: true, streaming: true, tools: true, reasoning: true, vision: false, thinkingLevels: [...DEFAULT_THINKING_LEVELS], ...model, familyId });
+
 export interface RelaySpec {
+	models?: ProviderModel[];
 	id: string;
 	name: string;
 	baseUrl: string;
@@ -166,7 +179,7 @@ export function maskBaseUrl(baseUrl: string): string {
 const hasFamily = (config: FamiliesConfig | undefined, id: string) => !!config?.families?.some((family) => family.id === id);
 
 /**
- * Owns the relay and route configuration. The picker and settings page share
+ * Owns provider/model configuration. The picker and settings page share
  * this state so both stay in sync without extra invokes.
  */
 export function useModelFamilies() {
@@ -202,13 +215,11 @@ export function useModelFamilies() {
 			setConfig(next); setOffers(runtime);
 			return true;
 		} catch (e) {
-			if (command === "batch_relays" || command === "reorder_routes") await refresh();
+			if (command === "batch_relays") await refresh();
 			setError(String(e)); return false;
 		} finally { mutationPending.current = false; }
 	}, []);
 
-	// A missing or malformed payload falls back to pi's own model list rather
-	// than blanking the composer.
 	// Built-in families always render first in their fixed order; families the
 	// user created later follow in creation order.
 	const families = useMemo(() => {
@@ -220,16 +231,16 @@ export function useModelFamilies() {
 
 	return {
 		config, families, relays: config?.relays ?? [], offers, loading, error, complete,
-		fallback: !loading && (!!error || !complete),
+		fallback: false,
 		usdCnyRate: config?.usdCnyRate ?? 7.2,
 		refresh,
 		clearError: () => setError(undefined),
 		// Resolves to the saved relay (its id is minted server-side) so the
-		// settings page can point follow-up route editing at it.
-		saveRelay: async (relay: RelaySpec, routes: RelayRouteSpec[] = [], testRequestIds: string[] = []) => {
+		// settings page can point model editing at it.
+		saveRelay: async (relay: RelaySpec, testRequestIds: string[] = []) => {
 			setError(undefined);
 			try {
-				const next = await invoke<FamiliesConfig>("save_relay", { relay, routes, testRequestIds });
+				const next = await invoke<FamiliesConfig>("save_relay", { relay, testRequestIds });
 				const runtime = await invoke<RuntimeOffer[]>("list_model_runtime");
 				setConfig(next); setOffers(runtime);
 				return next.relays.find((item) => item.name.trim().toLowerCase() === relay.name.trim().toLowerCase());
@@ -239,11 +250,6 @@ export function useModelFamilies() {
 		batchRelays: (relayIds: string[], operation: BatchOperation, expectedToken: string) => run("batch_relays", { relayIds, operation, expectedToken }),
 		deleteRelay: (relayId: string) => run("delete_relay", { relayId }),
 		setRelayEnabled: (relayId: string, enabled: boolean) => run("set_relay_enabled", { relayId, enabled }),
-		saveRoute: (familyId: string, route: RouteSpec) => run("save_route", { familyId, route }),
-		deleteRoute: (familyId: string, relayId: string) => run("delete_route", { familyId, relayId }),
-		reorderRoutes: (familyId: string, relayIds: string[]) => run("reorder_routes", { familyId, relayIds }),
-		setAutoFailover: (autoFailover: boolean) => run("set_family_auto_failover", { autoFailover }),
-		setAutoRetry: (autoRetry: boolean) => run("set_family_auto_retry", { autoRetry }),
 		setUsdCnyRate: (rate: number) => run("set_usd_cny_rate", { rate }),
 		createFamily: (id: string, displayName: string) => run("create_family", { id, displayName }),
 		test: async (baseUrl: string, apiKey: string, modelId: string, timeoutSeconds: number, requestId?: string, protocol?: RelayProtocol, relay?: RelaySpec, draft = false) => {

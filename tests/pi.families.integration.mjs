@@ -49,13 +49,13 @@ try {
 		{ id: "b", path: "json", model: "deepseek-v4.1", streaming: false, tools: false, vision: true, input: 2, timeout: 5 },
 		{ id: "c", path: "failure", model: "deepseek-chat", streaming: true, tools: false, input: 0, timeout: 5 },
 		{ id: "d", path: "timeout", model: "deepseek-chat", streaming: true, tools: false, input: 0, timeout: 1 },
-	].map((item) => ({ providerKey: `skiff-relay-${item.id}-deepseek`, keyEnv: `SKIFF_TEST_KEY_${item.id}`,
+	].map((item) => ({ providerKey: `skiff-relay-${item.id}`, keyEnv: `SKIFF_TEST_KEY_${item.id}`,
 		baseUrl: `http://127.0.0.1:${server.address().port}/${item.path}/v1`,
-		streaming: item.streaming, tools: item.tools, timeoutSeconds: item.timeout,
-		models: [{ id: item.model, name: item.id, api: "openai-completions", input: item.vision ? ["text", "image"] : ["text"], reasoning: item.id === "a",
+		timeoutSeconds: item.timeout,
+		models: [{ streaming: item.streaming, tools: item.tools, id: item.model, name: item.id, api: "openai-completions", input: item.vision ? ["text", "image"] : ["text"], reasoning: item.id === "a",
 			contextWindow: 64000, maxTokens: item.id === "a" ? 100 : 200, cost: { input: item.input, output: 3, cacheRead: 0, cacheWrite: 0 } }] }));
 	routes[0].models.push(
-		{ ...routes[0].models[0], id: "deepseek-flash", maxTokens: 300, contextWindow: 32000, cost: { input: 4, output: 6, cacheRead: 0, cacheWrite: 0 } },
+		{ ...routes[0].models[0], id: "deepseek-flash", tools: false, streaming: false, maxTokens: 300, contextWindow: 32000, cost: { input: 4, output: 6, cacheRead: 0, cacheWrite: 0 } },
 		{ ...routes[0].models[0], id: "deepseek-reasoner", maxTokens: 400, contextWindow: 256000, cost: { input: 8, output: 12, cacheRead: 0, cacheWrite: 0 } },
 	);
 	routes[1].models.push({ ...routes[1].models[0], id: "deepseek-chat" });
@@ -90,6 +90,7 @@ try {
 		for (const model of route.models) {
 			await rpc({ type: "new_session" });
 			await rpc({ type: "set_model", provider: route.providerKey, modelId: model.id });
+			if (model.reasoning) await rpc({ type: "set_thinking_level", level: "low" });
 			const selected = (await rpc({ type: "get_state" })).model;
 			assert.equal(selected.cost.input, model.cost.input);
 			assert.equal(selected.contextWindow, model.contextWindow);
@@ -117,7 +118,8 @@ try {
 			assert.ok(request, `No upstream request for ${route.providerKey}: ${message.errorMessage}`);
 			assert.equal(request.key, `Bearer dummy-${route.providerKey}`);
 			assert.equal(request.payload.model, model.id);
-			assert.equal(request.payload.stream, route.streaming);
+			if (model.reasoning) assert.equal(request.payload.reasoning_effort, "low");
+			assert.equal(request.payload.stream, model.streaming);
 			assert.equal(request.payload.messages[0].role, "system", "Family routes must retain system instructions when reasoning is enabled");
 			if (images.length) assert.ok(request.payload.messages.some((message) => Array.isArray(message.content)
 				&& message.content.some((part) => part.type === "image_url" && part.image_url.url === `data:image/png;base64,${images[0].data}`)), "Route image did not reach upstream");
@@ -134,7 +136,10 @@ try {
 				assert.ok((await rpc({ type: "get_messages" })).messages.some((message) => message.role === "user"
 					&& Array.isArray(message.content) && message.content.some((block) => block.type === "image")), "Route image missing from restored history");
 			}
-			if (!route.tools) assert.equal(request.payload.tools, undefined);
+			const stateAfter = await rpc({ type: "get_state" });
+			assert.equal(stateAfter.model.provider, route.providerKey, "An upstream failure must retain the same provider");
+			assert.equal(stateAfter.model.id, model.id);
+			if (!model.tools) assert.equal(request.payload.tools, undefined);
 			else assert.ok(request.payload.tools?.length > 0);
 		}
 	}

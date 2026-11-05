@@ -9,6 +9,7 @@ import { forkEntry, forkTurn } from "./turns";
 import { buildAppendPrompt } from "./prompt";
 import { initialSessionState, type ContextUsage, type ImageAttachment, type ModelInfo, type SessionState } from "./types";
 import type { RuntimeOffer } from "./modelFamilies";
+import { resolveSelection } from "./modelFamilies";
 import { attachHistoricalSnapshots } from "./routeSnapshot";
 import type { FamiliesConfig } from "./useModelFamilies";
 
@@ -101,7 +102,7 @@ export interface SessionOwner {
 export function preferredModelIsConfigured(preferred: Pick<ModelInfo, "provider" | "id" | "modelId">, offers: readonly RuntimeOffer[]): boolean {
 	if (!preferred.provider.startsWith("skiff-")) return true;
 	const modelId = preferred.modelId ?? preferred.id;
-	return offers.some((offer) => offer.providerKey === preferred.provider && offer.modelId === modelId);
+	return !!resolveSelection({ ...preferred, id: modelId }, [...offers]).offer;
 }
 
 interface SessionSnapshot {
@@ -337,15 +338,15 @@ export function usePiSession(target?: SessionTarget, runtimeOffers: readonly Run
 					if (result.cancelled) throw new Error("pi 扩展取消了聊天切换，未载入该聊天。");
 				}
 				if (!current()) return;
-				const preferred = preferredModel.current?.chatId === selected.id ? preferredModel.current.model ?? selected.model : selected.model;
+				const requested = preferredModel.current?.chatId === selected.id ? preferredModel.current.model ?? selected.model : selected.model;
+				const matched = resolveSelection(requested, [...runtimeOffersRef.current]).offer;
+				const preferred = matched ? { provider: matched.providerKey, id: matched.modelId, modelId: matched.modelId, offerId: matched.offerId, relayId: matched.relayId } : requested;
 				preferredModel.current = undefined;
 				let unavailableModel: ModelInfo | undefined;
 				let selectionError: unknown;
 				if (preferred) {
-					// Managed provider keys are derived from the current route projection.
-					// Do not ask pi to select a stale key from the workspace index: pi
-					// reports that as a fatal "Model not found" error before the route
-					// reconciler gets a chance to switch to a live offer.
+					// Skip a removed or disabled managed selection while loading history.
+					// Keep the saved identity so the selection validator can block sends.
 					if (!preferredModelIsConfigured(preferred, runtimeOffersRef.current)) unavailableModel = preferred;
 					else {
 						try { await rpc.request({ type: "set_model", provider: preferred.provider, modelId: preferred.id }); }
@@ -363,11 +364,9 @@ export function usePiSession(target?: SessionTarget, runtimeOffers: readonly Run
 				if (!current()) return;
 				const availableModels = parseModels(models.models);
 				const parsedModel = parseModels([data.model])[0];
-				// A saved model can disappear between sessions, and pi can also reject
-				// a provider while still having a usable default model. Do not turn that
-				// recoverable selection failure into a dead session: keep pi's reported
-				// model so the route reconciler can continue with the live configuration.
-				const restoredModel = selectionError || unavailableModel ? parsedModel : (parsedModel && preferred ? { ...parsedModel, offerId: preferred.offerId, routeId: preferred.routeId, modelId: preferred.modelId, familyId: preferred.familyId, familyName: preferred.familyName, relayId: preferred.relayId } : parsedModel);
+				// A failed set_model must never expose pi's default as an applied choice.
+				// History remains readable while the user repairs or replaces the selection.
+				const restoredModel = selectionError ? undefined : unavailableModel ? preferred : (parsedModel && preferred ? { ...parsedModel, offerId: preferred.offerId, routeId: preferred.routeId, modelId: preferred.modelId, familyId: preferred.familyId, familyName: preferred.familyName, relayId: preferred.relayId } : parsedModel);
 				const messages = attachHistoricalSnapshots(parseMessages(transcript.messages), selected.routeSnapshots);
 				const user = [...messages].reverse().find((message) => message.role === "user");
 				const startedAt = Boolean(data.isStreaming) ? runStarted.current ?? user?.timestamp ?? Date.now() : undefined;

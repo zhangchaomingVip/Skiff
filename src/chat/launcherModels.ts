@@ -80,18 +80,8 @@ export function groupLauncherFamilies(models: LauncherModel[], recentIds: Readon
 export function groupLauncherOffers(offers: RuntimeOffer[]): LauncherModel[] {
 	const unique = new Map<string, RuntimeOffer>();
 	for (const offer of offers) {
-		if (!offer.familyId || !offer.modelId || !offer.relayId || !offer.relayName) continue;
+		if (!offer.modelId || !offer.relayId || !offer.relayName) continue;
 		unique.set(offerKey(offer), offer);
 	}
-	const groups = new Map<string, LauncherModel>();
-	for (const offer of unique.values()) {
-		const key = `${offer.familyId}/${offer.modelId}`;
-		const existing = groups.get(key);
-		if (existing) existing.offers.push(offer);
-		else groups.set(key, { familyId: offer.familyId, familyName: offer.familyName, modelId: offer.modelId, offers: [offer], preferredOffer: offer });
-	}
-	return [...groups.values()].map((group) => {
-		const ordered = [...group.offers].sort((a, b) => (a.routeOrder ?? Number.MAX_SAFE_INTEGER) - (b.routeOrder ?? Number.MAX_SAFE_INTEGER));
-		return { ...group, offers: ordered, preferredOffer: ordered[0] };
-	});
+	return [...unique.values()].map((offer) => ({ familyId: offer.familyId, familyName: offer.familyName, modelId: offer.modelId, offers: [offer], preferredOffer: offer }));
 }

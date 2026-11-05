@@ -46,11 +46,11 @@ try {
 	const providerRow = dialog().locator(".provider-relay-row").filter({ hasText: "官方直连" }).first();
 	assert.equal(await providerRow.locator(".settings-badge").count(), 0, "The accent bar and switch already identify enabled providers");
 	const spacing = await page.evaluate(() => {
-		const list = document.querySelector(".provider-list"); const tabs = document.querySelector(".provider-source-tabs"); const row = list.querySelector(".provider-relay-row");
+		const list = document.querySelector(".provider-list"); const row = list.querySelector(".provider-relay-row");
 		const side = row.querySelector(".provider-row-side"); const key = side.querySelector(".settings-key-fingerprint"); const actions = side.querySelector(".provider-row-actions");
-		return { groupGap: getComputedStyle(list).gap, tabGap: getComputedStyle(tabs).gap, tabRadius: getComputedStyle(tabs).borderRadius, sideGap: getComputedStyle(side).gap, keyGap: getComputedStyle(key).marginRight, actionGap: getComputedStyle(actions).gap };
+		return { groupGap: getComputedStyle(list).gap, sideGap: getComputedStyle(side).gap, keyGap: getComputedStyle(key).marginRight, actionGap: getComputedStyle(actions).gap };
 	});
-	assert.deepEqual(spacing, { groupGap: "12px", tabGap: "4px", tabRadius: "8px", sideGap: "8px", keyGap: "8px", actionGap: "6px" });
+	assert.deepEqual(spacing, { groupGap: "12px", sideGap: "8px", keyGap: "8px", actionGap: "6px" });
 	const iconColor = await providerRow.locator(".provider-edit-button").evaluate((button) => getComputedStyle(button).color);
 	const inactiveIconColor = await providerRow.evaluate((row) => { row.classList.add("disabled"); const color = getComputedStyle(row.querySelector(".provider-edit-button")).color; row.classList.remove("disabled"); return color; });
 	assert.equal(inactiveIconColor, iconColor, "Disabling a provider must not dim its action icons");
@@ -59,7 +59,7 @@ try {
 	await providerRow.getByRole("button", { name: "测试连接 官方直连", exact: true }).click();
 	await page.waitForFunction(() => window.skiffPreview.metadata.tests.some((record) => record.relayId === "r1"));
 	assert.equal(await page.evaluate(() => window.skiffPreview.testRequests.at(-1).modelId), "deepseek-flash");
-	await providerRow.getByText(/最近测试 137 ms/).waitFor();
+	await providerRow.getByText("137 ms", { exact: true }).waitFor();
 	await page.evaluate(() => window.skiffPreview.deferTests(true));
 	await providerRow.getByRole("button", { name: "测试连接 官方直连", exact: true }).click();
 	await providerRow.locator(".provider-test-icon.is-spinning").waitFor();
@@ -70,7 +70,7 @@ try {
 	});
 	const failedStatus = providerRow.locator(".provider-row-test-status.is-error");
 	await failedStatus.waitFor();
-	assert.equal((await failedStatus.textContent()).trim(), "· 连接失败");
+	assert.equal((await failedStatus.textContent()).trim(), "连接超时");
 	const dangerColor = await page.evaluate(() => { const node = document.createElement("span"); node.style.color = "var(--danger)"; document.body.append(node); const color = getComputedStyle(node).color; node.remove(); return color; });
 	assert.equal(await failedStatus.evaluate((node) => getComputedStyle(node).color), dangerColor);
 

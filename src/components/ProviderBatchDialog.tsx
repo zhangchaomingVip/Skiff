@@ -26,7 +26,7 @@ export function ProviderBatchDialog({ operation, ids, initialImpact, onPreview, 
 	return <Dialog aria-label={title} className="project-dialog" initialFocus={cancel} pending={locked} onClose={() => { if (!locked) onClose(); }}>
 		<h2>{title}</h2>
 		<p>所选 {ids.length} 个供应商：{impact.names.join("、")}。</p>
-		{operation !== "enable" && <p>影响 {impact.routeCount} 条关联路线{operation === "delete" ? "，将一并删除路线与密钥，无法撤销" : "的可用性；路线自身开关和模型剔除配置保持原值"}。</p>}
+		{operation !== "enable" && <p>影响 {impact.routeCount} 个模型{operation === "delete" ? "，将一并删除模型与密钥，无法撤销" : "的可用性；模型自身开关和配置保持原值"}。</p>}
 		{loading && <p role="status">正在读取最新影响预览…</p>}
 		{(previewError || error) && <p className="form-error" role="alert">{previewError || error}</p>}
 		<div className="dialog-actions">

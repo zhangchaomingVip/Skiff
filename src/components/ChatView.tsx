@@ -16,7 +16,6 @@ import type { MessageReveal } from "../chat/useConversationSearch";
 import { Composer } from "./Composer";
 import { QueuedMessages } from "./QueuedMessages";
 import { MessageList } from "./MessageList";
-import { billingAccountLabel, type RouteAuthorizationChoice, type RouteAuthorizationRequest } from "../chat/routeAuthorization";
 
 /** Transcript + notices + composer. */
 export function ChatView({
@@ -28,8 +27,6 @@ export function ChatView({
 	projectName,
 	onSend,
 	onReconnect,
-	failover,
-	routeAuthorization,
 	draftTarget,
 	revealMessage,
 }: {
@@ -43,9 +40,6 @@ export function ChatView({
 	projectName?: string;
 	onSend: (text: string, images?: ImageAttachment[], delivery?: Delivery) => Promise<boolean>;
 	onReconnect: () => void;
-	/** A same-family channel that can take over after a provider error. */
-	failover?: { label: string; switch: (automatic?: boolean) => void };
-	routeAuthorization?: { request: RouteAuthorizationRequest; onChoice: (choice: RouteAuthorizationChoice) => void };
 }) {
 	const [localDraft, setLocalDraft] = useState("");
 	const storedDraft = useDraft(draftTarget);
@@ -113,7 +107,6 @@ export function ChatView({
 		setContinuing(true);
 		try { await onSend("请从刚才停止的位置继续，避免重复已输出的内容。"); } finally { if (mounted.current) setContinuing(false); }
 	};
-	const disabled = !connected || pending || state.isStreaming;
 	const cancelEdit = () => {
 		const previous = edit?.previous;
 		setEditing(undefined); fallbackEdit.current = undefined;
@@ -148,22 +141,9 @@ export function ChatView({
 					))}
 				</div>
 			)}
-			{routeAuthorization && (
-				<div className="banner route-authorization" role="alert">
-					<div className="route-authorization-copy">
-						<strong>线路切换需要确认</strong>
-						<span>{routeAuthorization.request.source.relayName} → {routeAuthorization.request.target.relayName} · {routeAuthorization.request.target.modelId}</span>
-						<small>目标扣费账户：{billingAccountLabel(routeAuthorization.request.target)}</small>
-					</div>
-					<div className="route-authorization-actions">
-						<Button variant="primary" size="primary" onClick={() => routeAuthorization.onChoice("once")}>同意</Button>
-						<Button  onClick={() => routeAuthorization.onChoice("session")}>本次会话都同意</Button>
-						<Button variant="ghost" onClick={() => routeAuthorization.onChoice("keep_failed")}>保持失败</Button>
-					</div>
-				</div>
-			)}
+
 			{state.lastError && !state.retrying && !(state.isStreaming && isProviderFailure(state.lastError)) && (
-				<div className={`banner error ${connected && isProviderFailure(state.lastError) ? "provider-toast" : ""}`} role="alert"><span>{state.lastError}</span>{failover && <Button variant="ghost" disabled={disabled} onClick={() => failover.switch()}>切换到同家族下一个可用提供商（{failover.label}）</Button>}{!connected ? <Button variant="ghost" onClick={() => onReconnect()}>重新连接</Button> : <IconButton onClick={actions.clearError} aria-label="关闭错误提示"><Icon name="close" /></IconButton>}</div>
+				<div className={`banner error ${connected && isProviderFailure(state.lastError) ? "provider-toast" : ""}`} role="alert"><span>{state.lastError}</span>{!connected ? <Button variant="ghost" onClick={() => onReconnect()}>重新连接</Button> : <IconButton onClick={actions.clearError} aria-label="关闭错误提示"><Icon name="close" /></IconButton>}</div>
 			)}
 			{connected && !state.availableModels.length && <div className="notice model-notice">暂无已启用的提供商，请添加或启用提供商。<Button variant="ghost" onClick={manage}>管理提供商…</Button></div>}
 			{/* Models exist but none resolved for this session: pi almost certainly
@@ -192,7 +172,7 @@ export function ChatView({
 				model={state.model}
 				onSelectModel={actions.setModel}
 				connected={connected}
-				modelDisabled={!connected || pending || state.isStreaming}
+				modelDisabled={loading || pending || state.isStreaming}
 				thinkingLevel={state.thinkingLevel}
 				thinkingLevels={state.thinkingLevels ?? []}
 				onThinkingLevel={actions.setThinkingLevel}

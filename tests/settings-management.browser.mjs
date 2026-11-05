@@ -33,51 +33,53 @@ try {
 	const original = await config();
 	assert.equal(await settings().getByRole("combobox", { name: "供应商显示排序" }).count(), 0, "Provider sorting is fixed to config order");
 	assert.equal(await settings().getByRole("checkbox", { name: "按来源分组" }).count(), 0, "Source grouping has no toolbar toggle");
-	const sourceTabs = settings().getByRole("tablist", { name: "供应商来源" });
-	assert.equal(await sourceTabs.getByRole("tab").count(), 4, "Provider sources share four horizontal tabs");
-	assert.deepEqual(await sourceTabs.getByRole("tab").allTextContents(), ["全部5", "官方直连2", "自定义2", "本机1"], "Tabs follow the requested order and combine relays with custom endpoints");
+	const sourceSelect = settings().getByRole("combobox", { name: "供应商来源" });
+	assert.equal(await sourceSelect.getByRole("option").count(), 4, "Provider source selector includes four options");
+	assert.deepEqual(await sourceSelect.getByRole("option").allTextContents(), ["全部 (5)", "官方直连 (2)", "自定义 (2)", "本机 (1)"], "Options follow the requested order and combine relays with custom endpoints");
 	assert.deepEqual(await settings().getByRole("group", { name: "供应商筛选" }).locator(".settings-filter-group").getByRole("button").allTextContents(), ["启用 3", "停用 2"], "Status chips omit the redundant all filter");
 	const searchField = settings().getByRole("textbox", { name: "搜索已配置供应商" });
 	const searchStyle = await searchField.evaluate((node) => ({ height: getComputedStyle(node).height, border: getComputedStyle(node).borderColor }));
 	const statusPill = settings().getByRole("button", { name: "启用 3", exact: true });
 	const pillStyle = await statusPill.evaluate((node) => ({ height: getComputedStyle(node).height, border: getComputedStyle(node).borderColor }));
-	assert.deepEqual(searchStyle, pillStyle, "Search and status filters share a compact height and light border");
+	assert.equal(searchStyle.height, "32px");
+	assert.equal(pillStyle.height, searchStyle.height, "Search and status filters share the standard control height");
+	await button("启用 3").click();
 	assert.equal(await settings().locator(".settings-source-heading").count(), 0, "Source headings are replaced by tabs");
-	await sourceTabs.getByRole("tab", { name: "官方直连 2", exact: true }).click();
+	await sourceSelect.selectOption("official");
 	assert.equal(await settings().locator(".provider-relay-row").count(), 2, "The official tab filters to official providers");
-	await sourceTabs.getByRole("tab", { name: "自定义 2", exact: true }).click();
+	await sourceSelect.selectOption("custom");
 	assert.equal(await settings().locator(".provider-relay-row").count(), 2, "The custom tab includes relays and custom endpoints");
 	assert.match(await settings().locator(".provider-relay-row").nth(0).textContent(), /硅基低价/);
 	assert.match(await settings().locator(".provider-relay-row").nth(1).textContent(), /自定义端点/);
-	assert.deepEqual(await settings().locator(".provider-relay-row .provider-source-tag").allTextContents(), ["自定义", "自定义"], "Relay and custom endpoint cards use the same badge label");
-	await sourceTabs.getByRole("tab", { name: "本机 1", exact: true }).click();
+	assert.deepEqual(await settings().locator(".provider-relay-row .provider-source-tag").allTextContents(), [], "Custom sources omit redundant badges");
+	await sourceSelect.selectOption("local");
 	assert.equal(await settings().locator(".provider-relay-row").count(), 1, "Local providers have their own tab");
 	assert.match(await settings().locator(".provider-relay-row").textContent(), /本机服务/);
-	await sourceTabs.getByRole("tab", { name: "全部 5", exact: true }).click();
+	await sourceSelect.selectOption("all");
 	await button("批量管理").focus(); await page.keyboard.press("Enter");
-	await sourceTabs.getByRole("tab", { name: "官方直连 2", exact: true }).click();
+	await sourceSelect.selectOption("official");
 	assert.equal(await settings().locator(".provider-relay-row").count(), 2, "Source tabs limit the current provider results");
 	await settings().getByRole("checkbox", { name: "全选当前结果" }).check();
 	assert.match(await settings().locator(".settings-batch-bar").textContent(), /已选 2 个/);
-	await sourceTabs.getByRole("tab", { name: "全部 5", exact: true }).click();
+	await sourceSelect.selectOption("all");
 	assert.match(await settings().locator(".settings-batch-bar").textContent(), /已选 0 个/, "Changing source clears hidden batch selections");
 	const search = searchField;
 	await search.fill("硅基");
-	assert.equal(await sourceTabs.getByRole("tab", { name: "自定义 1", exact: true }).count(), 1, "Custom counts include matching relay providers");
-	await sourceTabs.getByRole("tab", { name: "自定义 1", exact: true }).click();
+	assert.equal(await sourceSelect.getByRole("option", { name: "自定义 (1)", exact: true }).count(), 1, "Custom counts include matching relay providers");
+	await sourceSelect.selectOption("custom");
 	assert.equal(await settings().locator(".provider-relay-row").count(), 1);
 	await search.fill("官方");
-	await sourceTabs.getByRole("tab", { name: "全部 2", exact: true }).click();
-	assert.equal(await sourceTabs.getByRole("tab", { name: "官方直连 2", exact: true }).count(), 1, "Source counts follow the current search");
+	await sourceSelect.selectOption("all");
+	assert.equal(await sourceSelect.getByRole("option", { name: "官方直连 (2)", exact: true }).count(), 1, "Source counts follow the current search");
 	await settings().getByRole("checkbox", { name: "全选当前结果" }).check();
 	assert.equal(await settings().getByRole("checkbox", { name: /^选择 / }).count(), 2);
 	assert.equal(await settings().locator(".provider-relay-row").count(), 2);
 	await search.fill("");
 	await settings().getByRole("checkbox", { name: "全选当前结果" }).check(); await button("停用 2").click();
-	await page.waitForFunction(() => { const node = document.querySelector('.provider-status-filter[aria-pressed="true"]'); return node && getComputedStyle(node).borderColor === getComputedStyle(node).color; });
-	const selectedStatus = await button("停用 2").evaluate((node) => { const style = getComputedStyle(node); return { pressed: node.getAttribute("aria-pressed"), border: style.borderColor, color: style.color, background: style.backgroundColor }; });
+	await page.waitForFunction(() => { const node = document.querySelector('.provider-status-filter[aria-pressed="true"]'); return node && getComputedStyle(node).backgroundColor !== "rgba(0, 0, 0, 0)"; });
+	const selectedStatus = await button("停用 2").evaluate((node) => { const style = getComputedStyle(node); return { pressed: node.getAttribute("aria-pressed"), border: style.borderTopColor, color: style.color, background: style.backgroundColor }; });
 	assert.equal(selectedStatus.pressed, "true", "Status selection is exposed to assistive technology");
-	assert.equal(selectedStatus.border, selectedStatus.color, "Active status pill uses the accent for its border and text");
+	assert.equal(selectedStatus.border, "rgba(0, 0, 0, 0)", "Status pills keep their border quiet");
 	assert.notEqual(selectedStatus.background, "rgba(0, 0, 0, 0)", "Active status pill has a tinted background");
 	assert.match(await settings().locator(".settings-batch-bar").textContent(), /已选 0 个/);
 	assert.equal(await settings().locator(".provider-relay-row").count(), 2, "The status chip filters the list");
@@ -123,10 +125,10 @@ try {
 	assert.deepEqual((await metadata()).tests, history.tests);
 	await page.reload(); await open(); await button("供应商").click();
 	const testedRow = settings().locator(".provider-relay-row").filter({ hasText: "硅基低价" });
-	await testedRow.getByText(/最近测试 \d+ ms/).waitFor();
+	await testedRow.getByText(/^\d+ ms$/).waitFor();
 	assert.match(await testedRow.locator(".provider-row-meta").getAttribute("title") ?? "", /最近测试：成功.*first\/deepseek-v4.1-flash/);
 	const untestedRow = settings().locator(".provider-relay-row").filter({ hasText: "官方直连" }).first();
-	assert.doesNotMatch(await untestedRow.textContent(), /最近测试/, "Untested relays show no inline test hint");
+	assert.equal(await untestedRow.locator(".provider-row-test-status").textContent(), "待测试", "Untested relays have a compact pending status");
 	assert.equal(await untestedRow.locator(".provider-row-meta").getAttribute("title"), "未测试");
 	await shot("history-reloaded-light");
 	await button("路线").click();
@@ -198,18 +200,16 @@ try {
 	await shot("fixed-order-light");
 	for (const theme of ["light", "dark"]) {
 		await button("外观").click(); await button(theme === "light" ? "浅色" : "深色").click(); await button("供应商").click();
-		const themedSourceTabs = settings().getByRole("tablist", { name: "供应商来源" });
-		assert.equal(await themedSourceTabs.getByRole("tab").count(), 4, `${theme} theme keeps all source tabs visible`);
+		const themedSourceSelect = settings().getByRole("combobox", { name: "供应商来源" });
+		assert.equal(await themedSourceSelect.getByRole("option").count(), 4, `${theme} theme keeps all source tabs visible`);
 		await button("批量管理").click();
 		for (const [width, height] of [[1100, 750], [550, 375]]) {
 			await page.setViewportSize({ width, height }); await layout(); await shot(`batch-${theme}-${width}`);
-			const tabMetrics = await settings().locator(".provider-source-tabs").evaluate((node) => ({ clientWidth: node.clientWidth, scrollWidth: node.scrollWidth, buttonsFit: [...node.children].every((button) => button.scrollWidth <= button.clientWidth) }));
-			assert.equal(tabMetrics.buttonsFit, true, "Source tab labels and counts fit their buttons");
-			assert.equal(await settings().locator(".provider-source-tabs").evaluate((node) => getComputedStyle(node).overflowX), "auto", "The source tab strip remains horizontally scrollable when needed");
+			assert.equal(await themedSourceSelect.evaluate((node) => node.scrollWidth > node.clientWidth), false, "Source selector fits the toolbar");
 			if (width === 1100) {
 				const toolbarRects = await settings().locator(".providers-toolbar").evaluate((node) => [...node.children].map((child) => { const rect = child.getBoundingClientRect(); return { top: rect.top, bottom: rect.bottom, width: rect.width }; }));
 				assert.ok(Math.max(...toolbarRects.map((rect) => rect.top)) < Math.min(...toolbarRects.map((rect) => rect.bottom)), "Search, filters and actions share one toolbar row on desktop");
-				assert.ok(toolbarRects[0].width <= 320, "Search stays compact");
+				assert.ok(await searchField.evaluate((node) => node.getBoundingClientRect().width <= 240), "Search stays compact");
 			}
 			if (width === 550) {
 				await settings().getByRole("checkbox", { name: "选择 官方直连", exact: true }).check();
@@ -224,8 +224,9 @@ try {
 		await button("退出批量管理").click(); await page.setViewportSize({ width: 1100, height: 750 });
 	}
 	await page.goto(`${origin}/tests/preview.html?fixture=settings&theme=light`); await open(); await button("供应商").click();
-	const emptySourceTabs = settings().getByRole("tablist", { name: "供应商来源" });
-	await emptySourceTabs.getByRole("tab", { name: "本机 0", exact: true }).click();
+	const emptySourceSelect = settings().getByRole("combobox", { name: "供应商来源" });
+	await button("启用 3").click();
+	await emptySourceSelect.selectOption("local");
 	assert.equal(await settings().locator(".provider-empty-state .family-empty").textContent(), "此来源下暂无供应商");
 	assert.equal(await settings().locator(".provider-empty-state").getByRole("button", { name: "添加供应商", exact: true }).count(), 1);
 	const emptySearch = settings().getByRole("textbox", { name: "搜索已配置供应商" });
@@ -240,6 +241,6 @@ try {
 	await settings().locator(".provider-empty-state").getByRole("button", { name: "添加供应商", exact: true }).click();
 	assert.equal(await settings().getByRole("heading", { name: "添加供应商", exact: true }).count(), 1, "Empty-state action opens the provider picker and exits batch mode");
 	assert.deepEqual(errors, []);
-	console.log("PASS settings management: provider source tabs/order/filtering, empty states and add action, selection scope, atomic failure/retry and stale preview, route-order selection, exact persisted history/drafts/invalidation, full route order keyboard/drag/save/cancel/conflict, themes/narrow layout");
+	console.log("PASS settings management: provider source selector/order/filtering, empty states and add action, selection scope, atomic failure/retry and stale preview, route-order selection, exact persisted history/drafts/invalidation, full route order keyboard/drag/save/cancel/conflict, themes/narrow layout");
 } catch (error) { await shot("failure"); throw error; }
 finally { await browser.close(); }

@@ -31,6 +31,7 @@ export function useFamilyModels() {
 	const [config, setConfig] = useState<FamilyModelsConfig>(() => seedFamilyModels(readStored()));
 	const [updating, setUpdating] = useState<ReadonlySet<string>>(new Set());
 	const [updateNotice, setUpdateNotice] = useState<{ familyId: string; ok: boolean; text: string }>();
+	const refreshPending = useRef(false);
 	// Edits and refreshes read the latest committed config through the ref so
 	// batched state updates never overwrite each other.
 	const configRef = useRef(config);
@@ -61,9 +62,13 @@ export function useFamilyModels() {
 		save(next);
 	}, [save]);
 
-	const refreshFamily = useCallback(async (familyId: string) => {
+	const refreshFamilies = useCallback(async (familyIds: readonly string[]) => {
+		const idsToRefresh = [...new Set(familyIds)];
+		if (!idsToRefresh.length || refreshPending.current) return;
+		refreshPending.current = true;
+		const familyId = idsToRefresh.length === 1 ? idsToRefresh[0] : "all";
 		setUpdateNotice(undefined);
-		setUpdating((previous) => new Set(previous).add(familyId));
+		setUpdating(new Set(idsToRefresh));
 		try {
 			// A successful refresh bypasses the Rust caches and returns the
 			// freshly fetched catalog and latest-group data directly.
@@ -72,24 +77,28 @@ export function useFamilyModels() {
 				setUpdateNotice({ familyId, ok: false, text: "无法连接官方页面或模型目录，请稍后重试或手动编辑。" });
 				return;
 			}
-			const ids = pickVisibleIds(familyId, fresh.latest, fresh.catalog);
-			const current = configRef.current[familyId];
-			if (!ids.length) {
+			const next = { ...configRef.current };
+			let refreshed = 0;
+			for (const id of idsToRefresh) {
+				const ids = pickVisibleIds(id, fresh.latest, fresh.catalog);
+				if (!ids.length) continue;
+				next[id] = mergeFamilyModels(next[id], ids);
+				refreshed++;
+			}
+			if (!refreshed) {
 				setUpdateNotice({ familyId, ok: false, text: "官方页面与目录都没有返回可用模型，请手动编辑。" });
 				return;
 			}
-			const merged = mergeFamilyModels(current, ids);
-			save({ ...configRef.current, [familyId]: merged });
-			const changed = JSON.stringify(merged) !== JSON.stringify(current);
-			setUpdateNotice({ familyId, ok: true, text: changed ? "已更新为最新的模型组合。" : "目录显示没有更新的模型。" });
+			const changed = JSON.stringify(next) !== JSON.stringify(configRef.current);
+			save(next);
+			const text = idsToRefresh.length === 1 ? changed ? "已更新为最新的模型组合。" : "目录显示没有更新的模型。" : `已刷新 ${refreshed} 个家族的展示目录。${refreshed < idsToRefresh.length ? "部分家族未返回可用模型，已保留原清单。" : ""}`;
+			setUpdateNotice({ familyId, ok: true, text });
 		} finally {
-			setUpdating((previous) => {
-				const next = new Set(previous);
-				next.delete(familyId);
-				return next;
-			});
+			refreshPending.current = false;
+			setUpdating(new Set());
 		}
 	}, [refreshCatalog, save]);
+	const refreshFamily = useCallback((familyId: string) => refreshFamilies([familyId]), [refreshFamilies]);
 
 	return useMemo(() => ({
 		config,
@@ -97,8 +106,9 @@ export function useFamilyModels() {
 		setFamilyModels,
 		removeFamily,
 		refreshFamily,
+		refreshFamilies,
 		updating,
 		updateNotice,
 		clearUpdateNotice: () => setUpdateNotice(undefined),
-	}), [catalog, config, setFamilyModels, removeFamily, refreshFamily, updating, updateNotice]);
+	}), [catalog, config, setFamilyModels, removeFamily, refreshFamily, refreshFamilies, updating, updateNotice]);
 }

@@ -56,6 +56,6 @@ export function settingsTestDisplay(test?: SettingsTestRecord, now = Date.now())
 	if (test.configChanged) return { label: "需重新测试", title: detail, tone: "muted" as const };
 	return { label: `${test.ok ? "✓" : "×"} ${test.latencyMs} ms · ${relative}`, title: detail, tone: test.ok ? "success" as const : "error" as const };
 }
-export function providerBatchImpact(relays: readonly RelaySpec[], families: readonly ModelFamily[], ids: readonly string[]) {
-	return { names: relays.filter((relay) => ids.includes(relay.id)).map((relay) => relay.name), routeCount: families.flatMap((family) => family.routes).filter((route) => ids.includes(route.relayId)).length };
+export function providerBatchImpact(relays: readonly RelaySpec[], _families: readonly ModelFamily[], ids: readonly string[]) {
+	return { names: relays.filter((relay) => ids.includes(relay.id)).map((relay) => relay.name), routeCount: relays.filter((relay) => ids.includes(relay.id)).reduce((count, relay) => count + (relay.models?.length ?? 0), 0) };
 }

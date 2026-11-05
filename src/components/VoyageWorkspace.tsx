@@ -10,7 +10,6 @@ import { ChatView } from "./ChatView";
 import { ContextUsage } from "./ContextUsage";
 import { VoyageRail } from "./VoyageRail";
 import { useModelFamily } from "../chat/familyContext";
-import type { RouteAuthorizationChoice, RouteAuthorizationRequest } from "../chat/routeAuthorization";
 import { Dialog } from "./ui";
 import { ResizeSeparator } from "./ResizeSeparator";
 
@@ -33,7 +32,7 @@ export function useVoyagePanel() {
 	return [expanded, toggle] as const;
 }
 
-export function VoyageWorkspace({ draftTarget, revealMessage, state, loading = false, connected, pending, actions, onSend, onReconnect, projectName, failover, modelNotice, routeAuthorization, railWidth = 260, availableWidth = window.innerWidth, onRailWidth, onRailWidthCommit, topBar, expanded: controlledExpanded, onToggle }: {
+export function VoyageWorkspace({ draftTarget, revealMessage, state, loading = false, connected, pending, actions, onSend, onReconnect, projectName, modelNotice, railWidth = 260, availableWidth = window.innerWidth, onRailWidth, onRailWidthCommit, topBar, expanded: controlledExpanded, onToggle }: {
 	draftTarget?: DraftTarget;
 	revealMessage?: MessageReveal;
 	modelNotice?: string;
@@ -45,8 +44,6 @@ export function VoyageWorkspace({ draftTarget, revealMessage, state, loading = f
 	onSend: (text: string, images?: ImageAttachment[], delivery?: Delivery) => Promise<boolean>;
 	onReconnect: () => void;
 	projectName?: string;
-	failover?: { label: string; switch: (automatic?: boolean) => void };
-	routeAuthorization?: { request: RouteAuthorizationRequest; onChoice: (choice: RouteAuthorizationChoice) => void };
 	railWidth?: number;
 	availableWidth?: number;
 	onRailWidth?: (width: number) => void;
@@ -78,7 +75,7 @@ export function VoyageWorkspace({ draftTarget, revealMessage, state, loading = f
 		<div className="chat-column">
 			{topBar}
 			<LiveTurnContext.Provider value={metrics.liveTurn}>
-				<StableChatView draftTarget={draftTarget} revealMessage={revealMessage} state={state} loading={loading} connected={connected} pending={pending} actions={actions} onSend={onSend} onReconnect={onReconnect} projectName={projectName} failover={failover} routeAuthorization={routeAuthorization} />
+				<StableChatView draftTarget={draftTarget} revealMessage={revealMessage} state={state} loading={loading} connected={connected} pending={pending} actions={actions} onSend={onSend} onReconnect={onReconnect} projectName={projectName} />
 			</LiveTurnContext.Provider>
 			<ContextUsage notice={modelNotice} metrics={metrics} />
 		</div>

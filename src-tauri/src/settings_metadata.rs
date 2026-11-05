@@ -19,7 +19,7 @@ pub struct TestRecord {
 }
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct UseRecord { pub relay_id: String, pub route_id: String, pub used_at: u64 }
+pub struct UseRecord { pub relay_id: String, #[serde(default, skip_serializing_if = "String::is_empty")] pub route_id: String, pub used_at: u64 }
 #[derive(Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Metadata { pub version: u32, pub tests: Vec<TestRecord>, pub usage: Vec<UseRecord>, #[serde(default)] connections: HashMap<String, Connection> }
@@ -50,7 +50,7 @@ fn write(dir: &Path, value: &Metadata) -> Result<(), String> {
 	providers::atomic_write(&dir.join(FILE), &serde_json::to_value(value).map_err(|_| "无法编码本地记录")?)
 }
 fn referenced(config: &FamiliesConfig, relay: &str, model: &str) -> bool {
-	config.families.iter().any(|family| family.routes.iter().any(|route| route.relay_id == relay && route.models.iter().any(|item| item.model_id == model)))
+	config.relays.iter().any(|item| item.id == relay && item.models.iter().any(|entry| entry.model.model_id == model))
 }
 fn sync(value: &mut Metadata, config: &FamiliesConfig) {
 	value.version = 1;
@@ -62,7 +62,7 @@ fn sync(value: &mut Metadata, config: &FamiliesConfig) {
 		}
 	}
 	value.tests.retain(|test| referenced(config, &test.relay_id, &test.model_id));
-	value.usage.retain(|usage| config.relays.iter().any(|relay| relay.id == usage.relay_id) && config.families.iter().any(|family| family.routes.iter().any(|route| route.id == usage.route_id && route.relay_id == usage.relay_id)));
+	value.usage.retain(|usage| config.relays.iter().any(|relay| relay.id == usage.relay_id));
 }
 /// Caller holds CONFIG_LOCK, including config commits and concurrent sessions.
 pub fn reconcile(dir: &Path, config: &FamiliesConfig) {
@@ -163,6 +163,7 @@ mod tests {
 			{"id":"ra", "relayId":"a", "models":[{"modelId":"actual/model", "contextWindow":32000,"maxTokens":4096}]},
 			{"id":"rb", "relayId":"b", "models":[{"modelId":"actual/model", "contextWindow":32000,"maxTokens":4096}]}
 		])).unwrap();
+		crate::families::provider_models::migrate(&mut config).unwrap();
 		crate::families::save(&dir, &config).unwrap();
 		Fixture { dir, config }
 	}
@@ -221,7 +222,7 @@ mod tests {
 		let mut f = fixture();
 		let ticket = begin(&f.dir, &f.config, &f.config.relays[0], "actual/model");
 		finish(&f.dir, &f.config, "baseline", ticket, &result(true), false);
-		f.config.relays[0].name = "Renamed".into(); f.config.families[0].routes[0].models[0].input_cost = 99.0;
+		f.config.relays[0].name = "Renamed".into(); f.config.relays[0].models[0].model.input_cost = 99.0;
 		assert!(!query(&f.dir, &f.config).tests[0].config_changed);
 		for field in 0..4 {
 			let pending = begin(&f.dir, &f.config, &f.config.relays[0], "actual/model");
@@ -230,7 +231,7 @@ mod tests {
 			finish(&f.dir, &f.config, "late", pending, &result(false), false);
 			assert!(query(&f.dir, &f.config).tests[0].ok);
 		}
-		f.config.families[0].routes[0].models[0].model_id = "new-model".into();
+		f.config.relays[0].models[0].model.model_id = "new-model".into();
 		assert!(query(&f.dir, &f.config).tests.is_empty());
 	}
 
@@ -258,7 +259,7 @@ mod tests {
 	#[test]
 	fn use_records_require_live_valid_managed_responses_and_dedupe_tools() {
 		let mut f = fixture(); let mut seen = HashSet::new();
-		let mut event = json!({"type":"message_end", "message":{"role":"assistant", "provider":"skiff-relay-b-deepseek", "model":"actual/model", "timestamp":123, "stopReason":"toolUse", "content":[{"type":"toolCall", "id":"call"}]}});
+		let mut event = json!({"type":"message_end", "message":{"role":"assistant", "provider":"skiff-relay-b", "model":"actual/model", "timestamp":123, "stopReason":"toolUse", "content":[{"type":"toolCall", "id":"call"}]}});
 		record_response(&f.dir, &f.config, &event, &mut seen);
 		let first = query(&f.dir, &f.config).usage[0].used_at;
 		record_response(&f.dir, &f.config, &event, &mut seen);
@@ -270,8 +271,8 @@ mod tests {
 		event["message"]["provider"] = json!("unmanaged"); record_response(&f.dir, &f.config, &event, &mut seen);
 		assert_eq!(query(&f.dir, &f.config).usage.len(), 1);
 		assert_eq!(query(&f.dir, &f.config).usage[0].relay_id, "b");
-		assert_eq!(query(&f.dir, &f.config).usage[0].route_id, "rb");
-		f.config.families[0].routes.pop(); reconcile(&f.dir, &f.config);
+		assert!(query(&f.dir, &f.config).usage[0].route_id.is_empty());
+		f.config.relays.pop(); reconcile(&f.dir, &f.config);
 		assert!(query(&f.dir, &f.config).usage.is_empty());
 	}
 
@@ -292,7 +293,7 @@ mod tests {
 		let f = fixture();
 		std::thread::scope(|scope| { for index in 0..8 { let dir = &f.dir; let config = &f.config; scope.spawn(move || {
 			let _guard = providers::CONFIG_LOCK.lock().unwrap();
-			let event = json!({"type":"message_end", "message":{"role":"assistant", "provider":if index % 2 == 0 {"skiff-relay-a-deepseek"} else {"skiff-relay-b-deepseek"}, "model":"actual/model", "timestamp":index, "content":[{"type":"text","text":"valid"}]}});
+			let event = json!({"type":"message_end", "message":{"role":"assistant", "provider":if index % 2 == 0 {"skiff-relay-a"} else {"skiff-relay-b"}, "model":"actual/model", "timestamp":index, "content":[{"type":"text","text":"valid"}]}});
 			record_response(dir, config, &event, &mut HashSet::new());
 		}); } });
 		assert_eq!(query(&f.dir, &f.config).usage.len(), 2);
@@ -320,49 +321,4 @@ mod tests {
 		assert!(deleted.relays.is_empty()); assert!(deleted.families[0].routes.is_empty());
 	}
 
-	#[test]
-	fn route_order_rejects_incomplete_duplicate_alias_and_replaced_route_sets() {
-		let mut f = fixture();
-		f.config.relays[1].enabled = false;
-		f.config.families[0].routes[1].enabled = false;
-		f.config.families[0].routes[1].models.clear();
-		crate::families::save(&f.dir, &f.config).unwrap();
-		for ids in [vec!["ra".into()], vec!["ra".into(), "ra".into()], vec!["a".into(), "b".into()], vec!["ra".into(), "new".into()]] { assert!(crate::families::reorder_routes_in(&f.dir, "deepseek", &ids).is_err()); }
-		let saved = crate::families::reorder_routes_in(&f.dir, "deepseek", &["rb".into(), "ra".into()]).unwrap();
-		assert_eq!(saved.families[0].routes[0].id, "rb");
-		assert!(!saved.families[0].routes[0].enabled);
-		assert!(saved.families[0].routes[0].models.is_empty());
-		assert_eq!(serde_json::to_value(&saved.families[0].routes[1]).unwrap(), serde_json::to_value(&f.config.families[0].routes[0]).unwrap());
-	}
-
-	/// Explicit opt-in: real pi, temporary agent directory and loopback service only.
-	#[test]
-	#[ignore = "set SKIFF_TEST_PI_CLI and run this test explicitly"]
-	fn real_pi_responses_flow_through_native_metadata_observer() {
-		let f = fixture();
-		let capture = f.dir.join("events.json");
-		let cli = std::env::var("SKIFF_TEST_PI_CLI").expect("SKIFF_TEST_PI_CLI required");
-		let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
-		let status = std::process::Command::new("node").arg(root.join("tests/pi.families.integration.mjs")).arg(cli).env("SKIFF_SETTINGS_CAPTURE", &capture).current_dir(root).status().unwrap();
-		assert!(status.success());
-		let captured: serde_json::Value = serde_json::from_slice(&std::fs::read(capture).unwrap()).unwrap();
-		let mut config = FamiliesConfig::default();
-		for (index, route) in captured["routes"].as_array().unwrap().iter().enumerate() {
-			let id = ["a", "b", "c", "d"][index];
-			config.relays.push(serde_json::from_value(json!({"id":id,"name":id,"baseUrl":route["baseUrl"],"apiKey":"dummy"})).unwrap());
-			config.families[0].routes.push(serde_json::from_value(json!({"id":format!("route-{id}"),"relayId":id,"models":route["models"].as_array().unwrap().iter().map(|model| json!({"modelId":model["id"],"contextWindow":model["contextWindow"],"maxTokens":model["maxTokens"]})).collect::<Vec<_>>()})).unwrap());
-		}
-		crate::families::save(&f.dir, &config).unwrap();
-		// Reordering changes explicit priority, without changing attribution.
-		config = crate::families::reorder_routes_in(&f.dir, "deepseek", &["route-b".into(),"route-a".into(),"route-c".into(),"route-d".into()]).unwrap();
-		let mut seen = HashSet::new();
-		for event in captured["events"].as_array().unwrap() { record_response(&f.dir, &config, event, &mut seen); }
-		let records = query(&f.dir, &config).usage;
-		assert_eq!(records.len(), 2, "401 and timeout routes must not count");
-		assert!(records.iter().any(|entry| entry.relay_id == "a" && entry.route_id == "route-a"));
-		assert!(records.iter().any(|entry| entry.relay_id == "b" && entry.route_id == "route-b"));
-		let before = serde_json::to_value(&records).unwrap();
-		for event in captured["events"].as_array().unwrap() { record_response(&f.dir, &config, event, &mut seen); }
-		assert_eq!(serde_json::to_value(query(&f.dir, &config).usage).unwrap(), before);
-	}
 }

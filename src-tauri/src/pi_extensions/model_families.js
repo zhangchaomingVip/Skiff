@@ -7,9 +7,30 @@ import {
 } from "@mariozechner/pi-ai";
 
 /** Present a non-streaming completion to pi's normal streaming parser. */
-export async function adaptResponse(response) {
+export async function adaptResponse(response, api = "openai-completions") {
 	if (!response.ok) return response;
 	const completion = await response.json();
+	const events = [];
+	if (api === "openai-responses") {
+		events.push({ type: "response.created", response: completion });
+		for (const [index, item] of (completion.output ?? []).entries()) events.push({ type: "response.output_item.done", output_index: index, item });
+		events.push({ type: `response.${completion.status ?? "completed"}`, response: completion });
+	} else if (api === "anthropic-messages") {
+		events.push({ type: "message_start", message: { ...completion, content: [] } });
+		for (const [index, block] of (completion.content ?? []).entries()) {
+			const tool = block.type === "tool_use";
+			events.push({ type: "content_block_start", index, content_block: tool ? { ...block, input: {} } : block });
+			if (tool) events.push({ type: "content_block_delta", index, delta: { type: "input_json_delta", partial_json: JSON.stringify(block.input ?? {}) } });
+			events.push({ type: "content_block_stop", index });
+		}
+		events.push({ type: "message_delta", delta: { stop_reason: completion.stop_reason, stop_sequence: completion.stop_sequence }, usage: completion.usage });
+		events.push({ type: "message_stop" });
+	} else if (api === "google-generative-ai" || api === "google-vertex") {
+		events.push(completion);
+	}
+	if (events.length) return new Response(events.map((event) => `${event.type ? `event: ${event.type}\n` : ""}data: ${JSON.stringify(event)}\n\n`).join(""), {
+		status: 200, headers: { "content-type": "text/event-stream" },
+	});
 	const choices = (completion.choices ?? []).map((choice) => ({
 		index: choice.index ?? 0,
 		delta: {
@@ -33,8 +54,27 @@ const ADAPTERS = {
 	"google-vertex": () => googleVertexApi(),
 };
 
-/** Only Chat Completions has a plain-JSON response Skiff can re-present as SSE. */
-const NON_STREAMING_AWARE = new Set(["openai-completions"]);
+const GOOGLE_APIS = new Set(["google-generative-ai", "google-vertex"]);
+
+/** Google's SDK does not accept a custom fetch option. A private header scopes
+ * this bridge to its non-streaming requests; it is removed before transmission.
+ * All unrelated requests keep their original fetch behavior. */
+function googleNonStreamingBridge() {
+	const marker = crypto.randomUUID();
+	const originalFetch = globalThis.fetch;
+	globalThis.fetch = async (input, init) => {
+		const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
+		if (headers.get("x-skiff-response-mode") !== marker) return originalFetch(input, init);
+		headers.delete("x-skiff-response-mode");
+		const request = new Request(input, { ...init, headers });
+		const url = new URL(request.url);
+		if (!url.pathname.endsWith(":streamGenerateContent")) throw new Error("Google 非流式请求端点无效");
+		url.pathname = url.pathname.replace(/:streamGenerateContent$/, ":generateContent");
+		url.searchParams.delete("alt");
+		return adaptResponse(await originalFetch(new Request(url, request)), "google-generative-ai");
+	};
+	return marker;
+}
 
 /** Bound silence, not the lifetime of a healthy streaming response. */
 function idleTimeout(timeoutMs, parentSignal) {
@@ -64,10 +104,13 @@ export default function modelFamilies(pi) {
 		try { runtime = readFileSync(runtimeFile, "utf8"); } catch { /* fall back to the small environment form */ }
 	}
 	const routes = JSON.parse(runtime);
+	const googleMarker = routes.some((route) => GOOGLE_APIS.has(route.api) && route.models.some((model) => model.streaming === false)) ? googleNonStreamingBridge() : undefined;
 	const lookup = new Map(routes.map((route) => [route.providerKey, route]));
 	const streamSimple = (model, context, options = {}) => {
 		const route = lookup.get(model.provider);
 		if (!route) throw new Error("找不到该提供商的请求配置");
+		const settings = route.models.find((entry) => entry.id === model.id);
+		if (!settings) throw new Error("模型配置不存在");
 		const api = route.api ?? "openai-completions";
 		// Family routes serve arbitrary relays: pi cannot infer their protocol,
 		// tool support or capability profile from our provider key or URL.
@@ -79,11 +122,19 @@ export default function modelFamilies(pi) {
 			timeoutMs: route.timeoutSeconds * 1000, apiKey: process.env[route.keyEnv],
 			onPayload: async (payload, current) => {
 				payload = await options.onPayload?.(payload, current) ?? payload;
-				if (!route.tools) { delete payload.tools; delete payload.tool_choice; delete payload.parallel_tool_calls; }
+				if (settings.tools === false) {
+					delete payload.tools; delete payload.tool_choice; delete payload.parallel_tool_calls;
+					if (payload.config) { delete payload.config.tools; delete payload.config.toolConfig; }
+				}
+				if (GOOGLE_APIS.has(api) && settings.streaming === false) {
+					payload.config ??= {};
+					const http = payload.config.httpOptions ?? {};
+					payload.config.httpOptions = { ...http, headers: { ...http.headers, "x-skiff-response-mode": googleMarker } };
+				}
 				return payload;
 			},
 		};
-		if (NON_STREAMING_AWARE.has(api) && !route.streaming) {
+		if (!GOOGLE_APIS.has(api) && settings.streaming === false) {
 			// Keep the SDK in stream parsing mode, but send a normal JSON request
 			// upstream for channels with streaming disabled.
 			const doFetch = options.fetch ?? globalThis.fetch;
@@ -93,7 +144,7 @@ export default function modelFamilies(pi) {
 					payload.stream = false; delete payload.stream_options;
 					init = { ...init, body: JSON.stringify(payload) };
 				}
-				return adaptResponse(await doFetch(input, init));
+				return adaptResponse(await doFetch(input, init), api);
 			};
 		}
 		let upstream;

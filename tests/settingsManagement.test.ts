@@ -1,3 +1,4 @@
+import { blankModel } from "../src/chat/useModelFamilies.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { latestSettingsTest, providerBatchImpact, settingsTestDisplay, settingsTestSummary, sortSettingsProviders, type SettingsTestRecord } from "../src/chat/settingsManagement.ts";
@@ -44,8 +45,9 @@ test("route test display keeps performance and relative time visible while detai
 	assert.match(changed.title, /配置已变化.*复测/);
 });
 
-test("batch impact includes disabled and empty routes without changing their switches", () => {
+test("batch impact counts enabled and disabled models without changing their switches", () => {
 	const relays = ["a", "b"].map((id) => ({ ...blankRelay(), id, name: id }));
+	relays[0].models = [{ ...blankModel(), modelId: "one", enabled: false, streaming: true, tools: true, reasoning: true, familyId: "deepseek" }, { ...blankModel(), modelId: "two", enabled: true, streaming: true, tools: true, reasoning: true, familyId: "deepseek" }];
 	const families = [{ id: "deepseek", routes: [{ id: "1", relayId: "a", enabled: false, models: [] }, { id: "2", relayId: "a", enabled: true, models: [] }, { id: "3", relayId: "b", models: [] }] }] as unknown as ModelFamily[];
 	assert.deepEqual(providerBatchImpact(relays, families, ["a"]), { names: ["a"], routeCount: 2 });
 	assert.equal(families[0].routes[0].enabled, false);

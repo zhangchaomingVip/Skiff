@@ -1,13 +1,12 @@
-// Run on the preview port: node tests/models-settings.browser.mjs http://localhost:1423
-// Uses the local mock bridge only: no real keys, no paid model calls.
+// Isolated mock bridge. No credentials or real model requests.
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const { chromium } = process.env.SKIFF_PLAYWRIGHT_DIR ? require(process.env.SKIFF_PLAYWRIGHT_DIR) : await import("playwright");
-const origin = process.argv[2] ?? "http://localhost:1423";
-const output = new URL(process.env.SKIFF_SETTINGS_SCREENSHOTS ?? "../features/028-settings-information-redesign/screenshots/", import.meta.url);
+const { chromium } = require(process.env.SKIFF_PLAYWRIGHT_DIR ?? "../.playwright-cli/node_modules/playwright-core");
+const origin = process.argv[2] ?? "http://localhost:1421";
+const output = new URL("../dist/models-settings/", import.meta.url);
 await fs.mkdir(output, { recursive: true });
 const browser = await chromium.launch({ headless: true, channel: "msedge" });
 const page = await browser.newPage({ viewport: { width: 1100, height: 750 } });
@@ -16,121 +15,163 @@ const errors = [];
 page.on("pageerror", (error) => errors.push(String(error)));
 const dialog = () => page.getByRole("dialog", { name: "设置", exact: true });
 const button = (name) => dialog().getByRole("button", { name, exact: true });
-const shot = (name) => page.screenshot({ animations: "disabled", path: new URL(`models-settings-${name}.png`, output).pathname.replace(/^\/([A-Z]:)/, "$1") });
-const open = async (theme = "light", { reset = false, persist = false } = {}) => {
-	await page.goto(`${origin}/tests/preview.html?fixture=archive&theme=${theme}${persist ? "&persist=1" : ""}`);
-	if (reset) await page.evaluate(() => localStorage.removeItem("skiff.family-models.v1"));
-	await page.reload();
-	await page.waitForFunction(() => document.querySelector(".sidebar")?.dataset.connected === "true");
-	await page.keyboard.press("Control+Comma");
-	await dialog().waitFor();
-	await button("模型").click();
+const family = () => dialog().getByRole("combobox", { name: "模型家族", exact: true });
+const search = () => dialog().getByRole("textbox", { name: "搜索模型名称或提供商", exact: true });
+const card = (id) => dialog().getByRole("article", { name: `DeepSeek ${id}`, exact: true });
+const row = () => card("deepseek-flash").locator(".model-provider-row");
+const testButton = () => row().getByRole("button", { name: "测试连接 官方直连 deepseek-flash", exact: true });
+const commands = (command) => page.evaluate((command) => window.skiffPreview.commands.filter((entry) => entry.command === command), command);
+const screenshot = (name) => page.screenshot({ animations: "disabled", path: new URL(`${name}.png`, output).pathname.replace(/^\/([A-Z]:)/, "$1") });
+const layout = async () => {
+	assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+	for (const selector of [".settings-content", ".models-toolbar", ".model-card-list"]) assert.equal(await dialog().locator(selector).evaluate((node) => node.scrollWidth > node.clientWidth), false, `${selector} must fit`);
+	assert.equal(await dialog().locator(".models-toolbar").evaluate((toolbar) => {
+		const boxes = [...toolbar.querySelectorAll("input, select, .settings-toolbar-extras button")].map((node) => node.getBoundingClientRect());
+		return boxes.every((box, index) => boxes.slice(index + 1).every((other) => box.right <= other.left || box.left >= other.right || box.bottom <= other.top || box.top >= other.bottom));
+	}), true, "Toolbar controls must never overlap");
+	assert.equal(await dialog().locator(".model-settings-card .model-settings-card").count(), 0);
 };
-const close = async () => { await button("关闭设置").click(); await dialog().waitFor({ state: "detached" }); };
 
 try {
-	// 1. Seeded family view: tabs for the families, and the selected family card
-	// lists its two default models plus an Auto card below.
-	await open(undefined, { reset: true });
-	await shot("models-light");
-	const tabs = await dialog().locator(".family-model-tab").allTextContents();
-	for (const family of ["DeepSeek", "Kimi", "GLM"]) assert.ok(tabs.some((tab) => tab.includes(family)), `Family tab ${family} must exist`);
-	assert.equal(await dialog().locator(".switch").count(), 0, "Models entry must not expose route toggles");
-	const deepseekCard = dialog().locator(".family-card", { hasText: "DeepSeek" }).first();
-	assert.deepEqual(await deepseekCard.locator(".provider-row-title strong").allTextContents(), ["deepseek-v4-pro", "deepseek-flash"], "Seeded defaults must list the flagship and the flash variant");
+	for (const theme of ["light", "dark"]) {
+		await page.setViewportSize({ width: 1100, height: 750 });
+		await page.goto(`${origin}/tests/preview.html?fixture=archive&theme=${theme}&color=blue`);
+		await page.waitForFunction(() => document.querySelector(".sidebar")?.dataset.connected === "true");
+		await page.keyboard.press("Control+Comma");
+		// Capture the provider controls as the visual contract.
+		await button("供应商").click();
+		const controlStyle = (node) => {
+			const style = getComputedStyle(node);
+			return { height: style.height, border: style.border, radius: style.borderRadius, outline: style.outlineStyle, shadow: style.boxShadow };
+		};
+		const providerSelect = dialog().getByRole("combobox", { name: "供应商来源" });
+		const providerResting = await providerSelect.evaluate(controlStyle);
+		await providerSelect.focus();
+		const providerFocus = await providerSelect.evaluate(controlStyle);
+		await button("模型").click();
+		assert.equal(await dialog().getByRole("tablist").count(), 0, "Legacy tabs are removed");
+		assert.equal(await family().inputValue(), "all");
+		const options = await family().getByRole("option").allTextContents();
+		for (const label of ["全部家族", "DeepSeek", "Kimi", "GLM", "Auto"]) assert.ok(options.some((option) => option.startsWith(`${label} (`)));
+		const total = await dialog().locator(".model-settings-card").count();
+		assert.equal(options[0], `全部家族 (${total})`);
+		assert.deepEqual(await family().evaluate(controlStyle), providerResting);
+		await family().focus();
+		assert.deepEqual(await family().evaluate(controlStyle), providerFocus);
+		assert.equal(await dialog().locator(".models-toolbar").evaluate((toolbar) => {
+			const boxes = [...toolbar.querySelectorAll("input, select, .settings-toolbar-extras button")].map((node) => node.getBoundingClientRect());
+			return boxes.every((box) => box.height === 32 && box.top === boxes[0].top);
+		}), true, "Toolbar controls share the provider page's baseline and height");
+		await layout();
+		await screenshot(`${theme}-all`);
 
-	// 2. Route availability counters come from enabled routes on enabled relays.
-	const counts = await deepseekCard.locator(".model-family-meta").allTextContents();
-	assert.ok(counts.every((text) => /路线可用|未接路线/.test(text)), `Every model row must report route availability, saw ${JSON.stringify(counts)}`);
-	assert.ok(counts.some((text) => text.includes("未接路线")), `Unwired models cross-link to the routes page, saw ${JSON.stringify(counts)}`);
-	assert.ok(counts.some((text) => text.includes("1 条路线可用")), `deepseek-flash is wired on one route, saw ${JSON.stringify(counts)}`);
+		await family().selectOption("deepseek");
+		assert.equal(await dialog().locator(".model-settings-card h3").filter({ hasText: /^DeepSeek$/ }).count(), 0, "No repeated family heading");
+		assert.ok((await dialog().locator(".model-settings-card h3").allTextContents()).includes("deepseek-v4-pro"));
+		await search().fill("SILICONFLOW.CN");
+		assert.equal(await dialog().locator(".model-provider-main strong").count(), 2);
+		assert.ok((await dialog().locator(".model-provider-main strong").allTextContents()).every((name) => name === "硅基低价"));
+		assert.equal(await family().getByRole("option", { name: "DeepSeek (2)", exact: true }).count(), 1);
+		await search().fill("官方直连");
+		assert.ok((await dialog().locator(".model-provider-main strong").allTextContents()).every((name) => name === "官方直连"));
+		await search().fill("sk-mock");
+		await dialog().getByText("没有匹配的模型，请调整搜索或家族筛选。", { exact: true }).waitFor();
+		await button("清空模型搜索").click();
+		assert.equal(await search().evaluate((node) => node === document.activeElement), true);
+		assert.equal(await row().locator(".provider-row-test-status").textContent(), "待测试");
+		assert.equal(await row().getByRole("button").count(), 2);
+		assert.equal(await row().getByRole("button").evaluateAll((nodes) => nodes.every((node) => !node.textContent.trim() && !!node.getAttribute("aria-label"))), true);
+		assert.equal(await row().locator("small").first().textContent(), "api.deepseek.com/v1");
 
-	// 3. Per-model tests: every row carries one, the unwired model is disabled,
-	// and name/result/action share the same tracks so rows line up top to bottom.
-	const rows = deepseekCard.locator(".model-family-row");
-	assert.equal(await rows.count(), 2, "Both DeepSeek models render as testable rows");
-	assert.equal(await rows.getByRole("button", { name: "测试", exact: true }).count(), 2, "Every model row has a test action");
-	assert.equal(await rows.filter({ hasText: "deepseek-v4-pro" }).getByRole("button", { name: "测试", exact: true }).isDisabled(), true, "An unwired model cannot be tested yet");
-	const wiredRow = rows.filter({ hasText: "deepseek-flash" });
-	await wiredRow.getByRole("button", { name: "测试", exact: true }).click();
-	await wiredRow.locator(".test-result.ok").waitFor();
-	assert.match(await wiredRow.locator(".test-result").textContent(), /官方直连 · 成功 · 137 ms/);
-	const geometry = await rows.evaluateAll((items) => items.map((row) => {
-		const box = row.getBoundingClientRect();
-		const action = row.querySelector(".provider-row-actions")?.getBoundingClientRect();
-		return { top: Math.round(box.top), height: Math.round(box.height), actionLeft: Math.round(action?.left ?? -1) };
-	}));
-	assert.equal(new Set(geometry.map((item) => item.actionLeft)).size, 1, `All test actions must share one column, saw ${JSON.stringify(geometry)}`);
-	assert.equal(new Set(geometry.map((item) => item.height)).size, 1, `All model rows must keep one height, saw ${JSON.stringify(geometry)}`);
-	assert.equal(geometry[0].top < geometry[1].top, true, "Rows stack top to bottom");
-	await shot("models-tested");
+		// Per-model test status, cancellation and stale-record handling.
+		await testButton().click();
+		await row().locator(".provider-row-test-status.is-success").getByText("137 ms", { exact: true }).waitFor();
+		assert.equal(await page.evaluate(() => window.skiffPreview.testRequests.at(-1).modelId), "deepseek-flash");
+		await button("供应商").click(); await button("模型").click(); await family().selectOption("deepseek");
+		await row().locator(".provider-row-test-status.is-success").waitFor();
+		await page.evaluate(() => { window.skiffPreview.metadata.tests.find((test) => test.modelId === "deepseek-flash").configVersion = "stale"; });
+		await button("供应商").click(); await button("模型").click(); await family().selectOption("deepseek");
+		await row().locator(".provider-row-test-status.is-warning").waitFor();
+		await page.evaluate(() => window.skiffPreview.deferTests(true));
+		await testButton().click();
+		await row().locator(".provider-row-test-status.is-running").waitFor();
+		await page.waitForFunction(() => window.skiffPreview.pendingTests.length > 0);
+		await row().getByRole("button", { name: "取消测试 官方直连 deepseek-flash", exact: true }).click();
+		await row().locator(".provider-row-test-status.is-warning").waitFor();
+		await page.evaluate(() => window.skiffPreview.pendingTests.splice(0).forEach((pending) => pending.resolve({ ok: true, latencyMs: 1, status: 200 })));
+		assert.equal(await row().locator(".provider-row-test-status").textContent(), "待测试", "Late replies cannot overwrite cancellation");
+		await testButton().click();
+		await page.waitForFunction(() => window.skiffPreview.pendingTests.length > 0);
+		await page.evaluate(() => {
+			window.skiffPreview.pendingTests.splice(0).forEach((pending) => pending.resolve({ ok: false, latencyMs: 10000, status: 504, error: "模型请求超时" }));
+			window.skiffPreview.deferTests(false);
+		});
+		await row().locator(".provider-row-test-status.is-error").getByText("连接超时", { exact: true }).waitFor();
+		await testButton().click();
+		await row().locator(".provider-row-test-status.is-success").waitFor();
+		assert.equal(await dialog().locator(".model-provider-row").evaluateAll((rows) => {
+			const columns = rows.map((row) => row.querySelector(".provider-row-actions").getBoundingClientRect().left);
+			return columns.every((left) => left === columns[0]);
+		}), true, "Provider actions share one column across model cards");
+		await screenshot(`${theme}-deepseek`);
 
-	// 4. Auto card: one fixed row, no test action of its own.
-	const autoCard = dialog().locator(".family-card", { hasText: "Auto" }).first();
-	assert.equal(await autoCard.locator(".provider-row").count(), 1, "Auto shows a single row");
-	assert.ok((await autoCard.locator(".provider-row-title").textContent()).includes("自动选择"), "Auto row explains itself");
-	assert.equal(await autoCard.getByRole("button", { name: "测试", exact: true }).count(), 0, "Auto is not a concrete model, so it gets no test");
+		// Editing jumps to the exact provider/model. Disabled models use a grey status.
+		await row().getByRole("button", { name: "编辑模型 官方直连 deepseek-flash", exact: true }).click();
+		await page.locator("#relay-name").waitFor();
+		assert.equal(await page.locator("#relay-name").inputValue(), "官方直连");
+		await dialog().getByRole("checkbox", { name: "启用模型 deepseek-flash", exact: true }).uncheck();
+		await button("保存").click();
+		await page.locator("#relay-name").waitFor({ state: "detached" });
+		await button("模型").click(); await family().selectOption("deepseek");
+		await row().locator(".provider-row-test-status.is-disabled").getByText("停用", { exact: true }).waitFor();
+		assert.equal(await testButton().isDisabled(), true);
+		assert.equal(await row().getByRole("button", { name: "编辑模型 官方直连 deepseek-flash", exact: true }).isEnabled(), true);
+		await button("供应商").click();
+		await dialog().getByRole("checkbox", { name: "停用 硅基低价", exact: true }).locator("..").click();
+		await page.waitForFunction(() => window.skiffPreview.relays.find((relay) => relay.id === "r2").enabled === false && !document.querySelector('[aria-label="关闭设置"]')?.disabled);
+		await button("模型").click(); await family().selectOption("deepseek");
+		await dialog().locator('.provider-row-test-status[title="供应商已停用"]').first().waitFor();
 
-	// 5. Dark theme rendering.
-	await shot("models-list");
-	await button("外观").click();
-	await button("深色").click();
-	await button("模型").click();
-	await shot("models-dark");
-
-	// 6. Editing: rename an entry as manual, add a manual model, delete an auto one.
-	await button("编辑家族模型").click();
-	await dialog().getByText("每个家族最多保留两个自动更新的模型").waitFor();
-	const deepseekSection = dialog().locator(".family-card", { hasText: "DeepSeek" }).first();
-	await shot("models-edit");
-	// Every edit row also offers its own test.
-	assert.equal(await deepseekSection.locator(".model-family-row").getByRole("button", { name: "测试", exact: true }).count(), 2, "Edit rows keep the per-model test");
-	// Add a manual model; it lands first with the manual tag.
-	await deepseekSection.getByRole("button", { name: "添加模型" }).click();
-	await deepseekSection.getByLabel("DeepSeek 新模型 ID").fill("deepseek-mine");
-	await deepseekSection.getByRole("button", { name: "添加", exact: true }).click();
-	let modelIds = await deepseekSection.locator(".provider-row-title strong").allTextContents();
-	assert.deepEqual(modelIds[0], "deepseek-mine", "Manual additions must be listed first");
-	assert.ok((await deepseekSection.locator(".provider-row", { hasText: "deepseek-mine" }).locator(".provider-tag").textContent()).includes("手动"), "Manual entries are tagged");
-	// Deleting an entry updates the draft list (the delete icon sits beside the test action).
-	await deepseekSection.getByRole("button", { name: "删除 deepseek-v4-pro", exact: true }).click();
-	modelIds = await deepseekSection.locator(".provider-row-title strong").allTextContents();
-	assert.ok(!modelIds.includes("deepseek-v4-pro"), "Deleted entries leave the list");
-	await shot("models-edited");
-
-	// 7. Persistence: the edit survives a page reload (localStorage-backed config).
-	await close();
-	await open(undefined, { persist: true });
-	const persisted = dialog().locator(".family-card", { hasText: "DeepSeek" }).first();
-	const persistedIds = await persisted.locator(".provider-row-title strong").allTextContents();
-	assert.deepEqual(persistedIds, ["deepseek-mine", "deepseek-flash"], `Manual edits must survive reload, saw ${JSON.stringify(persistedIds)}`);
-	assert.ok((await persisted.locator(".provider-row", { hasText: "deepseek-mine" }).locator(".provider-tag").textContent()).includes("手动"), "Manual tag persists");
-
-	// 8. Online refresh replaces auto entries but keeps the manual one (mock pages agree with the seed).
-	await persisted.getByRole("button", { name: "联网更新" }).click();
-	await dialog().getByText("目录显示没有更新的模型。").waitFor();
-	await shot("models-refreshed");
-
-	// 9. Empty fixture: no routes anywhere, rows cross-link to the routes page and tests stay disabled.
-	await close();
-	await page.evaluate(() => localStorage.removeItem("skiff.family-models.v1"));
-	await page.goto(`${origin}/tests/preview.html?fixture=empty&theme=light`);
-	await page.waitForFunction(() => document.querySelector(".sidebar")?.dataset.connected === "true");
-	await page.keyboard.press("Control+Comma");
-	await button("模型").click();
-	const links = await dialog().getByRole("button", { name: "未接路线，去配置" }).count();
-	assert.equal(links, 3, "The overlaid DeepSeek model rows and Auto cross-link without routes");
-	assert.equal(await dialog().locator(".model-family-row").getByRole("button", { name: "测试", exact: true }).count(), 2);
-	assert.equal(await dialog().locator(".model-family-row").getByRole("button", { name: "测试", exact: true }).first().isDisabled(), true);
-	await dialog().getByRole("button", { name: "未接路线，去配置" }).first().click();
-	await dialog().getByText(/还没有供应商|还没添加路线/).first().waitFor();
-	await shot("models-empty-routes");
-
-	await close();
+		// Manual display entries persist; all-family refresh fetches sources only once.
+		await dialog().getByRole("textbox", { name: "展示模型 ID", exact: true }).fill("deepseek-personal");
+		await button("添加").click();
+		await card("deepseek-personal").waitFor();
+		await card("deepseek-personal").getByRole("button", { name: "移出展示清单 deepseek-personal", exact: true }).click();
+		assert.equal(await card("deepseek-personal").count(), 0);
+		await dialog().getByRole("textbox", { name: "展示模型 ID", exact: true }).fill("deepseek-preserved"); await button("添加").click();
+		await family().selectOption("auto");
+		assert.equal(await button("刷新目录").isDisabled(), true);
+		await family().selectOption("all");
+		const fetches = (await commands("fetch_official_pages")).length;
+		await button("刷新目录").click();
+		await dialog().getByRole("status").filter({ hasText: /已刷新 \d+ 个家族的展示目录/ }).waitFor();
+		assert.equal((await commands("fetch_official_pages")).length, fetches + 1);
+		await card("deepseek-preserved").waitFor();
+		await family().selectOption("kimi");
+		const storedBefore = await page.evaluate(() => JSON.parse(localStorage.getItem("skiff.family-models.v1")));
+		await button("刷新目录").click();
+		await button("刷新目录").waitFor();
+		const storedAfter = await page.evaluate(() => JSON.parse(localStorage.getItem("skiff.family-models.v1")));
+		assert.deepEqual(storedBefore.deepseek, storedAfter.deepseek);
+		assert.deepEqual(storedBefore.glm, storedAfter.glm);
+		await family().selectOption("all");
+		for (const width of [900, 550, 390]) {
+			await page.setViewportSize({ width, height: 750 });
+			await layout();
+			await screenshot(`${theme}-${width}`);
+		}
+		await page.setViewportSize({ width: 1100, height: 750 });
+		await button("关闭设置").click();
+		await page.goto(`${origin}/tests/preview.html?fixture=archive&theme=${theme}&persist=1`);
+		await page.waitForFunction(() => document.querySelector(".sidebar")?.dataset.connected === "true");
+		await page.keyboard.press("Control+Comma"); await button("模型").click();
+		await card("deepseek-preserved").waitFor();
+	}
 	assert.deepEqual(errors, []);
-	console.log("PASS family tabs with route counters, per-model tests and aligned rows, Auto card, manual add/delete with persistence, refresh notice, empty-state cross-link, dark theme");
+	console.log("PASS models settings: family select/counts, model/provider search, shared controls, flat cards, statuses/test/cancel/edit, manual display persistence, scoped/shared refresh, light/dark/narrow layouts");
 } catch (error) {
-	await shot("failure");
-	console.error(errors);
+	await screenshot("failure");
 	throw error;
-} finally { await browser.close(); }
+} finally {
+	await browser.close();
+}

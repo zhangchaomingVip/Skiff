@@ -1,3 +1,4 @@
+import { useModelFamily } from "../chat/familyContext";
 import type { Delivery } from "../chat/interactions";
 import { TextArea, IconButton, Button } from "./ui";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
@@ -68,6 +69,7 @@ export function Composer({
 	getCommands: () => Promise<PiCommand[]>;
 	onAttachmentsChange?: (images: ImageAttachment[], files: TextAttachment[], replacementId?: string) => void;
 }) {
+	const { configurationHint } = useModelFamily();
 	const inputRef = useRef<HTMLTextAreaElement>(null);
 	const sendingRef = useRef(false);
 	const textRef = useRef(text);
@@ -132,7 +134,7 @@ export function Composer({
 
 	const submit = async () => {
 		const trimmed = text.trim();
-		if ((!trimmed && !images.length && !files.length) || disabled || missingAttachments.length > 0 || sendingRef.current || reading) return;
+		if ((!trimmed && !images.length && !files.length) || disabled || !!configurationHint || missingAttachments.length > 0 || sendingRef.current || reading) return;
 		if (images.length && !canUseImages) { setImageError(IMAGE_CAPABILITY_ERROR); return; }
 		sendingRef.current = true;
 		const sentIds = new Set(images.map((image) => image.id));
@@ -184,13 +186,13 @@ export function Composer({
 				onKeyDown={onKeyDown}
 				onPaste={(event) => { const selected = Array.from(event.clipboardData.files); if (selected.length) { event.preventDefault(); void addAttachments(selected); } }}
 			/>
-			<div className="composer-bottom"><span className="composer-context"><IconButton  onClick={() => pickAttachments()} disabled={disabled || reading || sendingRef.current} aria-label="添加图片、文本或 Word 文件" title="添加图片、UTF-8 文本或 Word（.docx）文件（支持拖放或粘贴）；Word 提取正文，单个最大 10 MiB"><Icon name="plus" size={20} /></IconButton><ModelMenu models={models} model={model} onModel={onSelectModel} disabled={!connected || modelDisabled} /><ReasoningChip level={thinkingLevel} levels={thinkingLevels} disabled={!connected || modelDisabled} onLevel={onThinkingLevel} />{reading && <span>读取中…</span>}</span><input ref={fileRef} type="file" hidden multiple accept="image/png,image/jpeg,image/webp,image/gif,text/*,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx,.log,.json,.ts,.tsx,.js,.rs,.py,.yaml,.yml,.toml" onChange={(event) => { const replacementId = replacementRef.current; replacementRef.current = undefined; void addAttachments(Array.from(event.target.files ?? []), replacementId); event.target.value = ""; }} /><div className="composer-actions">
+			<div className="composer-bottom"><span className="composer-context"><IconButton  onClick={() => pickAttachments()} disabled={disabled || reading || sendingRef.current} aria-label="添加图片、文本或 Word 文件" title="添加图片、UTF-8 文本或 Word（.docx）文件（支持拖放或粘贴）；Word 提取正文，单个最大 10 MiB"><Icon name="plus" size={20} /></IconButton><ModelMenu models={models} model={model} onModel={onSelectModel} disabled={modelDisabled} /><ReasoningChip level={thinkingLevel} levels={thinkingLevels} disabled={!connected || modelDisabled} onLevel={onThinkingLevel} />{reading && <span>读取中…</span>}</span><input ref={fileRef} type="file" hidden multiple accept="image/png,image/jpeg,image/webp,image/gif,text/*,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx,.log,.json,.ts,.tsx,.js,.rs,.py,.yaml,.yml,.toml" onChange={(event) => { const replacementId = replacementRef.current; replacementRef.current = undefined; void addAttachments(Array.from(event.target.files ?? []), replacementId); event.target.value = ""; }} /><div className="composer-actions">
 				{streaming && !hasContent ? (
 					<IconButton className="send-btn" variant="primary" size="primary" onClick={onAbort} disabled={stopping || !connected} aria-label="停止生成" title="停止生成（Ctrl+Shift+Backspace）">
 						<Icon name="stop" size={17} />
 					</IconButton>
 				) : (
-					<IconButton className="send-btn" variant="primary" size="primary" onClick={() => void submit()} disabled={disabled || missingAttachments.length > 0 || reading || !hasContent || (images.length > 0 && !canUseImages)} aria-label={streaming ? "发送并排队" : "发送消息"} title={missingAttachments.length > 0 ? "请重新添加或移除缺失附件后发送" : streaming ? "发送并排队（Enter）" : "发送消息（Enter）"}>
+					<IconButton className="send-btn" variant="primary" size="primary" onClick={() => void submit()} disabled={disabled || !!configurationHint || missingAttachments.length > 0 || reading || !hasContent || (images.length > 0 && !canUseImages)} aria-label={streaming ? "发送并排队" : "发送消息"} title={missingAttachments.length > 0 ? "请重新添加或移除缺失附件后发送" : streaming ? "发送并排队（Enter）" : "发送消息（Enter）"}>
 						<Icon name="arrow" size={19} />
 					</IconButton>
 				)}

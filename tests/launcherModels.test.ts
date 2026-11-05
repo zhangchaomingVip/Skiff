@@ -7,19 +7,19 @@ const offer = (patch: Partial<RuntimeOffer> = {}): RuntimeOffer => ({
 	offerId: "route-a/model-a", routeId: "route-a", familyId: "deepseek", familyName: "DeepSeek", relayId: "relay-a", relayName: "线路 A", providerKey: "provider-a", modelId: "model-a", inputCost: 1, outputCost: 2, currency: "CNY", maxTokens: 1000, contextWindow: 10000, routeOrder: 1, ...patch,
 });
 
-test("Launcher groups same model offers while preserving route choices", () => {
+test("Launcher separates same model by provider", () => {
 	const models = groupLauncherOffers([offer(), offer({ offerId: "route-b/model-a", routeId: "route-b", relayId: "relay-b", relayName: "线路 B", providerKey: "provider-b", routeOrder: 2 }), offer()]);
-	assert.equal(models.length, 1);
-	assert.equal(models[0].offers.length, 2);
+	assert.equal(models.length, 2);
+	assert.equal(models[0].offers.length, 1);
 	assert.equal(models[0].preferredOffer.routeId, "route-a");
 });
 
-test("Launcher prefers the first offer in route order", () => {
+test("Launcher retains source order without preferring a provider", () => {
 	const models = groupLauncherOffers([
 		offer({ offerId: "route-b/model-a", routeId: "route-b", relayId: "relay-b", relayName: "线路 B", providerKey: "provider-b", routeOrder: 2 }),
 		offer({ routeOrder: 1 }),
 	]);
-	assert.equal(models[0].preferredOffer.routeId, "route-a");
+	assert.equal(models[0].preferredOffer.routeId, "route-b");
 });
 
 test("Launcher drops malformed offers without inventing a card", () => {

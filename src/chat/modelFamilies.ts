@@ -1,14 +1,16 @@
 import type { Currency, ModelInfo } from "./types";
 
-/** One selectable (family, relay, model) entry as returned by the Rust layer. */
+/** One selectable provider/model entry as returned by the Rust layer. */
 export interface RuntimeOffer {
 	offerId?: string;
+	legacyRouteIds?: string[];
+	legacyProviderKeys?: string[];
 	routeId?: string;
 	familyId: string;
 	familyName: string;
 	relayId: string;
 	relayName: string;
-	/** pi provider key for this route, e.g. `skiff-relay-r1-deepseek`. */
+	/** Stable pi provider key, e.g. `skiff-relay-r1`. */
 	providerKey: string;
 	modelId: string;
 	alias?: string;
@@ -40,28 +42,14 @@ export function formatContextWindow(tokens: number): string {
 	return `${Number.isInteger(binary) ? binary : decimal}${suffix}`;
 }
 
-function orderedOffers(offers: RuntimeOffer[]): RuntimeOffer[] {
-	return offers.map((offer, index) => ({ offer, index }))
-		.sort((a, b) => (a.offer.routeOrder ?? a.index) - (b.offer.routeOrder ?? b.index) || a.index - b.index)
-		.map(({ offer }) => offer);
-}
-
-/**
- * Picks the first available route in the configured order for a family/model.
- */
-export function resolveRoute(offers: RuntimeOffer[], familyId: string, modelId: string): RuntimeOffer | undefined {
-	const candidates = orderedOffers(offers).filter((offer) => offer.familyId === familyId && offer.modelId === modelId);
-	return candidates[0];
-}
-
 /**
  * Turns each runtime offer into a concrete `ModelInfo` value. Offers remain
  * separate even when they expose the same model ID, so the picker can pin the
- * exact route selected by the user.
+ * exact provider selected by the user.
  */
 export function modelsFromOffers(offers: RuntimeOffer[]): ModelInfo[] {
 	const unique = new Map<string, RuntimeOffer>();
-	for (const offer of orderedOffers(offers)) unique.set(offer.offerId ?? `${offer.familyId}/${offer.routeId ?? offer.relayId}/${offer.modelId}`, offer);
+	for (const offer of offers) unique.set(offer.offerId ?? `${offer.familyId}/${offer.routeId ?? offer.relayId}/${offer.modelId}`, offer);
 	const concrete = [...unique.values()];
 	const titles = new Map<string, number>();
 	for (const offer of concrete) {
@@ -76,7 +64,7 @@ export function modelsFromOffers(offers: RuntimeOffer[]): ModelInfo[] {
 			id: resolved.modelId,
 			modelId: resolved.modelId,
 			offerId: resolved.offerId,
-			routeId: resolved.routeId,
+
 			familyId: resolved.familyId,
 			familyName: resolved.familyName,
 			relayId: resolved.relayId,
@@ -100,12 +88,12 @@ export function modelsFromOffers(offers: RuntimeOffer[]): ModelInfo[] {
 }
 
 /**
- * Reconciles the live model reported by pi with the family list. Explicit route
+ * Reconciles the live model reported by pi with the family list. Explicit model
  * capabilities, prices and limits take precedence; older offers without capability
  * fields retain pi's values, matched by provider key and model ID.
  */
 export function reconcile(current: ModelInfo | undefined, offers: RuntimeOffer[], available: ModelInfo[] = []): ModelInfo[] {
-	if (!offers.length) return available.length ? available : current ? [current] : [];
+	if (!offers.length) return [];
 	return modelsFromOffers(offers).map((model) => {
 		const live = current?.provider === model.provider && current.id === model.id ? current : available.find((item) => item.provider === model.provider && item.id === model.id);
 		return { ...live, ...model };
@@ -113,52 +101,16 @@ export function reconcile(current: ModelInfo | undefined, offers: RuntimeOffer[]
 }
 
 /**
- * Selection is pinned: the exact route must still exist. Otherwise fall back
- * within the family by the same model, then route order.
+ * Match only the exact supplier/model or one unambiguous migration alias.
  */
-export function resolveSelection(current: ModelInfo | undefined, offers: RuntimeOffer[], familyId?: string): { offer?: RuntimeOffer; invalidated: boolean } {
-	offers = orderedOffers(offers);
-	const targetModelId = current?.modelId ?? current?.id;
-	const pinned = current?.routeId && offers.find((offer) => offer.routeId === current.routeId && offer.modelId === targetModelId);
-	if (pinned) return { offer: pinned, invalidated: false };
-	const exact = offers.find((offer) => offer.providerKey === current?.provider && offer.modelId === targetModelId);
+export function resolveSelection(current: ModelInfo | undefined, offers: RuntimeOffer[], _familyId?: string): { offer?: RuntimeOffer; invalidated: boolean } {
+	if (!current) return { invalidated: false };
+	const id = current.modelId ?? current.id;
+	const exact = offers.find((offer) => offer.modelId === id && offer.providerKey === current.provider);
 	if (exact) return { offer: exact, invalidated: false };
-	const invalidated = !!current?.provider.startsWith("skiff-");
-	const sameFamily = offers.filter((offer) => offer.familyId === familyId);
-	const sameModel = sameFamily.filter((offer) => offer.modelId === targetModelId);
-	const fallback = sameModel[0]
-		?? sameFamily[0]
-		?? offers.find((offer) => offer.modelId === targetModelId)
-		?? offers[0];
-	if (invalidated) return { offer: fallback, invalidated: true };
-	return { offer: sameModel[0]
-		?? sameFamily[0]
-		?? offers.find((offer) => offer.modelId === targetModelId)
-		?? offers[0], invalidated: false };
-}
-
-/**
- * Failover: the next route of the same family that serves the same model ID.
- * There is no wraparound; none means "no backup route".
- */
-export interface RouteRequirements {
-	streaming?: boolean;
-	tools?: boolean;
-	vision?: boolean;
-	reasoning?: boolean;
-}
-
-export function nextRoute(current: ModelInfo, offers: RuntimeOffer[], requirements: RouteRequirements = {}): RuntimeOffer | undefined {
-	const index = offers.findIndex((offer) => (current.routeId ? offer.routeId === current.routeId : offer.providerKey === current.provider) && offer.modelId === (current.modelId ?? current.id));
-	if (index < 0) return undefined;
-	const familyId = offers[index].familyId;
-	const modelId = offers[index].modelId;
-	const order = offers[index].routeOrder ?? index;
-	return offers.find((offer, candidateIndex) => offer.familyId === familyId && offer.modelId === modelId && (offer.routeOrder ?? candidateIndex) > order
-		&& (!requirements.streaming || offer.streaming === true)
-		&& (!requirements.tools || offer.tools === true)
-		&& (!requirements.vision || offer.vision === true)
-		&& (!requirements.reasoning || offer.reasoning === true));
+	const legacy = offers.filter((offer) => offer.modelId === id && offer.legacyProviderKeys?.includes(current.provider)
+		&& (!current.routeId || offer.legacyRouteIds?.includes(current.routeId)));
+	return { offer: legacy.length === 1 ? legacy[0] : undefined, invalidated: legacy.length !== 1 };
 }
 
 export type ProviderFailureKind = "network" | "timeout" | "rate_limit" | "server" | "unauthorized" | "non_retryable";
@@ -174,9 +126,4 @@ export function classifyProviderFailure(error: string): ProviderFailureKind {
 
 export function isProviderFailure(error: string): boolean {
 	return classifyProviderFailure(error) !== "non_retryable";
-}
-
-/** True when the picker should fall back to pi's own model list. */
-export function needsFallback(offers: RuntimeOffer[]): boolean {
-	return offers.length === 0;
 }

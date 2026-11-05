@@ -19,6 +19,7 @@ export async function verifyFileTreeRefresh(page, temporaryRoot, artifacts, mode
 	await row("notes").click();
 	await row("notes/initial.md").waitFor();
 	await tool("对话").click();
+	await page.getByRole("button", { name: "全部模型", exact: true }).click();
 	await page.locator(".launcher-row", { hasText: modelId }).getByRole("button", { name: "开始聊天" }).click();
 	for (const round of [1, 2]) {
 		// The fixture creates a real file before each real pi reply finishes.

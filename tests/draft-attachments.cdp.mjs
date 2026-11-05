@@ -4,9 +4,8 @@ import assert from "node:assert/strict";
 export async function verifyDraftAttachments(page) {
 	const input = page.getByRole("textbox", { name: "聊天消息", exact: true });
 	await input.fill("CDP 附件草稿恢复验证");
-	const chooser = page.waitForEvent("filechooser");
-	await page.getByRole("button", { name: "添加图片、文本或 Word 文件", exact: true }).click();
-	await (await chooser).setFiles({ name: "cdp-draft.txt", mimeType: "text/plain", buffer: Buffer.alloc(512 * 1024, 92) });
+	const [chooser] = await Promise.all([page.waitForEvent("filechooser"), page.getByRole("button", { name: "添加图片、文本或 Word 文件", exact: true }).click()]);
+	await chooser.setFiles({ name: "cdp-draft.txt", mimeType: "text/plain", buffer: Buffer.alloc(512 * 1024, 92) });
 	await page.getByRole("button", { name: "移除文件 cdp-draft.txt", exact: true }).waitFor();
 	const saved = async (expectAttachment) => {
 		const chatId = JSON.parse(localStorage.getItem("skiff.workspace.v1")).activeId;

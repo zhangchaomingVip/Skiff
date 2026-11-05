@@ -553,8 +553,6 @@ pub fn run() {
 			families::save_relay, families::delete_relay, families::set_relay_enabled,
 			families::preview_relay_batch, families::batch_relays, families::test_settings_connection,
 			settings_metadata::list_settings_metadata,
-			families::save_route, families::delete_route, families::reorder_routes,
-			families::set_family_auto_failover, families::set_family_auto_retry,
 			families::test_provider_connection, families::cancel_provider_test, families::discover_relay_models, families::probe_relay_endpoint,
 			families::fetch_pricing_page, families::extract_pricing_table,
 			families::fetch_public_catalog, families::fetch_official_pages, families::set_usd_cny_rate, families::create_family,

@@ -9,7 +9,7 @@ import { snapshotsForMessages } from "./routeSnapshot";
 import { isArchived, type Conversation, type Project } from "./workspace";
 
 type PiSession = ReturnType<typeof usePiSession> & ReturnType<typeof useRuntimeRoutes>;
-type Configuration = { config?: FamiliesConfig; ready: boolean };
+type Configuration = { config?: FamiliesConfig; ready: boolean; deferReload?: boolean };
 const sessionKey = (target: SessionTarget) => JSON.stringify([target.id, target.cwd]);
 
 /** Runs independently of the visible transcript, including metadata persistence. */
@@ -39,17 +39,9 @@ function SessionRuntime({ target, chat, offers, configuration, report, updateCha
 			...(!chat.customTitle ? { title } : {}),
 			elapsedMs: session.elapsedMs,
 		};
-		// A failed managed-model restore can leave pi on its global default. Do
-		// not persist that unrelated default over the chat's pinned route before
-		// the runtime-route reconciler has a chance to select a live offer.
-		if (state.model && state.model.provider !== "unknown" && state.model.id !== "unknown" && (!chat.selectedModel?.provider.startsWith("skiff-") || state.model.provider.startsWith("skiff-"))) {
-			const model = state.model;
-			const offer = offers.find((item) => (model.routeId && item.routeId === model.routeId && item.modelId === model.id) || (item.providerKey === model.provider && item.modelId === model.id));
-			const selectedModel = { provider: model.provider, id: model.id, modelId: model.modelId ?? model.id, routeId: offer?.routeId ?? model.routeId, offerId: offer?.offerId ?? model.offerId };
-			if (JSON.stringify(chat.selectedModel) !== JSON.stringify(selectedModel)) patch.selectedModel = selectedModel;
-			const alias = offers.find((item) => item.offerId === selectedModel.offerId)?.alias?.trim();
-			if (chat.modelAlias !== alias) patch.modelAlias = alias;
-		}
+		const selected = chat.selectedModel;
+		const alias = offers.find((offer) => offer.providerKey === selected?.provider && offer.modelId === selected.id)?.alias?.trim();
+		if (chat.modelAlias !== alias) patch.modelAlias = alias;
 		const routeSnapshots = snapshotsForMessages(state.messages);
 		if (JSON.stringify(chat.routeSnapshots) !== JSON.stringify(routeSnapshots)) patch.routeSnapshots = routeSnapshots;
 		updateChat(target.id, patch);
@@ -60,7 +52,7 @@ function SessionRuntime({ target, chat, offers, configuration, report, updateCha
 /** Open conversations own separate hooks/processes; navigation only selects a projection. */
 export function usePiSessions(activeId: string | undefined, chats: Conversation[], projects: Project[], offers: readonly RuntimeOffer[], configuration: Configuration, updateChat: (id: string, patch: Partial<Conversation>) => void) {
 	const emptyBase = usePiSession();
-	const empty = useMemo<PiSession>(() => ({ ...emptyBase, modelNotice: undefined, setModelNotice: () => undefined, routeEvents: [], needsConfirmation: false, routeAuthorization: undefined, failover: undefined }), [emptyBase]);
+	const empty = useMemo<PiSession>(() => ({ ...emptyBase, modelBlocked: undefined, modelNotice: undefined, setModelNotice: () => undefined, needsConfirmation: false }), [emptyBase]);
 	const updateRef = useRef(updateChat); updateRef.current = updateChat;
 	const update = useCallback((id: string, patch: Partial<Conversation>) => updateRef.current(id, patch), []);
 	const [sessions, setSessions] = useState<Map<string, PiSession>>(() => new Map());

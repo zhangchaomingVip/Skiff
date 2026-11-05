@@ -1,15 +1,7 @@
-//! Model families: the user-facing way to organise models.
-//!
-//! Skiff fixes four model families (DeepSeek, Kimi, GLM, Auto). Endpoints live
-//! in relays — one base URL plus one API key. A route binds a relay to a family
-//! and lists the models (with per-model prices and limits) the relay serves
-//! for that family, so one relay can back all four families without retyping
-//! credentials. The routes array order is the family's priority: the first
-//! enabled, available route serves a model, and later routes provide failover.
-//! Selection happens on (family, model)
-//! and pins the concrete route; each route is projected into pi's
-//! `models.json` / `auth.json` as `skiff-relay-<relay>-<family>`, with every
-//! route of a relay sharing one key environment variable.
+//! Provider-owned models; family routes are read only migration data.
+
+pub(crate) mod provider_models;
+pub use provider_models::ProviderModel;
 
 use std::collections::HashMap;
 use std::future::Future;
@@ -125,7 +117,7 @@ fn default_timeout() -> u64 {
 }
 
 fn default_schema_version() -> u64 {
-	5
+	6
 }
 
 /// Fallback USD→CNY rate for the public catalog; user-adjustable, not fetched online.
@@ -200,6 +192,8 @@ pub struct RelaySpec {
 	/// the family it needs exists.
 	#[serde(default, skip_serializing_if = "Vec::is_empty")]
 	pub unassigned_models: Vec<ModelSpec>,
+	#[serde(default)]
+	pub models: Vec<ProviderModel>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -226,20 +220,13 @@ pub struct RouteSpec {
 	pub thinking_levels: Vec<String>,
 }
 
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RelayRouteSpec {
-	pub family_id: String,
-	pub route: RouteSpec,
-}
-
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ModelFamily {
 	pub id: String,
 	pub display_name: String,
 	/// Array order is the family's priority for initial selection and failover.
-	#[serde(default)]
+	#[serde(default, skip_serializing_if = "Vec::is_empty")]
 	pub routes: Vec<RouteSpec>,
 }
 
@@ -252,9 +239,9 @@ pub struct FamiliesConfig {
 	pub relays: Vec<RelaySpec>,
 	#[serde(default)]
 	pub families: Vec<ModelFamily>,
-	#[serde(default)]
+	#[serde(default, skip_serializing)]
 	pub auto_failover: bool,
-	#[serde(default)]
+	#[serde(default, skip_serializing)]
 	pub auto_retry: bool,
 	/// USD→CNY conversion applied when prefilling official catalog prices.
 	#[serde(default = "default_usd_cny_rate")]
@@ -286,6 +273,7 @@ impl Default for FamiliesConfig {
 #[serde(rename_all = "camelCase")]
 pub struct RuntimeOffer {
 	pub offer_id: String,
+	#[serde(skip_serializing)]
 	pub route_id: String,
 	pub family_id: String,
 	pub family_name: String,
@@ -297,7 +285,9 @@ pub struct RuntimeOffer {
 	pub billing_account_id: String,
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub price_multiplier: Option<f64>,
-	pub route_order: usize,
+
+	pub legacy_route_ids: Vec<String>,
+	pub legacy_provider_keys: Vec<String>,
 	pub streaming: bool,
 	pub tools: bool,
 	pub vision: bool,
@@ -326,11 +316,6 @@ pub struct TestResult {
 
 pub fn config_path(dir: &Path) -> std::path::PathBuf {
 	dir.join("skiff-families.json")
-}
-
-/// Legacy file kept next to the config when a pre-v3 file is discarded.
-fn legacy_backup_path(dir: &Path) -> std::path::PathBuf {
-	dir.join("skiff-families.v2.bak.json")
 }
 
 fn route_id_seed(family_id: &str, relay_id: &str) -> String {
@@ -393,14 +378,10 @@ pub fn load(dir: &Path) -> Result<FamiliesConfig, String> {
 	let bytes = std::fs::read(&path).map_err(|_| "无法读取家族配置".to_string())?;
 	let mut value: Value = serde_json::from_slice(&bytes)
 		.map_err(|_| "家族配置不是有效 JSON，请修复或删除 skiff-families.json".to_string())?;
-	// Testing-environment reset: a pre-v3 file is backed up verbatim and the
-	// app starts fresh; no data migration is attempted.
-	if value["version"].as_u64().unwrap_or(1) < 3 {
-		std::fs::rename(&path, legacy_backup_path(dir))
-			.map_err(|_| "无法备份旧版家族配置，请手动处理 skiff-families.json".to_string())?;
-		return Ok(Default::default());
-	}
-	migrate_value_to_v5(&mut value);
+	if value["version"].as_u64().unwrap_or(1) < 3 { return Err("此配置早于路线配置版本，请先升级旧版配置；原文件已保留".into()); }
+	let old_version = value["version"].as_u64().unwrap_or(3);
+	if old_version > 6 { return Err("配置版本高于当前支持版本，原文件已保留".into()); }
+	if old_version < 5 { migrate_value_to_v5(&mut value); }
 	let mut config: FamiliesConfig = serde_json::from_value(value)
 		.map_err(|_| "家族配置不是有效 JSON，请修复或删除 skiff-families.json".to_string())?;
 	// Older files may predate a family; reinstate it empty rather than dropping it.
@@ -428,6 +409,20 @@ pub fn load(dir: &Path) -> Result<FamiliesConfig, String> {
 		for model in &mut relay.unassigned_models {
 			model.max_tokens = usable_max_tokens(model.max_tokens, model.context_window);
 		}
+	}
+	if old_version < 6 {
+		provider_models::migrate(&mut config)?;
+		validate_config(&config)?;
+		let mut backup = dir.join("skiff-families.pre-v6.bak.json");
+		if backup.exists() && std::fs::read(&backup).map_err(|_| "无法读取原配置备份")? != bytes {
+			backup = dir.join(format!("skiff-families.pre-v6.{}.bak.json", next_id()));
+		}
+		if !backup.exists() {
+			use std::io::Write;
+			let mut file = std::fs::OpenOptions::new().write(true).create_new(true).open(&backup).map_err(|_| "无法备份原配置")?;
+			file.write_all(&bytes).and_then(|_| file.sync_all()).map_err(|_| "无法备份原配置")?;
+		}
+		save(dir, &config)?;
 	}
 	validate_config(&config)?;
 	Ok(config)
@@ -581,6 +576,11 @@ fn normalize_relay(mut relay: RelaySpec, config: &FamiliesConfig) -> Result<Rela
 	relay.excluded_model_ids.sort();
 	relay.excluded_model_ids.dedup();
 	relay.unassigned_models = normalize_models(&relay.unassigned_models)?;
+	let normalized = normalize_models(&relay.models.iter().map(|entry| entry.model.clone()).collect::<Vec<_>>())?;
+	for (entry, model) in relay.models.iter_mut().zip(normalized) {
+		entry.model = model;
+		if !entry.family_id.is_empty() && !config.families.iter().any(|family| family.id == entry.family_id) { return Err("模型家族不存在".into()); }
+	}
 	relay.protocol = Some(normalize_protocol(relay.protocol.as_deref()));
 	Ok(relay)
 }
@@ -619,8 +619,8 @@ fn normalize_models(models: &[ModelSpec]) -> Result<Vec<ModelSpec>, String> {
 		let alias = validate_alias(&model.alias)?;
 		let thinking_levels = model.thinking_levels.as_deref().map(|levels| normalize_thinking_levels(Some(levels))).transpose()?;
 		let input_cost = money(model.input_cost);
-		let cache_read_cost = if model.cache_read_cost == 0.0 && input_cost > 0.0 { input_cost } else { money(model.cache_read_cost) };
-		let cache_write_cost = if model.cache_write_cost == 0.0 && input_cost > 0.0 { input_cost } else { money(model.cache_write_cost) };
+		let cache_read_cost = money(model.cache_read_cost);
+		let cache_write_cost = money(model.cache_write_cost);
 		normalized.push(ModelSpec {
 			model_id,
 			vision: model.vision,
@@ -639,12 +639,21 @@ fn normalize_models(models: &[ModelSpec]) -> Result<Vec<ModelSpec>, String> {
 }
 
 fn validate_config(config: &FamiliesConfig) -> Result<(), String> {
+	let mut ids = std::collections::HashSet::new();
+	for relay in &config.relays {
+		if relay.id.is_empty() || !ids.insert(provider_models::key(&relay.id)) { return Err("供应商 ID 重复或无效，原配置已保留".into()); }
+		for entry in &relay.models {
+			if !entry.family_id.is_empty() && !config.families.iter().any(|family| family.id == entry.family_id) { return Err("模型家族不存在".into()); }
+		}
+	}
+
 	for relay in &config.relays {
 		if relay.price_multiplier.is_some_and(|value| !value.is_finite() || value < 0.0) {
 			return Err("价格倍率必须为非负数".into());
 		}
+		normalize_models(&relay.models.iter().map(|entry| entry.model.clone()).collect::<Vec<_>>())?;
 		let multiplier = relay.price_multiplier.unwrap_or(1.0);
-		if relay_models(config, &relay.id).iter().any(|(_, model)| [model.input_cost, model.output_cost, model.cache_read_cost, model.cache_write_cost].iter().any(|cost| !(cost * multiplier).is_finite())) {
+		if relay.models.iter().map(|entry| &entry.model).any(|model| [model.input_cost, model.output_cost, model.cache_read_cost, model.cache_write_cost].iter().any(|cost| !(cost * multiplier).is_finite())) {
 			return Err("模型单价与价格倍率的乘积超出范围".into());
 		}
 	}
@@ -668,36 +677,6 @@ fn validate_config(config: &FamiliesConfig) -> Result<(), String> {
 
 /// Validates one route, including model-ID uniqueness across every route of
 /// the same relay: the projected (provider, model) pair must stay unambiguous.
-fn normalize_route(route: &RouteSpec, config: &FamiliesConfig, family_id: &str, replacing: Option<(&str, &str)>) -> Result<RouteSpec, String> {
-	if !config.relays.iter().any(|relay| relay.id == route.relay_id) {
-		return Err("线路的中转不存在，请先添加中转".into());
-	}
-	let models = normalize_models(&route.models)?;
-	let mut id = route.id.trim().to_string();
-	if id.is_empty() { id = route_id_seed(family_id, &route.relay_id); }
-	if id.chars().any(char::is_control) || id.len() > 96 { return Err("线路 ID 无效".into()); }
-	for family in &config.families {
-		for existing in &family.routes {
-			if replacing == Some((family.id.as_str(), existing.id.as_str())) || replacing == Some((family.id.as_str(), existing.relay_id.as_str())) { continue; }
-			if existing.id == id { return Err("线路 ID 不能重复".into()); }
-		}
-	}
-	Ok(RouteSpec { id, relay_id: route.relay_id.clone(), enabled: route.enabled, models, streaming: route.streaming, tools: route.tools, vision: route.vision, reasoning: route.reasoning, thinking_levels: normalize_thinking_levels(Some(&route.thinking_levels))? })
-}
-
-fn family_mut<'a>(config: &'a mut FamiliesConfig, family_id: &str) -> Result<&'a mut ModelFamily, String> {
-	// Any family present in the config qualifies: the built-ins are reinstated on
-	// load, and users can create additional families from the provider editor.
-	config
-		.families
-		.iter_mut()
-		.find(|family| family.id == family_id)
-		.ok_or_else(|| format!("找不到模型家族：{family_id}"))
-}
-
-// --- projection into pi's own configuration ---------------------------------
-
-/// pi's provider identifier for one route; also its key in `auth.json`.
 pub fn provider_key(family_id: &str, relay_id: &str) -> String {
 	format!("{KEY_PREFIX}{}-{family_id}", sanitize_component(relay_id))
 }
@@ -707,57 +686,6 @@ fn key_env(key: &str) -> String {
 }
 
 /// The levels a model advertises: its own declaration, else the route default.
-fn model_thinking_levels(route: &RouteSpec, item: &ModelSpec) -> Vec<String> {
-	if let Some(levels) = &item.thinking_levels {
-		return levels.clone();
-	}
-	route.thinking_levels.clone()
-}
-
-fn project_model(family_id: &str, route: &RouteSpec, item: &ModelSpec, key: &str, api: &str, multiplier: f64) -> Value {
-	let vision = if item.vision.unwrap_or(route.vision) { json!(["text", "image"]) } else { json!(["text"]) };
-	let reasoning = route.reasoning;
-	let compat = if api == "openai-completions" {
-		let mut compat = json!({ "supportsDeveloperRole": false });
-		// Custom relay provider names and URLs hide DeepSeek from pi-ai's
-		// built-in detection. LiteLLM requires reasoning_content on every
-		// assistant turn, including assistant tool-call messages with no
-		// reasoning block, so explicitly retain DeepSeek's wire format.
-		if family_id == "deepseek" {
-			compat["requiresReasoningContentOnAssistantMessages"] = json!(true);
-			compat["thinkingFormat"] = json!("deepseek");
-		}
-		compat
-	} else {
-		Value::Null
-	};
-	// A level list that is empty (or absent) is "not declared"; pi then keeps its
-	// own five-level default instead of losing `minimal`.
-	let declared = item.thinking_levels.as_ref().filter(|levels| !levels.is_empty()).cloned().unwrap_or_else(|| route.thinking_levels.clone());
-	json!({
-		"id": item.model_id, "name": if item.alias.is_empty() { item.model_id.clone() } else { item.alias.clone() }, "api": api, "provider": key,
-		"cost": { "input": item.input_cost * multiplier, "output": item.output_cost * multiplier, "cacheRead": item.cache_read_cost * multiplier, "cacheWrite": item.cache_write_cost * multiplier },
-		"currency": item.currency, "contextWindow": item.context_window, "maxTokens": usable_max_tokens(item.max_tokens, item.context_window),
-		"input": vision, "reasoning": reasoning,
-		// Only reasoning models get a map: pi lists `xhigh` and `max` from it.
-		"thinkingLevelMap": if reasoning && !declared.is_empty() { thinking_level_map(&declared) } else { Value::Null },
-		// Only OpenAI-compatible relays need the developer-role opt-out; the
-		// other adapters build their own request shapes.
-		"compat": compat,
-	})
-}
-
-/// Every (route, model) pair of one relay across all families.
-fn relay_models<'a>(config: &'a FamiliesConfig, relay_id: &str) -> Vec<(&'a RouteSpec, &'a ModelSpec)> {
-	config
-		.families
-		.iter()
-		.flat_map(|family| family.routes.iter())
-		.filter(|route| route.relay_id == relay_id)
-		.flat_map(|route| route.models.iter().map(move |model| (route, model)))
-		.collect()
-}
-
 fn is_managed_key(key: &str) -> bool {
 	key.starts_with(MANAGED_PREFIX)
 }
@@ -776,27 +704,14 @@ pub fn prepare_runtime(dir: &Path, cmd: &mut std::process::Command) -> Result<()
 	prepare_shell_prefix(dir)?;
 	let mut routes = Vec::new();
 	for relay in &config.relays {
-		if relay_models(&config, &relay.id).is_empty() {
-			continue;
-		}
-		for family in &config.families {
-			for route in family.routes.iter().filter(|route| route.relay_id == relay.id) {
-				let models: Vec<_> = route.models.iter().filter(|model| !relay.excluded_model_ids.contains(&model.model_id)).collect();
-				if !route.enabled || models.is_empty() || !relay.enabled {
-					continue;
-				}
-				let route_key = provider_key(&family.id, &relay.id);
-				let api = protocol_api(relay);
-				// Every route of a relay shares one key environment variable.
-				cmd.env(key_env(&route_key), &relay.api_key);
-				routes.push(json!({ "providerKey": route_key, "baseUrl": runtime_base_url(relay), "api": api,
-					"keyEnv": key_env(&route_key), "streaming": route.streaming, "tools": route.tools,
-					"timeoutSeconds": relay.timeout_seconds,
-				"models": models.iter().map(|model| project_model(&family.id, route, model, &route_key, api, relay.price_multiplier.unwrap_or(1.0))).collect::<Vec<_>>() }));
-			}
-		}
+		let models: Vec<_> = provider_models::enabled(&config, relay).map(|entry| provider_models::projection(entry, relay)).collect();
+		if models.is_empty() { continue; }
+		let key = provider_models::key(&relay.id);
+		cmd.env(key_env(&key), &relay.api_key);
+		routes.push(json!({"providerKey": key, "baseUrl": runtime_base_url(relay), "api": protocol_api(relay),
+			"keyEnv": key_env(&key), "timeoutSeconds": relay.timeout_seconds, "models": models}));
 	}
-	eprintln!("[skiff] prepare_runtime: {} enabled route(s) to project", routes.len());
+	eprintln!("[skiff] prepare_runtime: {} enabled provider(s) to project", routes.len());
 	if routes.is_empty() {
 		eprintln!("[skiff] prepare_runtime: no enabled routes; pi will start without managed providers");
 		return Ok(());
@@ -875,37 +790,19 @@ pub fn project(dir: &Path, config: &FamiliesConfig) -> Result<(), String> {
 		models["providers"] = json!({});
 	}
 
-	// Only valid routes are projected; disabled routes remain in this config so
-	// they can be restored without losing their credentials.
-	let mut desired: Vec<(String, &str, &RelaySpec, &RouteSpec)> = Vec::new();
-	for family in &config.families {
-		for route in &family.routes {
-			if !route.enabled || route.models.is_empty() { continue; }
-			let Some(relay) = config.relays.iter().find(|relay| relay.id == route.relay_id) else { continue };
-			if !relay.enabled || route.models.iter().all(|model| relay.excluded_model_ids.contains(&model.model_id)) { continue; }
-			desired.push((provider_key(&family.id, &relay.id), &family.id, relay, route));
-		}
-	}
-
+	let desired: Vec<_> = config.relays.iter().filter(|relay| provider_models::enabled(config, relay).next().is_some()).collect();
 	{
 		let map = models["providers"].as_object_mut().ok_or("pi 配置的 providers 必须是对象")?;
-		map.retain(|key, _| !is_managed_key(key) || desired.iter().any(|(wanted, _, _, _)| wanted == key));
-		for (key, family_id, relay, route) in &desired {
-			let api = protocol_api(relay);
-			let entry = json!({
-				"api": api,
-				"baseUrl": runtime_base_url(relay),
-				"models": route.models.iter().filter(|item| !relay.excluded_model_ids.contains(&item.model_id)).map(|item| project_model(family_id, route, item, key, api, relay.price_multiplier.unwrap_or(1.0))).collect::<Vec<_>>(),
-			});
-			map.insert(key.clone(), entry);
+		map.retain(|key, _| !is_managed_key(key));
+		for relay in &desired {
+			map.insert(provider_models::key(&relay.id), json!({"api": protocol_api(relay), "baseUrl": runtime_base_url(relay),
+				"models": provider_models::enabled(config, relay).map(|entry| provider_models::projection(entry, relay)).collect::<Vec<_>>() }));
 		}
 	}
-
 	if let Some(map) = auth.as_object_mut() {
-		map.retain(|key, _| !is_managed_key(key) || desired.iter().any(|(wanted, _, _, _)| wanted == key));
-		for (key, _, relay, _) in &desired {
-			if relay.api_key.trim().is_empty() { continue; }
-			map.insert(key.clone(), json!({ "type": "api_key", "key": format!("${}", key_env(key)) }));
+		map.retain(|key, _| !is_managed_key(key));
+		for relay in &desired {
+			if !relay.api_key.is_empty() { let key = provider_models::key(&relay.id); map.insert(key.clone(), json!({"type": "api_key", "key": format!("${}", key_env(&key))})); }
 		}
 	}
 
@@ -927,50 +824,7 @@ pub fn project(dir: &Path, config: &FamiliesConfig) -> Result<(), String> {
 // --- runtime view ------------------------------------------------------------
 
 pub fn runtime_offers(config: &FamiliesConfig) -> Vec<RuntimeOffer> {
-	let mut offers = Vec::new();
-	for family in &config.families {
-		for (route_order, route) in family.routes.iter().enumerate() {
-			let Some(relay) = config.relays.iter().find(|relay| relay.id == route.relay_id) else { continue };
-			if !relay.enabled || !route.enabled {
-				continue;
-			}
-			for model in &route.models {
-				if relay.excluded_model_ids.contains(&model.model_id) { continue; }
-				offers.push(RuntimeOffer {
-					offer_id: format!("{}/{}", route.id, model.model_id),
-					route_id: route.id.clone(),
-					family_id: family.id.clone(),
-					family_name: family.display_name.clone(),
-					relay_id: relay.id.clone(),
-					relay_name: relay.name.clone(),
-					provider_key: provider_key(&family.id, &relay.id),
-					model_id: model.model_id.clone(),
-					alias: model.alias.clone(),
-					billing_account_id: relay.billing_account_id.clone(),
-					price_multiplier: relay.price_multiplier,
-					route_order,
-					streaming: route.streaming,
-					tools: route.tools,
-					vision: model.vision.unwrap_or(route.vision),
-					reasoning: route.reasoning,
-					thinking_levels: if route.reasoning {
-						let declared = model_thinking_levels(route, model);
-						["off".to_string()].into_iter().chain(declared).collect()
-					} else {
-						vec!["off".to_string()]
-					},
-					input_cost: model.input_cost * relay.price_multiplier.unwrap_or(1.0),
-					output_cost: model.output_cost * relay.price_multiplier.unwrap_or(1.0),
-					cache_read_cost: model.cache_read_cost * relay.price_multiplier.unwrap_or(1.0),
-					cache_write_cost: model.cache_write_cost * relay.price_multiplier.unwrap_or(1.0),
-					currency: model.currency,
-					max_tokens: usable_max_tokens(model.max_tokens, model.context_window),
-					context_window: model.context_window,
-					});
-			}
-		}
-	}
-	offers
+	provider_models::offers(config)
 }
 
 // --- mutations ---------------------------------------------------------------
@@ -997,7 +851,7 @@ pub fn relay_batch_preview(config: &FamiliesConfig, relay_ids: &[String]) -> Res
 	if relay_ids.is_empty() || relay_ids.iter().collect::<std::collections::HashSet<_>>().len() != relay_ids.len() { return Err("请选择供应商，且不能重复选择".into()); }
 	let mut names = Vec::new();
 	for id in relay_ids { names.push(config.relays.iter().find(|relay| &relay.id == id).ok_or("所选供应商已不存在，请重新加载预览")?.name.clone()); }
-	let route_count = config.families.iter().flat_map(|family| &family.routes).filter(|route| relay_ids.contains(&route.relay_id)).count();
+	let route_count = config.relays.iter().filter(|relay| relay_ids.contains(&relay.id)).map(|relay| relay.models.len()).sum();
 	let token = format!("{:x}", Sha256::digest(serde_json::to_vec(config).map_err(|_| "无法生成确认预览")?));
 	Ok(RelayBatchPreview { token, names, route_count })
 }
@@ -1037,45 +891,6 @@ fn upsert_relay(config: &mut FamiliesConfig, relay: RelaySpec) {
 	}
 }
 
-/// Commit the relay and route changes together. Empty route IDs add routes;
-/// explicit IDs update a matching route for this relay.
-pub fn save_relay_with_routes_in(dir: &Path, relay: RelaySpec, routes: Vec<RelayRouteSpec>) -> Result<FamiliesConfig, String> {
-	apply(dir, |config| {
-		let mut normalized = normalize_relay(relay, config)?;
-		// A blank key on an edit means "keep the stored one".
-		if normalized.api_key.trim().is_empty() {
-			let Some(existing) = config.relays.iter().find(|existing| existing.id == normalized.id) else {
-				return Err("新中转需要 API Key".into());
-			};
-			normalized.api_key = existing.api_key.clone();
-		}
-		let relay_id = normalized.id.clone();
-		let excluded = normalized.excluded_model_ids.clone();
-		upsert_relay(config, normalized);
-		for mut item in routes {
-			let existing_id = family_mut(config, &item.family_id)?.routes.iter()
-				.find(|route| !item.route.id.is_empty() && route.id == item.route.id && route.relay_id == relay_id)
-				.map(|route| route.id.clone());
-			if let Some(existing_id) = existing_id {
-				item.route.relay_id = relay_id.clone();
-				let route = normalize_route(&item.route, config, &item.family_id, Some((&item.family_id, &existing_id)))?;
-				let existing = family_mut(config, &item.family_id)?.routes.iter_mut().find(|route| route.id == existing_id).ok_or("找不到要更新的路线")?;
-				*existing = route;
-				continue;
-			}
-			let family = family_mut(config, &item.family_id)?;
-			if family.routes.iter().any(|route| route.relay_id == relay_id) { continue; }
-			item.route.id.clear();
-			item.route.relay_id = relay_id.clone();
-			item.route.models.retain(|model| !excluded.contains(&model.model_id.trim().to_string()));
-			if item.route.models.is_empty() { continue; }
-			let route = normalize_route(&item.route, config, &item.family_id, None)?;
-			family_mut(config, &item.family_id)?.routes.push(route);
-		}
-		Ok(())
-	})
-}
-
 pub fn delete_relay_in(dir: &Path, relay_id: &str) -> Result<FamiliesConfig, String> {
 	apply(dir, |config| {
 		if !config.relays.iter().any(|relay| relay.id == relay_id) {
@@ -1097,70 +912,6 @@ pub fn set_relay_enabled_in(dir: &Path, relay_id: &str, enabled: bool) -> Result
 			return Err("找不到该中转".into());
 		};
 		relay.enabled = enabled;
-		Ok(())
-	})
-}
-
-/// One route per relay within a family: saving an existing relay's route replaces it.
-pub fn save_route_in(dir: &Path, family_id: &str, route: RouteSpec) -> Result<FamiliesConfig, String> {
-	apply(dir, |config| {
-		let replacing = config.families.iter().find(|family| family.id == family_id)
-			.and_then(|family| family.routes.iter().find(|existing| existing.id == route.id || (route.id.is_empty() && existing.relay_id == route.relay_id)))
-			.map(|existing| (family_id, existing.id.as_str()));
-		let normalized = normalize_route(&route, config, family_id, replacing)?;
-		let family = family_mut(config, family_id)?;
-		match family.routes.iter_mut().find(|existing| existing.id == normalized.id || existing.relay_id == normalized.relay_id) {
-			Some(existing) => *existing = normalized,
-			None => family.routes.push(normalized),
-		}
-		Ok(())
-	})
-}
-
-pub fn delete_route_in(dir: &Path, family_id: &str, relay_id: &str) -> Result<FamiliesConfig, String> {
-	apply(dir, |config| {
-		let family = family_mut(config, family_id)?;
-		let before = family.routes.len();
-		let removed = family.routes.iter().find(|route| route.id == relay_id || route.relay_id == relay_id).map(|route| route.id.clone());
-		family.routes.retain(|route| removed.as_deref() != Some(route.id.as_str()));
-		if family.routes.len() == before {
-			return Err("找不到要删除的线路".into());
-		}
-		Ok(())
-	})
-}
-
-pub fn reorder_routes_in(dir: &Path, family_id: &str, relay_ids: &[String]) -> Result<FamiliesConfig, String> {
-	apply(dir, |config| {
-		let family = family_mut(config, family_id)?;
-		if relay_ids.len() != family.routes.len() {
-			return Err("排序请求与现有线路数量不一致".into());
-		}
-		if relay_ids.iter().collect::<std::collections::HashSet<_>>().len() != relay_ids.len() {
-			return Err("排序请求包含重复线路".into());
-		}
-		let mut reordered = Vec::with_capacity(family.routes.len());
-		for id in relay_ids {
-			let Some(route) = family.routes.iter().find(|route| &route.id == id) else {
-				return Err("排序请求包含未知线路".into());
-			};
-			reordered.push(route.clone());
-		}
-		family.routes = reordered;
-		Ok(())
-	})
-}
-
-pub fn set_auto_failover_in(dir: &Path, auto_failover: bool) -> Result<FamiliesConfig, String> {
-	apply(dir, |config| {
-		config.auto_failover = auto_failover;
-		Ok(())
-	})
-}
-
-pub fn set_auto_retry_in(dir: &Path, auto_retry: bool) -> Result<FamiliesConfig, String> {
-	apply(dir, |config| {
-		config.auto_retry = auto_retry;
 		Ok(())
 	})
 }
@@ -1220,11 +971,11 @@ pub fn list_model_runtime() -> Result<Vec<RuntimeOffer>, String> {
 }
 
 #[tauri::command]
-pub fn save_relay(relay: RelaySpec, routes: Option<Vec<RelayRouteSpec>>, test_request_ids: Option<Vec<String>>) -> Result<FamiliesConfig, String> {
+pub fn save_relay(relay: RelaySpec, test_request_ids: Option<Vec<String>>) -> Result<FamiliesConfig, String> {
 	let _guard = providers::CONFIG_LOCK.lock().map_err(|_| "配置锁异常")?;
 	let dir = agent_dir()?;
 	let name = relay.name.trim().to_lowercase();
-	let config = save_relay_with_routes_in(&dir, relay, routes.unwrap_or_default())?;
+	let config = provider_models::save_relay_in(&dir, relay)?;
 	if let Some(saved) = config.relays.iter().find(|relay| relay.name.to_lowercase() == name) { crate::settings_metadata::promote(&dir, &config, &saved.id, &test_request_ids.unwrap_or_default()); }
 	Ok(config)
 }
@@ -1239,36 +990,6 @@ pub fn delete_relay(relay_id: String) -> Result<FamiliesConfig, String> {
 pub fn set_relay_enabled(relay_id: String, enabled: bool) -> Result<FamiliesConfig, String> {
 	let _guard = providers::CONFIG_LOCK.lock().map_err(|_| "配置锁异常")?;
 	set_relay_enabled_in(&agent_dir()?, &relay_id, enabled)
-}
-
-#[tauri::command]
-pub fn save_route(family_id: String, route: RouteSpec) -> Result<FamiliesConfig, String> {
-	let _guard = providers::CONFIG_LOCK.lock().map_err(|_| "配置锁异常")?;
-	save_route_in(&agent_dir()?, &family_id, route)
-}
-
-#[tauri::command]
-pub fn delete_route(family_id: String, relay_id: String) -> Result<FamiliesConfig, String> {
-	let _guard = providers::CONFIG_LOCK.lock().map_err(|_| "配置锁异常")?;
-	delete_route_in(&agent_dir()?, &family_id, &relay_id)
-}
-
-#[tauri::command]
-pub fn reorder_routes(family_id: String, relay_ids: Vec<String>) -> Result<FamiliesConfig, String> {
-	let _guard = providers::CONFIG_LOCK.lock().map_err(|_| "配置锁异常")?;
-	reorder_routes_in(&agent_dir()?, &family_id, &relay_ids)
-}
-
-#[tauri::command]
-pub fn set_family_auto_failover(auto_failover: bool) -> Result<FamiliesConfig, String> {
-	let _guard = providers::CONFIG_LOCK.lock().map_err(|_| "配置锁异常")?;
-	set_auto_failover_in(&agent_dir()?, auto_failover)
-}
-
-#[tauri::command]
-pub fn set_family_auto_retry(auto_retry: bool) -> Result<FamiliesConfig, String> {
-	let _guard = providers::CONFIG_LOCK.lock().map_err(|_| "配置锁异常")?;
-	set_auto_retry_in(&agent_dir()?, auto_retry)
 }
 
 #[tauri::command]
@@ -1289,384 +1010,95 @@ pub fn create_family(id: String, display_name: String) -> Result<FamiliesConfig,
 #[cfg(test)]
 mod tests {
 	use super::*;
-
-	#[test]
-	fn reconnect_policy_preserves_other_pi_settings() {
-		let dir = std::env::temp_dir().join(format!("skiff-retry-{}", next_id()));
-		std::fs::create_dir_all(&dir).unwrap();
-		let path = dir.join("settings.json");
-		providers::atomic_write(&path, &json!({ "theme": "dark", "retry": { "enabled": false, "maxRetries": 20, "baseDelayMs": 1000 }, "compaction": { "enabled": false } })).unwrap();
-		prepare_retry(&dir).unwrap();
-		assert_eq!(providers::read_config(&path).unwrap(), json!({ "theme": "dark", "retry": { "enabled": true, "maxRetries": 5, "baseDelayMs": 1000 }, "compaction": { "enabled": false } }));
-		std::fs::write(&path, "invalid json").unwrap();
-		assert!(prepare_retry(&dir).is_err());
-		assert_eq!(std::fs::read_to_string(&path).unwrap(), "invalid json");
-		std::fs::remove_dir_all(dir).unwrap();
+	fn dir(label: &str) -> std::path::PathBuf {
+		let path = std::env::temp_dir().join(format!("skiff-v6-{label}-{}-{}", std::process::id(), next_id()));
+		std::fs::create_dir_all(&path).unwrap(); path
 	}
-
+	fn legacy() -> Value { json!({"version":5, "relays":[{"id":"r1","name":"First","baseUrl":"http://127.0.0.1/v1","apiKey":"test","enabled":true}],
+		"families":[{"id":"kimi","displayName":"Kimi","routes":[{"id":"old-route","relayId":"r1","enabled":true,"vision":true,"reasoning":true,"tools":false,"streaming":false,"thinkingLevels":["low","high"],
+		"models":[{"modelId":"shared","contextWindow":128000,"maxTokens":8192,"inputCost":2}]}]}]}) }
+	fn write_legacy(path: &Path, value: &Value) -> Vec<u8> { let bytes = serde_json::to_vec(value).unwrap(); std::fs::write(config_path(path), &bytes).unwrap(); bytes }
 	#[test]
-	fn shell_prefix_switches_console_to_utf8_without_touching_other_settings() {
-		let dir = std::env::temp_dir().join(format!("skiff-shell-prefix-{}", next_id()));
-		std::fs::create_dir_all(&dir).unwrap();
-		let path = dir.join("settings.json");
-		providers::atomic_write(&path, &json!({ "theme": "dark", "retry": { "enabled": true } })).unwrap();
-		prepare_shell_prefix(&dir).unwrap();
-		let written = providers::read_config(&path).unwrap();
-		assert_eq!(written["theme"], json!("dark"));
-		assert_eq!(written["retry"]["enabled"], json!(true));
-		#[cfg(windows)]
-		assert_eq!(written["shellCommandPrefix"], json!("chcp.com 65001 >/dev/null 2>&1"));
-		prepare_shell_prefix(&dir).unwrap();
-		assert_eq!(providers::read_config(&path).unwrap(), written);
-		providers::atomic_write(&path, &json!({ "shellCommandPrefix": "set -e" })).unwrap();
-		prepare_shell_prefix(&dir).unwrap();
-		assert_eq!(providers::read_config(&path).unwrap()["shellCommandPrefix"], json!("set -e"));
-		std::fs::write(&path, "invalid json").unwrap();
-		assert!(prepare_shell_prefix(&dir).is_err());
-		std::fs::remove_dir_all(dir).unwrap();
+	fn migration_expands_defaults_preserves_backup_and_is_idempotent() {
+		let path = dir("inherit"); let original = write_legacy(&path, &legacy());
+		let config = load_plain(&path).unwrap(); let entry = &config.relays[0].models[0];
+		assert_eq!(config.version,6); assert!(config.families.iter().all(|f| f.routes.is_empty()));
+		assert_eq!(entry.model.vision,Some(true)); assert_eq!(entry.model.thinking_levels.as_ref().unwrap(), &vec!["low".to_string(),"high".into()]);
+		assert!(!entry.tools && !entry.streaming && entry.enabled && entry.reasoning);
+		assert_eq!(entry.legacy_route_ids,vec!["old-route"]);
+		assert_eq!(std::fs::read(path.join("skiff-families.pre-v6.bak.json")).unwrap(),original);
+		let bytes = std::fs::read(config_path(&path)).unwrap(); load_plain(&path).unwrap(); assert_eq!(std::fs::read(config_path(&path)).unwrap(),bytes);
+		let offers = runtime_offers(&config); assert_eq!(offers[0].provider_key,"skiff-relay-r1");
+		assert_eq!(offers[0].thinking_levels, vec!["off","low","high"]);
+		let projected = providers::read_config(&path.join("models.json")).unwrap();
+		assert_eq!(projected["providers"]["skiff-relay-r1"]["models"][0]["thinkingLevelMap"]["xhigh"],Value::Null);
+		std::fs::remove_dir_all(path).unwrap();
 	}
-
 	#[test]
-	fn provider_multiplier_scales_billing_and_projection_without_changing_official_prices() {
-		let dir = std::env::temp_dir().join(format!("skiff-price-multiplier-{}", std::process::id()));
-		std::fs::create_dir_all(&dir).unwrap();
-		let relay: RelaySpec = serde_json::from_value(json!({ "id": "discount", "name": "Discount", "baseUrl": "https://relay.example/v1", "apiKey": "sk-test-multiplier", "priceMultiplier": 0.5 })).unwrap();
-		let routes: Vec<RelayRouteSpec> = serde_json::from_value(json!([{ "familyId": "kimi", "route": { "relayId": "discount", "models": [{ "modelId": "kimi-k3", "inputCost": 2, "outputCost": 8, "cacheReadCost": 0.4, "cacheWriteCost": 3, "currency": "CNY", "maxTokens": 8192, "contextWindow": 128000 }] } }])).unwrap();
-		let saved = save_relay_with_routes_in(&dir, relay, routes).unwrap();
-		let reloaded = load_plain(&dir).unwrap();
-		assert_eq!(reloaded.relays[0].price_multiplier, Some(0.5));
-		let kimi = reloaded.families.iter().find(|family| family.id == "kimi").unwrap();
-		assert_eq!(kimi.routes[0].models[0].input_cost, 2.0);
-		let offers = runtime_offers(&reloaded);
-		assert_eq!((offers[0].input_cost, offers[0].output_cost, offers[0].cache_read_cost, offers[0].cache_write_cost), (1.0, 4.0, 0.2, 1.5));
-		assert_eq!(offers[0].price_multiplier, Some(0.5));
-		let projection = providers::read_config(&dir.join("models.json")).unwrap();
-		assert_eq!(projection["providers"][provider_key("kimi", "discount")]["models"][0]["cost"], json!({ "input": 1.0, "output": 4.0, "cacheRead": 0.2, "cacheWrite": 1.5 }));
-		for multiplier in [None, Some(1.0), Some(0.25), Some(0.0), Some(1.5)] {
-			let mut relay = saved.relays[0].clone();
-			relay.price_multiplier = multiplier;
-			let updated = save_relay_with_routes_in(&dir, relay, vec![]).unwrap();
-			assert_eq!(runtime_offers(&updated)[0].input_cost, 2.0 * multiplier.unwrap_or(1.0));
+	fn disabled_route_and_excluded_model_stay_disabled_independently_of_provider() {
+		for reason in ["route", "excluded", "provider"] {
+			let path=dir(reason); let mut value=legacy();
+			if reason=="route" { value["families"][0]["routes"][0]["enabled"]=json!(false); }
+			if reason=="excluded" { value["relays"][0]["excludedModelIds"]=json!(["shared"]); }
+			if reason=="provider" { value["relays"][0]["enabled"]=json!(false); }
+			write_legacy(&path,&value); let config=load_plain(&path).unwrap();
+			assert!(runtime_offers(&config).is_empty()); assert_eq!(config.relays[0].models[0].enabled,reason=="provider");
+			let enabled=set_relay_enabled_in(&path,"r1",true).unwrap(); assert_eq!(runtime_offers(&enabled).len(),usize::from(reason=="provider"));
+			let mut relay=enabled.relays[0].clone(); relay.models[0].enabled=true;
+			let restored=provider_models::save_relay_in(&path,relay).unwrap(); assert_eq!(runtime_offers(&restored).len(),1); assert!(restored.relays[0].models[0].model.vision.unwrap());
+			std::fs::remove_dir_all(path).unwrap();
 		}
-		for multiplier in [-0.5, f64::NAN, f64::INFINITY] {
-			let mut relay = saved.relays[0].clone();
-			relay.price_multiplier = Some(multiplier);
-			assert!(save_relay_with_routes_in(&dir, relay, vec![]).is_err());
+	}
+	#[test]
+	fn duplicate_models_merge_only_if_their_expanded_configuration_agrees() {
+		for conflict in [false,true] {
+			let path=dir("duplicate"); let mut value=legacy(); let mut duplicate=value["families"][0]["routes"][0].clone(); duplicate["id"]=json!("other");
+			if conflict { duplicate["models"][0]["inputCost"]=json!(99); }
+			value["families"][0]["routes"].as_array_mut().unwrap().push(duplicate); let original=write_legacy(&path,&value);
+			let result=load_plain(&path);
+			if conflict { assert!(result.is_err()); assert_eq!(std::fs::read(config_path(&path)).unwrap(),original); assert!(!path.join("models.json").exists()); }
+			else { let config=result.unwrap(); assert_eq!(config.relays[0].models.len(),1); assert_eq!(config.relays[0].models[0].legacy_route_ids.len(),2); }
+			std::fs::remove_dir_all(path).unwrap();
 		}
-		std::fs::remove_dir_all(dir).unwrap();
 	}
-
 	#[test]
-	fn full_window_output_ceilings_are_repaired_on_load_and_clamped_on_projection() {
-		let dir = std::env::temp_dir().join(format!("skiff-max-output-repair-{}", std::process::id()));
-		std::fs::create_dir_all(&dir).unwrap();
-		let relay: RelaySpec = serde_json::from_value(json!({ "id": "moonshot", "name": "Moonshot", "baseUrl": "https://api.moonshot.cn/v1", "apiKey": "sk-test" })).unwrap();
-		let routes: Vec<RelayRouteSpec> = serde_json::from_value(json!([{ "familyId": "kimi", "route": { "relayId": "moonshot", "models": [
-			{ "modelId": "kimi-k3", "inputCost": 20, "outputCost": 100, "contextWindow": 1048576, "maxTokens": 1048576 },
-			{ "modelId": "kept", "inputCost": 1, "outputCost": 2, "contextWindow": 200000, "maxTokens": 64000 }
-		] } }])).unwrap();
-		save_relay_with_routes_in(&dir, relay, routes).unwrap();
-		// A ceiling equal to the window is not a budget: it is clamped at save
-		// and on load; values below the window stay untouched.
-		let reloaded = load_plain(&dir).unwrap();
-		let kimi = reloaded.families.iter().find(|family| family.id == "kimi").unwrap();
-		assert_eq!(kimi.routes[0].models[0].max_tokens, FALLBACK_MAX_OUTPUT);
-		assert_eq!(kimi.routes[0].models[1].max_tokens, 64000);
-		assert_eq!(runtime_offers(&reloaded)[0].max_tokens, FALLBACK_MAX_OUTPUT);
-		// pi's projection never carries a full-window budget.
-		let projected = providers::read_config(&dir.join("models.json")).unwrap();
-		let models = projected["providers"][provider_key("kimi", "moonshot")]["models"].as_array().unwrap();
-		assert_eq!(models[0]["maxTokens"], json!(32768));
-		assert_eq!(models[1]["maxTokens"], json!(64000));
-		// Even a hand-edited file with the old ceiling is repaired on load.
-		let written = std::fs::read_to_string(config_path(&dir)).unwrap().replace("\"maxTokens\":32768", "\"maxTokens\":1048576");
-		std::fs::write(config_path(&dir), written).unwrap();
-		let repaired = load_plain(&dir).unwrap();
-		let kimi = repaired.families.iter().find(|family| family.id == "kimi").unwrap();
-		assert_eq!(kimi.routes[0].models[0].max_tokens, FALLBACK_MAX_OUTPUT);
-		std::fs::remove_dir_all(dir).unwrap();
+	fn migration_write_failure_rolls_back_original_config_and_projection() {
+		let path=dir("rollback"); let original=write_legacy(&path,&legacy()); std::fs::write(path.join("models.json"),b"{\"providers\":{\"external\":{}}}").unwrap();
+		std::fs::write(path.join("auth.json"),b"invalid").unwrap(); let models=std::fs::read(path.join("models.json")).unwrap();
+		assert!(load(&path).is_err()); assert_eq!(std::fs::read(config_path(&path)).unwrap(),original); assert_eq!(std::fs::read(path.join("models.json")).unwrap(),models);
+		assert_eq!(std::fs::read(path.join("skiff-families.pre-v6.bak.json")).unwrap(),original); std::fs::remove_dir_all(path).unwrap();
 	}
-
 	#[test]
-	fn relay_and_discovered_routes_save_together_and_preserve_existing_settings() {
-		let dir = std::env::temp_dir().join(format!("skiff-discovered-routes-test-{}", std::process::id()));
-		std::fs::create_dir_all(&dir).unwrap();
-		let relay: RelaySpec = serde_json::from_value(json!({
-			"id": "", "name": "Bailian", "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-			"apiKey": "sk-test-discovery", "excludedModelIds": ["kimi-k3"]
-		})).unwrap();
-		let routes = || -> Vec<RelayRouteSpec> {
-			["deepseek", "kimi", "glm"].iter().map(|id| serde_json::from_value(json!({
-				"familyId": id, "route": { "relayId": "", "tools": true, "models": [{
-					"modelId": if *id == "kimi" { "kimi-k3".to_string() } else { format!("vendor/{id}-chat") },
-					"inputCost": 1.5, "contextWindow": 128000, "maxTokens": 8192
-				}] }
-			})).unwrap()).collect()
-		};
-		let saved = save_relay_with_routes_in(&dir, relay, routes()).unwrap();
-		let relay = saved.relays[0].clone();
-		assert!(!relay.id.is_empty());
-		assert_eq!(runtime_offers(&saved).len(), 2);
-		let projected = providers::read_config(&dir.join("models.json")).unwrap();
-		assert_eq!(projected["providers"][provider_key("glm", &relay.id)]["models"][0]["id"], "vendor/glm-chat");
-		assert_eq!(projected["providers"][provider_key("glm", &relay.id)]["models"][0]["compat"]["supportsDeveloperRole"], false);
-		assert!(!std::fs::read_to_string(config_path(&dir)).unwrap().contains("sk-test-discovery"));
-
-		// Retesting must preserve manual route edits and ordering.
-		let mut edited = saved.families[0].routes[0].clone();
-		edited.models[0].input_cost = 7.0;
-		save_route_in(&dir, "deepseek", edited.clone()).unwrap();
-		let mut edit_relay = relay.clone();
-		edit_relay.api_key.clear();
-		edit_relay.excluded_model_ids.clear();
-		let repaired = save_relay_with_routes_in(&dir, edit_relay, routes()).unwrap();
-		assert_eq!(repaired.relays[0].api_key, "sk-test-discovery");
-		assert_eq!(repaired.families[0].routes.len(), 1);
-		assert_eq!(repaired.families[0].routes[0].models[0].input_cost, 7.0);
-		assert_eq!(runtime_offers(&repaired).len(), 3);
-
-		let mut provider_edit = repaired.families[0].routes[0].clone();
-		provider_edit.models[0].alias = "编辑后的显示名".into();
-		provider_edit.models[0].context_window = 196_000;
-		let updated = save_relay_with_routes_in(&dir, relay.clone(), vec![RelayRouteSpec { family_id: "deepseek".into(), route: provider_edit }]).unwrap();
-		assert_eq!(updated.families[0].routes[0].models[0].alias, "编辑后的显示名");
-		assert_eq!(updated.families[0].routes[0].models[0].context_window, 196_000);
-		assert_eq!(updated.families[0].routes[0].models[0].input_cost, 7.0);
-		assert_eq!(updated.families[0].routes[0].id, edited.id);
-
-		// A malformed discovered route must not leave a partially saved relay.
-		let before = std::fs::read(config_path(&dir)).unwrap();
-		let models_before = std::fs::read(dir.join("models.json")).unwrap();
-		let mut invalid_relay = relay;
-		invalid_relay.id.clear(); invalid_relay.name = "Invalid relay".into();
-		let mut invalid_routes = routes();
-		invalid_routes[2].route.models[0].max_tokens = 0;
-		assert!(save_relay_with_routes_in(&dir, invalid_relay, invalid_routes).is_err());
-		assert_eq!(std::fs::read(config_path(&dir)).unwrap(), before);
-		assert_eq!(std::fs::read(dir.join("models.json")).unwrap(), models_before);
-		std::fs::remove_dir_all(dir).unwrap();
+	fn migration_preserves_each_source_when_an_older_backup_exists() {
+		let path = dir("backup-retry");
+		let older = b"previous migration source";
+		std::fs::write(path.join("skiff-families.pre-v6.bak.json"), older).unwrap();
+		let original = write_legacy(&path, &legacy());
+		load(&path).unwrap();
+		assert_eq!(std::fs::read(path.join("skiff-families.pre-v6.bak.json")).unwrap(), older);
+		assert!(std::fs::read_dir(&path).unwrap().flatten().any(|entry| entry.file_name().to_string_lossy().ends_with(".bak.json") && std::fs::read(entry.path()).unwrap() == original));
+		std::fs::remove_dir_all(path).unwrap();
 	}
-
 	#[test]
-	fn relay_protocol_normalizes_projects_and_shapes_requests() {
-		// Absent and unknown values keep the legacy OpenAI-compatible default.
-		assert_eq!(normalize_protocol(None), "openai");
-		assert_eq!(normalize_protocol(Some("nonsense")), "openai");
-		assert_eq!(normalize_protocol(Some(" Anthropic ")), "anthropic");
-		assert_eq!(normalize_protocol(Some("google-genai")), "google-genai");
-
-		let model = ModelSpec { model_id: "claude-sonnet-4".into(), vision: None, thinking_levels: None, alias: String::new(), input_cost: 1.0, output_cost: 4.0, cache_read_cost: 1.0, cache_write_cost: 1.0, currency: Currency::Cny, max_tokens: 8192, context_window: 200_000 };
-		let route = RouteSpec { id: "route-kimi-r1".into(), relay_id: "r1".into(), enabled: true, models: vec![model], streaming: true, tools: true, vision: false, reasoning: false, thinking_levels: Vec::new() };
-		let mut relay = RelaySpec { id: "r1".into(), name: "Anthropic relay".into(), base_url: "https://api.anthropic.com/v1".into(), api_key: "key".into(), protocol: Some("Anthropic".into()), timeout_seconds: 60, enabled: true, billing_account_id: String::new(), price_multiplier: None, excluded_model_ids: Vec::new(), unassigned_models: Vec::new() };
-		let normalized = normalize_relay(relay.clone(), &FamiliesConfig { version: 5, relays: Vec::new(), families: Vec::new(), auto_failover: false, auto_retry: false, usd_cny_rate: 7.2 }).unwrap();
-		assert_eq!(normalized.protocol.as_deref(), Some("anthropic"));
-		assert_eq!(protocol_api(&normalized), "anthropic-messages");
-		// Other adapters build their own shapes, so no OpenAI compat block leaks in.
-		assert_eq!(project_model("kimi", &route, &route.models[0], "skiff-test", "anthropic-messages", 1.0)["compat"], Value::Null);
-
-		relay.protocol = Some("google-genai".into());
-		assert_eq!(protocol_api(&relay), "google-generative-ai");
-		relay.protocol = Some("openai-responses".into());
-		assert_eq!(protocol_api(&relay), "openai-responses");
-		relay.protocol = None;
-		assert_eq!(protocol_api(&relay), "openai-completions");
-
-		// Anthropic's SDK appends `/v1`; the stored `/v1` suffix must not double up.
-		relay.protocol = Some("anthropic".into());
-		assert_eq!(runtime_base_url(&relay), "https://api.anthropic.com");
-		relay.base_url = "https://claude-proxy.example".into();
-		assert_eq!(runtime_base_url(&relay), "https://claude-proxy.example");
-		assert_eq!(anthropic_root("https://x/v1/"), "https://x");
-		relay.base_url = "https://api.openai.com/v1".into();
-		relay.protocol = Some("openai".into());
-		assert_eq!(runtime_base_url(&relay), "https://api.openai.com/v1");
-
-		// Each protocol gets its own one-shot request shape for the connection test.
-		let (url, body, auth) = connection_test_request("anthropic", "https://api.anthropic.com/v1", "k", "claude-3");
-		assert_eq!(url, "https://api.anthropic.com/v1/messages");
-		assert_eq!(auth, "anthropic");
-		assert_eq!(body["max_tokens"], 128);
-		// The test and the SDK must agree on the endpoint for a suffix-less relay.
-		let (url, _, _) = connection_test_request("anthropic", "https://claude-proxy.example", "k", "claude-3");
-		assert_eq!(url, "https://claude-proxy.example/v1/messages");
-		let (url, body, auth) = connection_test_request("openai-responses", "https://api.openai.com/v1", "k", "gpt-5");
-		assert_eq!(url, "https://api.openai.com/v1/responses");
-		assert_eq!(auth, "bearer");
-		assert_eq!(body["max_output_tokens"], 128);
-		let (url, body, auth) = connection_test_request("google-genai", "https://generativelanguage.googleapis.com/v1beta", "k", "gemini-2.5-pro");
-		assert_eq!(url, "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=k");
-		assert_eq!(auth, "query");
-		assert_eq!(body["generationConfig"]["maxOutputTokens"], 128);
-		let (url, body, auth) = connection_test_request("openai", "https://api.example.com/v1", "k", "m");
-		assert_eq!(url, "https://api.example.com/v1/chat/completions");
-		assert_eq!(auth, "bearer");
-		assert_eq!(body["max_tokens"], 128);
-		// Relays that require a boolean reject an omitted `stream` as None.
-		assert_eq!(body["stream"], false);
-		let (_, body, _) = connection_test_request("kimi", "https://api.example.com/v1", "k", "m");
-		assert_eq!(body["stream"], false);
+	fn provider_projection_uses_per_model_capabilities_and_preserves_external_config() {
+		let path=dir("projection"); write_legacy(&path,&legacy()); let mut config=load_plain(&path).unwrap();
+		let mut second=config.relays[0].models[0].clone(); second.model.model_id="other".into(); second.streaming=true; second.tools=true; second.reasoning=false; second.model.vision=Some(false);
+		config.relays[0].models.push(second); let mut relay=config.relays[0].clone(); relay.id="r2".into(); relay.name="Second".into(); config.relays.push(relay);
+		providers::atomic_write(&path.join("models.json"),&json!({"providers":{"external":{"anything":1}}})).unwrap(); save(&path,&config).unwrap();
+		let models=providers::read_config(&path.join("models.json")).unwrap(); assert_eq!(models["providers"]["external"]["anything"],1);
+		assert_eq!(models["providers"]["skiff-relay-r1"]["models"][1]["input"],json!(["text"]));
+		assert_eq!(runtime_offers(&config).len(),4);
+		let mut cmd=std::process::Command::new("pi"); prepare_runtime(&path,&mut cmd).unwrap();
+		let runtime: Value=serde_json::from_slice(&std::fs::read(path.join("skiff-family-runtime.json")).unwrap()).unwrap(); assert_eq!(runtime[0]["models"][0]["tools"],false); assert_eq!(runtime[0]["models"][1]["tools"],true);
+		std::fs::remove_dir_all(path).unwrap();
 	}
-
 	#[test]
-	fn model_vision_survives_save_and_controls_projection_and_runtime_independently() {
-		let dir = std::env::temp_dir().join(format!("skiff-model-vision-test-{}", std::process::id()));
-		std::fs::create_dir_all(&dir).unwrap();
-		let mut config: FamiliesConfig = serde_json::from_value(json!({
-			"version": 4,
-			"relays": [{ "id": "r1", "name": "Relay", "baseUrl": "https://relay.example/v1", "enabled": true }],
-			"families": [{ "id": "glm", "displayName": "GLM", "routes": [{
-				"id": "route-glm-r1", "relayId": "r1", "vision": false,
-				"models": [
-					{ "modelId": "glm-5.3", "vision": false, "contextWindow": 128000, "maxTokens": 8192 },
-					{ "modelId": "glm-5.3-flash", "vision": true, "contextWindow": 128000, "maxTokens": 8192 },
-					{ "modelId": "legacy", "contextWindow": 128000, "maxTokens": 8192 }
-				]
-			}] }]
-		})).unwrap();
-		config.families[0].routes[0].models = normalize_models(&config.families[0].routes[0].models).unwrap();
-		for default_vision in [false, true] {
-			config.families[0].routes[0].vision = default_vision;
-			save(&dir, &config).unwrap();
-			let saved = load_plain(&dir).unwrap();
-			let route = &saved.families.iter().find(|family| family.id == "glm").unwrap().routes[0];
-			assert_eq!(route.models.iter().map(|model| model.vision).collect::<Vec<_>>(), vec![Some(false), Some(true), None]);
-			assert_eq!(runtime_offers(&saved).iter().map(|offer| offer.vision).collect::<Vec<_>>(), vec![false, true, default_vision]);
-			let expected = vec![json!(["text"]), json!(["text", "image"]), if default_vision { json!(["text", "image"]) } else { json!(["text"]) }];
-			let projected = providers::read_config(&dir.join("models.json")).unwrap();
-			assert_eq!(projected["providers"]["skiff-relay-r1-glm"]["models"].as_array().unwrap().iter().map(|model| model["input"].clone()).collect::<Vec<_>>(), expected);
-			let mut command = std::process::Command::new("pi");
-			prepare_runtime(&dir, &mut command).unwrap();
-			let runtime: Value = serde_json::from_str(command.get_envs().find(|(name, _)| *name == "SKIFF_FAMILY_RUNTIME").unwrap().1.unwrap().to_str().unwrap()).unwrap();
-			assert_eq!(runtime[0]["models"].as_array().unwrap().iter().map(|model| model["input"].clone()).collect::<Vec<_>>(), expected);
-		}
-		std::fs::remove_dir_all(dir).unwrap();
-	}
-
-	#[test]
-	fn migrates_legacy_route_choice_into_order_and_removes_it() {
-		let mut value = json!({
-			"version": 3,
-			"relays": [{"id": "r1", "name": "Relay", "baseUrl": "https://relay.example/v1", "apiKey": "sealed", "enabled": true}],
-			"families": [{"id": "kimi", "displayName": "Kimi", "defaultRelayId": "r2", "routes": [
-				{"relayId": "r1", "models": [{"modelId": "kimi-k3", "inputCost": 1, "outputCost": 4, "currency": "CNY", "maxTokens": 8192, "contextWindow": 128000}]},
-				{"relayId": "r2", "models": [{"modelId": "kimi-k2", "inputCost": 1, "outputCost": 4, "currency": "CNY", "maxTokens": 8192, "contextWindow": 128000}]}
-			]}]
-		});
-		migrate_value_to_v5(&mut value);
-		assert_eq!(value["version"], 5);
-		assert_eq!(value["relays"][0]["billingAccountId"], "");
-		assert!(value["families"][0].get("defaultRouteId").is_none());
-		assert!(value["families"][0].get("defaultRelayId").is_none());
-		assert_eq!(value["families"][0]["routes"][0]["id"], "route-kimi-r2");
-		assert_eq!(value["families"][0]["routes"][0]["enabled"], true);
-		assert_eq!(value["families"][0]["routes"][0]["models"][0]["alias"], "");
-		assert_eq!(value["families"][0]["routes"][0]["models"][0]["cacheReadCost"], 1);
-		assert_eq!(value["families"][0]["routes"][0]["models"][0]["cacheWriteCost"], 1);
-	}
-
-	#[test]
-	fn runtime_offers_skip_disabled_routes_and_expose_offer_identity() {
-		let relay = RelaySpec { id: "r1".into(), name: "Relay".into(), base_url: "https://relay.example/v1".into(), api_key: String::new(), protocol: None, timeout_seconds: 60, enabled: true, billing_account_id: "wallet-a".into(), price_multiplier: None, excluded_model_ids: Vec::new(), unassigned_models: Vec::new() };
-		let model = ModelSpec { model_id: "kimi-k3".into(), vision: None, thinking_levels: None, alias: "k3-便宜".into(), input_cost: 1.0, output_cost: 4.0, cache_read_cost: 0.5, cache_write_cost: 0.7, currency: Currency::Cny, max_tokens: 8192, context_window: 128000 };
-		let route = RouteSpec { id: "route-kimi-r1".into(), relay_id: "r1".into(), enabled: true, models: vec![model], streaming: true, tools: true, vision: false, reasoning: true, thinking_levels: Vec::new() };
-		let disabled = RouteSpec { id: "route-kimi-r2".into(), relay_id: "r1".into(), enabled: false, models: vec![], streaming: true, tools: true, vision: false, reasoning: false, thinking_levels: Vec::new() };
-		let family = ModelFamily { id: "kimi".into(), display_name: "Kimi".into(), routes: vec![route, disabled] };
-		let config = FamiliesConfig { version: 5, relays: vec![relay], families: vec![family], auto_failover: false, auto_retry: false, usd_cny_rate: 7.2 };
-		let offers = runtime_offers(&config);
-		assert_eq!(offers.len(), 1);
-		assert_eq!(offers[0].offer_id, "route-kimi-r1/kimi-k3");
-		assert_eq!(offers[0].billing_account_id, "wallet-a");
-		assert_eq!(offers[0].cache_read_cost, 0.5);
-	}
-
-	#[test]
-	fn projection_and_runtime_drop_disabled_relays_and_routes() {
-		let dir = std::env::temp_dir().join(format!("skiff-route-test-{}", std::process::id()));
-		let _ = std::fs::remove_dir_all(&dir);
-		std::fs::create_dir_all(&dir).unwrap();
-		std::fs::write(dir.join("models.json"), json!({
-			"providers": {
-				"custom": {"api": "openai-completions"},
-				"skiff-relay-stale-kimi": {"api": "old"}
-			}
-		}).to_string()).unwrap();
-		std::fs::write(dir.join("auth.json"), json!({
-			"custom": {"type": "oauth"},
-			"skiff-relay-stale-kimi": {"type": "api_key", "key": "old"}
-		}).to_string()).unwrap();
-		let model = ModelSpec { model_id: "kimi-k3".into(), vision: None, thinking_levels: None, alias: "k3".into(), input_cost: 1.0, output_cost: 4.0, cache_read_cost: 1.0, cache_write_cost: 1.0, currency: Currency::Cny, max_tokens: 8192, context_window: 128000 };
-		let active = RouteSpec { id: "route-kimi-r1".into(), relay_id: "r1".into(), enabled: true, models: vec![model.clone()], streaming: true, tools: true, vision: false, reasoning: false, thinking_levels: Vec::new() };
-		let stopped_route = RouteSpec { id: "route-kimi-stopped".into(), relay_id: "r1".into(), enabled: false, models: vec![model.clone()], streaming: true, tools: true, vision: false, reasoning: false, thinking_levels: Vec::new() };
-		let stopped_relay_route = RouteSpec { id: "route-kimi-r2".into(), relay_id: "r2".into(), enabled: true, models: vec![model], streaming: true, tools: true, vision: false, reasoning: false, thinking_levels: Vec::new() };
-		let deepseek_model = ModelSpec { model_id: "deepseek-chat".into(), vision: None, thinking_levels: None, alias: String::new(), input_cost: 0.3, output_cost: 1.2, cache_read_cost: 0.3, cache_write_cost: 0.3, currency: Currency::Cny, max_tokens: 8192, context_window: 128000 };
-		let config = FamiliesConfig {
-			version: 5,
-			relays: vec![
-				RelaySpec { id: "r1".into(), name: "Active".into(), base_url: "https://active.example/v1".into(), api_key: "key-active".into(), protocol: None, timeout_seconds: 60, enabled: true, billing_account_id: "wallet-a".into(), price_multiplier: None, excluded_model_ids: Vec::new(), unassigned_models: Vec::new() },
-				RelaySpec { id: "r2".into(), name: "Stopped".into(), base_url: "https://stopped.example/v1".into(), api_key: "key-stopped".into(), protocol: None, timeout_seconds: 60, enabled: false, billing_account_id: "wallet-b".into(), price_multiplier: None, excluded_model_ids: Vec::new(), unassigned_models: Vec::new() },
-			],
-			families: vec![
-				ModelFamily { id: "kimi".into(), display_name: "Kimi".into(), routes: vec![active, stopped_route, stopped_relay_route] },
-				ModelFamily { id: "deepseek".into(), display_name: "DeepSeek".into(), routes: vec![RouteSpec { id: "route-deepseek-r1".into(), relay_id: "r1".into(), enabled: true, models: vec![deepseek_model], streaming: true, tools: true, vision: false, reasoning: false, thinking_levels: Vec::new() }] },
-			],
-			auto_failover: false,
-			auto_retry: false,
-			usd_cny_rate: 7.2,
-		};
-		project(&dir, &config).unwrap();
-		let projected_models: Value = serde_json::from_slice(&std::fs::read(dir.join("models.json")).unwrap()).unwrap();
-		let projected_auth: Value = serde_json::from_slice(&std::fs::read(dir.join("auth.json")).unwrap()).unwrap();
-		assert!(projected_models["providers"]["skiff-relay-r1-kimi"].is_object());
-		assert!(projected_models["providers"]["skiff-relay-r1-deepseek"].is_object());
-		assert!(projected_models["providers"]["skiff-relay-stale-kimi"].is_null());
-		assert!(projected_models["providers"]["custom"].is_object());
-		assert!(projected_auth["skiff-relay-r1-kimi"].is_object());
-		assert!(projected_auth["skiff-relay-stale-kimi"].is_null());
-		std::fs::write(config_path(&dir), serde_json::to_vec(&config).unwrap()).unwrap();
-		let mut command = std::process::Command::new("pi");
-		prepare_runtime(&dir, &mut command).unwrap();
-		let env_names: Vec<String> = command.get_envs().filter_map(|(key, _)| key.to_str().map(str::to_string)).collect();
-		assert!(env_names.iter().any(|key| key == "SKIFF_KEY_skiff_relay_r1_kimi"));
-		assert!(env_names.iter().any(|key| key == "SKIFF_KEY_skiff_relay_r1_deepseek"));
-		assert!(!env_names.iter().any(|key| key == "SKIFF_KEY_skiff_relay_r2_kimi"));
-		let _ = std::fs::remove_dir_all(&dir);
-	}
-
-	#[test]
-	fn route_order_allows_disabling_and_deleting_routes() {
-		let dir = std::env::temp_dir().join(format!("skiff-route-choice-test-{}", std::process::id()));
-		let _ = std::fs::remove_dir_all(&dir);
-		std::fs::create_dir_all(&dir).unwrap();
-		let model = ModelSpec { model_id: "kimi-k3".into(), vision: None, thinking_levels: None, alias: String::new(), input_cost: 1.0, output_cost: 4.0, cache_read_cost: 1.0, cache_write_cost: 1.0, currency: Currency::Cny, max_tokens: 8192, context_window: 128000 };
-		let config = FamiliesConfig {
-			version: 5,
-			relays: vec![
-				RelaySpec { id: "r1".into(), name: "Primary".into(), base_url: "https://primary.example/v1".into(), api_key: "key-1".into(), protocol: None, timeout_seconds: 60, enabled: true, billing_account_id: String::new(), price_multiplier: None, excluded_model_ids: Vec::new(), unassigned_models: Vec::new() },
-				RelaySpec { id: "r2".into(), name: "Backup".into(), base_url: "https://backup.example/v1".into(), api_key: "key-2".into(), protocol: None, timeout_seconds: 60, enabled: true, billing_account_id: String::new(), price_multiplier: None, excluded_model_ids: Vec::new(), unassigned_models: Vec::new() },
-			],
-			families: vec![ModelFamily { id: "kimi".into(), display_name: "Kimi".into(), routes: vec![
-				RouteSpec { id: "route-kimi-r1".into(), relay_id: "r1".into(), enabled: true, models: vec![model.clone()], streaming: true, tools: true, vision: false, reasoning: false, thinking_levels: Vec::new() },
-				RouteSpec { id: "route-kimi-r2".into(), relay_id: "r2".into(), enabled: true, models: vec![model], streaming: true, tools: true, vision: false, reasoning: false, thinking_levels: Vec::new() },
-			] }],
-			auto_failover: false,
-			auto_retry: false,
-			usd_cny_rate: 7.2,
-		};
-		std::fs::write(config_path(&dir), serde_json::to_vec(&config).unwrap()).unwrap();
-		// A stopped relay or route is skipped until it is enabled again.
-		assert!(set_relay_enabled_in(&dir, "r1", false).is_ok());
-		assert!(!load_plain(&dir).unwrap().relays[0].enabled);
-		assert!(set_relay_enabled_in(&dir, "r1", true).is_ok());
-		let mut stopped = load_plain(&dir).unwrap().families.iter().find(|family| family.id == "kimi").unwrap().routes[0].clone();
-		stopped.enabled = false;
-		assert!(save_route_in(&dir, "kimi", stopped).is_ok());
-		assert!(runtime_offers(&load_plain(&dir).unwrap()).iter().all(|offer| offer.route_id != "route-kimi-r1"));
-		assert!(delete_route_in(&dir, "kimi", "route-kimi-r1").is_ok());
-		let _ = std::fs::remove_dir_all(&dir);
+	fn validation_preserves_zero_cache_prices_and_rejects_duplicates() {
+		let mut config=FamiliesConfig::default(); let mut relay: RelaySpec=serde_json::from_value(json!({"id":"r1","name":"First","baseUrl":"https://example.com/v1","models":[{"modelId":"shared","contextWindow":128000,"maxTokens":8192,"inputCost":2}]})).unwrap();
+		relay=normalize_relay(relay,&config).unwrap(); assert_eq!(relay.models[0].model.cache_read_cost,0.0); relay.models.push(relay.models[0].clone()); config.relays.push(relay); assert!(validate_config(&config).is_err());
 	}
 }
 
-/// models.dev 公共模型目录（官方牌价），带 24h 磁盘缓存；refresh 跳过缓存并在成功后重写。
 #[tauri::command]
 pub async fn fetch_public_catalog(refresh: Option<bool>) -> Result<providers::CatalogResponse, String> {
 	providers::public_catalog(&agent_dir()?, refresh.unwrap_or(false)).await
@@ -2103,6 +1535,7 @@ mod connection_test_tests {
 			let mut config = FamiliesConfig::default();
 			config.relays.push(serde_json::from_value(json!({"id":"test", "name":"Test", "baseUrl":format!("http://{address}/v1"), "apiKey":"dummy-only", "protocol":protocol, "timeoutSeconds":5})).unwrap());
 			config.families[0].routes.push(serde_json::from_value(json!({"id":"route-test", "relayId":"test", "models":[{"modelId":"actual/model", "contextWindow":32000, "maxTokens":4096}]})).unwrap());
+			provider_models::migrate(&mut config).unwrap();
 			save(&dir, &config).unwrap();
 			let result = tauri::async_runtime::block_on(test_settings_connection_in(&dir, config.relays[0].clone(), "actual/model".into(), format!("settings-{protocol}"), false)).unwrap();
 			assert_eq!(result.ok, index != 5);
@@ -2119,181 +1552,4 @@ mod connection_test_tests {
 		let _ = std::fs::remove_dir_all(dir);
 	}
 
-	#[test]
-	fn exclusions_persist_filter_runtime_and_projection_and_can_be_restored() {
-		let dir = std::env::temp_dir().join(format!("skiff-exclusions-{}", next_id()));
-		let mut config: FamiliesConfig = serde_json::from_value(json!({
-			"relays": [
-				{ "id": "r1", "name": "One", "baseUrl": "https://one.example/v1", "apiKey": "test-key", "excludedModelIds": ["slow"] },
-				{ "id": "r2", "name": "Two", "baseUrl": "https://two.example/v1" }
-			],
-			"families": [{ "id": "deepseek", "displayName": "DeepSeek", "routes": [
-				{ "id": "route-one", "relayId": "r1", "models": [
-					{ "modelId": "fast", "contextWindow": 1000, "maxTokens": 100 },
-					{ "modelId": "slow", "contextWindow": 1000, "maxTokens": 100 }
-				] },
-				{ "id": "route-two", "relayId": "r2", "models": [{ "modelId": "slow", "contextWindow": 1000, "maxTokens": 100 }] }
-			] }]
-		})).unwrap();
-		save(&dir, &config).unwrap();
-		let saved = load_plain(&dir).unwrap();
-		assert_eq!(saved.relays[0].excluded_model_ids, ["slow"]);
-		assert_eq!(runtime_offers(&saved).iter().map(|offer| (offer.relay_id.as_str(), offer.model_id.as_str())).collect::<Vec<_>>(), [("r1", "fast"), ("r2", "slow")]);
-		let projected = providers::read_config(&dir.join("models.json")).unwrap();
-		assert_eq!(projected["providers"]["skiff-relay-r1-deepseek"]["models"].as_array().unwrap().len(), 1);
-		let mut command = std::process::Command::new("pi");
-		prepare_runtime(&dir, &mut command).unwrap();
-		let runtime: Value = serde_json::from_str(command.get_envs().find(|(name, _)| *name == "SKIFF_FAMILY_RUNTIME").unwrap().1.unwrap().to_str().unwrap()).unwrap();
-		assert_eq!(runtime[0]["models"].as_array().unwrap().len(), 1);
-		assert_eq!(saved.families[0].routes[0].models.len(), 2);
-		config.relays[0].excluded_model_ids.push("fast".into());
-		save(&dir, &config).unwrap();
-		assert!(providers::read_config(&dir.join("models.json")).unwrap()["providers"]["skiff-relay-r1-deepseek"].is_null());
-		config.relays[0].excluded_model_ids.clear();
-		save(&dir, &config).unwrap();
-		assert_eq!(runtime_offers(&load_plain(&dir).unwrap()).len(), 3);
-		std::fs::remove_dir_all(dir).unwrap();
-	}
-
-	#[test]
-	fn auto_family_is_fixed_displayed_and_accepts_routes_and_projection() {
-		let dir = std::env::temp_dir().join(format!("skiff-auto-family-{}", next_id()));
-		std::fs::create_dir_all(&dir).unwrap();
-		assert_eq!(family_display("auto"), "Auto");
-		let relay: RelaySpec = serde_json::from_value(json!({
-			"id": "", "name": "Router", "baseUrl": "https://router.example/v1", "apiKey": "sk-test-auto"
-		})).unwrap();
-		let saved = save_relay_with_routes_in(&dir, relay, vec![serde_json::from_value(json!({
-			"familyId": "auto", "route": { "relayId": "",
-				"models": [{ "modelId": "auto", "contextWindow": 128000, "maxTokens": 8192 }]
-			}
-		})).unwrap()]).unwrap();
-		let relay = saved.relays[0].clone();
-		assert_eq!(runtime_offers(&saved).iter().map(|offer| (offer.family_id.as_str(), offer.model_id.as_str())).collect::<Vec<_>>(), [("auto", "auto")]);
-		let projected = providers::read_config(&dir.join("models.json")).unwrap();
-		assert_eq!(projected["providers"][provider_key("auto", &relay.id)]["models"][0]["id"], "auto");
-
-		// Older files predating the auto family get it reinstated empty on load.
-		save(&dir, &serde_json::from_value::<FamiliesConfig>(json!({
-			"version": 4, "relays": [], "families": [{ "id": "kimi", "displayName": "Kimi", "routes": [] }]
-		})).unwrap()).unwrap();
-		let loaded = load_plain(&dir).unwrap();
-		assert_eq!(loaded.families.iter().map(|family| family.id.as_str()).collect::<Vec<_>>(), ["deepseek", "kimi", "glm", "auto"]);
-		std::fs::remove_dir_all(dir).unwrap();
-	}
-
-	#[test]
-	fn thinking_levels_project_into_pi_map_and_offer_extended_levels() {
-		let dir = std::env::temp_dir().join(format!("skiff-thinking-levels-{}", next_id()));
-		std::fs::create_dir_all(&dir).unwrap();
-		let relay: RelaySpec = serde_json::from_value(json!({
-			"id": "", "name": "Router", "baseUrl": "http://127.0.0.1:8787/v1", "apiKey": "sk-local"
-		})).unwrap();
-		// Duplicates and `off` collapse; order follows pi's ladder, not the input.
-		let saved = save_relay_with_routes_in(&dir, relay, vec![serde_json::from_value(json!({
-			"familyId": "deepseek", "route": {
-				"relayId": "", "reasoning": true, "thinkingLevels": ["max", "low", "off", "low"],
-				"models": [
-					{ "modelId": "deepseek-v4.1-flash", "contextWindow": 128000, "maxTokens": 8192 },
-					{ "modelId": "deepseek-v4-flash", "contextWindow": 128000, "maxTokens": 8192, "thinkingLevels": ["minimal"] }
-				]
-			}
-		})).unwrap()]).unwrap();
-		let route = &saved.families.iter().find(|family| family.id == "deepseek").unwrap().routes[0];
-		assert_eq!(route.thinking_levels, ["low", "max"]);
-		assert_eq!(route.models[0].thinking_levels, None);
-		assert_eq!(route.models[1].thinking_levels.as_deref(), Some(&["minimal".to_string()][..]));
-
-		let key = provider_key("deepseek", &saved.relays[0].id);
-		let projected = providers::read_config(&dir.join("models.json")).unwrap();
-		let models = projected["providers"][&key]["models"].as_array().unwrap();
-		// Declared levels map to themselves; the rest are null so pi hides them.
-		assert_eq!(models[0]["thinkingLevelMap"], json!({
-			"minimal": null, "low": "low", "medium": null, "high": null, "xhigh": null, "max": "max"
-		}));
-		assert_eq!(models[1]["thinkingLevelMap"], json!({
-			"minimal": "minimal", "low": null, "medium": null, "high": null, "xhigh": null, "max": null
-		}));
-
-		let levels: Vec<_> = runtime_offers(&saved).iter().map(|offer| offer.thinking_levels.clone()).collect();
-		assert_eq!(levels, [vec!["off", "low", "max"], vec!["off", "minimal"]]);
-		std::fs::remove_dir_all(dir).unwrap();
-	}
-
-	#[test]
-	fn thinking_levels_default_to_pi_ladder_and_reject_unknown_levels() {
-		let model = ModelSpec { model_id: "m".into(), vision: None, thinking_levels: None, alias: String::new(), input_cost: 0.0, output_cost: 0.0, cache_read_cost: 0.0, cache_write_cost: 0.0, currency: Currency::Cny, max_tokens: 8192, context_window: 128000 };
-		// Undeclared routes stay map-free so pi keeps its five-level default.
-		let route = RouteSpec { id: "r".into(), relay_id: "r1".into(), enabled: true, models: vec![model.clone()], streaming: true, tools: true, vision: false, reasoning: true, thinking_levels: Vec::new() };
-		assert_eq!(project_model("auto", &route, &model, "skiff-test", "openai-completions", 1.0)["thinkingLevelMap"], Value::Null);
-
-		let declared = RouteSpec { thinking_levels: vec!["low".into(), "high".into()], ..route.clone() };
-		let map = project_model("auto", &declared, &model, "skiff-test", "openai-completions", 1.0)["thinkingLevelMap"].clone();
-		assert_eq!(map["low"], "low");
-		assert_eq!(map["high"], "high");
-		assert_eq!(map["minimal"], Value::Null);
-		assert_eq!(map["max"], Value::Null);
-
-		let mut silent = declared.clone();
-		silent.reasoning = false;
-		assert_eq!(project_model("auto", &silent, &model, "skiff-test", "openai-completions", 1.0)["thinkingLevelMap"], Value::Null);
-
-		assert_eq!(normalize_thinking_levels(Some(&["HIGH".into(), "XHigh".into()])).unwrap(), ["high", "xhigh"]);
-		assert!(normalize_thinking_levels(Some(&["ultra".into()])).is_err());
-	}
-
-	#[test]
-	fn create_family_adds_custom_family_and_routes_can_reference_it() {
-		let dir = std::env::temp_dir().join(format!("skiff-create-family-{}", std::process::id()));
-		let _ = std::fs::remove_dir_all(&dir);
-		std::fs::create_dir_all(&dir).unwrap();
-		let saved = create_family_in(&dir, " GPT ", "GPT").unwrap();
-		assert_eq!(saved.families.iter().find(|family| family.id == "gpt").unwrap().display_name, "GPT");
-		// Reload keeps the custom family after the built-ins.
-		let reloaded = load_plain(&dir).unwrap();
-		assert_eq!(reloaded.families.last().unwrap().id, "gpt");
-		assert!(FAMILY_IDS.iter().all(|id| reloaded.families.iter().any(|family| family.id == *id)));
-
-		let relay: RelaySpec = serde_json::from_value(json!({ "id": "", "name": "OpenAI", "baseUrl": "https://api.openai.com/v1", "apiKey": "sk-test-family", "unassignedModels": [{ "modelId": "o4-mini", "contextWindow": 128000, "maxTokens": 8192 }] })).unwrap();
-		let routes = vec![serde_json::from_value::<RelayRouteSpec>(json!({
-			"familyId": "gpt", "route": { "relayId": "", "models": [{ "modelId": "gpt-5.2", "contextWindow": 128000, "maxTokens": 8192 }] }
-		})).unwrap()];
-		let saved = save_relay_with_routes_in(&dir, relay, routes).unwrap();
-		let relay_id = saved.relays[0].id.clone();
-		let gpt = saved.families.iter().find(|family| family.id == "gpt").unwrap();
-		assert_eq!(gpt.routes[0].models[0].model_id, "gpt-5.2");
-		let projected = providers::read_config(&dir.join("models.json")).unwrap();
-		assert_eq!(projected["providers"][provider_key("gpt", &relay_id)]["models"][0]["id"], "gpt-5.2");
-
-		assert!(create_family_in(&dir, "gpt", "重复").is_err());
-		assert!(create_family_in(&dir, "9bad", "数字开头").is_err());
-		assert!(create_family_in(&dir, "this-family-id-is-far-too-long-for-provider-keys", "超长").is_err());
-		std::fs::remove_dir_all(dir).unwrap();
-	}
-
-	#[test]
-	fn relay_saves_unassigned_models_without_projecting_or_offering_them() {
-		let dir = std::env::temp_dir().join(format!("skiff-unassigned-models-{}", std::process::id()));
-		let _ = std::fs::remove_dir_all(&dir);
-		std::fs::create_dir_all(&dir).unwrap();
-		let relay: RelaySpec = serde_json::from_value(json!({
-			"id": "", "name": "OpenAI", "baseUrl": "https://api.openai.com/v1", "apiKey": "sk-test-unassigned",
-			"unassignedModels": [
-				{ "modelId": "gpt-5.2", "contextWindow": 128000, "maxTokens": 8192 },
-				{ "modelId": "text-embedding-3-small", "contextWindow": 8192, "maxTokens": 8192 }
-			]
-		})).unwrap();
-		let saved = save_relay_with_routes_in(&dir, relay, vec![]).unwrap();
-		assert_eq!(saved.relays[0].unassigned_models.len(), 2);
-		// Unassigned models stay invisible to selection and to pi's projection.
-		assert!(runtime_offers(&saved).is_empty());
-		let projected = providers::read_config(&dir.join("models.json")).unwrap();
-		assert!(projected["providers"].as_object().unwrap().is_empty());
-		// Duplicate ids inside the unassigned list are rejected like route models.
-		let mut edited = saved.relays[0].clone();
-		edited.api_key.clear();
-		edited.unassigned_models.push(serde_json::from_value(json!({ "modelId": "gpt-5.2", "contextWindow": 128000, "maxTokens": 8192 })).unwrap());
-		assert!(save_relay_with_routes_in(&dir, edited, vec![]).is_err());
-		std::fs::remove_dir_all(dir).unwrap();
-	}
 }

@@ -28,13 +28,13 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 			if (!old || old.signature && old.signature !== connection(relay)) metadata.connections[relay.id] = { signature: connection(relay), version: crypto.randomUUID() };
 			metadata.connections[relay.id].signature = connection(relay);
 		}
-		metadata.tests = metadata.tests.filter((test) => families.some((family) => family.routes.some((route) => route.relayId === test.relayId && route.models.some((model) => model.modelId === test.modelId))));
+		metadata.tests = metadata.tests.filter((test) => relays.some((relay) => relay.id === test.relayId && relay.models.some((model) => model.modelId === test.modelId)));
 		for (const test of metadata.tests) test.configChanged = test.configVersion !== metadata.connections[test.relayId]?.version;
 	};
 	const recordTest = (ticket, relayId) => {
 		syncMetadata(); const entry = metadata.connections[relayId];
 		if (entry?.signature !== ticket.signature || latestTests.get(`${ticket.relay.id}\0${ticket.modelId}`) !== ticket.order || cancelledTests.has(ticket.requestId)) return;
-		if (!families.some((family) => family.routes.some((route) => route.relayId === relayId && route.models.some((model) => model.modelId === ticket.modelId)))) return;
+		if (!relays.some((relay) => relay.id === relayId && relay.models.some((model) => model.modelId === ticket.modelId))) return;
 		metadata.tests = metadata.tests.filter((item) => item.relayId !== relayId || item.modelId !== ticket.modelId);
 		metadata.tests.push({ relayId, modelId: ticket.modelId, configVersion: entry.version, completedAt: ticket.completedAt, ok: ticket.result.ok, latencyMs: ticket.result.latencyMs, status: ticket.result.status, errorCategory: ticket.result.ok ? null : "HTTP 请求失败", configChanged: false }); persistMetadata();
 	};
@@ -102,32 +102,19 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 		families[1].routes[0].models.push(...["kimi-k3", "kimi-k2.7-code"].map((modelId) => ({ ...sample, modelId })));
 		families[2].routes[0].models.push(...["glm-5.3", "glm-5.3-flash"].map((modelId) => ({ ...sample, modelId })));
 	}
+	// Convert legacy fixture input once; runtime and settings use provider-owned models.
+	for (const relay of relays) relay.models = families.flatMap((family) => family.routes.filter((route) => route.relayId === relay.id).flatMap((route) => route.models.map((model) => ({ ...model, familyId: family.id, enabled: route.enabled && !relay.excludedModelIds?.includes(model.modelId), streaming: route.streaming, tools: route.tools, vision: model.vision ?? route.vision, reasoning: route.reasoning, thinkingLevels: model.thinkingLevels ?? route.thinkingLevels ?? ["minimal", "low", "medium", "high"], legacyRouteIds: [route.id], legacyProviderKeys: [providerKey(family.id, relay.id)] }))));
 	const relayOf = (relayId) => relays.find((relay) => relay.id === relayId);
 	// Same ladder pi uses: a level exists only when thinkingLevelMap declares it.
 	const THINKING_LEVELS = ["minimal", "low", "medium", "high", "xhigh", "max"];
 	const thinkingMap = (levels) => Object.fromEntries(THINKING_LEVELS.map((level) => [level, levels?.includes(level) ? level : null]));
 	const thinkingLevelsOf = (route, model) => route.reasoning ? ["off", ...THINKING_LEVELS.filter((level) => (model.thinkingLevels ?? route.thinkingLevels ?? THINKING_LEVELS.slice(0, 4)).includes(level))] : ["off"];
 	const familyRoutes = () => families.flatMap((family) => family.routes.map((route) => ({ family, route })));
-	const familyModels = () => familyRoutes().flatMap(({ family, route }) => {
-		const relay = relayOf(route.relayId);
-		if (!relay?.enabled || !route.enabled) return [];
-		return route.models.filter((model) => !relay.excludedModelIds?.includes(model.modelId)).map((model) => ({
-			provider: providerKey(family.id, relay.id), id: model.modelId, name: model.modelId,
-			contextWindow: model.contextWindow, maxTokens: model.maxTokens, currency: model.currency, cost: { input: model.inputCost * (relay.priceMultiplier ?? 1), output: model.outputCost * (relay.priceMultiplier ?? 1) },
-			reasoning: route.reasoning, input: (model.vision ?? route.vision) ? ["text", "image"] : ["text"],
-			thinkingLevels: thinkingLevelsOf(route, model),
-			thinkingLevelMap: route.reasoning ? thinkingMap(model.thinkingLevels ?? route.thinkingLevels ?? THINKING_LEVELS.slice(0, 4)) : null,
-		}));
-	});
+	const offers = () => relays.filter((relay) => relay.enabled).flatMap((relay) => relay.models.filter((model) => model.enabled).map((model) => ({ ...model, offerId: `${relay.id}/${model.modelId}`, familyName: families.find((family) => family.id === model.familyId)?.displayName ?? "未分组", relayId: relay.id, relayName: relay.name, providerKey: `skiff-relay-${relay.id}`, billingAccountId: relay.billingAccountId, priceMultiplier: relay.priceMultiplier, inputCost: model.inputCost * (relay.priceMultiplier ?? 1), outputCost: model.outputCost * (relay.priceMultiplier ?? 1), cacheReadCost: model.cacheReadCost * (relay.priceMultiplier ?? 1), cacheWriteCost: model.cacheWriteCost * (relay.priceMultiplier ?? 1), thinkingLevels: thinkingLevelsOf(model, model) })));
+	const familyModels = () => offers().map((offer) => ({ ...offer, provider: offer.providerKey, id: offer.modelId, name: offer.alias || offer.modelId, input: offer.vision ? ["text", "image"] : ["text"], cost: { input: offer.inputCost, output: offer.outputCost }, thinkingLevelMap: offer.reasoning ? thinkingMap(offer.thinkingLevels) : null }));
 	const models = familyModels();
-	let autoFailover = false;
-	let autoRetry = false;
-	const familiesConfig = () => ({ version: 5, relays: structuredClone(relays), autoFailover, autoRetry, families: structuredClone(families) });
-	const offers = () => familyRoutes().flatMap(({ family, route }, routeOrder) => {
-		const relay = relayOf(route.relayId);
-		if (!relay?.enabled || !route.enabled) return [];
-		return route.models.filter((model) => !relay.excludedModelIds?.includes(model.modelId)).map((model) => ({ offerId: `${route.id}/${model.modelId}`, routeId: route.id, familyId: family.id, familyName: family.displayName, relayId: relay.id, relayName: relay.name, providerKey: providerKey(family.id, relay.id), modelId: model.modelId, alias: model.alias, billingAccountId: relay.billingAccountId, priceMultiplier: relay.priceMultiplier, routeOrder, streaming: route.streaming, tools: route.tools, vision: model.vision ?? route.vision, reasoning: route.reasoning, thinkingLevels: thinkingLevelsOf(route, model), inputCost: model.inputCost * (relay.priceMultiplier ?? 1), outputCost: model.outputCost * (relay.priceMultiplier ?? 1), cacheReadCost: model.cacheReadCost * (relay.priceMultiplier ?? 1), cacheWriteCost: model.cacheWriteCost * (relay.priceMultiplier ?? 1), currency: model.currency, maxTokens: model.maxTokens, contextWindow: model.contextWindow }));
-	});
+	let usdCnyRate = 7.2;
+	const familiesConfig = () => ({ version: 6, relays: structuredClone(relays), usdCnyRate, families: families.map(({ routes, ...family }) => ({ ...family, routes: [] })) });
 	const persist = () => storage?.setItem("skiff.test.sessions", JSON.stringify(saved));
 	const emit = (instanceId, event) => {
 		for (const listener of listeners.values()) {
@@ -194,6 +181,7 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 				return { repositoryRoot: "D:\\workspace\\Skiff", commit: "a13fc921", changedPaths: args.paths, version: "mock-git-v2", pushed: !!args.push };
 			}
 			if (command === "rollback_project_files") return { repositoryRoot: "D:\\workspace\\Skiff", changedPaths: args.paths, version: "mock-git-v2" };
+			if (command === "set_usd_cny_rate") { usdCnyRate = args.rate; return familiesConfig(); }
 			if (command === "list_model_families") {
 				if (fixture === "loading") await new Promise(() => {});
 				if (fixture === "error") throw new Error("预览：模型目录暂时不可用，请重试");
@@ -239,8 +227,8 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 				if (String(args.baseUrl).includes("fail")) return { ok: false, latencyMs: 42, status: 401, error: "Invalid API key" };
 				return { ok: true, latencyMs: 137, status: 200, error: null };
 			}
-			if (command === "set_family_auto_failover") { autoFailover = !!args.autoFailover; return familiesConfig(); }
-			if (command === "set_family_auto_retry") { autoRetry = !!args.autoRetry; return familiesConfig(); }
+
+
 			if (command === "create_family") {
 				const id = String(args.id ?? "").trim().toLowerCase();
 				if (!/^[a-z][a-z0-9_-]{0,31}$/.test(id)) throw new Error("家族 ID 需以字母开头，仅含字母、数字、- 或 _，最长 32 个字符");
@@ -262,18 +250,6 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 				incoming.timeoutSeconds = Math.min(600, Math.max(5, incoming.timeoutSeconds ?? 60));
 				const index = relays.findIndex((relay) => relay.id === incoming.id);
 				if (index < 0) relays.push(incoming); else relays[index] = incoming;
-				for (const item of args.routes ?? []) {
-					const family = families.find((family) => family.id === item.familyId);
-					if (!family) continue;
-					const existingIndex = family.routes.findIndex((route) => route.id === item.route.id && route.relayId === incoming.id);
-					if (existingIndex >= 0) {
-						family.routes[existingIndex] = { ...item.route, relayId: incoming.id };
-						continue;
-					}
-					if (family.routes.some((route) => route.relayId === incoming.id)) continue;
-					const models = item.route.models.filter((model) => !incoming.excludedModelIds?.includes(model.modelId));
-					if (models.length) family.routes.push({ ...item.route, id: `route-${item.familyId}-${incoming.id}`, relayId: incoming.id, models });
-				}
 				for (const id of args.testRequestIds ?? []) { const ticket = tickets.get(id); if (ticket) { recordTest(ticket, incoming.id); tickets.delete(id); } }
 				return familiesConfig();
 			}
@@ -290,36 +266,9 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 				relay.enabled = !!args.enabled;
 				return familiesConfig();
 			}
-			if (command === "save_route") {
-				const family = families.find((item) => item.id === args.familyId);
-				if (!family) throw new Error(`未知模型家族：${args.familyId}`);
-				const incoming = args.route;
-				if (!relayOf(incoming.relayId)) throw new Error("线路的中转不存在，请先添加中转");
-				if (!incoming.models?.length) throw new Error("请至少添加一个模型，补全线路配置");
-				const ids = new Set(incoming.models.map((model) => model.modelId?.trim()));
-				if (ids.has("")) throw new Error("模型 ID 不能为空");
-				if (ids.size !== incoming.models.length) throw new Error("同一线路内模型 ID 不能重复");
-				incoming.id ||= `route-${args.familyId}-${incoming.relayId}`;
-				incoming.enabled ??= true;
-				const index = family.routes.findIndex((route) => route.id === incoming.id || route.relayId === incoming.relayId);
-				if (index < 0) family.routes.push(incoming); else family.routes[index] = incoming;
-				return familiesConfig();
-			}
-			if (command === "delete_route") {
-				const family = families.find((item) => item.id === args.familyId);
-				const before = family?.routes.length ?? 0;
-			if (family) family.routes = family.routes.filter((route) => route.id !== args.relayId && route.relayId !== args.relayId);
-				if (!family || family.routes.length === before) throw new Error("找不到要删除的线路");
-				return familiesConfig();
-			}
-			if (command === "reorder_routes") {
-				if (failOrder) { failOrder = false; throw new Error("模拟顺序保存失败"); }
-				const family = families.find((item) => item.id === args.familyId);
-				if (!family || args.relayIds.length !== family.routes.length) throw new Error("排序请求与现有线路数量不一致");
-				if (new Set(args.relayIds).size !== family.routes.length || args.relayIds.some((id) => !family.routes.some((r) => r.id === id))) throw new Error("路线集合已变化，请重新加载");
-				family.routes = args.relayIds.map((id) => family.routes.find((route) => route.id === id));
-				return familiesConfig();
-			}
+
+
+
 			if (command === "probe_relay_endpoint") {
 				await new Promise((resolve) => target.setTimeout(resolve, 350));
 				if (args.apiKey === "invalid" || String(args.baseUrl).includes("fail")) return { ok: false, latencyMs: 25, status: 401, error: "密钥无效" };

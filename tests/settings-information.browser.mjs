@@ -35,7 +35,7 @@ try {
 	await page.keyboard.press("Control+Comma");
 	await button("供应商").click();
 	const original = await config();
-	assert.deepEqual(await dialog().locator(".provider-row-title .provider-source-tag").allTextContents(), ["官方直连", "官方直连", "自定义", "本机", "自定义"]);
+	assert.deepEqual(await dialog().locator(".provider-row-title .provider-source-tag").allTextContents(), ["官方直连", "官方直连", "本机"]);
 	assert.equal(await dialog().locator(".provider-key").count(), 0);
 	assert.deepEqual(await dialog().getByRole("group", { name: "供应商筛选" }).locator(".settings-filter-group").getByRole("button").allTextContents(), ["启用 3", "停用 2"]);
 	await button("停用 2").click();
