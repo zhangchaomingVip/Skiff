@@ -8,16 +8,20 @@ const errors = [];
 page.on("pageerror", (error) => errors.push(error.message));
 const base = process.argv[2] ?? "http://localhost:1421";
 try {
+	await page.addInitScript(() => {
+		localStorage.setItem("skiff.voyage.sound.v1", "on");
+		window.companionAudioCalls = 0;
+		window.AudioContext = class { constructor() { window.companionAudioCalls++; } };
+	});
 	await page.goto(`${base}/tests/voyage.html`);
 	await page.waitForFunction(() => window.voyageHarness?.render);
 	assert.equal(await page.locator(".voyage-weather-card").count(), 4);
 	assert.equal(await page.locator(".voyage-companion-actions").count(), 0);
-	assert.equal(await page.locator(".voyage-dashboard-header .voyage-companion-sound").count(), 1);
-	await page.getByRole("button", { name: "开启互动音效", exact: true }).click();
-	assert.equal(await page.getByRole("button", { name: "关闭互动音效", exact: true }).getAttribute("aria-pressed"), "true");
+	assert.equal(await page.locator(".voyage-companion-sound").count(), 0);
+	assert.equal(await page.locator(".voyage-dashboard-header button").count(), 1);
 	await page.reload();
 	await page.waitForFunction(() => window.voyageHarness?.render);
-	await page.getByRole("button", { name: "关闭互动音效", exact: true }).click();
+	assert.equal(await page.locator(".voyage-companion-sound").count(), 0);
 	for (const theme of ["light", "dark"]) {
 		await page.evaluate((theme) => document.documentElement.dataset.theme = theme, theme);
 		for (const width of [240, 260, 360, 480]) {
@@ -39,9 +43,11 @@ try {
 	await page.locator(".voyage-companion-stage").scrollIntoViewIfNeeded();
 	await page.locator(".voyage-companion-stage").click();
 	assert.equal(await page.locator(".voyage-companion-art").getAttribute("src"), "/companion/tap.webp");
+	await page.locator(".voyage-companion-stage").dblclick();
+	assert.equal(await page.evaluate(() => window.companionAudioCalls), 0);
 	await page.getByRole("button", { name: "收起航行台", exact: true }).click();
 	await page.getByRole("button", { name: "展开航行台", exact: true }).click();
 	assert.equal(await page.locator(".voyage-weather-card").count(), 4);
 	assert.deepEqual(errors, []);
-	console.log("PASS companion portal: sound preference, four-card headroom, larger centered navigator, light/dark × 4 widths, mobile interaction and collapse/reopen");
+	console.log("PASS companion portal: no sound control or audio despite legacy preference, four-card headroom, larger centered navigator, light/dark × 4 widths, mobile interaction and collapse/reopen");
 } finally { await browser.close(); }

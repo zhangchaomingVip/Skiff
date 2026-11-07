@@ -1,17 +1,14 @@
-import { useCallback, useEffect, useRef, useState, type ChangeEvent, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { IconButton } from "./ui";
-import { Icon, type IconName } from "./Icon";
-import type { VoyagePhase } from "../chat/sailing";
+import { Icon } from "./Icon";
 import { VoyageBento } from "./VoyageBento";
 import type { VoyageMetrics } from "../chat/useVoyageMetrics";
-import { formatDuration, formatTokens } from "../chat/usage";
-import { costTooltip, formatCosts, type CostSummary } from "../chat/cost";
-import { toolStatusLabel, toolTargetText, type VoyageTimeline, type VoyageTool } from "../chat/voyageTimeline";
+import { formatDuration } from "../chat/usage";
+import { toolStatusLabel, toolTargetText, type VoyageTool } from "../chat/voyageTimeline";
 import { toolKind } from "../chat/toolRuns";
 import { TOOL_ICONS } from "./toolIcons";
 import { companionPose, latestToolFailed, POSE_MOOD, type CompanionPose } from "../chat/companionPose";
-import { playCompanionVoice, type CompanionVoice } from "../chat/companionSound";
-import { DECK_SIZE_MIN, readCompanion, readCompanionSound, readDeckMode, readDeckSize, saveCompanion, saveCompanionSound, saveDeckMode, saveDeckSize, type DeckMode } from "../chat/voyageDeck";
+import { readCompanion, saveCompanion } from "../chat/voyageDeck";
 
 /** The poke frame: pressing the navigator shows the tap art for a beat. */
 const TAP_ART = "/companion/tap.webp";
@@ -26,27 +23,9 @@ const COMPANION_ART: Record<CompanionPose | "still", string> = {
 };
 /** The squashed frown lasts about three stomps. */
 const SQUASH_MS = 3000;
-const DECK_OPTIONS: { mode: DeckMode; label: string; icon: IconName }[] = [
-	{ mode: "companion", label: "领航员", icon: "sailboat" },
-	{ mode: "billing", label: "账单明细", icon: "tokens" },
-	{ mode: "blank", label: "纯净星空", icon: "spark" },
-];
-
-const number = (value: number) => formatTokens(Math.round(value));
 
 function statusText(metrics: VoyageMetrics): string {
 	return metrics.status;
-}
-
-const PHASE_LEGEND: { phase: VoyagePhase; label: string }[] = [{ phase: "response", label: "航行" }, { phase: "thinking", label: "思考" }, { phase: "tool", label: "工具" }];
-
-function PhaseBar({ timeline, compact = false }: { timeline?: VoyageTimeline; compact?: boolean }) {
-	const total = Math.max(1, timeline?.durationMs ?? 0);
-	const totals: Record<VoyagePhase, number> = { response: timeline?.segments.filter((item) => item.phase === "response").reduce((sum, item) => sum + (item.endedAt ?? timeline.at) - item.startedAt, 0) ?? 0, thinking: timeline?.thinkingMs ?? 0, tool: timeline?.toolMs ?? 0 };
-	const phases = compact ? PHASE_LEGEND.filter(({ phase }) => totals[phase] > 0) : PHASE_LEGEND;
-	const showDetails = !compact || totals.thinking > 0 || totals.tool > 0;
-	const hint = timeline ? phases.map(({ phase, label }) => `${label} ${formatDuration(totals[phase])}`).join(" · ") : "暂无阶段数据";
-	return <div className="voyage-phase-section"><div className="voyage-phase-bar" title={hint} aria-label={hint} role="img">{timeline?.segments.map((segment, index) => <span key={index} className={`phase-${segment.phase}`} style={{ width: `${Math.max(0, ((segment.endedAt ?? timeline.at) - segment.startedAt) / total * 100)}%` }} />)}</div>{showDetails && <div className="voyage-phase-legend">{phases.map(({ phase, label }) => <div key={phase} className={`${timeline && timeline.endedAt === undefined && timeline.phase === phase ? "current" : ""}${totals[phase] === 0 ? " is-zero" : ""}`}><div className="voyage-phase-label"><i className={`phase-${phase}`} />{label}</div><div className="voyage-phase-value">{timeline ? formatDuration(totals[phase]) : "—"}</div></div>)}</div>}</div>;
 }
 
 function toolIcon(tool: VoyageTool) {
@@ -70,51 +49,11 @@ function ToolCapsule({ metrics }: { metrics: VoyageMetrics }) {
 	</section>;
 }
 
-function ToolLog({ metrics, open = false }: { metrics: VoyageMetrics; open?: boolean }) {
-	const details = useRef<HTMLDetailsElement>(null);
-	// The billing deck is an explicit request for the full record, so its log starts expanded.
-	useEffect(() => { if (open && details.current) details.current.open = true; }, [open]);
+function ToolLog({ metrics }: { metrics: VoyageMetrics }) {
 	if (!metrics.toolLog.length) return null;
 	const failures = metrics.toolLog.filter((tool) => tool.status !== "completed").length;
 	const summary = `航海日志 · ${metrics.toolLog.length} 项已入日志${failures ? `（${failures} 次失败）` : ""}`;
-	return <details ref={details} className="voyage-tool-log"><summary>{summary}</summary><ol className="voyage-tool-stream" aria-label="工具完成日志" aria-live="polite" aria-relevant="additions" tabIndex={0}>{metrics.toolLog.map((tool) => <ToolTraceRow key={tool.id} tool={tool} />)}</ol></details>;
-}
-
-function CostButton({ cost, label, className }: { cost?: CostSummary; label: string; className: string }) {
-	const amount = formatCosts(cost, 4);
-	const precise = formatCosts(cost, 6);
-	const [status, setStatus] = useState("");
-	const timer = useRef<ReturnType<typeof setTimeout>>();
-	useEffect(() => () => clearTimeout(timer.current), []);
-	return <><button type="button" className={className} disabled={precise === "—"} title={precise === "—" ? costTooltip(cost) : `精确费用 ${precise}；${costTooltip(cost)}；点击复制`} aria-label={`复制${label}`} onClick={async () => {
-		try { await navigator.clipboard.writeText(precise); setStatus(`${label}已复制`); }
-		catch { setStatus("复制失败"); }
-		clearTimeout(timer.current);
-		timer.current = setTimeout(() => setStatus(""), 2000);
-	}}>{amount}</button><span className="sr-only" role="status">{status}</span></>;
-}
-
-function TurnRecord({ metrics }: { metrics: VoyageMetrics }) {
-	const { turn } = metrics;
-	const total = turn.total ?? (turn.input === undefined && turn.output === undefined ? undefined : (turn.input ?? 0) + (turn.output ?? 0));
-	const hitRate = turn.input !== undefined && turn.input > 0 ? turn.hitRate : undefined;
-	const hitTone = hitRate === undefined ? undefined : hitRate >= 0.9 ? "hit-high" : hitRate < 0.7 ? "hit-low" : undefined;
-	const hasBilling = formatCosts(turn.cost, 4) !== "—" || formatCosts(metrics.sessionCost, 4) !== "—";
-	const unconfigured = turn.cost?.unconfigured || metrics.sessionCost.unconfigured;
-	return <section className="voyage-turn" aria-label="本次航行记录">
-		<div className="voyage-turn-header"><strong>本次航行记录</strong><span>{total === undefined ? "—" : `${number(total)} tok`}</span></div>
-		<dl className="voyage-turn-metrics">
-			<div><dt title="本轮所有请求的输入，含缓存读取与写入">累计输入</dt><dd>{turn.input === undefined ? "—" : number(turn.input)}</dd></div>
-			<div><dt>新增 / 缓存</dt><dd>{turn.newInput === undefined && hitRate === undefined ? "—" : <><span className="voyage-turn-new" title="新增输入，含缓存写入">{turn.newInput === undefined ? "—" : `+${number(turn.newInput)}`}</span><span aria-hidden="true"> · </span><span className={hitTone} title="缓存命中率">{hitRate === undefined ? "—" : `${(hitRate * 100).toFixed(1)}%`}</span></>}</dd></div>
-			{turn.reasoning !== undefined && turn.reasoning > 0 && <div><dt>思考</dt><dd>{number(turn.reasoning)}</dd></div>}
-			<div><dt>输出</dt><dd>{turn.output === undefined ? "—" : number(turn.output)}</dd></div>
-			{!metrics.timeline && turn.durationMs !== undefined && <div><dt>本轮耗时</dt><dd>{formatDuration(turn.durationMs)}</dd></div>}
-		</dl>
-		<dl className="voyage-turn-billing">{hasBilling ? <>
-			<div><dt>本轮费用</dt><dd><CostButton className="voyage-turn-cost" cost={turn.cost} label="本轮费用" /></dd></div>
-			<div><dt>会话累计</dt><dd><strong><CostButton className="voyage-turn-cost" cost={metrics.sessionCost} label="会话累计费用" /></strong></dd></div>
-		</> : <div><dt>计费</dt><dd className="voyage-turn-unpriced">{unconfigured ? "未配置定价" : "暂无费用数据"}</dd></div>}</dl>
-	</section>;
+	return <details className="voyage-tool-log"><summary>{summary}</summary><ol className="voyage-tool-stream" aria-label="工具完成日志" aria-live="polite" aria-relevant="additions" tabIndex={0}>{metrics.toolLog.map((tool) => <ToolTraceRow key={tool.id} tool={tool} />)}</ol></details>;
 }
 
 function useReducedMotion(): boolean {
@@ -158,7 +97,7 @@ function useCompanionMood(metrics: VoyageMetrics) {
 
 /** The navigator stage: five live poses driven by the voyage, with a static
  *  reduced-motion fallback and a pettable, squishable body. */
-function Companion({ pose, press, reduced, sound }: { pose: CompanionPose | "still"; press: (pose: CompanionPose, ms: number) => void; reduced: boolean; sound: boolean }) {
+function Companion({ pose, press, reduced }: { pose: CompanionPose | "still"; press: (pose: CompanionPose, ms: number) => void; reduced: boolean }) {
 	const [custom, setCustom] = useState<string | undefined>(() => readCompanion());
 	const [missing, setMissing] = useState<string[]>([]);
 	const [notice, setNotice] = useState("");
@@ -188,7 +127,6 @@ function Companion({ pose, press, reduced, sound }: { pose: CompanionPose | "sti
 		window.clearTimeout(noticeTimer.current);
 		noticeTimer.current = window.setTimeout(() => setNotice(""), 2400);
 	};
-	const speak = (voice: CompanionVoice) => { if (sound) playCompanionVoice(voice); };
 	const pick = (event: ChangeEvent<HTMLInputElement>) => {
 		const selected = event.target.files?.[0];
 		event.target.value = "";
@@ -212,7 +150,6 @@ function Companion({ pose, press, reduced, sound }: { pose: CompanionPose | "sti
 		announce("已恢复默认领航员");
 	};
 	const poke = () => {
-		speak("poke");
 		setTapped(true);
 		window.clearTimeout(tapTimer.current);
 		tapTimer.current = window.setTimeout(() => setTapped(false), TAP_MS);
@@ -220,7 +157,6 @@ function Companion({ pose, press, reduced, sound }: { pose: CompanionPose | "sti
 		art.current?.animate([{ transform: "scale(1)" }, { transform: "translateY(-6px) scale(1.05, .95)" }, { transform: "scale(.98, 1.02)" }, { transform: "scale(1)" }], { duration: 420, easing: "cubic-bezier(.3, 1.5, .45, 1)" });
 	};
 	const squash = () => {
-		speak("squash");
 		// A double click ends the poke frame before the frown lands.
 		window.clearTimeout(tapTimer.current);
 		setTapped(false);
@@ -252,116 +188,26 @@ function Companion({ pose, press, reduced, sound }: { pose: CompanionPose | "sti
 	</div>;
 }
 
-/** Split handle on the deck divider: pulling up grows the deck and the cluster scrolls. */
-function DeckHandle({ getValue, getMax, onResize, onCommit, onReset }: { getValue: () => number; getMax: () => number; onResize: (size: number) => void; onCommit: (size: number) => void; onReset: () => void }) {
-	const [dragging, setDragging] = useState(false);
-	const drag = useRef<{ pointerId: number; startY: number; startValue: number; currentValue: number }>();
-	const callbacks = useRef({ getValue, getMax, onResize, onCommit });
-	callbacks.current = { getValue, getMax, onResize, onCommit };
-	const clamp = (next: number) => Math.max(DECK_SIZE_MIN, Math.min(callbacks.current.getMax(), Math.round(next)));
-	const finish = useCallback(() => {
-		const active = drag.current;
-		if (!active) return;
-		drag.current = undefined;
-		setDragging(false);
-		callbacks.current.onCommit(active.currentValue);
-	}, []);
-	useEffect(() => {
-		if (!dragging) return;
-		window.addEventListener("blur", finish);
-		return () => window.removeEventListener("blur", finish);
-	}, [dragging, finish]);
-	useEffect(() => () => finish(), [finish]);
-	const move = (clientY: number) => {
-		const active = drag.current;
-		if (!active) return;
-		const next = clamp(active.startValue - (clientY - active.startY));
-		active.currentValue = next;
-		callbacks.current.onResize(next);
-	};
-	const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-		if (!["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
-		event.preventDefault();
-		const current = clamp(callbacks.current.getValue());
-		const next = event.key === "Home" ? DECK_SIZE_MIN : event.key === "End" ? clamp(callbacks.current.getMax()) : clamp(current + (event.key === "ArrowUp" ? 16 : -16));
-		callbacks.current.onResize(next);
-		callbacks.current.onCommit(next);
-	};
-	return <div className={`voyage-deck-handle${dragging ? " dragging" : ""}`} role="separator" aria-orientation="horizontal" aria-label="调整仪表与甲板的高度" aria-valuemin={DECK_SIZE_MIN} aria-valuemax={Math.round(getMax())} aria-valuenow={Math.round(getValue())} tabIndex={0}
-		onPointerDown={(event) => {
-			if (event.button !== 0) return;
-			event.preventDefault();
-			const startValue = clamp(callbacks.current.getValue());
-			drag.current = { pointerId: event.pointerId, startY: event.clientY, startValue, currentValue: startValue };
-			event.currentTarget.setPointerCapture(event.pointerId);
-			setDragging(true);
-		}}
-		onPointerMove={(event) => { if (drag.current?.pointerId === event.pointerId) move(event.clientY); }}
-		onPointerUp={(event) => { if (drag.current?.pointerId === event.pointerId) { move(event.clientY); finish(); } }}
-		onPointerCancel={finish} onLostPointerCapture={finish} onKeyDown={onKeyDown} onDoubleClick={onReset} />;
-}
-
 /** `onCollapse` is only wired for the narrow-screen dialog, where the title bar toggle is covered. */
 export function VoyageRail({ metrics, onCollapse }: { metrics: VoyageMetrics; onCollapse?: () => void }) {
-	const [deck, setDeck] = useState<DeckMode>(() => readDeckMode());
-	const [sound, setSound] = useState(() => readCompanionSound());
-	const toggleSound = () => {
-		const next = !sound;
-		setSound(next);
-		saveCompanionSound(next);
-		if (next) playCompanionVoice("happy");
-	};
-	const [deckSize, setDeckSize] = useState<number | undefined>(() => readDeckSize());
-	const dashboard = useRef<HTMLDivElement>(null);
-	const deckSection = useRef<HTMLElement>(null);
-	const selectDeck = (mode: DeckMode) => { setDeck(mode); saveDeckMode(mode); };
-	// The compact cluster keeps ~150px, so the deck never swallows it and keeps a
-	// little headroom for the keyboard resize above the natural fill height.
-	const maxDeckSize = () => Math.max(DECK_SIZE_MIN, Math.round((dashboard.current?.clientHeight ?? 0) - 150));
-	const currentDeckSize = () => deckSize ?? Math.round(deckSection.current?.getBoundingClientRect().height ?? DECK_SIZE_MIN);
-	const commitDeckSize = (size: number) => saveDeckSize(size);
-	const resetDeckSize = () => { setDeckSize(undefined); saveDeckSize(undefined); };
-	useEffect(() => {
-		const onResize = () => setDeckSize((size) => size === undefined ? size : Math.min(size, maxDeckSize()));
-		window.addEventListener("resize", onResize);
-		return () => window.removeEventListener("resize", onResize);
-	}, []);
 	const titleStatus = statusText(metrics);
 	const mood = useCompanionMood(metrics);
-	const split = deck !== "companion" && deckSize !== undefined;
 	return <aside id="voyage-rail" className={`voyage-rail expanded voyage-${metrics.pressure} voyage-${metrics.activity}`} aria-label="Skiff 航行台">
-		<div ref={dashboard} className={`voyage-dashboard${deck === "companion" ? " voyage-dashboard-orbit" : ""}${split ? " split" : ""}`} style={split ? { "--voyage-deck-size": `${deckSize}px` } as CSSProperties : undefined}>
-			<header className="voyage-dashboard-header voyage-rail-header"><h1 title={`Skiff 航行台 · ${titleStatus}`}><span className="voyage-badge" aria-hidden="true"><Icon name="sailboat" size={12} /></span><span className="voyage-title">Skiff 航行台</span></h1>
-				<div className="voyage-deck-switch" role="group" aria-label="甲板视图">
-					{DECK_OPTIONS.map(({ mode, label, icon }) => <button key={mode} type="button" className={`voyage-deck-mode${deck === mode ? " is-active" : ""}`} aria-pressed={deck === mode} aria-label={label} title={label} onClick={() => selectDeck(mode)}><Icon name={icon} size={14} /></button>)}
-				</div>
-				{deck === "companion" && <button type="button" className="voyage-deck-mode voyage-companion-sound" aria-pressed={sound} aria-label={sound ? "关闭互动音效" : "开启互动音效"} title={sound ? "关闭互动音效" : "开启互动音效"} onClick={toggleSound}><Icon name={sound ? "sound" : "mute"} size={14} /></button>}
+		<div className="voyage-dashboard voyage-dashboard-orbit">
+			<header className="voyage-dashboard-header voyage-rail-header"><h1 title={`Skiff 航行台 · ${titleStatus}`}><span className="voyage-title">Skiff 航行台</span></h1>
 				{onCollapse && <IconButton type="button" className="voyage-rail-toggle voyage-collapse" onClick={onCollapse} aria-label="收起航行台"><Icon name="chevron" size={16} /></IconButton>}
 			</header>
-			{deck === "companion" ? <>
-				<section className="voyage-stage-orbit" aria-label="领航员环绕舞台">
-					<div className="voyage-orbit-scene">
-						<VoyageBento metrics={metrics} />
-						<section className="voyage-deck voyage-deck-companion" aria-label="领航员甲板">
-							<Companion pose={mood.pose} press={mood.press} reduced={mood.reduced} sound={sound} />
-						</section>
-					</div>
-				</section>
-				{(metrics.timeline || metrics.activeTools.length > 0 || metrics.toolLog.length > 0) && <div className="voyage-orbit-log">
-					<ToolCapsule metrics={metrics} /><ToolLog metrics={metrics} />
-				</div>}
-			</> : <>
-			<div className="voyage-instruments">
-				<VoyageBento metrics={metrics} />
-				{metrics.timeline && <PhaseBar timeline={metrics.timeline} />}
-				<ToolCapsule metrics={metrics} />
-				{deck === "blank" && <ToolLog metrics={metrics} />}
-			</div>
-			<section ref={deckSection} className={`voyage-deck voyage-deck-${deck}`} aria-label="领航员甲板">
-				<DeckHandle getValue={currentDeckSize} getMax={maxDeckSize} onResize={setDeckSize} onCommit={commitDeckSize} onReset={resetDeckSize} />
-				{deck === "billing" && <div className="voyage-deck-bill"><TurnRecord metrics={metrics} /><ToolLog metrics={metrics} open /></div>}
+			<section className="voyage-stage-orbit" aria-label="领航员环绕舞台">
+				<div className="voyage-orbit-scene">
+					<VoyageBento metrics={metrics} />
+					<section className="voyage-deck voyage-deck-companion" aria-label="领航员甲板">
+						<Companion pose={mood.pose} press={mood.press} reduced={mood.reduced} />
+					</section>
+				</div>
 			</section>
-			</>}
+			{(metrics.timeline || metrics.activeTools.length > 0 || metrics.toolLog.length > 0) && <div className="voyage-orbit-log">
+				<ToolCapsule metrics={metrics} /><ToolLog metrics={metrics} />
+			</div>}
 		</div>
 	</aside>;
 }

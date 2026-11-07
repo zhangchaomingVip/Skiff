@@ -4,7 +4,7 @@ import { advanceTimeline, refreshTimeline, startTimeline, toolFailureStatus, typ
 import type { ChatMessage, ContextUsage, ModelInfo, SessionState } from "./types";
 import { cacheSavingsRatio, summarizeCosts, type CostSummary } from "./cost";
 import { SPARK_SAMPLES } from "./sparkline";
-import { decodeReading, decodeTiming } from "./voyageBento";
+import { contextComposition, decodeReading, decodeTiming, turnInputTrend, voyageProcessStats } from "./voyageBento";
 import { summarizeUsage } from "./usage";
 
 export interface VoyageMetrics {
@@ -15,8 +15,16 @@ export interface VoyageMetrics {
 	ttftMs?: number;
 	decodeMs?: number;
 	sessionTokens?: number;
+	telemetry: {
+		turn: ReturnType<typeof voyageProcessStats>;
+		session: ReturnType<typeof voyageProcessStats>;
+		usage: ReturnType<typeof summarizeUsage>;
+		usageKnown: boolean;
+		composition: ReturnType<typeof contextComposition>;
+		inputTrend: ReturnType<typeof turnInputTrend>;
+		sessionCacheSavings?: number;
+	};
 	cacheSavings?: number;
-	tokenTrail?: number[];
 	activity: VoyageActivity;
 	reminder?: string;
 	streaming: boolean;
@@ -30,7 +38,7 @@ export interface VoyageMetrics {
 	phase: VoyagePhase;
 	arrived: boolean;
 	pressure: "normal" | "warning" | "critical";
-	turn: { durationMs?: number; input?: number; total?: number; newInput?: number; cacheRead?: number; hitRate?: number; output?: number; reasoning?: number; cost?: CostSummary };
+	turn: ReturnType<typeof currentTurnStats>;
 	recentRequestInput?: number;
 	liveTurn?: { turnId?: string; durationMs: number };
 	sessionCost: CostSummary;
@@ -62,8 +70,7 @@ export function useVoyageMetrics(messages: ChatMessage[], model: ModelInfo | und
 	const input = useRef({ key, tokens, streaming, activeRun, turnMessages, error, abortedRunKey, eventTimeline });
 	input.current = { key, tokens, streaming, activeRun, turnMessages, error, abortedRunKey, eventTimeline };
 	const sampler = useRef<VoyageSample>();
-	// Only a running turn samples the sparkline; a finished curve stays frozen.
-	const trail = useRef<{ key: string; speeds: number[]; tokens: number[]; units: number; at: number }>({ key: "", speeds: [], tokens: [], units: 0, at: 0 });
+	const trail = useRef<{ key: string; speeds: number[] }>({ key: "", speeds: [] });
 	const ledger = useRef<VoyageTimeline>();
 	const contextLedger = useRef<VoyageContext>();
 	const [reading, setReading] = useState<{ sample: VoyageSample; timeline?: VoyageTimeline }>();
@@ -89,15 +96,9 @@ export function useVoyageMetrics(messages: ChatMessage[], model: ModelInfo | und
 		const next = sampleVoyage(previous, current.tokens, now, current.streaming, nextTimeline?.phase === "response");
 		sampler.current = next;
 		ledger.current = nextTimeline;
-		if (trail.current.key !== current.key) trail.current = { key: current.key, speeds: [], tokens: [], units: current.activeRun?.promptId ? 0 : visibleOutputUnits(current.turnMessages), at: now };
+		if (trail.current.key !== current.key) trail.current = { key: current.key, speeds: [] };
 		if (current.streaming) {
 			trail.current.speeds = [...trail.current.speeds, Math.round(next.speed * 10) / 10].slice(-SPARK_SAMPLES);
-			const units = visibleOutputUnits(current.turnMessages);
-			if (now > trail.current.at) {
-				trail.current.tokens = [...trail.current.tokens, Math.max(0, units - trail.current.units) * 1000 / (now - trail.current.at)].slice(-SPARK_SAMPLES);
-				trail.current.units = units;
-				trail.current.at = now;
-			}
 		}
 		setReading({ sample: next, timeline: nextTimeline });
 	};
@@ -140,15 +141,25 @@ export function useVoyageMetrics(messages: ChatMessage[], model: ModelInfo | und
 	const liveTurn = useMemo(() => streaming && durationMs !== undefined ? { turnId: activeRun?.turnId, durationMs } : undefined, [streaming, durationMs, activeRun?.turnId]);
 	const sessionCost = useMemo(() => summarizeCosts(messages, pricingModels, model), [messages, pricingModels, model]);
 	const cacheSavings = useMemo(() => streaming ? undefined : cacheSavingsRatio(turnMessages, pricingModels, model), [turnMessages, pricingModels, model, streaming]);
+	const process = useMemo(() => ({
+		turn: voyageProcessStats(belongs ? messages.slice(user ? messages.lastIndexOf(user) : 0) : [], timeline),
+		session: voyageProcessStats(messages, belongs ? timeline : undefined),
+	}), [messages, belongs, timeline, user]);
+	const composition = useMemo(() => contextComposition(messages, data.context), [messages, data.context]);
+	const sessionCacheSavings = useMemo(() => streaming ? undefined : cacheSavingsRatio(messages, pricingModels, model), [messages, pricingModels, model, streaming]);
+	const sessionUsage = useMemo(() => summarizeUsage(messages), [messages]);
+	const inputTrend = useMemo(() => turnInputTrend(messages), [messages]);
+	const usageKnown = messages.some((message) => message.role === "assistant" && !!message.usage);
+	const sessionTokens = usageKnown || streaming && liveOutput > 0 ? sessionUsage.total + (streaming ? liveOutput : 0) : undefined;
 	return {
 		speed: activity === "sailing" ? currentSample?.speed ?? 0 : 0,
 		averageSpeed: average.averageSpeed,
 		peakSpeed: currentSample?.peak,
 		averageEstimated: average.averageEstimated,
 		...timing,
-		sessionTokens: summarizeUsage(messages).total + (streaming ? liveOutput : 0),
+		sessionTokens,
+		telemetry: { ...process, usage: { ...sessionUsage, output: sessionUsage.output + (streaming ? liveOutput : 0), total: sessionTokens ?? 0 }, usageKnown, composition, inputTrend, sessionCacheSavings },
 		cacheSavings,
-		tokenTrail: trail.current.key === key ? trail.current.tokens : [],
 		activity,
 		reminder: contextReminder(data?.context, data?.limit, data?.estimated),
 		streaming,
@@ -160,7 +171,7 @@ export function useVoyageMetrics(messages: ChatMessage[], model: ModelInfo | und
 		phase,
 		arrived,
 		pressure: contextPressure(ratio),
-		turn: { ...turn, input: data.input, durationMs, reasoning, output: streaming ? (turn.output ?? 0) + liveOutput : turn.output, total: streaming ? (turn.total ?? 0) + liveOutput : turn.total },
+		turn: { ...turn, input: turn.input ?? data.input, durationMs, reasoning, output: streaming ? (turn.output ?? 0) + liveOutput : turn.output, total: streaming ? (turn.total ?? 0) + liveOutput : turn.total },
 		recentRequestInput: data.lastRequestInput,
 		liveTurn,
 		sessionCost,

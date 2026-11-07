@@ -242,7 +242,7 @@ export function advanceVoyageContext(previous: VoyageContext | undefined, key: s
 }
 
 /** Usage belongs to the most recent user prompt, including any intermediate assistant steps. */
-export function currentTurnStats(messages: ChatMessage[], models: ModelInfo[] = [], current?: ModelInfo): { durationMs?: number; input?: number; total?: number; newInput?: number; cacheRead?: number; hitRate?: number; output?: number; reasoning?: number; cost?: CostSummary } {
+export function currentTurnStats(messages: ChatMessage[], models: ModelInfo[] = [], current?: ModelInfo): { durationMs?: number; input?: number; total?: number; newInput?: number; cacheRead?: number; cacheWrite?: number; hitRate?: number; output?: number; reasoning?: number; cost?: CostSummary } {
 	let userIndex = -1;
 	for (let index = messages.length - 1; index >= 0; index--) {
 		if (messages[index].role === "user") { userIndex = index; break; }
@@ -261,6 +261,7 @@ export function currentTurnStats(messages: ChatMessage[], models: ModelInfo[] = 
 		total: usage?.total,
 		newInput: usage ? usage.input + usage.cacheWrite : undefined,
 		cacheRead: usage?.cacheRead,
+		cacheWrite: usage?.cacheWrite,
 		hitRate: usage && usage.inputTotal > 0 ? usage.hitRate : undefined,
 		output: usage?.output,
 		...(usage?.reasoning === undefined ? {} : { reasoning: usage.reasoning }),

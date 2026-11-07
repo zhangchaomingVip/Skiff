@@ -10,7 +10,8 @@ const base = process.argv[2] ?? "http://localhost:1421";
 const chat = (index) => page.getByRole("navigation", { name: "项目列表" }).getByRole("button", { name: `Performance ${index}`, exact: true });
 const receiptCount = () => page.evaluate(() => JSON.parse(localStorage.getItem("skiff.workspace.v1")).chats.find((chat) => chat.id === "s0").turnPerformances?.filter(Boolean).length ?? 0);
 const waitReceipts = (count) => page.waitForFunction((count) => JSON.parse(localStorage.getItem("skiff.workspace.v1")).chats.find((chat) => chat.id === "s0").turnPerformances?.filter(Boolean).length === count, count);
-const reading = async () => ({ speed: await page.locator(".voyage-weather-speed strong").textContent(), timing: await page.locator(".voyage-weather-speed p").textContent() });
+// Only receipt-backed timing survives navigation; a live sampler peak is deliberately not reconstructed.
+const reading = async () => ({ speed: await page.locator(".voyage-weather-speed strong").textContent(), timing: await page.locator(".voyage-weather-speed p span").first().textContent() });
 async function openRail() {
 	if (!await page.locator(".voyage-weather-speed").count()) await page.getByRole("button", { name: "航行台", exact: true }).click();
 }
@@ -32,7 +33,7 @@ try {
 	await waitReceipts(1);
 	const first = await reading();
 	assert.notEqual(first.speed, "—");
-	assert.match(first.timing, /首字 \d+(?:\.\d+)?(?:ms|s) · 纯吐字/);
+	assert.match(first.timing, /首字 \d+(?:\.\d+)?(?:ms|s)/);
 	await chat(1).click();
 	await page.locator(".composer-input").waitFor();
 	await page.waitForFunction(() => document.querySelector(".voyage-weather-speed strong")?.textContent === "—");
