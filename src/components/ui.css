@@ -101,6 +101,10 @@
 	/* The separator marks keyboard focus on the actual split line, not around its hit box. */
 	.resize-separator:focus-visible { outline: none; }
 	.ui-input[data-appearance=plain]:focus-visible { outline: none; }
+	.git-commit-box .ui-textarea:is(:focus, :focus-visible) { outline: none; }
+	.git-commit-summary .git-rollback-button:disabled { border-color: transparent; background: transparent; color: var(--muted); }
+	.git-commit-actions .ui-button:disabled { border-color: transparent; background: color-mix(in srgb, var(--secondary) 8%, var(--surface)); color: color-mix(in srgb, var(--secondary) 60%, var(--surface)); box-shadow: none; }
+	.git-commit-actions .ui-button[data-variant=primary]:disabled { background: color-mix(in srgb, var(--action) 18%, var(--surface)); color: color-mix(in srgb, var(--accent) 55%, var(--muted)); }
 	[data-theme-changing] *, [data-theme-changing] *::before, [data-theme-changing] *::after { transition: none !important; }
 	@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
 }

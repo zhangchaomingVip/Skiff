@@ -23,15 +23,19 @@ try {
 		assert.equal(await chat.isVisible(), false);
 		assert.equal(await empty.locator("h1").innerText(), "打开一个文件");
 		await page.screenshot({ path: `dist/file-workspace/${theme}-empty.png` });
-		// Hiding the tree keeps the current workspace and active activity icon.
+		// Hiding the tree keeps the workspace; the icon only highlights an open panel.
 		await tool("文件").click();
-		assert.equal(await tool("文件").getAttribute("aria-pressed"), "true");
+		assert.equal(await tool("文件").getAttribute("aria-pressed"), "false");
 		assert.equal(await tool("文件").getAttribute("aria-expanded"), "false");
 		assert.equal(await empty.isVisible(), true);
 		await tool("文件").click();
 		await page.getByRole("tab", { name: "Commit", exact: true }).click();
 		assert.equal(await empty.isVisible(), true);
+		assert.equal(await empty.locator("h1").innerText(), "查看变更对比");
+		assert.equal(await empty.locator("p").innerText(), "从左侧点击变更文件，在这里查看 Diff 内容");
+		await page.screenshot({ path: `dist/file-workspace/${theme}-commit-empty.png` });
 		await page.getByRole("tab", { name: "文件", exact: true }).click();
+		assert.equal(await empty.locator("h1").innerText(), "打开一个文件");
 		await page.locator('.file-tree-row[title="README.md"]').click();
 		await page.locator(".source-preview").waitFor();
 		assert.equal(await empty.count(), 0);

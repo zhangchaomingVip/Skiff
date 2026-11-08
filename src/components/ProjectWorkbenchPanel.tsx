@@ -170,18 +170,20 @@ function GitPanel({ project, onOpen, onMutated }: { project?: Project; onOpen: (
 		finally { projectGitCache.pause(project.path, false); setWriting(false); setWriteProgress(undefined); }
 	};
 	return <section className="workbench-section git-panel" aria-label="Git 变更">
-		<div className="workbench-tab-actions"><IconButton size="compact" variant="ghost" aria-label="刷新 Git 状态" title="刷新 Git 状态" onClick={() => { setWriteError(undefined); void refresh(); }} disabled={loading || writing}><Icon name="updateProject" /></IconButton></div>
+		<div className="workbench-tab-actions"><IconButton size="compact" variant="ghost" aria-label="刷新 Git 状态" title="刷新 Git 状态" onClick={() => { setWriteError(undefined); void refresh(); }} disabled={loading || writing}><Icon name="refresh" /></IconButton></div>
 		{!project ? <div className="workbench-empty">选择一个项目以查看 Git 变更</div> : <>
-			{status && <div className="git-repository" title={status.repositoryRoot}><div><Icon name="git" /><strong>{status.branch}</strong>{status.head && <code>{status.head.slice(0, 8)}</code>}</div><span>{status.repositoryRoot}</span>{status.scope && <small>范围：{status.scope}</small>}</div>}
+			{status && <div className="git-repository" title={status.repositoryRoot}><Icon name="git" /><strong title={status.branch}>{status.branch}</strong>{status.head && <code>{status.head.slice(0, 8)}</code>}{status.scope && <small title={`范围：${status.scope}`}>范围：{status.scope}</small>}</div>}
 			{local && <div className="workbench-empty git-local-project" role="status"><span><Icon name="laptop" size={20} />本地</span><p>Local project</p></div>}
 			{status?.operation && <div className="workbench-banner warning">仓库正在进行 {status.operation}，写操作已禁用。</div>}
 			{error && <div className="workbench-banner error" role="alert">{error}</div>}
 			{notice && <div className="workbench-banner success" role="status">{notice}</div>}
 			{loading && !status && !local ? <div className="workbench-empty">正在读取 Git 状态…</div> : status && <GitChanges key={draftKey} cacheKey={draftKey} entries={status.entries} selected={selected} writing={writing} onSelect={select} onOpen={(entry) => onOpen(project, entry.path, "diff")} />}
 			{status && <div className="git-commit-box">
-				<div className="git-commit-summary"><span className="git-selected-count">已选 {selected.length} 个文件</span><Button size="compact" variant="ghost" disabled={!rollbackTargets.length || writing || !!status.operation} onClick={() => setConfirmRollback(true)}>恢复所选</Button></div>
-				<div className="git-change-counts" aria-label="所选文件分类统计" aria-live="polite">{Object.entries(counts).filter(([, count]) => count > 0).map(([kind, count]) => <span key={kind} data-kind={kind}>{count} {kind}</span>)}</div>
-				<TextArea aria-label="提交信息" rows={5} placeholder="Commit Message" disabled={writing} value={message} onChange={(event) => setDrafts((current) => { const next = { ...current, [draftKey]: event.target.value }; retainedGitDrafts[draftKey] = event.target.value; return next; })} onKeyDown={(event) => { if ((event.ctrlKey || event.metaKey) && event.key === "Enter") { event.preventDefault(); void commit(); } }} />
+				<div className="git-commit-selection">
+					<div className="git-commit-summary"><span className="git-selected-count">已选 {selected.length} 个文件</span><Button className="git-rollback-button" size="compact" variant="ghost" disabled={!rollbackTargets.length || writing || !!status.operation} onClick={() => setConfirmRollback(true)}>恢复所选</Button></div>
+					<div className="git-change-counts" aria-label="所选文件分类统计" aria-live="polite">{Object.entries(counts).filter(([, count]) => count > 0).map(([kind, count]) => <span key={kind} data-kind={kind}>{count} {kind}</span>)}</div>
+				</div>
+				<TextArea aria-label="提交信息" rows={5} placeholder="Commit Message (Ctrl+Enter)" disabled={writing} value={message} onChange={(event) => setDrafts((current) => { const next = { ...current, [draftKey]: event.target.value }; retainedGitDrafts[draftKey] = event.target.value; return next; })} onKeyDown={(event) => { if ((event.ctrlKey || event.metaKey) && event.key === "Enter") { event.preventDefault(); void commit(); } }} />
 				<div className="git-commit-actions"><Button size="compact" variant="primary" disabled={writing || loading || !selected.length || !message.trim() || !!status.operation} onClick={() => void commit()}>Commit</Button><Button size="compact" disabled={writing || loading || !selected.length || !message.trim() || !!status.operation} title="提交所选文件，并推送当前分支到已配置的上游" onClick={() => void commit(true)}>Commit and Push</Button></div>
 				{writing && writeProgress && <span className="muted" role="status" aria-live="polite" aria-atomic="true">{writeProgress}</span>}
 			</div>}

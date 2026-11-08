@@ -43,6 +43,7 @@ try {
 		await panel().locator('.git-file[data-kind="added"]').waitFor();
 		assert.equal(await commit().isDisabled(), true);
 		assert.equal(await push().isDisabled(), true);
+		await page.screenshot({ path: `dist/git-commit/${theme}-disabled.png`, animations: "disabled" });
 		for (const [kind, token] of [["modified", "--git-modified"], ["added", "--color-success"], ["untracked", "--danger"]]) {
 			const colors = await panel().locator(`.git-file[data-kind=${kind}] > span:nth-child(2)`).evaluate((element, token) => {
 				const probe = document.createElement("span"); probe.style.color = `var(${token})`; element.append(probe);
@@ -85,7 +86,7 @@ try {
 		assert.equal(await panel().locator(".git-selected-count").innerText(), "已选 0 个文件");
 		await selectAll(); await message().fill("local only");
 		await page.evaluate(() => { window.commitMode = "success"; });
-		await commit().click();
+		await message().press("Control+Enter");
 		await panel().getByRole("status").filter({ hasText: "已创建本地提交" }).waitFor();
 		assert.equal(await page.evaluate(() => window.skiffPreview.commands.findLast((item) => item.command === "commit_project_files").args.push), false);
 	}

@@ -43,7 +43,7 @@ export function GitChanges({ cacheKey, entries, selected, writing, onSelect, onO
 					const separator = path.lastIndexOf("/");
 					const name = path.slice(separator + 1);
 					const directory = separator >= 0 ? path.slice(0, separator) : ".";
-					return <div key={`${entry.path}:${entry.oldPath ?? ""}`} className="git-change-row" onContextMenu={(event) => openFileMenu(event, entry.path)}>
+					return <div key={`${entry.path}:${entry.oldPath ?? ""}`} className="git-change-row" data-selected={selectedPaths.has(entry.path) || undefined} onContextMenu={(event) => openFileMenu(event, entry.path)}>
 						<input type="checkbox" aria-label={`选择 ${entry.path}`} checked={selectedPaths.has(entry.path)} disabled={!entry.selectable || writing} onChange={(event) => select([entry.path], event.target.checked)} />
 						<button className="git-file" data-kind={entry.kind} aria-label={`查看 Diff：${entry.path}`} title={entry.oldPath ? `${entry.oldPath} → ${entry.path}` : entry.path} onClick={() => onOpen(entry)}><span className={`git-kind ${entry.kind}`}>{kindLabel[entry.kind]}</span><span title={name}>{name}</span><small title={directory}>{directory}</small></button>
 					</div>;

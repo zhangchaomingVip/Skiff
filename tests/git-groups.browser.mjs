@@ -46,6 +46,14 @@ try {
 		assert.equal(await unversioned.locator(".git-change-row").count(), 2);
 		assert.equal(await changes.locator("summary small").innerText(), "4 files");
 		assert.equal(await unversioned.locator("summary small").innerText(), "2 files");
+		for (const section of [changes, unversioned]) {
+			const offsets = await section.evaluate((element) => {
+				const center = (input) => { const box = input.getBoundingClientRect(); return box.x + box.width / 2; };
+				const heading = center(element.querySelector("summary input"));
+				return [...element.querySelectorAll(".git-change-row > input")].map((input) => Math.abs(center(input) - heading));
+			});
+			assert.ok(offsets.every((offset) => offset <= 1), `Parent and child checkboxes share a vertical baseline: ${offsets}`);
+		}
 		assert.equal(await changes.getByRole("checkbox", { name: "选择 src/conflict.ts", exact: true }).isDisabled(), true);
 		assert.equal(await changes.getByRole("button", { name: "查看 Diff：src/renamed.ts", exact: true }).getAttribute("title"), "src/old.ts → src/renamed.ts");
 		const nested = unversioned.getByRole("button", { name: "查看 Diff：src/workbench/newFile.ts", exact: true });
@@ -93,7 +101,8 @@ try {
 		assert.deepEqual(await page.evaluate(() => window.skiffPreview.commands.findLast((item) => item.command === "commit_project_files").args.paths), ["src/workbench/newFile.ts", "notes/计划.md"]);
 		await page.getByRole("button", { name: "查看 Diff：src/workbench/newFile.ts", exact: true }).click();
 		await page.locator(".diff-preview").waitFor();
-		assert.equal(await page.evaluate(() => window.skiffPreview.commands.findLast((item) => item.command === "get_project_git_diff").args.path), "src/workbench/newFile.ts");
+		assert.equal(await page.locator(".preview-tab.active").getAttribute("title"), "Skiff · src/workbench/newFile.ts", "Opening a prefetched Diff still selects the requested file");
+		assert.equal(await page.evaluate(() => window.skiffPreview.commands.some((item) => item.command === "get_project_git_diff" && item.args.path === "src/workbench/newFile.ts")), true);
 
 		await all("Unversioned Files").check();
 		await refresh();
