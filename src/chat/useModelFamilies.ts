@@ -103,8 +103,7 @@ export interface RelaySpec {
 	/** Official model prices are multiplied by this factor; absent keeps legacy prices. */
 	priceMultiplier?: number;
 	excludedModelIds?: string[];
-	/** Discovered models that belong to no family yet: saved with the relay,
-	 *  never routed, so the picker hides them until they gain a family. */
+	/** Legacy migration input; current provider models can remain ungrouped. */
 	unassignedModels?: ModelSpec[];
 }
 

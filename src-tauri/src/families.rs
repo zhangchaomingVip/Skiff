@@ -1154,10 +1154,6 @@ pub async fn probe_relay_endpoint(base_url: String, api_key: String, protocol: O
 
 /// 各家族官方模型页（6h 缓存），由前端解析出最新在售模型；失败回退过期缓存。
 /// refresh 跳过缓存，成功后重写缓存使 TTL 重新计时。
-#[tauri::command]
-pub async fn fetch_official_pages(refresh: Option<bool>) -> Result<providers::OfficialPagesResponse, String> {
-	providers::official_pages(&agent_dir()?, refresh.unwrap_or(false)).await
-}
 
 /// 抓取用户提供的公开模型定价页，由前端解析出模型与价格。
 #[tauri::command]

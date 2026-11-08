@@ -9,9 +9,12 @@ export function probeRelayEndpoint(baseUrl: string, apiKey: string, protocol?: R
  * capability flags Skiff can act on. */
 export interface DiscoveredModel {
 	id: string;
-	reasoning: boolean;
-	vision: boolean;
-	tools: boolean;
+	reasoning?: boolean;
+	vision?: boolean;
+	tools?: boolean;
+	streaming?: boolean;
+	contextWindow?: number;
+	maxTokens?: number;
 }
 
 export function discoverModels(baseUrl: string, apiKey: string): Promise<DiscoveredModel[]> {

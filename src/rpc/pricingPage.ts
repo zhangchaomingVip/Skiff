@@ -49,7 +49,7 @@ export interface CatalogResponse {
 	fetchedAt: number;
 }
 
-/** Official catalog (models.dev) pruned to the supported families, 24h disk cache. */
+/** Reference price data, fetched only on explicit sync; never an availability list. */
 export function fetchPublicCatalog(refresh = false): Promise<CatalogResponse> {
 	return invoke<CatalogResponse>("fetch_public_catalog", { refresh });
 }

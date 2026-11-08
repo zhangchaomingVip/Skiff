@@ -28,7 +28,7 @@ const assertFits = async (selector) => {
 
 try {
 	await mkdir("dist/model-picker", { recursive: true });
-	await page.addInitScript(() => localStorage.setItem("skiff.family-models.v1", JSON.stringify({ deepseek: [], kimi: [], glm: [], community: [] })));
+
 	for (const theme of ["light", "dark"]) {
 		await page.goto(`${base}/tests/preview.html?fixture=picker&theme=${theme}&static=1&persist=1`);
 		await page.locator(".model-trigger:not(:disabled)").waitFor();
@@ -47,7 +47,7 @@ try {
 		assert.equal(await catalog.locator(".model-catalog-header").getByRole("button", { name: "管理提供商", exact: true }).count(), 1);
 		assert.equal(await modelList.getByRole("option", { selected: true }).count(), 1);
 		const expectedOptions = await page.evaluate(() => window.skiffPreview.relays.filter((relay) => relay.enabled).flatMap((relay) => relay.models.filter((model) => model.enabled).map((model) => `选择 ${relay.name} ${model.modelId}`)).sort());
-		assert.deepEqual((await modelList.getByRole("option").evaluateAll((elements) => elements.map((element) => element.getAttribute("aria-label")))).sort(), expectedOptions, "Every enabled provider/model remains selectable with empty family display lists; disabled entries stay excluded");
+		assert.deepEqual((await modelList.getByRole("option").evaluateAll((elements) => elements.map((element) => element.getAttribute("aria-label")))).sort(), expectedOptions, "Every enabled provider/model remains selectable; disabled entries stay excluded");
 		const sectionNames = await catalog.locator(".model-catalog-section-head").allTextContents();
 		await familyFilter.click();
 		assert.deepEqual(await familyMenu.getByRole("option").allTextContents(), ["全部家族", ...sectionNames]);

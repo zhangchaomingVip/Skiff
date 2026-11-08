@@ -90,7 +90,7 @@ export async function verifyProviderModels(page, agentDir, requests, modelId, re
 				await page.waitForTimeout(100);
 				assert.equal(runtimeStarts(), startsBeforeToggle, "Settings switches do not restart real pi");
 				assert.deepEqual(await page.evaluate(() => window.providerToggleRestrictions), []);
-				assert.equal(await toggleSettings.getByRole("button", { name: "模型", exact: true }).isEnabled(), true);
+				assert.equal(await toggleSettings.getByRole("button", { name: "模型", exact: true }).count(), 0);
 			}
 		}
 		await page.screenshot({ path: join(artifacts, "provider-toggle-stable.png") });

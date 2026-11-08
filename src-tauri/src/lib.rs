@@ -555,7 +555,7 @@ pub fn run() {
 			settings_metadata::list_settings_metadata,
 			families::test_provider_connection, families::cancel_provider_test, families::discover_relay_models, families::probe_relay_endpoint,
 			families::fetch_pricing_page, families::extract_pricing_table,
-			families::fetch_public_catalog, families::fetch_official_pages, families::set_usd_cny_rate, families::create_family,
+			families::fetch_public_catalog, families::set_usd_cny_rate, families::create_family,
 			search::get_web_search_status, search::validate_web_search, search::save_web_search_key, search::set_web_search_provider, search::set_web_search_read_url, search::clear_web_search_key, search::install_web_search_extension
 		])
 		.on_window_event(|window, event| {

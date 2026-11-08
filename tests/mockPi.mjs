@@ -47,6 +47,8 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 	let settleOnNextClearQueue = false;
 	const providerKey = (familyId, relayId) => `skiff-relay-${relayId}-${familyId}`;
 	// Families ship with two DeepSeek routes (over two relays) so QA can exercise the switcher.
+	const referencePrices = { models: [], stale: false, fail: false };
+	const discovery = { models: undefined };
 	const relays = [
 		{ id: "r1", name: "官方直连", baseUrl: "https://api.deepseek.com/v1", apiKey: "sk-mock-0000abcd", timeoutSeconds: 60, enabled: true, billingAccountId: "wallet-a" },
 		{ id: "r2", name: "硅基低价", baseUrl: "https://api.siliconflow.cn/v1", apiKey: "sk-mock-1111efgh", timeoutSeconds: 60, enabled: true, billingAccountId: "wallet-b" },
@@ -200,17 +202,10 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 				return familiesConfig();
 			}
 			if (command === "list_model_runtime") return offers();
-			if (command === "fetch_public_catalog") return { models: fixture === "settings-info" ? [{ modelId: "deepseek-flash", name: "DeepSeek V4.1 Flash 1017", provider: "deepseek" }] : [], stale: false, fetchedAt: 0 };
-			// Mock latest-model sources: official pages aligned with the families
-			// fixture so the models family view can exercise offline trimming.
-			if (command === "fetch_official_pages") return {
-				pages: [
-					{ familyId: "glm", url: "https://mock/glm", body: "<table><tr><th>模型</th><th>状态</th></tr><tr><td>GLM-5.2</td><td></td></tr></table>", fetchedAt: 0 },
-					{ familyId: "deepseek", url: "https://mock/deepseek", body: "<table><tr><th>模型</th><th>deepseek-flash</th><th>deepseek-chat</th><th>deepseek-reasoner</th></tr><tr><td>BASE URL</td><td>https://api.deepseek.com</td><td></td><td></td></tr></table>", fetchedAt: 0 },
-					{ familyId: "kimi", url: "https://mock/kimi", body: "const t = _jsx(T, {cols:[],rows:[[`kimi-k2`],[`kimi-k2-air`]]})", fetchedAt: 0 },
-				],
-				stale: false,
-			};
+			if (command === "fetch_public_catalog") {
+				if (referencePrices.fail) throw new Error("参考价格查询失败");
+				return { models: structuredClone(referencePrices.models), stale: referencePrices.stale, fetchedAt: 0 };
+			}
 			if (command === "list_settings_metadata") { syncMetadata(); return structuredClone({ version: 1, tests: metadata.tests, usage: metadata.usage }); }
 			if (command === "preview_relay_batch" || command === "batch_relays") {
 				if (!args.relayIds.length || new Set(args.relayIds).size !== args.relayIds.length || args.relayIds.some((id) => !relayOf(id))) throw new Error("所选供应商已不存在，请重新加载预览");
@@ -292,6 +287,7 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 				await new Promise((resolve) => target.setTimeout(resolve, 350));
 				if (args.apiKey === "invalid") throw new Error("密钥无效或未授权");
 				if (String(args.baseUrl).includes("missing")) throw new Error("该地址不支持 /models 接口，请手动填写");
+				if (discovery.models) return structuredClone(discovery.models);
 				const ids = ["deepseek-chat", "deepseek-flash", "deepseek-reasoner", "Kimi-K2", "moonshot-v1", "glm-4.6", "chatglm-6b", "glm-5.4", "glm-5.4-flash", ...Array.from({ length: 22 }, (_, i) => `a-model-${String(i).padStart(2, "0")}`)];
 				return ids.map((id) => ({ id, reasoning: false, vision: false, tools: false }));
 			}
@@ -440,5 +436,5 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 			}
 		},
 	};
-	return { relays, families, metadata, failNextOrder: () => { failOrder = true; }, failNextBatch: () => { failBatch = true; }, histories, saved, commands, processes, listeners, callbacks, emit, testRequests, pendingTests, deferTests: (value) => { deferTests = value; }, failNextSend: () => { failSend = true; }, settleOnNextClearQueue: () => { settleOnNextClearQueue = true; }, setDialogPath: (value) => { dialogPath = value; } };
+	return { relays, families, metadata, referencePrices, discovery, failNextOrder: () => { failOrder = true; }, failNextBatch: () => { failBatch = true; }, histories, saved, commands, processes, listeners, callbacks, emit, testRequests, pendingTests, deferTests: (value) => { deferTests = value; }, failNextSend: () => { failSend = true; }, settleOnNextClearQueue: () => { settleOnNextClearQueue = true; }, setDialogPath: (value) => { dialogPath = value; } };
 }

@@ -107,9 +107,39 @@ fn discovery_http_error(status: u16, bytes: &[u8], key: &str) -> String {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct DiscoveredModel {
 	pub id: String,
-	pub reasoning: bool,
-	pub vision: bool,
-	pub tools: bool,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub reasoning: Option<bool>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub vision: Option<bool>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub tools: Option<bool>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub streaming: Option<bool>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub context_window: Option<u64>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub max_tokens: Option<u64>,
+}
+
+fn discovered_model(model: &Value, protocol: &str) -> Option<DiscoveredModel> {
+	let id = match protocol {
+		"google-genai" | "vertex" => model["name"].as_str()?.rsplit('/').next()?,
+		_ => model["id"].as_str()?,
+	};
+	if id.trim().is_empty() { return None; }
+	let context_window = [&model["contextWindow"], &model["context_window"], &model["context_length"], &model["limit"]["context"], &model["inputTokenLimit"]]
+		.into_iter().find_map(Value::as_u64).filter(|value| *value > 0);
+	let max_tokens = [&model["maxTokens"], &model["max_tokens"], &model["max_output_tokens"], &model["limit"]["output"], &model["outputTokenLimit"]]
+		.into_iter().find_map(Value::as_u64).filter(|value| *value > 0);
+	Some(DiscoveredModel {
+		id: id.to_string(),
+		reasoning: model["reasoning"].as_bool(),
+		vision: model["vision"].as_bool().or_else(|| model["modalities"]["input"].as_array().map(|items| items.iter().any(|item| item.as_str() == Some("image")))),
+		tools: model["tools"].as_bool().or_else(|| model["tool_call"].as_bool()),
+		streaming: model["streaming"].as_bool(),
+		context_window,
+		max_tokens,
+	})
 }
 
 /// Lists models over an OpenAI-compatible `/models` endpoint. `protocol`
@@ -147,18 +177,7 @@ pub(crate) async fn discover(base: &str, key: &str, protocol: Option<&str>) -> R
 		"google-genai" | "vertex" => value["models"].as_array().ok_or("模型列表应包含 models 数组")?,
 		_ => value["data"].as_array().ok_or("模型列表应包含 data 数组")?,
 	};
-	let mut models: Vec<DiscoveredModel> = entries.iter().filter_map(|m| {
-		let raw = if protocol == "google-genai" || protocol == "vertex" { m["name"].as_str()?.rsplit('/').next()? } else { m["id"].as_str()? };
-		if raw.trim().is_empty() { return None; }
-		Some(DiscoveredModel {
-			id: raw.to_string(),
-			// Most providers omit these; only adopt them when the endpoint
-			// actually reports the capability, otherwise default to false.
-			reasoning: m["reasoning"].as_bool().unwrap_or(false),
-			vision: m["vision"].as_bool().unwrap_or(false),
-			tools: m["tools"].as_bool().unwrap_or(false),
-		})
-	}).collect();
+	let mut models: Vec<DiscoveredModel> = entries.iter().filter_map(|model| discovered_model(model, protocol)).collect();
 	models.sort_by(|a, b| a.id.cmp(&b.id));
 	models.dedup_by(|a, b| a.id == b.id);
 	if models.is_empty() { return Err("接口未返回模型，请手动填写模型 ID".into()); }
@@ -329,10 +348,11 @@ struct CatalogCache {
 const CATALOG_URL: &str = "https://models.dev/api.json";
 const CATALOG_TTL_SECS: i64 = 24 * 60 * 60;
 /// v2 added cache prices and per-entry currency (CNY-pinned lists); v3 clamps
-/// full-window output ceilings down to a usable default budget.
-const CATALOG_CACHE_VERSION: u32 = 3;
+/// full-window output ceilings down to a usable default budget; v4 broadens
+/// price coverage beyond the original display families.
+const CATALOG_CACHE_VERSION: u32 = 4;
 /// Keep CN moonshot before the global twin so dedupe prefers it.
-const CATALOG_PROVIDERS: [&str; 4] = ["deepseek", "moonshotai-cn", "moonshotai", "zhipuai"];
+const CATALOG_PROVIDERS: &[&str] = &["deepseek", "moonshotai-cn", "moonshotai", "zhipuai", "openai", "anthropic", "google", "google-vertex", "xai", "alibaba-cn", "alibaba", "minimax-cn", "minimax", "mistral", "cohere"];
 
 /// A published CNY price for one model, per 1M tokens.
 struct CnyPrice {
@@ -363,13 +383,13 @@ fn cny_price(model_id: &str) -> Option<&'static CnyPrice> {
 fn prune_catalog(value: &Value) -> Vec<CatalogModel> {
 	let mut models: Vec<CatalogModel> = Vec::new();
 	let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
-	for provider in CATALOG_PROVIDERS {
+	for &provider in CATALOG_PROVIDERS {
 		let Some(entries) = value[provider]["models"].as_object() else { continue };
 		let short = provider.trim_end_matches("-cn");
 		for (id, model) in entries {
-			if !seen.insert(id.to_lowercase()) { continue }
 			let cost = &model["cost"];
 			let (Some(input), Some(output)) = (cost["input"].as_f64(), cost["output"].as_f64()) else { continue };
+			if input < 0.0 || output < 0.0 || !input.is_finite() || !output.is_finite() || !seen.insert(id.to_lowercase()) { continue; }
 			let published = cny_price(id);
 			let (input_cost, output_cost, cache_read_cost, cache_write_cost, currency) = match published {
 				Some(price) => (price.input, price.output, Some(price.cache_read), Some(price.cache_write), "CNY"),
@@ -417,7 +437,7 @@ fn now_unix() -> i64 {
 	std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|duration| duration.as_secs() as i64).unwrap_or(0)
 }
 
-/// Official prices for the configured families, pruned from models.dev.
+/// Reference prices from model makers; never used to choose available models.
 /// Fresh cache (24h) short-circuits the network; `refresh` skips the cache
 /// and rewrites it on success so the next TTL window starts from now. On
 /// failure an expired cache is served so the import flow degrades instead of
@@ -469,99 +489,22 @@ async fn fetch_catalog_json() -> Result<Value, String> {
 	serde_json::from_slice(&bytes).map_err(|_| "公共目录不是有效 JSON".to_string())
 }
 
-/// Latest-model source pages: one official docs page per family, fetched with
-/// a 6h disk cache so the frontend can parse fresh model IDs without hammering
-/// the vendors. models.dev (`public_catalog`) remains the structured fallback.
-pub(crate) const OFFICIAL_PAGES: [(&str, &str); 3] = [
-	("glm", "https://docs.bigmodel.cn/cn/guide/start/model-overview"),
-	("deepseek", "https://api-docs.deepseek.com/zh-cn/quick_start/pricing"),
-	("kimi", "https://platform.moonshot.cn/docs/pricing/chat"),
-];
-
-const OFFICIAL_PAGE_TTL_SECS: i64 = 6 * 60 * 60;
-
-#[derive(Clone, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct OfficialPage {
-	pub family_id: String,
-	pub url: String,
-	pub body: String,
-	pub fetched_at: i64,
-}
-
-#[derive(serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct OfficialPagesResponse {
-	pub pages: Vec<OfficialPage>,
-	/// True when at least one family fell back to an expired cache entry.
-	pub stale: bool,
-}
-
-fn official_pages_cache_path(dir: &Path) -> std::path::PathBuf {
-	dir.join("official-pages.json")
-}
-
-#[derive(serde::Serialize, serde::Deserialize)]
-struct OfficialPagesCache {
-	fetched_at: i64,
-	pages: Vec<OfficialPage>,
-}
-
-/// Fetches every official page independently; a family whose page fails keeps
-/// its expired cache entry (or drops out entirely), so one redesign never
-/// blanks the whole catalog.
-pub(crate) async fn official_pages(dir: &Path, refresh: bool) -> Result<OfficialPagesResponse, String> {
-	official_pages_with_urls(dir, refresh, OFFICIAL_PAGES.iter().map(|(family, url)| (*family, url.to_string())).collect()).await
-}
-
-async fn official_pages_with_urls(dir: &Path, refresh: bool, targets: Vec<(&str, String)>) -> Result<OfficialPagesResponse, String> {
-	let cache_path = official_pages_cache_path(dir);
-	let cache = std::fs::read(&cache_path).ok()
-		.and_then(|bytes| serde_json::from_slice::<OfficialPagesCache>(&bytes).ok());
-	let now = now_unix();
-	let mut pages: Vec<OfficialPage> = Vec::new();
-	let mut stale = false;
-	for (family_id, url) in targets {
-		let cached = cache.as_ref().and_then(|cache| cache.pages.iter().find(|page| page.family_id == family_id));
-		if let Some(cached) = cached {
-			if !refresh && now - cached.fetched_at < OFFICIAL_PAGE_TTL_SECS {
-				pages.push(cached.clone());
-				continue;
-			}
-		}
-		match fetch_page_body(&url).await {
-			Ok(body) => pages.push(OfficialPage { family_id: family_id.to_string(), url, body, fetched_at: now }),
-			Err(_) => {
-				if let Some(cached) = cached {
-					stale = true;
-					pages.push(cached.clone());
-				}
-			}
-		}
-	}
-	if pages.is_empty() { return Err("官方模型页获取失败，请检查网络".into()); }
-	let fetched_at = pages.iter().map(|page| page.fetched_at).min().unwrap_or(now);
-	if let Ok(bytes) = serde_json::to_vec(&OfficialPagesCache { fetched_at, pages: pages.clone() }) {
-		let _ = std::fs::write(&cache_path, bytes);
-	}
-	Ok(OfficialPagesResponse { pages, stale })
-}
-
-async fn fetch_page_body(url: &str) -> Result<String, String> {
-	let mut response = send_with_direct_retry(|client| client.get(url), Duration::from_secs(15), "官方模型页").await?;
-	let status = response.status();
-	if !status.is_success() { return Err(format!("HTTP {}", status.as_u16())); }
-	let mut bytes = Vec::new();
-	while let Some(chunk) = response.chunk().await.map_err(|_| "读取官方模型页失败")? {
-		if bytes.len() + chunk.len() > 2 * 1024 * 1024 { return Err("官方模型页响应过大".into()); }
-		bytes.extend_from_slice(&chunk);
-	}
-	Ok(String::from_utf8_lossy(&bytes).into_owned())
-}
-
 #[cfg(test)]
 mod tests {
 	use super::*;
+	#[test]
+	fn discovery_uses_only_provider_metadata_and_keeps_missing_values_unknown() {
+		let bare = discovered_model(&json!({"id":"vendor/nonstandard-model"}), "openai").unwrap();
+		assert_eq!(bare.id, "vendor/nonstandard-model");
+		assert!(bare.vision.is_none() && bare.tools.is_none() && bare.reasoning.is_none());
+		assert!(serde_json::to_value(&bare).unwrap().get("vision").is_none());
+		let full = discovered_model(&json!({"id":"custom", "tools":false, "vision":true, "reasoning":false, "streaming":false, "context_window":4096, "max_output_tokens":1000}), "openai").unwrap();
+		assert_eq!(full.tools, Some(false)); assert_eq!(full.vision, Some(true));
+		assert_eq!(full.reasoning, Some(false)); assert_eq!(full.streaming, Some(false));
+		assert_eq!(full.context_window, Some(4096)); assert_eq!(full.max_tokens, Some(1000));
+		let google = discovered_model(&json!({"name":"models/custom", "inputTokenLimit":1000000, "outputTokenLimit":8192}), "google-genai").unwrap();
+		assert_eq!(google.id, "custom"); assert_eq!(google.context_window, Some(1000000)); assert_eq!(google.max_tokens, Some(8192));
+	}
 	#[test]
 	fn discovery_reports_http_errors_without_credentials() {
 		use std::io::{Read, Write};
@@ -630,7 +573,7 @@ mod tests {
 		assert!(value.get("content_type").is_none());
 	}
 	#[test]
-	fn prunes_catalog_to_family_providers_with_dedupe_and_flags() {
+	fn reference_prices_cover_model_makers_independently_of_display_families() {
 		let value = serde_json::json!({
 			"deepseek": { "models": {
 				"deepseek-flash": { "name": "DeepSeek Flash", "cost": { "input": 0.15, "output": 0.6, "cache_read": 0.003 }, "limit": { "context": 1000000, "output": 8192 }, "modalities": { "input": ["text"] }, "tool_call": true, "last_updated": "2026-09-10" },
@@ -650,7 +593,7 @@ mod tests {
 			"openai": { "models": { "gpt-x": { "cost": { "input": 1, "output": 1 } } }}
 		});
 		let models = prune_catalog(&value);
-		assert_eq!(models.len(), 5);
+		assert_eq!(models.len(), 6);
 		let flash = models.iter().find(|model| model.model_id == "deepseek-flash").unwrap();
 		assert_eq!(flash.provider, "deepseek");
 		assert_eq!(flash.input_cost, 0.15);
@@ -676,7 +619,8 @@ mod tests {
 		assert_eq!((legacy.cache_read_cost, legacy.cache_write_cost), (Some(0.19), Some(0.95)));
 		assert_eq!(legacy.currency, "USD");
 		assert!(models.iter().any(|model| model.model_id == "glm-old" && model.status.as_deref() == Some("deprecated")));
-		assert!(!models.iter().any(|model| model.model_id == "gpt-x" || model.model_id == "no-price"));
+		assert!(models.iter().any(|model| model.model_id == "gpt-x" && model.provider == "openai"));
+		assert!(!models.iter().any(|model| model.model_id == "no-price"));
 	}
 	#[test]
 	fn pruned_output_ceiling_at_the_window_becomes_a_usable_budget() {
@@ -729,72 +673,4 @@ mod tests {
 		std::fs::remove_file(&path).unwrap();
 	}
 
-	/// One-shot HTTP server answering every connection with `status`/`body`.
-	fn page_server(status: u16, body: &'static str) -> std::net::SocketAddr {
-		let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-		let address = listener.local_addr().unwrap();
-		std::thread::spawn(move || {
-			for _ in 0..3 {
-				let Ok((mut stream, _)) = listener.accept() else { break };
-				let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
-				let mut request = [0; 4096];
-				let _ = std::io::Read::read(&mut stream, &mut request);
-				let response = format!("HTTP/1.1 {status} T\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len());
-				let _ = std::io::Write::write_all(&mut stream, response.as_bytes());
-			}
-		});
-		address
-	}
-
-	// The real OFFICIAL_PAGES hosts cannot be reached from unit tests; the
-	// test drives the shared loop with loopback URLs instead.
-	async fn official_pages_with_hosts(dir: &Path, hosts: [&str; 3]) -> Result<OfficialPagesResponse, String> {
-		let targets = OFFICIAL_PAGES.iter().zip(hosts).map(|((family, _), host)| (*family, format!("http://{host}/page"))).collect();
-		official_pages_with_urls(dir, false, targets).await
-	}
-
-	#[test]
-	fn official_pages_cache_within_ttl_and_falls_back_to_stale() {
-		let dir = std::env::temp_dir().join(format!("skiff-official-{}-{}", std::process::id(), now_unix()));
-		std::fs::create_dir_all(&dir).unwrap();
-		let good = page_server(200, "<html>glm-5.4</html>");
-		let bad = page_server(500, "");
-		let hosts: [String; 3] = [good.to_string(), bad.to_string(), bad.to_string()];
-		let host_refs: [&str; 3] = [hosts[0].as_str(), hosts[1].as_str(), hosts[2].as_str()];
-		let first = tauri::async_runtime::block_on(official_pages_with_hosts(&dir, host_refs)).unwrap();
-		assert_eq!(first.pages.len(), 1);
-		assert!(!first.stale);
-		assert_eq!(first.pages[0].family_id, "glm");
-
-		// Within TTL no network happens; the cache answer covers every family.
-		let mut cached_pages = first.pages.clone();
-		cached_pages.push(OfficialPage { family_id: "deepseek".into(), url: "https://example/deepseek".into(), body: "cached".into(), fetched_at: first.pages[0].fetched_at });
-		serde_json::to_writer(std::fs::File::create(official_pages_cache_path(&dir)).unwrap(), &OfficialPagesCache { fetched_at: first.pages[0].fetched_at, pages: cached_pages.clone() }).unwrap();
-		let second = tauri::async_runtime::block_on(official_pages_with_hosts(&dir, host_refs)).unwrap();
-		assert_eq!(second.pages.len(), 2);
-		assert!(!second.stale);
-
-		// Past TTL the failing families keep their expired entries and flag stale.
-		let expired: Vec<OfficialPage> = cached_pages.iter().map(|page| OfficialPage { fetched_at: page.fetched_at - OFFICIAL_PAGE_TTL_SECS - 1, ..page.clone() }).collect();
-		serde_json::to_writer(std::fs::File::create(official_pages_cache_path(&dir)).unwrap(), &OfficialPagesCache { fetched_at: now_unix(), pages: expired }).unwrap();
-		let third = tauri::async_runtime::block_on(official_pages_with_hosts(&dir, host_refs)).unwrap();
-		assert!(third.stale);
-		assert_eq!(third.pages.len(), 2);
-		assert_eq!(third.pages.iter().find(|page| page.family_id == "deepseek").unwrap().body, "cached");
-
-		// refresh skips even a fresh cache and rewrites it, restarting the TTL.
-		let refresh_good = page_server(200, "<html>glm-5.4</html>");
-		let refreshed = tauri::async_runtime::block_on(async {
-			let targets = OFFICIAL_PAGES.iter().map(|(family, _)| (*family, format!("http://{refresh_good}/page"))).collect();
-			official_pages_with_urls(&dir, true, targets).await
-		}).unwrap();
-		assert!(!refreshed.stale);
-		assert_eq!(refreshed.pages.len(), 3);
-		assert_eq!(refreshed.pages.iter().find(|page| page.family_id == "glm").unwrap().body, "<html>glm-5.4</html>");
-		// The rewritten cache serves the next TTL window without network.
-		let after = tauri::async_runtime::block_on(official_pages_with_hosts(&dir, host_refs)).unwrap();
-		assert_eq!(after.pages.iter().find(|page| page.family_id == "glm").unwrap().body, "<html>glm-5.4</html>");
-		assert!(!after.stale);
-		std::fs::remove_dir_all(dir).unwrap();
-	}
 }

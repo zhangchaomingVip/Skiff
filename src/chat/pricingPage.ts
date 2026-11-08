@@ -1,5 +1,5 @@
 import type { Currency } from "./types";
-import { modelIdMatchesCatalog } from "./latestModels";
+import { modelIdMatchesCatalog } from "./priceIdentity";
 
 /** A page fetched by the Rust side: final URL after redirects plus the raw body. */
 export interface FetchedPage {
@@ -568,13 +568,6 @@ export function estimateVisionTokens(width: number, height: number): number {
 	return 85 + 170 * tiles;
 }
 
-/** Catalog providers per family, CN variant first so dedupe keeps CN pricing context. */
-export const FAMILY_CATALOG_PROVIDERS: Record<string, string[]> = {
-	deepseek: ["deepseek"],
-	kimi: ["moonshotai", "moonshotai-cn"],
-	glm: ["zhipuai"],
-};
-
 /** Minimal catalog entry shape (mirrors the Rust-pruned JSON). */
 export interface CatalogEntryLike {
 	provider: string;
@@ -591,11 +584,6 @@ export interface CatalogEntryLike {
 	tools: boolean;
 	reasoning: boolean;
 	status: string | null;
-}
-
-export function catalogForFamily<T extends CatalogEntryLike>(catalog: T[], familyId: string): T[] {
-	const providers = FAMILY_CATALOG_PROVIDERS[familyId] ?? [];
-	return providers.length ? catalog.filter((entry) => providers.includes(entry.provider)) : [];
 }
 
 /**
@@ -637,7 +625,8 @@ export interface SyncableModel {
 
 /**
  * Refills a provider's model prices from the official catalog, resolving each
- * row against its own family. Only the four price fields move: context windows
+ * row by its API ID, independently of display families. Ambiguous matches are
+ * skipped. Only the four price fields move: context windows
  * and capability flags stay as configured, so a stale catalog entry can never
  * invalidate a route that already works. Reports the ids that matched and the
  * ones the catalog does not know.
@@ -652,7 +641,9 @@ export function syncModelPrices<P extends SyncableModel>(
 	const synced = entries.map((entry) => {
 		const modelId = entry.model.modelId.trim();
 		if (!modelId) return entry;
-		const found = catalogForFamily(catalog, entry.familyId ?? "").find((item) => modelIdMatchesCatalog(modelId, item));
+		const exact = catalog.filter((item) => item.modelId.trim().toLowerCase() === modelId.toLowerCase());
+		const candidates = exact.length ? exact : catalog.filter((item) => modelIdMatchesCatalog(modelId, item));
+		const found = candidates.length === 1 ? candidates[0] : undefined;
 		if (!found) {
 			missing.push(modelId);
 			return entry;

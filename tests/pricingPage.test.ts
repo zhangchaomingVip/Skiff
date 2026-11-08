@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { candidateApiUrls, catalogEntryToPriced, catalogForFamily, estimateVisionTokens, importPricedModels, parseHtmlTables, parseJsonModels, parsePricedTable, syncModelPrices, type FetchedPage } from "../src/chat/pricingPage.ts";
+import { candidateApiUrls, catalogEntryToPriced, estimateVisionTokens, importPricedModels, parseHtmlTables, parseJsonModels, parsePricedTable, syncModelPrices, type FetchedPage } from "../src/chat/pricingPage.ts";
 
 const tokenrhythmEntry = (overrides: Record<string, unknown>) => ({
 	id: "glm-5.1",
@@ -265,15 +265,21 @@ test("price sync refills only the price fields of catalog-known models", () => {
 	assert.equal(synced.entries[3].model.modelId, "  ");
 });
 
-test("catalog filters by family providers with CN first", () => {
-	const catalog = [
-		{ provider: "deepseek", modelId: "deepseek-flash", inputCost: 0, outputCost: 0, contextWindow: 0, maxTokens: 0, vision: false, tools: false, reasoning: false, status: null },
-		{ provider: "moonshotai-cn", modelId: "kimi-k2.6", inputCost: 0, outputCost: 0, contextWindow: 0, maxTokens: 0, vision: false, tools: false, reasoning: false, status: null },
-		{ provider: "zhipuai", modelId: "glm-5", inputCost: 0, outputCost: 0, contextWindow: 0, maxTokens: 0, vision: false, tools: false, reasoning: false, status: null },
-	];
-	assert.deepEqual(catalogForFamily(catalog, "kimi").map((item) => item.provider), ["moonshotai-cn"]);
-	assert.equal(catalogForFamily(catalog, "glm").length, 1);
-	assert.equal(catalogForFamily(catalog, "unknown-family").length, 0);
+
+test("reference price sync ignores display families and never changes model identity or capabilities", () => {
+	const model = { modelId: "vendor/gpt-custom", alias: "Private", currency: "USD" as const, inputCost: 9, outputCost: 18, cacheReadCost: 3, cacheWriteCost: 9, contextWindow: 65536, maxTokens: 2048, vision: true, tools: false };
+	const reference = { provider: "openai", modelId: model.modelId, name: "Reference", inputCost: 1, outputCost: 2, cacheReadCost: 0.2, cacheWriteCost: 1, currency: "USD", contextWindow: 1, maxTokens: 1, vision: false, tools: true, reasoning: false, status: null };
+	for (const familyId of [undefined, "", "unrelated-family"]) {
+		const result = syncModelPrices([{ familyId, model }], [reference], 7.2);
+		assert.deepEqual(result.matched, [model.modelId]);
+		assert.deepEqual(result.entries[0].model, { ...model, currency: "CNY", inputCost: 7.2, outputCost: 14.4, cacheReadCost: 1.44, cacheWriteCost: 7.2 });
+	}
+	const unknown = { ...model, modelId: "gpt-custom-uncensored" };
+	assert.equal(syncModelPrices([{ model: unknown }], [reference], 7.2).entries[0].model, unknown);
+	const duplicate = { ...reference, provider: "other", inputCost: 999 };
+	const ambiguous = syncModelPrices([{ model }], [reference, duplicate], 7.2);
+	assert.deepEqual(ambiguous.missing, [model.modelId]);
+	assert.equal(ambiguous.entries[0].model, model, "Conflicting reference matches keep the manually configured price");
 });
 
 test("vision token estimate follows OpenAI-style tiling with a cap", () => {
