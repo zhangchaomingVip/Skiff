@@ -6,8 +6,10 @@ import { cacheSavingsRatio, summarizeCosts, type CostSummary } from "./cost";
 import { SPARK_SAMPLES } from "./sparkline";
 import { contextComposition, decodeReading, decodeTiming, turnInputTrend, voyageProcessStats } from "./voyageBento";
 import { summarizeUsage } from "./usage";
+import { advanceVoyageDisplay, restoreVoyageDisplay, type VoyageDisplay } from "./voyageDisplay";
 
 export interface VoyageMetrics {
+	display: VoyageDisplay;
 	speed: number;
 	averageSpeed?: number;
 	peakSpeed?: number;
@@ -73,6 +75,7 @@ export function useVoyageMetrics(messages: ChatMessage[], model: ModelInfo | und
 	const trail = useRef<{ key: string; speeds: number[] }>({ key: "", speeds: [] });
 	const ledger = useRef<VoyageTimeline>();
 	const contextLedger = useRef<VoyageContext>();
+	const displayLedger = useRef<VoyageDisplay>();
 	const [reading, setReading] = useState<{ sample: VoyageSample; timeline?: VoyageTimeline }>();
 	const tick = () => {
 		const current = input.current;
@@ -151,7 +154,7 @@ export function useVoyageMetrics(messages: ChatMessage[], model: ModelInfo | und
 	const inputTrend = useMemo(() => turnInputTrend(messages), [messages]);
 	const usageKnown = messages.some((message) => message.role === "assistant" && !!message.usage);
 	const sessionTokens = usageKnown || streaming && liveOutput > 0 ? sessionUsage.total + (streaming ? liveOutput : 0) : undefined;
-	return {
+	const metrics = {
 		speed: activity === "sailing" ? currentSample?.speed ?? 0 : 0,
 		averageSpeed: average.averageSpeed,
 		peakSpeed: currentSample?.peak,
@@ -183,4 +186,11 @@ export function useVoyageMetrics(messages: ChatMessage[], model: ModelInfo | und
 		contextSource: data?.source ?? "unknown",
 		speedEstimated,
 	};
+	const firstUser = messages.find((message) => message.role === "user")?.id ?? "empty";
+	const displayIdentity = JSON.stringify([firstUser, model?.provider, model?.id, model?.contextWindow]);
+	const previousDisplay = displayLedger.current ?? restoreVoyageDisplay(metrics, messages, displayIdentity, model);
+	const display = advanceVoyageDisplay(previousDisplay, metrics, displayIdentity, key, contextUsage?.tokens === null);
+	// Commit after rendering, so abandoned renders cannot replace the retained readings.
+	useEffect(() => { displayLedger.current = display; });
+	return { ...metrics, display };
 }

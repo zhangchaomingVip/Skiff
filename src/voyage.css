@@ -276,6 +276,7 @@
 	.voyage-weather-card h2 { display: flex; align-items: center; gap: var(--space-1); min-width: 0; margin: 0; color: var(--secondary); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); line-height: 1.4; }
 	.voyage-weather-card h2 svg { flex: none; opacity: .75; }
 	.voyage-weather-card h2 span { min-width: 0; overflow-wrap: anywhere; }
+	.voyage-weather-card h2 .voyage-weather-pending { display: grid; place-items: center; flex: none; margin-left: auto; color: var(--voyage-sky); }
 	.voyage-weather-reading { display: flex; flex-wrap: wrap; align-items: baseline; align-content: start; column-gap: var(--space-0-5); min-width: 0; font-variant-numeric: tabular-nums; }
 	.voyage-weather-reading strong { color: var(--voyage-reading); font-size: clamp(var(--font-size-xl), 6cqi, var(--font-size-voyage-reading)); font-weight: var(--font-weight-medium); line-height: 1.15; letter-spacing: -.025em; white-space: nowrap; }
 	.voyage-weather-reading small { color: var(--secondary); font-size: var(--font-size-xs); line-height: 1.15; }
@@ -327,6 +328,7 @@
 	.voyage-telemetry-ledger dt { min-width: 0; color: var(--secondary); overflow-wrap: anywhere; }
 	.voyage-telemetry-ledger dd { min-width: 0; max-width: 150px; margin: 0; text-align: right; overflow-wrap: anywhere; }
 	.voyage-telemetry-note { margin: var(--space-2) 0 0; color: var(--secondary); font-size: var(--font-size-xs); line-height: 1.4; }
+	.voyage-telemetry-pending { margin: 0 0 var(--space-2); padding: var(--space-1-5); border-radius: var(--radius-md); background: color-mix(in srgb, var(--voyage-sky) 8%, transparent); color: var(--secondary); font-size: var(--font-size-xs); line-height: 1.4; }
 	.voyage-telemetry-subhead { margin: var(--space-2) 0 var(--space-1); color: var(--secondary); font-size: var(--font-size-xs); }
 	.voyage-telemetry-timebar { display: flex; height: 5px; border-radius: var(--radius-full); background: var(--voyage-track-soft); overflow: hidden; }
 	.voyage-telemetry-timebar i:first-child { background: var(--voyage-sky); }

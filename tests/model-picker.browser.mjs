@@ -24,6 +24,7 @@ const assertFits = async (selector) => {
 
 try {
 	await mkdir("dist/model-picker", { recursive: true });
+	await page.addInitScript(() => localStorage.setItem("skiff.family-models.v1", JSON.stringify({ deepseek: [], kimi: [], glm: [], community: [] })));
 	for (const theme of ["light", "dark"]) {
 		await page.goto(`${base}/tests/preview.html?fixture=picker&theme=${theme}&static=1&persist=1`);
 		await page.locator(".model-trigger:not(:disabled)").waitFor();
@@ -38,7 +39,20 @@ try {
 		assert.equal(await trigger.evaluate((element) => element === document.activeElement), true);
 		await open();
 		assert.equal(await search.evaluate((element) => element === document.activeElement), true);
-		assert.equal(await catalog.getByRole("option", { selected: true }).count(), 1, "Current model stays visible even when outside the display list");
+		assert.equal(await catalog.getByRole("option", { selected: true }).count(), 1);
+		const expectedOptions = await page.evaluate(() => window.skiffPreview.relays.filter((relay) => relay.enabled).flatMap((relay) => relay.models.filter((model) => model.enabled).map((model) => `选择 ${relay.name} ${model.modelId}`)).sort());
+		assert.deepEqual((await catalog.getByRole("option").evaluateAll((elements) => elements.map((element) => element.getAttribute("aria-label")))).sort(), expectedOptions, "Every enabled provider/model remains selectable with empty family display lists; disabled entries stay excluded");
+		for (const id of ["deepseek-v4-1-flash-1017-uncensored", "deepseek-v4.1-flash-uncensored", "personal-model", "unlisted-model"]) {
+			await catalog.getByRole("option", { name: `选择 官方直连 ${id}`, exact: true }).click();
+			await page.waitForFunction((id) => document.querySelector(".model-trigger-label")?.textContent === id, id);
+			const selection = await page.evaluate(() => window.skiffPreview.commands.filter((entry) => entry.command === "rpc_send" && JSON.parse(entry.args.message).type === "set_model").map((entry) => JSON.parse(entry.args.message)).at(-1));
+			assert.equal(selection.provider, "skiff-relay-r1");
+			assert.equal(selection.modelId, id, "Selection preserves the exact API model ID");
+			await open();
+		}
+		await catalog.getByRole("option", { name: "选择 官方直连 deepseek-chat", exact: true }).click();
+		await page.waitForFunction(() => document.querySelector(".model-trigger-label")?.textContent === "deepseek-chat");
+		await open();
 		await page.getByRole("group", { name: "按提供商筛选" }).getByRole("button", { name: "硅基低价", exact: true }).click();
 		assert.ok(await catalog.getByRole("option").count() > 0);
 		assert.ok((await page.locator(".model-catalog-meta").allTextContents()).every((text) => text.startsWith("硅基低价")));

@@ -295,6 +295,7 @@ try {
 	await render(multi);
 	assert.deepEqual(await page.locator(".voyage-weather-cache p span").allTextContents(), ["缓存创建 0 tok", "缓存读取 9k tok"]);
 	const unknownUsage = structuredClone(multi);
+	unknownUsage.sessionId = "unknown-usage";
 	for (const message of unknownUsage.messages) delete message.usage;
 	await render(unknownUsage);
 	assert.equal(await page.locator(".voyage-weather-tokens strong").textContent(), "—");

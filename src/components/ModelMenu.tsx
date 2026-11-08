@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Button, Dialog, Popover, SegmentedControl } from "./ui";
 import type { ModelInfo } from "../chat/types";
 import { FAMILY_LABELS } from "../chat/useModelFamilies";
@@ -7,8 +7,7 @@ import { ModelPicker } from "./ModelPicker";
 import { BrandIcon, type BrandName } from "./BrandIcon";
 import { Icon } from "./Icon";
 import { modelBrand } from "../chat/modelDisplay";
-import { pickerGroups, pickerModelName, visiblePickerModels } from "../chat/modelPicker";
-import { useFamilyModels } from "../chat/useFamilyModels";
+import { pickerGroups, pickerModelName } from "../chat/modelPicker";
 import { modelFavoriteKey, useModelFavorites } from "../chat/useModelFavorites";
 import { LEVEL_LABELS } from "./ReasoningChip";
 
@@ -28,13 +27,7 @@ export function ModelMenu({ models, model, disabled, onModel, thinkingLevel, thi
 }) {
 	const { familyOf, manage: onManage, models: familyModels, current, select, configurationHint } = useModelFamily();
 	models = familyModels ?? models;
-	const { config: visibleModels, catalog } = useFamilyModels();
 	model = current ?? model;
-	const pickerModels = useMemo(() => {
-		const visible = visiblePickerModels(models, visibleModels, catalog, familyOf);
-		const active = models.find((item) => model && modelFavoriteKey(item) === modelFavoriteKey(model));
-		return active && !visible.includes(active) ? [active, ...visible] : visible;
-	}, [models, visibleModels, catalog, familyOf, model]);
 	onModel = select ?? onModel;
 	const [open, setOpen] = useState(false);
 	const [catalogOpen, setCatalogOpen] = useState(false);
@@ -46,7 +39,7 @@ export function ModelMenu({ models, model, disabled, onModel, thinkingLevel, thi
 	const mark = brand(family?.id) ?? modelBrand(model?.provider, model?.id, model?.name);
 	const displayName = model ? pickerModelName(model) : "选择模型";
 	const fullTitle = model ? [family ? FAMILY_LABELS[family.id] ?? family.name : undefined, displayName, model.providerName, model.routeId, `${model.provider}/${model.id}`].filter(Boolean).join(" · ") : "选择模型";
-	const quickModels = pickerModels.filter((item) => favorites.includes(modelFavoriteKey(item)) || (model && modelFavoriteKey(item) === modelFavoriteKey(model)));
+	const quickModels = models.filter((item) => favorites.includes(modelFavoriteKey(item)) || (model && modelFavoriteKey(item) === modelFavoriteKey(model)));
 	if (model && !quickModels.some((item) => modelFavoriteKey(item) === modelFavoriteKey(model))) quickModels.unshift(model);
 	const groups = pickerGroups(quickModels, "", familyOf);
 	const level = thinkingLevels.includes(thinkingLevel ?? "") ? thinkingLevel! : thinkingLevels[0];
@@ -82,6 +75,6 @@ export function ModelMenu({ models, model, disabled, onModel, thinkingLevel, thi
 			{configurationHint && <p className="menu-hint" role="status">{configurationHint}</p>}
 			<div className="model-quick-footer"><Button variant="ghost" onClick={() => { setOpen(false); setCatalogOpen(true); }}><Icon name="layers" size={16} />更多模型…</Button></div>
 		</Popover>}
-		{catalogOpen && <Dialog className="model-catalog-dialog" initialFocus={searchInput} aria-label="切换模型" onClose={() => setCatalogOpen(false)} returnFocusSelector=".model-trigger"><ModelPicker searchRef={searchInput} configurationHint={configurationHint} models={pickerModels} familyOf={familyOf} current={model} onManage={manage} onSelect={selectModel} onClose={() => setCatalogOpen(false)} favorites={favorites} onToggleFavorite={toggleFavorite} disabled={disabled} /></Dialog>}
+		{catalogOpen && <Dialog className="model-catalog-dialog" initialFocus={searchInput} aria-label="切换模型" onClose={() => setCatalogOpen(false)} returnFocusSelector=".model-trigger"><ModelPicker searchRef={searchInput} configurationHint={configurationHint} models={models} familyOf={familyOf} current={model} onManage={manage} onSelect={selectModel} onClose={() => setCatalogOpen(false)} favorites={favorites} onToggleFavorite={toggleFavorite} disabled={disabled} /></Dialog>}
 	</div>;
 }

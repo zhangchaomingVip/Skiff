@@ -104,6 +104,17 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 	}
 	// Convert legacy fixture input once; runtime and settings use provider-owned models.
 	for (const relay of relays) relay.models = families.flatMap((family) => family.routes.filter((route) => route.relayId === relay.id).flatMap((route) => route.models.map((model) => ({ ...model, familyId: family.id, enabled: route.enabled && !relay.excludedModelIds?.includes(model.modelId), streaming: route.streaming, tools: route.tools, vision: model.vision ?? route.vision, reasoning: route.reasoning, thinkingLevels: model.thinkingLevels ?? route.thinkingLevels ?? ["minimal", "low", "medium", "high"], legacyRouteIds: [route.id], legacyProviderKeys: [providerKey(family.id, relay.id)] }))));
+	if (fixture === "picker") {
+		const sample = relays[0].models[0];
+		families.push({ id: "community", displayName: "社区模型", routes: [] });
+		relays[0].models.push(
+			...["deepseek-v4-1-flash-1017-uncensored", "deepseek-v4.1-flash-uncensored"].map((modelId) => ({ ...sample, modelId })),
+			{ ...sample, modelId: "personal-model", familyId: "community" },
+			{ ...sample, modelId: "unlisted-model", familyId: "" },
+			{ ...sample, modelId: "disabled-model", enabled: false },
+		);
+		relays.push({ ...relays[0], id: "disabled-provider", name: "停用提供商", enabled: false, models: [{ ...sample, modelId: "disabled-provider-model" }] });
+	}
 	const relayOf = (relayId) => relays.find((relay) => relay.id === relayId);
 	// Same ladder pi uses: a level exists only when thinkingLevelMap declares it.
 	const THINKING_LEVELS = ["minimal", "low", "medium", "high", "xhigh", "max"];
