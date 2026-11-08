@@ -108,12 +108,13 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 		const sample = relays[0].models[0];
 		families.push({ id: "community", displayName: "社区模型", routes: [] });
 		relays[0].models.push(
-			...["deepseek-v4-1-flash-1017-uncensored", "deepseek-v4.1-flash-uncensored"].map((modelId) => ({ ...sample, modelId })),
+			...["deepseek-v4-1-flash-1017-uncensored", "deepseek-v4.1-flash-uncensored"].map((modelId) => ({ ...sample, modelId, contextWindow: 1_000_000, vision: true, inputCost: 1.08, outputCost: 4.32 })),
 			{ ...sample, modelId: "personal-model", familyId: "community" },
-			{ ...sample, modelId: "unlisted-model", familyId: "" },
+			{ ...sample, modelId: "unlisted-model", familyId: "", inputCost: 0, outputCost: 0 },
 			{ ...sample, modelId: "disabled-model", enabled: false },
 		);
 		relays.push({ ...relays[0], id: "disabled-provider", name: "停用提供商", enabled: false, models: [{ ...sample, modelId: "disabled-provider-model" }] });
+		relays[2].billingAccountId = "未标注";
 	}
 	const relayOf = (relayId) => relays.find((relay) => relay.id === relayId);
 	// Same ladder pi uses: a level exists only when thinkingLevelMap declares it.

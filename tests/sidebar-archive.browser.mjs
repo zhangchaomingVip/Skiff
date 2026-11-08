@@ -180,7 +180,7 @@ try {
 	const modelSearch = modelPicker.getByRole("combobox", { name: "搜索家族、提供商或模型" });
 	await modelSearch.waitFor();
 	await modelSearch.fill("deepseek-chat");
-	assert.equal(await modelPicker.getByRole("option").count(), 2, "Model menu should preserve both routes for the same model");
+	assert.equal(await modelPicker.getByRole("listbox", { name: "可用模型" }).getByRole("option").count(), 2, "Model menu should preserve both routes for the same model");
 	await modelSearch.press("ArrowDown");
 	await modelSearch.press("Enter");
 	await waitUntil(() => JSON.parse(localStorage.getItem("skiff.workspace.v1")).chats.find((chat) => chat.id === "archive-candidate")?.selectedModel?.routeId === "route-deepseek-r2", "Keyboard model selection did not switch to the selected route");

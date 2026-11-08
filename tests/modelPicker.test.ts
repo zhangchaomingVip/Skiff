@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { pickerGroups, pickerModelName, formatPriceMultiplier } from "../src/chat/modelPicker.ts";
+import { pickerGroups, pickerFamilyGroups, pickerModelName, formatPriceMultiplier } from "../src/chat/modelPicker.ts";
 import { modelsFromOffers } from "../src/chat/modelFamilies.ts";
 import type { ModelInfo } from "../src/chat/types.ts";
 
@@ -38,4 +38,39 @@ test("picker keeps aliases compact and preserves multiplier precision", () => {
 	assert.equal(formatPriceMultiplier(0), "0x");
 	assert.equal(formatPriceMultiplier(1.5), "1.5x");
 	for (const multiplier of [undefined, 1, -1, NaN, Infinity]) assert.equal(formatPriceMultiplier(multiplier), undefined);
+});
+
+test("family sections combine suppliers without merging exact model targets", () => {
+	const models = [
+		{ id: "unassigned", provider: "p1" },
+		{ id: "kimi-k3", provider: "p1", familyId: "kimi" },
+		{ id: "deepseek-custom", provider: "p2", familyId: "deepseek" },
+		{ id: "kimi-k3", provider: "p2", familyId: "kimi" },
+		{ id: "also-unassigned", provider: "p2", familyId: "" },
+	];
+	const familyOf = (model: ModelInfo) => model.familyId === undefined ? undefined : { id: model.familyId, name: model.familyId };
+	const groups = pickerFamilyGroups(models, "", familyOf);
+	assert.deepEqual(groups.map(({ key, models }) => [key, models.map((model) => `${model.provider}/${model.id}`)]), [
+		["kimi", ["p1/kimi-k3", "p2/kimi-k3"]],
+		["deepseek", ["p2/deepseek-custom"]],
+		["", ["p1/unassigned", "p2/also-unassigned"]],
+	]);
+	assert.equal(groups[2].name, "其它模型");
+	assert.deepEqual(pickerFamilyGroups(models, "", familyOf, undefined, "")[0].models, [models[0], models[4]]);
+});
+
+test("family, supplier and search filters intersect while retaining source order", () => {
+	const models = [
+		{ id: "private-flash", provider: "pi-a", relayId: "a", providerName: "渠道 A", familyId: "deepseek", alias: "闪电" },
+		{ id: "kimi-k3", provider: "pi-a", relayId: "a", familyId: "kimi" },
+		{ id: "private-flash", provider: "pi-b", relayId: "b", familyId: "deepseek" },
+	];
+	const familyOf = (model: ModelInfo) => model.familyId ? { id: model.familyId, name: model.familyId === "deepseek" ? "DeepSeek" : "Kimi" } : undefined;
+	for (const query of [" FLASH ", "DeepSeek", "闪电", "渠道 A"]) {
+		assert.deepEqual(pickerFamilyGroups(models, query, familyOf, "a", "deepseek")[0].models, [models[0]]);
+	}
+	assert.equal(pickerFamilyGroups(models, "flash", familyOf, "a", "kimi").length, 0);
+	assert.equal(pickerFamilyGroups(models, "", familyOf, "missing").length, 0);
+	assert.equal(pickerFamilyGroups([], "", familyOf).length, 0);
+	assert.deepEqual(pickerFamilyGroups(models, "", familyOf).map((group) => group.name), ["DeepSeek", "Kimi"]);
 });
