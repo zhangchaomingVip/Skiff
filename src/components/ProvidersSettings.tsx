@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { latestSettingsTest, settingsTestSummary, sortSettingsProviders, providerBatchImpact, PROVIDER_GROUPS, type BatchOperation, type RelayBatchPreview } from "../chat/settingsManagement";
 import { useSettingsMetadata } from "../chat/useSettingsMetadata";
 import { ProviderBatchDialog } from "./ProviderBatchDialog";
+import { ProviderModelConfigDialog } from "./ProviderModelConfigDialog";
 import type { DiscoveredModel } from "../rpc/modelDiscovery";
 import { probeRelayEndpoint } from "../rpc/modelDiscovery";
 import { syncModelPrices } from "../chat/pricingPage";
@@ -12,7 +13,7 @@ import { filterPresets, hostOf, matchPreset, PRESET_KINDS, type ProviderPreset }
 import { discoveredFamily, suggestFamilyId, suggestedFamilyLabel } from "../chat/providerRoutes";
 import { fetchPublicCatalog } from "../rpc/pricingPage";
 import { formatContextWindow } from "../chat/modelFamilies";
-import { blankModel, blankRelay, FAMILY_LABELS, maskKey, RELAY_PROTOCOLS, validateModels, type ModelFamily, type ModelSpec, type RelayProtocol, type ProviderModel, providerModel, THINKING_LEVELS, DEFAULT_THINKING_LEVELS, type RelaySpec, type TestResult } from "../chat/useModelFamilies";
+import { blankModel, blankRelay, FAMILY_LABELS, maskKey, RELAY_PROTOCOLS, validateModels, type ModelFamily, type ModelSpec, type RelayProtocol, type ProviderModel, providerModel, type RelaySpec, type TestResult } from "../chat/useModelFamilies";
 import { filterSettingsProviders, providerSourceLabel, settingsProviderEndpointLabel, settingsProviderEndpointTitle } from "../chat/settingsModels";
 import type { SettingsLocation } from "./settingsNavigation";
 import { DisclosureLabel } from "./Disclosure";
@@ -125,6 +126,9 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 	const [copyStatus, setCopyStatus] = useState<{ relayId: string; state: "copied" | "failed" }>();
 	const copyFeedbackTimer = useRef<number>();
 	const [providerModels, setProviderModels] = useState<ProviderModelDraft[]>([]);
+	const [editingModelIndex, setEditingModelIndex] = useState<number | null>(null);
+	const editingModel = editingModelIndex === null ? undefined : providerModels[editingModelIndex];
+	const openModelConfig = (index: number) => setEditingModelIndex(index);
 	const [priceSyncNotice, setPriceSyncNotice] = useState<string>();
 	const originalEditorState = useRef<string>();
 	const [discoveringModels, setDiscoveringModels] = useState(false);
@@ -159,6 +163,7 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 	};
 	useEffect(() => () => { endpointProbeRequest.current += 1; testRequest.current += 1; modelDiscoveryRequest.current += 1; cancelActiveTest(); rowTestRequest.current = undefined; window.clearTimeout(copyFeedbackTimer.current); }, []);
 	const resetConnectionTest = () => {
+		setEditingModelIndex(null);
 		endpointProbeRequest.current += 1;
 		setProbingEndpoint(false); setEndpointResult(undefined);
 		testRequest.current += 1;
@@ -279,8 +284,6 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 	useLayoutEffect(() => {
 		if (!focusLocation?.modelId || editingRelayId !== focusLocation.relayId) return;
 		const row = [...(contentRef.current?.querySelectorAll<HTMLElement>("[data-model-id]") ?? [])].find((element) => element.dataset.modelId === focusLocation.modelId);
-		const details = row?.querySelector("details");
-		if (details) details.open = true;
 		row?.querySelector<HTMLInputElement>("input")?.focus();
 		row?.scrollIntoView({ block: "center" });
 	}, [editingRelayId, focusLocation?.relayId, focusLocation?.modelId]);
@@ -389,7 +392,10 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 		}));
 	};
 
-	const removeProviderModel = (index: number) => setProviderModels((previous) => previous.filter((_, row) => row !== index));
+	const removeProviderModel = (index: number) => {
+		setEditingModelIndex((current) => current === null || current === index ? null : current > index ? current - 1 : current);
+		setProviderModels((previous) => previous.filter((_, row) => row !== index));
+	};
 
 	// A new provider must pass one live connection test (max_tokens=1) before it
 	// can be saved. After failure, the user chooses which models to test next.
@@ -689,11 +695,11 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 								{testStopped && <span className="test-result" role="status">已停止测试，已完成的结果已保留。</span>}
 								{connectionTestError && <span className="test-result bad" role="alert">模型测试失败 · {connectionTestError}</span>}
 								<div className="provider-model-table">
-									<div className="provider-model-editor-columns" aria-hidden="true"><span>模型 ID / 家族</span><span>上下文</span><span>显示名</span><span>测试</span><span>启用</span><span>删除</span></div>
+									<div className="provider-model-editor-columns" aria-hidden="true"><span>模型 ID / 家族</span><span>上下文</span><span>显示名</span><span>测试</span><span>启用</span><span>配置</span><span>删除</span></div>
 								{providerModels.map((entry, index) => <div className="provider-model-editor-row" data-model-id={entry.model.modelId} key={index}>
 									<div className="provider-model-id-cell">
 										<Input aria-label={`模型 ID ${index + 1}`} value={entry.model.modelId} maxLength={256} placeholder="模型 ID" onChange={(event) => patchProviderModel(index, { modelId: event.target.value })} disabled={pending || testing} />
-										{entry.familyId ? <small>{familyLabel(entry.familyId)}</small> : <small className="provider-model-family-needed" title="未分组模型仍可选择和使用">未配置家族</small>}
+										<div className="provider-model-meta">{entry.familyId ? <small>{familyLabel(entry.familyId)}</small> : <small className="provider-model-family-needed" title="未分组模型仍可选择和使用">未配置家族</small>}{([["vision", "视觉"], ["reasoning", "推理"], ["tools", "工具"]] as const).map(([key, label]) => (entry.model[key] ?? key !== "vision") && <span className="provider-model-capability-badge" key={key}>{label}</span>)}</div>
 									</div>
 									<Input aria-label={`模型 ${index + 1} 上下文窗口`} title="例如 128k、1M；1k = 1000 token，1M = 1000000 token；不带单位时按 token 计算" type="text" required pattern={"\\s*(?:\\d+(?:\\.\\d+)?|\\.\\d+)\\s*[kKmM]?\\s*"} placeholder="128k / 1M" value={entry.contextWindowText ?? formatContextWindow(entry.model.contextWindow)} onChange={(event) => {
 										const text = event.target.value;
@@ -702,17 +708,8 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 									<Input aria-label={`模型 ${index + 1} 显示名`} value={entry.model.alias} maxLength={64} placeholder="可选" onChange={(event) => patchProviderModel(index, { alias: event.target.value })} disabled={pending || testing} />
 									{providerModelTest(entry, relay, preset)}
 									<label className="switch"><input type="checkbox" aria-label={`启用模型 ${entry.model.modelId}`} checked={entry.model.enabled !== false} disabled={pending || testing} onChange={(event) => patchProviderModel(index, { enabled: event.target.checked } as Partial<ProviderModel>)} /><span className="slider" /></label>
-									<details className="provider-model-details"><summary>详情</summary><fieldset className="provider-model-detail-fields" disabled={pending || testing}>
-									{!relay.enabled && <p role="status">供应商已停用；启用供应商后模型才可用。</p>}
-									<label>家族<Select value={entry.familyId ?? ""} onChange={(event) => setProviderModels((previous) => previous.map((item, row) => row === index ? { ...item, familyId: event.target.value } : item))}><option value="">未分组</option>{families.map((family) => <option key={family.id} value={family.id}>{family.displayName}</option>)}</Select></label>
-									{([ ["reasoning", "推理支持"], ["vision", "图片输入"], ["tools", "工具调用"], ["streaming", "流式输出"] ] as const).map(([key, label]) => <label key={key}><input type="checkbox" checked={entry.model[key] ?? key !== "vision"} onChange={(event) => patchProviderModel(index, { [key]: event.target.checked })} />{label}</label>)}
-									<fieldset disabled={entry.model.reasoning === false}><legend>可用推理等级（当前会话强度在聊天中选择）</legend>{THINKING_LEVELS.map((level) => <label key={level}><input type="checkbox" checked={(entry.model.thinkingLevels ?? ["minimal", "low", "medium", "high"]).includes(level)} onChange={(event) => patchProviderModel(index, { thinkingLevels: event.target.checked ? [...(entry.model.thinkingLevels ?? DEFAULT_THINKING_LEVELS), level] : (entry.model.thinkingLevels ?? DEFAULT_THINKING_LEVELS).filter((item) => item !== level) })} />{level}</label>)}</fieldset>
-									<label>上下文窗口<Input type="number" min={1} value={entry.model.contextWindow} onChange={(event) => patchProviderModel(index, { contextWindow: Number(event.target.value) })} /></label><label>最大输出<Input type="number" min={1} max={entry.model.contextWindow} value={entry.model.maxTokens} onChange={(event) => patchProviderModel(index, { maxTokens: Number(event.target.value) })} /></label>
-									<label>币种<Select value={entry.model.currency} onChange={(event) => patchProviderModel(index, { currency: event.target.value as "CNY" | "USD" })}><option>CNY</option><option>USD</option></Select></label>
-									{([ ["inputCost", "输入价格"], ["outputCost", "输出价格"], ["cacheReadCost", "缓存读取价格"], ["cacheWriteCost", "缓存写入价格"] ] as const).map(([key, label]) => <label key={key}>{label} / 百万 token<Input type="number" min={0} step="any" value={entry.model[key]} onChange={(event) => patchProviderModel(index, { [key]: Number(event.target.value) })} /></label>)}
-									</fieldset></details>
+									<IconButton title="高级配置" aria-label={`配置模型 ${entry.model.modelId}`} variant="ghost" size="compact" onClick={() => openModelConfig(index)} disabled={pending || testing}><Icon name="sliders" size={14} /></IconButton>
 									<IconButton type="button" variant="ghost" size="compact" aria-label={`删除模型 ${index + 1}`} title="从供应商模型列表中移除" onClick={() => removeProviderModel(index)} disabled={pending || testing}><Icon name="trash" size={14} /></IconButton>
-									{!entry.familyId && <label className="provider-model-family-select">模型家族<Select aria-label={`模型 ${index + 1} 家族`} value="" onChange={(event) => setProviderModels((previous) => previous.map((item, row) => row === index ? { ...item, familyId: event.target.value } : item))} disabled={pending || testing}><option value="" disabled>选择家族…</option>{families.map((family) => <option key={family.id} value={family.id}>{familyLabel(family.id)}</option>)}</Select></label>}
 									</div>)}
 									</div>
 									{modelListNotice && <small className="provider-model-list-notice" role="status">{modelListNotice}</small>}
@@ -890,6 +887,16 @@ export const ProvidersSettingsContent = forwardRef<SettingsEditorHandle, Provide
 				</section>
 			</>
 		)}
+		{draft?.kind === "relay" && editingModelIndex !== null && editingModel && <ProviderModelConfigDialog
+			model={editingModel.model}
+			familyId={editingModel.familyId}
+			families={families}
+			providerEnabled={draft.relay.enabled}
+			disabled={pending || testing}
+			onPatch={(value) => patchProviderModel(editingModelIndex, value)}
+			onFamilyChange={(familyId) => setProviderModels((previous) => previous.map((entry, index) => index === editingModelIndex ? { ...entry, familyId } : entry))}
+			onClose={() => setEditingModelIndex(null)}
+		/>}
 		{batchAction && <ProviderBatchDialog operation={batchAction} ids={selected} initialImpact={batchImpact} onPreview={onPreviewBatch} onCommit={async (ids, operation, token) => {
 			let success = false;
 			await mutate(async () => { success = await onBatch(ids, operation, token); return success; });

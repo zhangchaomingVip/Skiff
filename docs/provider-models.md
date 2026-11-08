@@ -6,6 +6,8 @@
 
 聊天显式保存供应商与模型，新聊天仅继承当前有效选择。没有有效选择、配置读取失败、供应商停用或删除、模型停用或删除时保留原选择并阻止发送。请求错误不会改变选择；pi 对同一供应商模型的重试继续保留。模型详情中的推理等级是支持范围，每次聊天的推理强度仍在聊天界面设置。
 
+供应商模型列表保留 ID、家族与能力徽标、上下文、显示名、测试和启用操作。行内「配置」打开独立弹窗，集中编辑家族、最大输出、四项能力、推理等级和独立价格；上下文仅在列表编辑，弹窗只读展示。弹窗中的修改直接进入供应商草稿，「完成」或 Escape 关闭弹窗后保留草稿，主编辑页「保存」才写入配置，「取消」丢弃全部草稿修改。
+
 运行时适配器按当前模型读取工具与流式开关。关闭工具会移除协议对应的工具声明。关闭流式时，Chat Completions / Kimi、Responses、Anthropic 发送非流式请求，再将完整回复转换为 pi 所需事件；Google GenAI / Vertex 改用 `generateContent` 端点，并将完整结果交回原 SDK 解析。Google SDK 不提供自定义 fetch，因此使用带私有随机标识的传输适配器，只处理标记过的请求，发送前移除内部标识；其余请求原样传递。协议转换、历史消息和计费仍由 pi SDK 处理。
 
 ## 供应商发现与参考价格
@@ -30,4 +32,5 @@
 - `node tests/pi.protocol-models.integration.mjs <pi-cli.js>`：Responses、Anthropic、Google GenAI、Vertex 中逐模型工具及流式开关实际作用于请求，回复与 token 统计正常，内部标识不出现在上游请求。
 - `npm run test:cdp -- --model-picker`：真实 WebView2 → IPC → Rust → pi 的模型专项，包含供应商原始 ID 与元数据、迁移备份、同名模型跨供应商精确选择、手动修改后重开、停用/恢复、删除和配置损坏时阻止发送、历史价格快照不变。使用独立 WebView profile、临时 agent 配置及全部 localStorage 备份与恢复；附件、航行台性能与 Git 检查保留在默认完整测试中。
 - `node tests/provider-discovery-pricing.browser.mjs`：无后台公共目录请求、精确导入供应商模型、能力与上下文来源、未分组模型、主动价格同步及失败保留；浅深主题预览。
+- `node tests/provider-model-config.browser.mjs`：紧凑模型行、高级配置全字段保存回读、草稿与取消、增删和异步发现模型时的对应关系、数值校验、Escape 与焦点恢复；浅深主题及窄窗口预览。
 - `npm run build`、`npm run check:ui`、`npm run test:styles`，以及 1421 端口浅深主题预览。

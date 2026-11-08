@@ -40,11 +40,13 @@ try {
 		await custom.waitFor();
 		assert.equal(await settings.locator(".provider-model-editor-row").count(), 5, "Discovery merges every provider ID once, without catalog recommendations");
 		assert.equal(await custom.getByRole("textbox", { name: /上下文窗口/ }).inputValue(), "64k");
-		await custom.locator("summary").click();
-		assert.equal(await custom.getByRole("checkbox", { name: "图片输入", exact: true }).isChecked(), true);
-		assert.equal(await custom.getByRole("checkbox", { name: "工具调用", exact: true }).isChecked(), false);
-		assert.equal(await custom.getByRole("checkbox", { name: "推理支持", exact: true }).isChecked(), false);
-		await custom.getByRole("combobox", { name: "家族", exact: true }).selectOption("");
+		await custom.getByRole("button", { name: "配置模型 Vendor/Private-v9-special", exact: true }).click();
+		const config = page.getByRole("dialog", { name: "配置模型", exact: true });
+		assert.equal(await config.getByRole("switch", { name: "图片输入", exact: true }).isChecked(), true);
+		assert.equal(await config.getByRole("switch", { name: "工具调用", exact: true }).isChecked(), false);
+		assert.equal(await config.getByRole("switch", { name: "推理支持", exact: true }).isChecked(), false);
+		await config.getByRole("combobox", { name: "模型家族", exact: true }).selectOption("");
+		await config.getByRole("button", { name: "完成", exact: true }).click();
 		assert.equal((await priceRequests()).length, 0, "Discovery only calls the supplier, even for custom IDs");
 		await button("保存").click();
 		await button("编辑 官方直连").waitFor();
