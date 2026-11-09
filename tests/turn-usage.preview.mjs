@@ -2,6 +2,7 @@ import React, { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { MessageList } from "../src/components/MessageList";
 import { ModelFamilyContext } from "../src/chat/familyContext";
+import { ProjectChangesNavigationContext } from "../src/workbench/projectChangesNavigation";
 import { parseMessages } from "../src/chat/parse";
 import "../src/tokens.css";
 import "../src/index.css";
@@ -11,14 +12,15 @@ const root = createRoot(document.getElementById("root"));
 const noop = () => {};
 const model = { provider: "mock", id: "mock", currency: "CNY", cost: { input: 1, output: 2 } };
 window.turnUsageHarness = {
-	render({ messages, models = [model], current = model, ...props }) {
+	render({ messages, models = [model], current = model, projectRoot, ...props }) {
 		const parsed = parseMessages(messages).map((message) => ({ ...message, routeSnapshot: messages[Number(message.id.replace("history_", ""))]?.routeSnapshot }));
 		root.render(React.createElement(StrictMode, null,
-			React.createElement(ModelFamilyContext.Provider, { value: { models, current, familyOf: noop, manage: noop } },
-				React.createElement(MessageList, {
-					messages: parsed, running: false, models, model: current,
-					onSuggestion: noop, followSignal: 0, ...props,
-				})),
+			React.createElement(ProjectChangesNavigationContext.Provider, { value: projectRoot ? { root: projectRoot, label: "查看文件", onOpen: noop, onOpenFile: noop } : undefined },
+				React.createElement(ModelFamilyContext.Provider, { value: { models, current, familyOf: noop, manage: noop } },
+					React.createElement(MessageList, {
+						messages: parsed, running: false, models, model: current,
+						onSuggestion: noop, followSignal: 0, ...props,
+					}))),
 		));
 	},
 };

@@ -28,7 +28,7 @@ export function ToolCallBlock({ tool, result }: { tool: Tool; result?: Result })
 	const task = /subagent|agent/.test(name) ? typeof args.task === "string" ? args.task : typeof args.prompt === "string" ? args.prompt : undefined : undefined;
 	const target = toolTarget(tool);
 	const summary = toolCallSummary({ key: 0, block: tool, result });
-	// Command rows read the deterministic action title; the raw command stays in the details.
+	// Keep deterministic action titles and distinguish calls with a compact target preview.
 	const commandTitle = kind === "command" ? commandRowTitle(name, tool.argsText) : undefined;
 	const cwd = CWD_KEYS.map((key) => args[key]).find((value): value is string => typeof value === "string" && !!value.trim());
 	const output = result?.text ?? "";
@@ -47,7 +47,7 @@ export function ToolCallBlock({ tool, result }: { tool: Tool; result?: Result })
 		: result.isError ? <span className="tool-state failed"><Icon name="alert" size={13} />失败</span>
 		: diff !== undefined || writeContent !== undefined ? <span className="tool-diff-count"><span className="tool-diff-added" aria-label={`新增 ${additions.toLocaleString("en-US")} 行`}>+{additions.toLocaleString("en-US")}</span><span className="tool-diff-removed" aria-label={`删除 ${removals.toLocaleString("en-US")} 行`}>-{removals.toLocaleString("en-US")}</span></span>
 		: undefined;
-	return <ProcessDisclosure className={`tool ${result?.isError ? "err" : ""}`} icon={TOOL_ICONS[kind]} label={searchLabel ? <span className="tool-summary">{searchLabel}</span> : commandTitle ? <span className="tool-summary">{commandTitle.title}</span> : <ToolSummaryLabel label={summary.label} target={target} />} status={status}>
+	return <ProcessDisclosure className={`tool ${result?.isError ? "err" : ""}`} icon={TOOL_ICONS[kind]} label={searchLabel ? <span className="tool-summary">{searchLabel}</span> : <ToolSummaryLabel label={commandTitle?.title ?? summary.label} plain={!!commandTitle} target={target} targetKind={commandTitle ? "command" : ["read", "write", "delete", "list"].includes(kind) ? "file" : undefined} />} status={status}>
 		<div className={`tool-content${searchDetails ? " tool-search-content" : ""}`}>
 			{command !== undefined && <ToolDetailSection title="命令" copy={{ text: command, label: "复制命令" }}>
 				{cwd && <p className="tool-detail-meta">工作目录 · <span className="tool-detail-path">{cwd}</span></p>}

@@ -301,7 +301,8 @@
 		--shadow-elevation-2: 0 4px 12px rgba(0, 0, 0, .08);
 		--shadow-elevation-3: 0 8px 20px rgba(0, 0, 0, .1);
 		--shadow-elevation-up: 0 -6px 20px rgba(0, 0, 0, .08);
-		--bubble-bg: var(--sidebar);
+		--bubble-bg: #f3f5f8;
+		--user-bubble-border: color-mix(in srgb, var(--border) 55%, transparent);
 		--activity-bg: #edecea;
 		--activity-hover: #e3e1dd;
 		--activity-selected: #d9d7d3;

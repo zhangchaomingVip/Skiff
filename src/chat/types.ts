@@ -81,6 +81,8 @@ export interface ChatMessage {
 	routeSnapshot?: RouteSnapshot;
 	/** pi finish reason, e.g. `stop`, `length`, `toolUse`, `aborted`. */
 	stopReason?: string;
+	/** Preserve provider failures beside their attempt, including after history restore. */
+	errorMessage?: string;
 	/** Client result retained for a manual stop, including a turn with no assistant. */
 	turnResult?: string;
 	/** Wall-clock duration of the turn, attached when the agent run settles. */
@@ -113,7 +115,7 @@ export interface ContextUsage {
 
 export interface SessionState {
 	/** Retry events stay beside the failed attempt for the current run. */
-	retryAttempts?: { id: string; afterMessageId?: string; attempt: number; maxAttempts: number; error: string }[];
+	retryAttempts?: { id: string; afterMessageId?: string; attempt: number; maxAttempts: number; error: string; status?: "retrying" | "retried" | "recovered" | "failed" | "cancelled" }[];
 	retrying?: boolean;
 	queue?: QueueSnapshot;
 	withdrawn?: QueueSnapshot;

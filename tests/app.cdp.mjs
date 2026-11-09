@@ -24,9 +24,11 @@ import { verifyFileContextMenu } from "./file-context-menu.cdp.mjs";
 import { verifyFileTreeRefresh } from "./file-tree-refresh.cdp.mjs";
 import { verifyProviderModels } from "./provider-models.cdp.mjs";
 import { verifyDraftAttachments } from "./draft-attachments.cdp.mjs";
+import { verifyToolResultsAndRetries } from "./retry.cdp.mjs";
 
 const CDP_PORT = 9222;
 const modelPickerOnly = process.argv.includes("--model-picker");
+const retryOnly = process.argv.includes("--retry");
 const MODEL_ID = "skiff-cdp-test";
 const REPLY = "CDP 全链路验证成功：UI → Tauri IPC → Rust → pi → 本地 mock 模型。";
 const repoRoot = process.cwd();
@@ -48,6 +50,8 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // --- 本地 mock provider（与 pi.integration.mjs 相同的 SSE 形状）----------------
 const requests = [];
+let retryScenario;
+let scenarioRequests = 0;
 const server = createServer((request, response) => {
 	const send = (status, body) => { response.writeHead(status, { "Content-Type": "application/json" }); response.end(body); };
 	if (request.method === "GET" && request.url === "/v1/models") return send(200, JSON.stringify({ data: [{ id: MODEL_ID }, { id: "provider-private-alias", vision: true, tools: false, reasoning: false, context_window: 64000, max_output_tokens: 2048 }] }));
@@ -60,6 +64,14 @@ const server = createServer((request, response) => {
 				const systemText = (parsed.messages ?? []).filter((message) => message.role === "system" || message.role === "developer")
 					.map((message) => typeof message.content === "string" ? message.content : (message.content ?? []).map((part) => part.text ?? "").join("\n")).join("\n");
 				requests.push({ model: parsed.model, messageCount: parsed.messages?.length ?? 0, systemText, authorization: request.headers.authorization, payload: parsed });
+				if (retryScenario === "failure") return send(503, JSON.stringify({ error: { message: "No available workers (all circuits open or unhealthy)", type: "Service Unavailable", code: "no_available_workers", request_id: "cdp-retry-request" } }));
+				if (retryScenario === "tools") {
+					const step = scenarioRequests++;
+					response.writeHead(200, { "Content-Type": "text/event-stream" });
+					const delta = step < 2 ? { tool_calls: [{ index: 0, id: "bash:44", type: "function", function: { name: "bash", arguments: JSON.stringify({ command: `echo cdp-tool-${step + 1}` }) } }] } : { content: "CDP 重复工具 ID 验证完成" };
+					for (const choice of [{ index: 0, delta, finish_reason: null }, { index: 0, delta: {}, finish_reason: step < 2 ? "tool_calls" : "stop" }]) response.write(`data: ${JSON.stringify({ id: "cdp-tools", object: "chat.completion.chunk", model: MODEL_ID, choices: [choice] })}\n\n`);
+					response.end("data: [DONE]\n\n"); return;
+				}
 				if (parsed.model === "test-html") {
 					response.writeHead(200, { "Content-Type": "text/html" });
 					response.end("<!doctype html><html>Provider website</html>"); return;
@@ -124,6 +136,7 @@ const families = {
 	usdCnyRate: 7.2,
 };
 await writeFile(join(agentDir, "skiff-families.json"), JSON.stringify(families, null, "\t"));
+if (retryOnly) await writeFile(join(agentDir, "settings.json"), JSON.stringify({ retry: { enabled: true, maxRetries: 5, baseDelayMs: 250, maxAgentDelayMs: 1000, provider: { maxRetries: 0 } } }));
 
 // --- 拉起桌面 dev 实例（CDP 调试端口 + 临时数据目录）----------------------------
 const env = { ...process.env, PI_CODING_AGENT_DIR: agentDir, WEBVIEW2_USER_DATA_FOLDER: join(root, "webview"), WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${CDP_PORT}` };
@@ -213,6 +226,10 @@ try {
 	console.log("已在启动台点击「开始聊天」，等待聊天视图…");
 
 	await page.waitForSelector(".composer-input", { timeout: 60_000 });
+	if (retryOnly) {
+		await verifyToolResultsAndRetries(page, (scenario) => { retryScenario = scenario; scenarioRequests = 0; }, requests, artifacts);
+		assert.deepEqual(pageErrors, [], "No uncaught errors during tools and retry verification");
+	} else {
 	if (!modelPickerOnly) await verifyDraftAttachments(page);
 	await page.fill(".composer-input", "请原样回复一句话，用于验证链路。");
 	await page.click(".send-btn", { timeout: 60_000 });
@@ -294,6 +311,7 @@ try {
 	}
 	assert.deepEqual(pageErrors, [], "No uncaught errors after full-chain verification");
 	console.log(`\n验证通过：\n- mock 收到 ${requests.length} 次请求，model=${requests[0].model}，messages=${requests[0].messageCount}\n- 回复已渲染到真实窗口 DOM\n- 页面无未捕获异常\n- 截图：${shotPath}`);
+	}
 } catch (error) {
 	if (page) await page.screenshot({ path: join(artifacts, "cdp-failure.png") }).catch(() => {});
 	await writeArtifacts();

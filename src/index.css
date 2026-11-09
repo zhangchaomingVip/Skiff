@@ -337,7 +337,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .launcher-recent-main span { color: var(--muted); font-size: var(--font-size-sm); }
 .launcher-recent-arrow { flex: 0 0 auto; color: var(--accent); font-size: var(--font-size-sm); }
 .launcher-recent-empty { min-height: 100px; }
-.messages { flex: 1; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; padding: var(--space-8) var(--chat-gutter) var(--space-2); overscroll-behavior: contain; }
+.messages { flex: 1; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; padding: var(--space-8) var(--chat-gutter) var(--space-6); overscroll-behavior: contain; }
 .empty { max-width: var(--chat-content-width); margin: clamp(25px, 10vh, 110px) auto 0; text-align: center; }
 .empty-symbol { display: inline-flex; color: var(--secondary); margin-bottom: var(--space-4); }
 .empty-eyebrow { margin: 0 0 var(--space-2); color: var(--muted); font-size: var(--font-size-sm); letter-spacing: 2px; }
@@ -369,14 +369,15 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .md a.citation-chip { display: inline-flex; max-width: min(100%, 420px); align-items: center; vertical-align: baseline; overflow: hidden; padding: 1px 8px; border: 1px solid var(--border); border-radius: var(--radius-full); background: var(--panel-2); color: var(--secondary); font-size: .88em; text-decoration: none; text-overflow: ellipsis; white-space: nowrap; }
 .md a.citation-chip:hover { border-color: var(--accent); color: var(--accent); }
 .inline-code { background: color-mix(in srgb, var(--panel) 75%, transparent); border-radius: var(--radius-base); padding: 1px 5px; font-family: var(--font-family-mono); font-size: .875em; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+.md .inline-code { margin-inline: var(--space-0-5); border: 1px solid color-mix(in srgb, var(--border) 50%, transparent); }
 .code-block code { font-family: var(--font-family-mono); font-size: var(--font-size-sm); }
 /* Per-turn header: folds every reasoning chain of that reply. */
 .turn-header { display: flex; flex-direction: column; align-items: stretch; gap: var(--space-2); }
 .turn-header > .ui-button { align-self: flex-end; }
 .turn-process-head > .process-row { font-weight: var(--font-weight-regular); }
 /* Process rows read as secondary labels next to the reply body. */
-.msg .process-row { min-height: var(--chat-tool-row); font-size: var(--font-size-base); color: var(--chat-meta); }
-.msg .process-details { --process-row-color: var(--chat-meta); }
+.msg .process-row { min-height: var(--chat-tool-row); font-size: var(--font-size-base); color: var(--muted); }
+.msg .process-details { --process-row-color: var(--muted); }
 
 /* Every process fold uses fixed icon and trailing state/arrow slots. */
 .process-details { min-width: 0; margin: 0; --process-row-color: var(--secondary); }
@@ -384,7 +385,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .process-row::-webkit-details-marker { display: none; }
 .process-row:not(.process-row-static):hover { background: var(--hover); color: var(--text); }
 .process-row-icon, .process-row .disclosure { display: inline-flex; align-items: center; justify-content: center; color: var(--muted); }
-.process-row-icon { flex: 0 0 var(--control-compact); width: var(--control-compact); justify-content: flex-start; }
+.process-row-icon { flex: 0 0 var(--control-compact); width: var(--control-compact); justify-content: flex-start; color: var(--chat-meta); }
+.process-details[open] > .process-row .process-row-icon, .process-row:hover .process-row-icon, .process-row:focus-visible .process-row-icon { color: var(--muted); }
 .process-row-label { display: flex; flex: 1; align-items: center; gap: var(--space-2); min-width: 0; overflow-wrap: anywhere; }
 .process-row-trailing { display: flex; flex: 0 0 auto; align-items: center; gap: var(--space-2); margin-left: var(--space-3); }
 .process-row-status { display: flex; align-items: center; justify-content: flex-end; width: 8em; color: var(--muted); font-size: var(--font-size-sm); white-space: nowrap; }
@@ -402,12 +404,14 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .turn-header > .process-row { flex: 1; }
 .tool-summary { display: block; flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tool-summary:only-child { flex: 1; }
+.tool-summary:has(+ .tool-target) { flex-shrink: 0; max-width: 60%; }
 .tool-action + .tool-action::before { content: " · "; color: var(--muted); }
 .tool-count { white-space: nowrap; }
 .turn-summary { font-variant-numeric: tabular-nums; }
 .tool-state.running { color: var(--accent); }
 .tool-state.failed { color: var(--danger); }
-.turn-process-body { display: flex; flex-direction: column; gap: var(--chat-block-gap); min-width: 0; }
+.turn-process-body { display: flex; flex-direction: column; gap: var(--chat-block-gap); min-width: 0; margin-left: 7px; padding-left: 13px; border-left: 1px solid color-mix(in srgb, var(--border) 75%, transparent); }
+.turn-process-body > [data-process-text] > .md { font-size: var(--font-size-md); color: var(--secondary); }
 /* Rows pack tight into one stack; the block gap only remains around prose. */
 .turn-process-body > :has(> .process-details) + :has(> .process-details) { margin-top: calc(var(--space-1) - var(--chat-block-gap)); }
 .process-count-label { min-width: 0; font-variant-numeric: tabular-nums; }
@@ -783,7 +787,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .code-block .hljs-meta, .code-block .hljs-meta .hljs-keyword { color: var(--syn-meta); }
 .code-block .hljs-deletion { color: var(--diff-remove); }
 .code-expand { width: 100%; border: 0; border-top: 1px solid var(--border); padding: 8px; background: var(--panel); color: var(--secondary); font-size: var(--font-size-sm); }
-.tool-target { display: block; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-family-mono); font-size: var(--font-size-sm); color: var(--muted); }
+.tool-target { display: block; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-family-mono); font-size: var(--font-size-sm); color: var(--chat-meta); }
+.tool-command-preview { font-size: var(--font-size-xs); }
+.tool-target-file { display: flex; }
+.tool-target-directory { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.tool-target-basename { flex: 0 0 auto; max-width: 100%; overflow: hidden; text-overflow: ellipsis; color: var(--secondary); }
 .tool-state { display: inline-flex; align-items: center; gap: var(--space-1); color: var(--muted); font-size: var(--font-size-sm); }
 .tool-diff-count { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: center; gap: var(--space-2); width: 100%; font-family: var(--font-family-mono); text-align: right; }
 .tool-diff-added { color: var(--diff-add); }
@@ -896,6 +904,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .provider-toast { position: absolute; z-index: 8; top: 12px; left: 50%; transform: translateX(-50%); flex-wrap: wrap; width: min(600px, calc(100% - 32px)); background: var(--bg); box-shadow: 0 8px 28px var(--shadow-color); }
 .provider-toast > span { flex-basis: calc(100% - 40px); }
 .provider-toast .ui-button { white-space: normal; text-align: left; }
+.request-error-content { display: flex; flex-direction: column; gap: var(--space-3); }
+.request-error-fields { display: flex; flex-direction: column; gap: var(--space-2); margin: 0; font-size: var(--font-size-sm); }
+.request-error-fields > div { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.request-error-fields dt { color: var(--secondary); }
+.request-error-fields dd { margin: 0; color: var(--text); overflow-wrap: anywhere; }
 .route-authorization { align-items: stretch; flex-wrap: wrap; color: var(--text); background: var(--panel-2); }
 .route-authorization-copy { display: flex; flex: 1 1 260px; min-width: 0; flex-direction: column; gap: 3px; }
 .route-authorization-copy span { color: var(--secondary); overflow-wrap: anywhere; }

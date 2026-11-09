@@ -1,6 +1,7 @@
 import type { ChatMessage, ContextUsage, ModelInfo, SessionState } from "./types";
 import { summarizeUsage } from "./usage";
 import { summarizeCosts, type CostSummary } from "./cost";
+import { processBlocks } from "./turnProcess";
 
 /** Live text is only a token estimate; pi reports exact output usage after a message ends. */
 export function estimateOutputTokens(messages: ChatMessage[]): number {
@@ -61,8 +62,7 @@ export function currentTurnMessages(messages: ChatMessage[], run?: SessionState[
 }
 
 export function voyagePhase(messages: ChatMessage[]): VoyagePhase {
-	const results = new Set(messages.flatMap((message) => message.blocks.flatMap((block) => block.kind === "toolResult" && block.id ? [block.id] : [])));
-	if (messages.some((message) => message.blocks.some((block) => block.kind === "tool" && !results.has(block.id)))) return "tool";
+	if (messages.some((message) => processBlocks(message).some((entry) => entry.block.kind === "tool" && !entry.result))) return "tool";
 	const last = messages[messages.length - 1];
 	const block = last?.blocks[last.blocks.length - 1];
 	return last?.streaming && block?.kind === "thinking" ? "thinking" : "response";
@@ -70,12 +70,11 @@ export function voyagePhase(messages: ChatMessage[]): VoyagePhase {
 
 /** The latest unresolved tool call owns the visible tool timer. */
 export function pendingToolCallId(messages: ChatMessage[]): string | undefined {
-	const results = new Set(messages.flatMap((message) => message.blocks.flatMap((block) => block.kind === "toolResult" && block.id ? [block.id] : [])));
 	for (let messageIndex = messages.length - 1; messageIndex >= 0; messageIndex--) {
-		const blocks = messages[messageIndex].blocks;
-		for (let blockIndex = blocks.length - 1; blockIndex >= 0; blockIndex--) {
-			const block = blocks[blockIndex];
-			if (block.kind === "tool" && !results.has(block.id)) return block.id;
+		const entries = processBlocks(messages[messageIndex]);
+		for (let index = entries.length - 1; index >= 0; index--) {
+			const { block, result } = entries[index];
+			if (block.kind === "tool" && !result) return block.id;
 		}
 	}
 	return undefined;

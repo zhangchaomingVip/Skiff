@@ -142,7 +142,7 @@ export function ChatView({
 				</div>
 			)}
 
-			{state.lastError && !state.retrying && !(state.isStreaming && isProviderFailure(state.lastError)) && (
+			{state.lastError && !state.messages.some((message) => message.errorMessage === state.lastError) && !state.retrying && !(state.isStreaming && isProviderFailure(state.lastError)) && (
 				<div className={`banner error ${connected && isProviderFailure(state.lastError) ? "provider-toast" : ""}`} role="alert"><span>{state.lastError}</span>{!connected ? <Button variant="ghost" onClick={() => onReconnect()}>重新连接</Button> : <IconButton onClick={actions.clearError} aria-label="关闭错误提示"><Icon name="close" /></IconButton>}</div>
 			)}
 			{connected && !state.availableModels.length && <div className="notice model-notice">暂无已启用的提供商，请添加或启用提供商。<Button variant="ghost" onClick={manage}>管理提供商…</Button></div>}

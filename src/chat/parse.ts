@@ -107,15 +107,60 @@ export function parseModels(raw: unknown): ModelInfo[] {
 		.filter((m) => m.provider && m.id);
 }
 
+/** Providers may reuse call IDs after compaction; the latest call owns its result. */
+export function toolResultMessageIndex(messages: ChatMessage[], toolCallId: unknown): number {
+	for (let index = messages.length - 1; index >= 0; index--) {
+		if (messages[index].blocks.some((block) => block.kind === "tool" && block.id === toolCallId)) return index;
+	}
+	for (let index = messages.length - 1; index >= 0; index--) {
+		if (messages[index].role === "assistant") return index;
+	}
+	return -1;
+}
+
+export interface SessionEntries {
+	entries: { id: string; parentId: string | null; type: string; message?: Record<string, unknown> }[];
+	leafId: string | null;
+}
+
+/** pi omits retry failures from model context; recover diagnostics from the active raw branch. */
+function withHistoryErrors(raw: unknown[], history?: SessionEntries): unknown[] {
+	if (!history || !Array.isArray(history.entries)) return raw;
+	const timestamps = raw.flatMap((value) => value && typeof value === "object" ? [parseTimestamp((value as Record<string, unknown>).timestamp)].filter((time): time is number => time !== undefined) : []);
+	if (!timestamps.length) return raw;
+	const start = timestamps.reduce((earliest, time) => Math.min(earliest, time), Infinity);
+	const entries = new Map(history.entries.map((entry) => [entry.id, entry]));
+	const seen = new Set<string>();
+	const errors: Record<string, unknown>[] = [];
+	let cursor = history.leafId;
+	while (cursor && !seen.has(cursor)) {
+		seen.add(cursor);
+		const entry = entries.get(cursor);
+		if (!entry) break;
+		const message = entry.message;
+		const time = parseTimestamp(message?.timestamp);
+		if (entry.type === "message" && message?.role === "assistant" && typeof message.errorMessage === "string" && message.errorMessage && time !== undefined && time >= start) errors.push(message);
+		cursor = entry.parentId;
+	}
+	const merged = [...raw];
+	for (const message of errors.reverse()) {
+		const time = parseTimestamp(message.timestamp)!;
+		if (merged.some((value) => value && typeof value === "object" && parseTimestamp((value as Record<string, unknown>).timestamp) === time && (value as Record<string, unknown>).errorMessage === message.errorMessage)) continue;
+		const index = merged.findIndex((value) => value && typeof value === "object" && (parseTimestamp((value as Record<string, unknown>).timestamp) ?? -Infinity) > time);
+		merged.splice(index < 0 ? merged.length : index, 0, message);
+	}
+	return merged;
+}
+
 /** Restore the active pi branch, attaching tool results to their assistant turn. */
-export function parseMessages(raw: unknown): ChatMessage[] {
+export function parseMessages(raw: unknown, history?: SessionEntries): ChatMessage[] {
 	if (!Array.isArray(raw)) return [];
 	const messages: ChatMessage[] = [];
-	for (const [index, value] of raw.entries()) {
+	for (const [index, value] of withHistoryErrors(raw, history).entries()) {
 		if (!value || typeof value !== "object") continue;
 		const message = value as Record<string, unknown>;
 		if (message.role === "toolResult") {
-			const assistant = [...messages].reverse().find((m) => m.blocks.some((b) => b.kind === "tool" && b.id === message.toolCallId)) ?? [...messages].reverse().find((m) => m.role === "assistant");
+			const assistant = messages[toolResultMessageIndex(messages, message.toolCallId)];
 			assistant?.blocks.push(...parseBlocks([{ ...message, type: "toolResult" }]));
 		} else if (message.role === "user" || message.role === "assistant") {
 			messages.push({
@@ -125,6 +170,7 @@ export function parseMessages(raw: unknown): ChatMessage[] {
 				model: typeof message.model === "string" ? message.model : undefined,
 				usage: message.usage as ChatMessage["usage"],
 				stopReason: typeof message.stopReason === "string" ? message.stopReason : undefined,
+				errorMessage: typeof message.errorMessage === "string" ? message.errorMessage : undefined,
 				durationMs: typeof message.durationMs === "number" ? message.durationMs : undefined,
 				timestamp: parseTimestamp(message.timestamp),
 			});

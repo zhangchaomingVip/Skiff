@@ -3,7 +3,7 @@ import { DialogRuntime, emptyQueue, extensionDialog, queueSize, queueSnapshot, t
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { PiRpc, type RpcEvent } from "../rpc/RpcClient";
-import { parseMessages, parseModels } from "./parse";
+import { parseMessages, parseModels, type SessionEntries } from "./parse";
 import { reduce } from "./reducer";
 import { forkEntry, forkTurn } from "./turns";
 import { buildAppendPrompt } from "./prompt";
@@ -356,12 +356,13 @@ export function usePiSession(target?: SessionTarget, runtimeOffers: readonly Run
 					}
 				}
 				if (!current()) return;
-				const [data, models, transcript, levels, stats] = await Promise.all([
+				const [data, models, transcript, levels, stats, entries] = await Promise.all([
 					rpc.request<Record<string, unknown>>({ type: "get_state" }),
 					rpc.request<{ models?: unknown }>({ type: "get_available_models" }),
 					rpc.request<{ messages?: unknown }>({ type: "get_messages" }),
 					rpc.request<{ levels?: string[] }>({ type: "get_available_thinking_levels" }).catch(() => ({ levels: [] })),
 					rpc.request<Record<string, unknown>>({ type: "get_session_stats" }).catch(() => ({})),
+					rpc.request<SessionEntries>({ type: "get_entries" }).catch(() => undefined),
 				]);
 				if (!current()) return;
 				const availableModels = parseModels(models.models);
@@ -369,7 +370,7 @@ export function usePiSession(target?: SessionTarget, runtimeOffers: readonly Run
 				// A failed set_model must never expose pi's default as an applied choice.
 				// History remains readable while the user repairs or replaces the selection.
 				const restoredModel = selectionError ? undefined : unavailableModel ? preferred : (parsedModel && preferred ? { ...parsedModel, offerId: preferred.offerId, routeId: preferred.routeId, modelId: preferred.modelId, familyId: preferred.familyId, familyName: preferred.familyName, relayId: preferred.relayId } : parsedModel);
-				const messages = attachHistoricalPerformances(attachHistoricalSnapshots(parseMessages(transcript.messages), selected.routeSnapshots), targetRef.current?.turnPerformances ?? selected.turnPerformances);
+				const messages = attachHistoricalPerformances(attachHistoricalSnapshots(parseMessages(transcript.messages, entries), selected.routeSnapshots), targetRef.current?.turnPerformances ?? selected.turnPerformances);
 				const user = [...messages].reverse().find((message) => message.role === "user");
 				const startedAt = Boolean(data.isStreaming) ? runStarted.current ?? user?.timestamp ?? Date.now() : undefined;
 				runStarted.current = startedAt;
@@ -463,9 +464,9 @@ export function usePiSession(target?: SessionTarget, runtimeOffers: readonly Run
 				if (!ownsRpc(rpc)) return false;
 				if (!accepted) { fail("pi 扩展取消了消息操作。"); return false; }
 				forked = true;
-				const [transcript, data] = await Promise.all([rpc.request<{ messages: unknown }>({ type: "get_messages" }), rpc.request<Record<string, unknown>>({ type: "get_state" })]);
+				const [transcript, data, entries] = await Promise.all([rpc.request<{ messages: unknown }>({ type: "get_messages" }), rpc.request<Record<string, unknown>>({ type: "get_state" }), rpc.request<SessionEntries>({ type: "get_entries" }).catch(() => undefined)]);
 				if (!ownsRpc(rpc)) return false;
-				setState((s) => ({ ...s, messages: attachHistoricalPerformances(parseMessages(transcript.messages), performancesForMessages(s.messages)), voyageTimeline: undefined, lastError: undefined }));
+				setState((s) => ({ ...s, messages: attachHistoricalPerformances(parseMessages(transcript.messages, entries), performancesForMessages(s.messages)), voyageTimeline: undefined, lastError: undefined }));
 				// A fork creates a new branch projection; never reuse the old branch's
 				// context while the fresh stats request is in flight.
 				contextVersionRef.current++;

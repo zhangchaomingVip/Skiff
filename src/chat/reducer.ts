@@ -1,5 +1,5 @@
 import { extensionDialog, queueSnapshot } from "./interactions";
-import { parseBlocks, parseMessageBlocks } from "./parse";
+import { parseBlocks, parseMessageBlocks, toolResultMessageIndex } from "./parse";
 import type { ChatMessage, ContentBlock, SessionState } from "./types";
 import type { RpcEvent } from "../rpc/RpcClient";
 import type { RuntimeOffer } from "./modelFamilies";
@@ -46,11 +46,11 @@ function reduceChat(state: SessionState, event: RpcEvent, options: ReducerOption
 	switch (event.type) {
 		case "auto_retry_start": {
 			if (typeof event.attempt !== "number" || !Number.isInteger(event.attempt) || event.attempt < 1 || typeof event.maxAttempts !== "number" || !Number.isInteger(event.maxAttempts) || event.attempt > event.maxAttempts) return state;
-			const retry = { id: nextId("retry"), afterMessageId: state.messages[state.messages.length - 1]?.id, attempt: event.attempt, maxAttempts: event.maxAttempts, error: String(event.errorMessage ?? "") };
-			return { ...state, retrying: true, lastError: undefined, lastOutcome: undefined, retryAttempts: [...(state.retryAttempts ?? []), retry] };
+			const retry = { id: nextId("retry"), afterMessageId: state.messages[state.messages.length - 1]?.id, attempt: event.attempt, maxAttempts: event.maxAttempts, error: String(event.errorMessage ?? ""), status: "retrying" as const };
+			return { ...state, retrying: true, lastError: undefined, lastOutcome: undefined, retryAttempts: [...(state.retryAttempts ?? []).map((item) => item.status === "retrying" ? { ...item, status: "retried" as const } : item), retry] };
 		}
 		case "auto_retry_end":
-			return { ...state, retrying: false, ...(event.success === true ? { lastError: undefined, lastOutcome: undefined } : event.finalError === "Retry cancelled" ? { lastError: undefined } : typeof event.finalError === "string" ? { lastError: event.finalError } : {}) };
+			return { ...state, retrying: false, retryAttempts: state.retryAttempts?.map((item) => item.status === "retrying" ? { ...item, status: event.success === true ? "recovered" : event.finalError === "Retry cancelled" ? "cancelled" : "failed" } : item), ...(event.success === true ? { lastError: undefined, lastOutcome: undefined } : event.finalError === "Retry cancelled" ? { lastError: undefined } : typeof event.finalError === "string" ? { lastError: event.finalError } : {}) };
 		case "queue_update": return { ...state, queue: queueSnapshot(event) };
 		case "queue_withdrawn": return { ...state, withdrawn: queueSnapshot(event) };
 		case "stop_pending": return { ...state, stopping: true };
@@ -92,6 +92,7 @@ function reduceChat(state: SessionState, event: RpcEvent, options: ReducerOption
 				...settled,
 				isStreaming: false,
 				retrying: false,
+				retryAttempts: settled.retryAttempts?.map((item) => item.status === "retrying" ? { ...item, status: "cancelled" } : item),
 				activeRun: undefined,
 				pendingPrompt: undefined,
 				messages: settled.messages.map((m) => (m.streaming ? { ...m, streaming: false } : m)),
@@ -189,8 +190,7 @@ function reduceChat(state: SessionState, event: RpcEvent, options: ReducerOption
 			const message = event.message as Record<string, unknown> | undefined;
 			const role = message?.role;
 			if (role === "toolResult") {
-				const paired = state.messages.findIndex((m) => m.blocks.some((b) => b.kind === "tool" && b.id === message?.toolCallId));
-				const index = paired >= 0 ? paired : lastAssistantIndex(state.messages);
+				const index = toolResultMessageIndex(state.messages, message?.toolCallId);
 				if (index < 0) return state;
 				const messages = [...state.messages];
 				messages[index] = {
@@ -212,6 +212,7 @@ function reduceChat(state: SessionState, event: RpcEvent, options: ReducerOption
 				usage: message?.usage as ChatMessage["usage"],
 				routeSnapshot: role === "assistant" ? snapshotForResponse({ provider: typeof message?.provider === "string" ? message.provider : undefined, model: typeof message?.model === "string" ? message.model : undefined }, state.model, options.offers ?? []) ?? (index >= 0 ? state.messages[index].routeSnapshot : undefined) : undefined,
 				stopReason: typeof message?.stopReason === "string" ? message.stopReason : undefined,
+				errorMessage: typeof message?.errorMessage === "string" ? message.errorMessage : undefined,
 				durationMs: index >= 0 ? state.messages[index].durationMs : undefined,
 				timestamp: index >= 0 ? state.messages[index].timestamp : timestamp(message?.timestamp),
 			};

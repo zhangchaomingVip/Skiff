@@ -24,6 +24,9 @@ test("retry progress preserves the run, anchors all five attempts and clears tra
 		assert.equal(state.activeRun, run);
 		assert.equal(state.isStreaming, true);
 		assert.equal(state.retryAttempts?.[attempt - 1].afterMessageId, failedMessage.id);
+		assert.equal(state.retryAttempts?.[attempt - 1].status, "retrying");
+		if (attempt > 1) assert.equal(state.retryAttempts?.[attempt - 2].status, "retried");
+		assert.equal(failedMessage.errorMessage, "503 server busy");
 	}
 	state = reduce(state, { type: "message_start", message: { role: "assistant" } });
 	state = reduce(state, { type: "message_end", message: { role: "assistant", content: "recovered", stopReason: "stop" } });
@@ -32,6 +35,7 @@ test("retry progress preserves the run, anchors all five attempts and clears tra
 	assert.equal(state.lastError, undefined);
 	assert.equal(state.retrying, false);
 	assert.equal(state.retryAttempts?.length, 5);
+	assert.equal(state.retryAttempts?.[4].status, "recovered");
 	assert.equal(state.messages.filter((message) => message.role === "user").length, 1);
 });
 
@@ -41,22 +45,52 @@ test("exhaustion, cancellation and process exit terminate retry state; a new pro
 	state = reduce(state, { type: "auto_retry_end", success: false, finalError: "503 still busy" });
 	assert.equal(state.retrying, false);
 	assert.equal(state.lastError, "503 still busy");
+	assert.equal(state.retryAttempts?.[0].status, "failed");
 	state = reduce(state, { type: "prompt_start", promptId: "new", startedAt: 2000, message: { id: "new-user", role: "user", blocks: [] } });
 	assert.deepEqual(state.retryAttempts, []);
 	assert.equal(state.lastError, undefined);
 	state = reduce(state, { type: "auto_retry_start", attempt: 1, maxAttempts: 5 });
 	state = reduce(state, { type: "auto_retry_end", success: false, finalError: "Retry cancelled" });
 	assert.equal(state.lastError, undefined);
+	assert.equal(state.retryAttempts?.[0].status, "cancelled");
 	state = reduce(state, { type: "agent_settled" });
 	assert.equal(state.retrying, false);
 	state = reduce(state, { type: "auto_retry_start", attempt: 1, maxAttempts: 5 });
 	state = reduce(state, { type: "bridge_exit", message: "pi exited" });
 	assert.equal(state.retrying, false);
 	assert.equal(state.lastError, "pi exited");
+	assert.equal(state.retryAttempts?.[state.retryAttempts.length - 1].status, "cancelled");
+});
+
+test("provider errors survive cancellation, new prompts and history restore", () => {
+	const errorMessage = '503: {"message":"No available workers (all circuits open or unhealthy)","code":"no_available_workers"}';
+	let state = failedAttempt(initialSessionState, errorMessage);
+	state = reduce(state, { type: "auto_retry_start", attempt: 1, maxAttempts: 5, errorMessage });
+	state = reduce(state, { type: "auto_retry_end", success: false, finalError: "Retry cancelled" });
+	assert.equal(state.retryAttempts?.[0].error, errorMessage);
+	assert.equal(state.messages[0].errorMessage, errorMessage);
+	state = reduce(state, { type: "prompt_start", promptId: "next", startedAt: 2000, message: { id: "next", role: "user", blocks: [] } });
+	assert.equal(state.messages[0].errorMessage, errorMessage);
+	assert.equal(parseMessages([{ role: "assistant", content: [], stopReason: "error", errorMessage }])[0].errorMessage, errorMessage);
 });
 
 test("malformed retry events do not enter maintenance state", () => {
 	for (const attempt of [0, -1, 6, 1.5, Infinity]) assert.equal(reduce(initialSessionState, { type: "auto_retry_start", attempt, maxAttempts: 5 }), initialSessionState);
+});
+
+test("history recovers omitted retry errors only from the active branch without duplicating final errors", () => {
+	const user = { role: "user", content: "work", timestamp: 1794191000000 };
+	const failure = { role: "assistant", content: [], timestamp: user.timestamp + 1000, stopReason: "error", errorMessage: "503 no_available_workers" };
+	const final = { ...failure, timestamp: user.timestamp + 2000 };
+	const history = { leafId: "final", entries: [
+		{ id: "user", parentId: null, type: "message", message: user },
+		{ id: "other-branch", parentId: "user", type: "message", message: { ...failure, errorMessage: "401 other branch" } },
+		{ id: "retry", parentId: "user", type: "message", message: failure },
+		{ id: "omission", parentId: "retry", type: "context_edit" },
+		{ id: "final", parentId: "omission", type: "message", message: final },
+	] };
+	assert.deepEqual(parseMessages([user, final], history).map((message) => message.errorMessage), [undefined, failure.errorMessage, final.errorMessage]);
+	assert.equal(parseMessages([user], { ...history, leafId: "omission" })[1].errorMessage, failure.errorMessage, "Cancelled backoff retains its omitted provider error");
 });
 
 test("a retried partial reply is superseded only after replacement content arrives, without changing the transcript", () => {

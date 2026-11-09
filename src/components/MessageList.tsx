@@ -4,8 +4,7 @@ import { groupTurns, supersededReplyIds, turnContentTails } from "../chat/turns"
 import { MessageItem } from "./MessageItem";
 import { Icon } from "./Icon";
 import type { MessageReveal } from "../chat/useConversationSearch";
-import { ProcessRow } from "./ProcessDisclosure";
-import { classifyProviderFailure } from "../chat/modelFamilies";
+import { RequestFailure } from "./RequestFailure";
 import { WaitingReply } from "./WaitingReply";
 import { aggregateTurnProcess, turnDurationLabel } from "../chat/turnProcess";
 
@@ -108,7 +107,11 @@ export function MessageList({ runStartedAt, retryAttempts, messages, pendingProm
 
 	const messageItems = displayMessages.map((message, index) => (
 		<Fragment key={message.id}><MessageItem runStartedAt={runStartedAt} onEdit={onEdit} onContinue={onContinue} continuing={continuing} turnOutcome={(() => { const group = messagesByTurn.get(turns[index].turnId) ?? []; const final = [...group].reverse().find((entry) => entry.role === "assistant"); return group.find((entry) => entry.turnResult)?.turnResult ?? (lastOutcome?.turnId === turns[index].turnId ? lastOutcome.reason : final?.stopReason); })()} searchQuery={revealMessage?.messageId === message.id ? revealMessage.query : undefined} key={message.id} message={message} superseded={superseded.has(message.id)} processPresentation={process.presentation.get(message.id)} processDuration={turnDurationLabel(messagesByTurn.get(turns[index].turnId) ?? [])} expandedGroups={expandedGroups} onExpandedChange={setProcessExpanded} turnMessages={message.role === "assistant" && turnTails.get(turns[index].turnId) === index ? messagesByTurn.get(turns[index].turnId) : undefined} compact={message.role === "assistant" && displayMessages[index - 1]?.role === "assistant"} running={running} turnRunning={running && turns[index].turnId === processTurnId} turnHead={turns[index].head} isLast={message.role === "assistant" ? index === lastAssistant && displayMessages[displayMessages.length - 1]?.role === "assistant" : index === displayMessages.length - 1} readOnly={readOnly} />
-		{retryAttempts?.filter((retry) => retry.afterMessageId === message.id).map((retry) => <div key={retry.id} className="retry-progress" role="status"><ProcessRow icon="wifi" label={`${retryReason(retry.error)}，正在重新连接 ${retry.attempt}/${retry.maxAttempts}`} /></div>)}
+		{(() => {
+			const retries = retryAttempts?.filter((retry) => retry.afterMessageId === message.id) ?? [];
+			if (retries.length) return retries.map((retry) => <RequestFailure key={retry.id} error={retry.error || message.errorMessage || "未知错误"} retry={retry} onRetry={!readOnly && !running && index === displayMessages.length - 1 ? onContinue : undefined} disabled={continuing} />);
+			return message.errorMessage ? <RequestFailure error={message.errorMessage} onRetry={!readOnly && !running && index === displayMessages.length - 1 ? onContinue : undefined} disabled={continuing} /> : undefined;
+		})()}
 		</Fragment>
 	));
 	return (
@@ -123,12 +126,4 @@ export function MessageList({ runStartedAt, retryAttempts, messages, pendingProm
 		<span className="sr-only" role="status">{running ? "Skiff 正在生成回复" : "回复已就绪"}</span>
 		</div>
 	);
-}
-
-function retryReason(error: string): string {
-	switch (classifyProviderFailure(error)) {
-		case "timeout": return "请求超时";
-		case "network": return "连接中断";
-		default: return "服务器繁忙";
-	}
 }
