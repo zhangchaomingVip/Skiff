@@ -3,6 +3,7 @@ import { DialogRuntime, emptyQueue, extensionDialog, queueSize, queueSnapshot, t
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { PiRpc, type RpcEvent } from "../rpc/RpcClient";
+import { browserNative, type BrowserStatus } from "../browser/native";
 import { parseMessages, parseModels, type SessionEntries } from "./parse";
 import { reduce } from "./reducer";
 import { forkEntry, forkTurn } from "./turns";
@@ -37,7 +38,7 @@ export interface PiSessionActions {
 	captureEdit: (id: string) => Promise<{ target: MessageLocation; branchVersion: string } | undefined>;
 	validateEdit: (target: MessageLocation, branchVersion: string) => Promise<string | undefined>;
 	prompt: (text: string, images?: ImageAttachment[], delivery?: Delivery) => Promise<boolean>;
-	abort: () => Promise<void>;
+	abort: (options?: { browserManaged?: boolean; strict?: boolean }) => Promise<void>;
 	clearQueue: () => Promise<void>;
 	updateQueuedMessage: (delivery: Delivery, index: number, update?: { text: string; delivery: Delivery }) => Promise<boolean>;
 	replyDialog: (id: string, reply: DialogReply) => Promise<boolean>;
@@ -329,7 +330,7 @@ export function usePiSession(target?: SessionTarget, runtimeOffers: readonly Run
 		const spawned = preceding.then(async () => {
 			if (!current()) return;
 			startupConfig = configurationRef.current?.config;
-			await rpc.start({ cwd: selected.cwd, appendSystemPrompt: buildAppendPrompt() });
+			await rpc.start({ chatId: selected.id, cwd: selected.cwd, appendSystemPrompt: buildAppendPrompt() });
 		});
 		void (async () => {
 			try {
@@ -615,18 +616,28 @@ export function usePiSession(target?: SessionTarget, runtimeOffers: readonly Run
 			}
 		},
 		replyDialog: async (id, reply) => await dialogsRef.current?.reply(id, reply) ?? false,
-		abort: async () => {
+		abort: async (options) => {
 			const rpc = rpcRef.current;
-			if (!connected || !ownsRpc(rpc) || !rpc || stoppingRef.current || (!streamingRef.current && runStarted.current === undefined && !queueSize(queueRef.current))) return;
+			if (!connected || !ownsRpc(rpc) || !rpc || stoppingRef.current) { if (options?.strict) throw new Error("尚未确认 pi 已停止，请重新连接后再试"); return; }
+			if (!options?.strict && !streamingRef.current && runStarted.current === undefined && !queueSize(queueRef.current)) return;
 			stoppingRef.current = true;
 			const turnId = stateRef.current.activeRun?.turnId;
 			setState((s) => reduce(s, { type: "stop_pending" }));
 			let cleared = true; let stopped = false;
 			let wasRunning = true;
+			let browserTransition: BrowserStatus | undefined;
+			let browserStopFailed = false;
 			try {
+				if (!options?.browserManaged && owner.id) {
+					try {
+						const browser = await browserNative.find(owner.id);
+						if (browser && ["starting", "ai", "human", "stopping"].includes(browser.control)) browserTransition = await browserNative.beginControl(browser, "stop");
+					} catch (error) { browserStopFailed = true; if (ownsRpc(rpc)) fail(`浏览器停止尚未确认：${String(error)}`); }
+				}
 				const before = await rpc.request<Record<string, unknown>>({ type: "get_state" }).catch(() => undefined);
 				wasRunning = !before || !!before.isStreaming || !!before.isCompacting || Number(before.pendingMessageCount) > 0 || !!stateRef.current.dialogs?.length || !!stateRef.current.retrying;
-				if (!ownsRpc(rpc) || !wasRunning) return;
+				if (!ownsRpc(rpc)) return;
+				if (!wasRunning) { stopped = true; return; }
 				try { const result = await rpc.request<Record<string, unknown>>({ type: "clear_queue" }); if (ownsRpc(rpc)) setState((s) => reduce(s, { type: "queue_withdrawn", ...result })); }
 				catch { cleared = false; if (ownsRpc(rpc)) fail("未能确认队列已清空，仍将尝试中止运行。"); }
 				await dialogsRef.current?.cancelAll();
@@ -645,11 +656,17 @@ export function usePiSession(target?: SessionTarget, runtimeOffers: readonly Run
 					streamingRef.current = false; runStarted.current = undefined;
 					setState((s) => reduce(s, { type: "agent_settled", voyageAt: now, durationMs: duration, completedAt: now }));
 				}
-			} catch (error) { if (ownsRpc(rpc)) fail(error); }
-			finally { if (ownsRpc(rpc)) {
+			} catch (error) { if (ownsRpc(rpc)) fail(error); if (options?.strict) throw error; }
+			finally {
+				if (browserTransition) {
+					try { await browserNative.completeControl(browserTransition, "stop", browserTransition.controlVersion); }
+					catch (error) { stopped = false; if (ownsRpc(rpc)) fail(error); }
+				}
+				if (ownsRpc(rpc)) {
 				stoppingRef.current = false;
-				setState((s) => ({ ...reduce(s, { type: "stop_finished", success: stopped && cleared && wasRunning, turnId }), ...(!cleared ? { notices: [...s.notices, { id: crypto.randomUUID(), kind: "warning" as const, text: "未能确认队列已清空；本次停止未获完整确认。" }] } : {}) }));
+					setState((s) => ({ ...reduce(s, { type: "stop_finished", success: stopped && cleared && wasRunning && !browserStopFailed, turnId }), ...(!cleared ? { notices: [...s.notices, { id: crypto.randomUUID(), kind: "warning" as const, text: "未能确认队列已清空；本次停止未获完整确认。" }] } : {}) }));
 			} }
+			if (options?.strict && (!stopped || !cleared)) throw new Error("未能确认 pi 运行与队列已停止，请重试停止");
 		},
 		setModel: async (model) => {
 			const rpc = rpcRef.current;

@@ -25,10 +25,17 @@ import { verifyFileTreeRefresh } from "./file-tree-refresh.cdp.mjs";
 import { verifyProviderModels } from "./provider-models.cdp.mjs";
 import { verifyDraftAttachments } from "./draft-attachments.cdp.mjs";
 import { verifyToolResultsAndRetries } from "./retry.cdp.mjs";
+import { verifyNativeBrowser, verifyNativeBrowserShutdown } from "./browser-native.cdp.mjs";
+import { createBrowserToolScenario, verifyBrowserTools } from "./browser-tools.cdp.mjs";
+import { createLifecycleScenario, verifyBrowserLifecycle } from "./browser-lifecycle.cdp.mjs";
 
 const CDP_PORT = 9222;
 const modelPickerOnly = process.argv.includes("--model-picker");
 const retryOnly = process.argv.includes("--retry");
+const browserToolsOnly = process.argv.includes("--browser-tools");
+const browserLifecycleOnly = process.argv.includes("--browser-lifecycle");
+const browserOnly = process.argv.includes("--browser") || browserToolsOnly || browserLifecycleOnly;
+const appOrigin = process.env.SKIFF_CDP_RELEASE === "1" ? "http://tauri.localhost" : "http://localhost:1420";
 const MODEL_ID = "skiff-cdp-test";
 const REPLY = "CDP 全链路验证成功：UI → Tauri IPC → Rust → pi → 本地 mock 模型。";
 const repoRoot = process.cwd();
@@ -50,6 +57,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // --- 本地 mock provider（与 pi.integration.mjs 相同的 SSE 形状）----------------
 const requests = [];
+const browserScenario = browserLifecycleOnly ? await createLifecycleScenario(MODEL_ID) : browserToolsOnly ? await createBrowserToolScenario(MODEL_ID) : undefined;
 let retryScenario;
 let scenarioRequests = 0;
 const server = createServer((request, response) => {
@@ -64,6 +72,7 @@ const server = createServer((request, response) => {
 				const systemText = (parsed.messages ?? []).filter((message) => message.role === "system" || message.role === "developer")
 					.map((message) => typeof message.content === "string" ? message.content : (message.content ?? []).map((part) => part.text ?? "").join("\n")).join("\n");
 				requests.push({ model: parsed.model, messageCount: parsed.messages?.length ?? 0, systemText, authorization: request.headers.authorization, payload: parsed });
+				if (browserScenario?.handle(parsed, response)) return;
 				if (retryScenario === "failure") return send(503, JSON.stringify({ error: { message: "No available workers (all circuits open or unhealthy)", type: "Service Unavailable", code: "no_available_workers", request_id: "cdp-retry-request" } }));
 				if (retryScenario === "tools") {
 					const step = scenarioRequests++;
@@ -127,7 +136,7 @@ const families = {
 			models: [{ modelId: MODEL_ID, alias: "cdp-test", inputCost: 0, outputCost: 0, cacheReadCost: 0, cacheWriteCost: 0, currency: "CNY", maxTokens: 8192, contextWindow: 128000 }],
 			streaming: true,
 			tools: true,
-			vision: false,
+			vision: browserToolsOnly,
 			reasoning: false,
 		}],
 	}],
@@ -139,7 +148,7 @@ await writeFile(join(agentDir, "skiff-families.json"), JSON.stringify(families, 
 if (retryOnly) await writeFile(join(agentDir, "settings.json"), JSON.stringify({ retry: { enabled: true, maxRetries: 5, baseDelayMs: 250, maxAgentDelayMs: 1000, provider: { maxRetries: 0 } } }));
 
 // --- 拉起桌面 dev 实例（CDP 调试端口 + 临时数据目录）----------------------------
-const env = { ...process.env, PI_CODING_AGENT_DIR: agentDir, WEBVIEW2_USER_DATA_FOLDER: join(root, "webview"), WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${CDP_PORT}` };
+const env = { ...process.env, PI_CODING_AGENT_DIR: agentDir, SKIFF_BROWSER_DATA_DIR: join(root, "browsers"), WEBVIEW2_USER_DATA_FOLDER: join(root, "webview"), WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${CDP_PORT} --enable-automation` };
 // Optional already-built debug binary, for verification while a developer's
 // Vite/Tauri instance owns port 1420. Copy it and isolate WebView2 storage so
 // neither its executable nor its workspace can be affected by this run.
@@ -161,6 +170,7 @@ const writeArtifacts = async () => {
 const cleanup = async () => {
 	await new Promise((resolve) => { execFile("taskkill", ["/PID", String(dev.pid), "/T", "/F"], () => resolve()); });
 	server.close();
+	browserScenario?.close();
 	await rm(root, { recursive: true, force: true }).catch(() => {});
 	await writeArtifacts();
 };
@@ -184,14 +194,22 @@ try {
 	console.log("CDP 端点已就绪，正在附身窗口…");
 
 	browser = await chromium.connectOverCDP(cdpUrl);
+	if (browserOnly) {
+		const diagnostic = await browser.newBrowserCDPSession();
+		const { arguments: browserArguments } = await diagnostic.send("Browser.getBrowserCommandLine");
+		const profileArgument = browserArguments.find((argument) => argument.startsWith("--user-data-dir="));
+		assert.ok(profileArgument && profileArgument.toLowerCase().includes(root.toLowerCase()), "Browser test must use the temporary WebView2 profile before touching storage");
+		await diagnostic.detach();
+		console.log("已核对 WebView2 实际命令行：数据目录位于本次测试临时目录。");
+	}
 	const context = browser.contexts()[0];
 	if (!context) throw new Error("CDP 已连接但没有任何浏览器上下文。");
 	const pageDeadline = Date.now() + 60_000;
-	while (!context.pages().some((page) => page.url().includes("localhost:1420"))) {
+	while (!context.pages().some((page) => page.url().startsWith(appOrigin))) {
 		if (Date.now() > pageDeadline) throw new Error(`未找到应用页面，现有页面：${context.pages().map((page) => page.url()).join(", ")}`);
 		await sleep(500);
 	}
-	page = context.pages().find((candidate) => candidate.url().includes("localhost:1420"));
+	page = context.pages().find((candidate) => candidate.url().startsWith(appOrigin));
 	const pageErrors = [];
 	page.on("pageerror", (error) => pageErrors.push(String(error)));
 
@@ -226,7 +244,16 @@ try {
 	console.log("已在启动台点击「开始聊天」，等待聊天视图…");
 
 	await page.waitForSelector(".composer-input", { timeout: 60_000 });
-	if (retryOnly) {
+	if (browserOnly) {
+		if (browserToolsOnly) await verifyBrowserTools(page, browserScenario, requests, artifacts);
+		if (browserLifecycleOnly) await verifyBrowserLifecycle(page, browserScenario, requests, artifacts, root);
+		await verifyNativeBrowser(page);
+		await page.fill(".composer-input", "浏览器服务关闭后验证普通聊天。");
+		await page.click(".send-btn");
+		await page.waitForFunction((reply) => document.body.innerText.includes(reply), REPLY, { timeout: 90000 });
+		assert.ok(requests.length > 0, "Ordinary pi chat remains functional");
+		assert.deepEqual(pageErrors, []);
+	} else if (retryOnly) {
 		await verifyToolResultsAndRetries(page, (scenario) => { retryScenario = scenario; scenarioRequests = 0; }, requests, artifacts);
 		assert.deepEqual(pageErrors, [], "No uncaught errors during tools and retry verification");
 	} else {
@@ -330,6 +357,15 @@ try {
 		// Chromium 的 localStorage 落盘有延迟；立刻 taskkill /F 会让还原值丢在内存里。
 		await sleep(8000);
 		console.log(`\n已还原 localStorage（${restored} 个键），项目与聊天列表未被污染`);
+	}
+	if (browserOnly && page && !process.exitCode) {
+		try { await verifyNativeBrowserShutdown(page, root); }
+		catch (error) { console.error(error); process.exitCode = 1; }
+	}
+	if (browserOnly && page && process.exitCode) {
+		// A failed assertion must still give the native ownership service a chance to reap Chrome.
+		await page.evaluate(() => window.__TAURI_INTERNALS__.invoke("plugin:window|close", { label: "main" })).catch(() => {});
+		await sleep(8000);
 	}
 	if (browser) await browser.close().catch(() => {});
 	await cleanup();

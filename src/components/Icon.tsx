@@ -2,6 +2,8 @@ const paths = {
 	sailboat: "M12 3v14M12 3 4 15h8m3-8 5 8h-5M3 18h18l-2 3H5l-2-3Z",
 	type: "M4 5h16M12 5v16M8 21h8",
 	monitor: "M3 3h18v14H3ZM8 21h8m-4-4v4",
+	arrowLeft: "M20 12H4m6-6-6 6 6 6",
+	link: "m10 13 4-4m-6 6-1 1a4 4 0 0 1-6-6l4-4a4 4 0 0 1 6 0m2 3 1-1a4 4 0 0 1 6 6l-4 4a4 4 0 0 1-6 0",
 	anchor: "M12 3v17m-5-9H3v3a9 9 0 0 0 18 0v-3h-4M9 6a3 3 0 1 0 6 0 3 3 0 0 0-6 0Z",
 	flag: "M5 21V3m0 0h14l-3 5 3 5H5",
 	copy: "M9 9h12v12H9ZM15 9V3H3v12h6",

@@ -25,7 +25,12 @@ export function preparePreview(target) {
 	storage.setItem("skiff.themeColor", themeColor);
 	document.documentElement.dataset.themeColor = themeColor;
 	storage.setItem("skiff.sidebar.open", String(target.innerWidth > 760));
-	if (fixture === "sidebar" || fixture === "project-limit") {
+	if (fixture === "browser") {
+		const project = { id: "browser-project", name: "浏览任务", path: "D:\\workspace\\demo" };
+		const chats = ["a", "b"].map((id) => ({ id: `browser-${id}`, projectId: project.id, title: `浏览任务 ${id.toUpperCase()}`, customTitle: true, sessionFile: `browser-${id}.jsonl`, hasMessages: true, updatedAt: now, selectedModel: { provider: "skiff-relay-r1-deepseek", id: "deepseek-chat", modelId: "deepseek-chat", routeId: "route-deepseek-r1", offerId: "route-deepseek-r1/deepseek-chat" } }));
+		storage.setItem("skiff.test.sessions", JSON.stringify(Object.fromEntries(chats.map((chat) => [chat.sessionFile, [{ role: "user", content: "帮我查看网页并核对表单。" }, { role: "assistant", content: "可以在浏览器面板观看页面变化。" }]]))));
+		storage.setItem("skiff.workspace.v1", JSON.stringify({ version: 1, projects: [project], chats, activeId: chats[0].id }));
+	} else if (fixture === "sidebar" || fixture === "project-limit") {
 		const projects = [
 			{ id: "sidebar-skiff", name: "Skiff", path: "D:\\workspace\\Skiff" },
 			{ id: "sidebar-aiagent", name: "aiagent", path: "D:\\workspace\\aiagent" },

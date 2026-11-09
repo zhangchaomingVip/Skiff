@@ -4,7 +4,11 @@ import { useConversationSearch } from "./chat/useConversationSearch";
 import { conversationLabel, conversationTooltip } from "./chat/conversationDisplay";
 import { HistorySearchDialog } from "./components/HistorySearchDialog";
 import { SidebarPresentation } from "./components/SidebarPresentation";
-import { dismissPopovers, Button, Tooltip } from "./components/ui";
+import { dismissPopovers, Button, IconButton, Tooltip } from "./components/ui";
+import { BrowserWorkspace } from "./components/BrowserWorkspace";
+import { useBrowserPanel } from "./browser/useBrowserPanel";
+import { browserNative } from "./browser/native";
+import { useBrowserActions } from "./browser/useBrowserActions";
 import { Icon } from "./components/Icon";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { invoke } from "@tauri-apps/api/core";
@@ -89,6 +93,15 @@ export default function App() {
 	const [sidebarWidth, setSidebarWidth] = useState(() => readPreferredWidth("skiff.sidebar.width", 232, 200, 420));
 	const [voyageWidth, setVoyageWidth] = useState(() => readPreferredWidth("skiff.voyage.width", 260, 240, 480));
 	const [voyageExpanded, toggleVoyagePanel] = useVoyagePanel();
+	const browserPanel = useBrowserPanel(activeChat?.id, currentView === "chat" && activeTool === "chats");
+	const [browserFocus, setBrowserFocus] = useState<{ chatId?: string; version: number }>({ version: 0 });
+	const [browserWidth, setBrowserWidth] = useState(() => readPreferredWidth("skiff.browser.width", 560, 320, 1000));
+	const commitBrowserWidth = useCallback((value: number) => { setBrowserWidth(value); try { localStorage.setItem("skiff.browser.width", String(value)); } catch { /* Width remains available without storage. */ } }, []);
+	const toggleBrowser = () => { if (!browserPanel.expanded) setBrowserFocus((value) => ({ chatId: activeChat?.id, version: value.version + 1 })); browserPanel.setExpanded(!browserPanel.expanded); };
+	const toggleVoyage = () => {
+		if (browserPanel.expanded) { browserPanel.setExpanded(false); if (!voyageExpanded) toggleVoyagePanel(); }
+		else toggleVoyagePanel();
+	};
 	useEffect(() => {
 		const resize = () => setViewportWidth(window.innerWidth);
 		window.addEventListener("resize", resize);
@@ -96,6 +109,8 @@ export default function App() {
 	}, []);
 	const [projectDialogOpen, setProjectDialogOpen] = useState(false);
 	const [purgeError, setPurgeError] = useState<string>();
+	const [lifecyclePending, setLifecyclePending] = useState(false);
+	const lifecycleLock = useRef(false);
 	const [manualBrowseProjectId, setManualBrowseProjectId] = useState<string>();
 	const browse = useMemo(() => resolveBrowseProject(shownProjects, activeProject?.id, manualBrowseProjectId), [shownProjects, activeProject?.id, manualBrowseProjectId]);
 	useEffect(() => { if (manualBrowseProjectId && !browse.manualProjectId) setManualBrowseProjectId(undefined); }, [browse.manualProjectId, manualBrowseProjectId]);
@@ -128,9 +143,10 @@ export default function App() {
 	// Mirror the voyage state on the taskbar: the sailing mark while pi answers,
 	// the docked speedboat once the turn ends.
 	useEffect(() => { void showVoyageIcon(pool.runningIds.size > 0).catch(() => undefined); }, [pool.runningIds.size > 0]);
-	const navigationDisabled = search.busy || !library.workspace;
+	const navigationDisabled = lifecyclePending || search.busy || !library.workspace;
 	const locked = navigationDisabled || session.loading;
 	const settingsRestrictions = useMemo<SettingsRestrictions>(() => ({
+		browser: busy ? "当前会话运行中，请等待完成后修改浏览器能力" : locked ? "正在加载会话，请稍后再试" : undefined,
 		prompt: busy ? "当前会话运行中，请等待完成后修改系统提示词" : locked ? "正在加载会话，请稍后再试" : undefined,
 		providers: busy ? "当前会话运行中，请等待完成后修改供应商配置" : locked || modelFamilies.loading ? "正在加载会话或更新配置，请稍后再试" : undefined,
 		archives: locked ? "正在加载会话或切换工作区，请稍后再试" : undefined,
@@ -149,6 +165,7 @@ export default function App() {
 		setSettingsCategory(settingsRestrictions[target] ? "appearance" : target);
 	}, [settingsCategory, settingsRestrictions]);
 	const narrowViewport = viewportWidth <= 760;
+	useEffect(() => { if (narrowViewport && browserPanel.expanded) setSidebarOpen(false); }, [narrowViewport, browserPanel.expanded]);
 	useEffect(() => { if (narrowViewport && settingsCategory) setSidebarOpen(false); }, [narrowViewport, settingsCategory]);
 	const desktopSidebarOpen = sidebarOpen && !narrowViewport;
 	const sidebarBounds = { min: 200, max: Math.max(200, Math.min(420, viewportWidth - 416)) };
@@ -160,40 +177,62 @@ export default function App() {
 	const commitSidebarWidth = useCallback((value: number) => { setSidebarWidth(value); try { localStorage.setItem("skiff.sidebar.width", String(value)); } catch { /* Width still applies for this session. */ } }, []);
 	const setVoyageWidthFromDrag = useCallback((value: number) => setVoyageWidth(value), []);
 	const commitVoyageWidth = useCallback((value: number) => { setVoyageWidth(value); try { localStorage.setItem("skiff.voyage.width", String(value)); } catch { /* Width still applies for this session. */ } }, []);
-	const archiveChat = useCallback((id: string) => {
+	const runLifecycle = async (operation: () => Promise<void>) => {
+		if (lifecycleLock.current) return;
+		lifecycleLock.current = true; setLifecyclePending(true); setPurgeError(undefined);
+		try { await operation(); }
+		catch (error) { setPurgeError(`浏览器资源处理未完成，已保留聊天记录：${String(error)}`); }
+		finally { lifecycleLock.current = false; setLifecyclePending(false); }
+	};
+	const archiveChat = useCallback(async (id: string) => {
 		if (navigationDisabled || !pool.canClose(id)) return;
 		const wasActive = activeChat?.id === id;
-		library.archiveChat(id);
-		if (wasActive) {
-			setView("launcher");
-			if (narrowViewport) setSidebarOpen(false);
-		}
+		await runLifecycle(async () => {
+			await browserNative.retireChat(id);
+			browserPanel.forget(id);
+			library.archiveChat(id);
+			if (wasActive) {
+				setView("launcher");
+				if (narrowViewport) setSidebarOpen(false);
+			}
+		});
 	}, [activeChat?.id, library, navigationDisabled, narrowViewport, pool.canClose]);
-	const restoreArchivedChat = useCallback((id: string) => {
+	const restoreArchivedChat = useCallback(async (id: string) => {
 		if (locked || !pool.canClose(id)) return;
-		library.restoreChat(id);
-		setSettingsCategory(undefined);
-		setView("chat");
-		if (narrowViewport) setSidebarOpen(false);
+		await runLifecycle(async () => {
+			await browserNative.restoreChat(id);
+			browserPanel.forget(id);
+			library.restoreChat(id);
+			setSettingsCategory(undefined);
+			setView("chat");
+			if (narrowViewport) setSidebarOpen(false);
+		});
 	}, [library, locked, narrowViewport, pool.canClose]);
-	const deleteArchivedChat = useCallback((id: string) => {
+	const deleteArchivedChat = useCallback(async (id: string) => {
 		if (navigationDisabled || !pool.canClose(id)) return;
-		library.deleteChat(id);
+		await runLifecycle(async () => {
+			await browserNative.retireChat(id, true);
+			browserPanel.forget(id);
+			library.deleteChat(id);
+		});
 	}, [library, navigationDisabled, pool.canClose]);
-	// Permanent deletion removes the pi session file first: if the file cannot
-	// be removed the chat stays visible instead of silently losing its history
-	// while the transcript survives on disk.
+	// Reap the owned browser/profile and transcript before removing the index.
+	// A cleanup failure leaves the chat visible so the user can retry.
 	const purgeChat = useCallback(async (id: string) => {
 		if (navigationDisabled || !pool.canClose(id)) return;
 		const chat = allChats.find((item) => item.id === id);
 		if (!chat) return;
-		setPurgeError(undefined);
-		if (chat.hasMessages && chat.sessionFile) {
-			try { await invoke("delete_session_file", { sessionFile: chat.sessionFile }); }
-			catch (error) { setPurgeError(`永久删除失败：${String(error)}`); return; }
-		}
-		if (activeChat?.id === id) setView("launcher");
-		library.deleteChat(id);
+		await runLifecycle(async () => {
+			setPurgeError(undefined);
+			await browserNative.retireChat(id, true);
+			browserPanel.forget(id);
+			if (chat.hasMessages && chat.sessionFile) {
+				try { await invoke("delete_session_file", { sessionFile: chat.sessionFile }); }
+				catch (error) { setPurgeError(`永久删除失败：${String(error)}`); return; }
+			}
+			if (activeChat?.id === id) setView("launcher");
+			library.deleteChat(id);
+		});
 	}, [activeChat?.id, allChats, library, navigationDisabled, pool.canClose]);
 	// Hiding keeps every chat, session reference and draft so re-adding the same
 	// folder later brings the whole group back.
@@ -210,19 +249,23 @@ export default function App() {
 		if (navigationDisabled) return;
 		const chats = allChats.filter((chat) => chat.projectId === id);
 		if (!chats.every((chat) => pool.canClose(chat.id))) return;
-		setPurgeError(undefined);
-		const failures: string[] = [];
-		for (const chat of chats) {
-			if (!chat.hasMessages || !chat.sessionFile) continue;
-			try { await invoke("delete_session_file", { sessionFile: chat.sessionFile }); }
-			catch (error) { failures.push(`${chat.title}：${String(error)}`); }
-		}
-		// Partial deletion would leave a project pointing at half-removed files,
-		// so the index survives and the user can retry.
-		if (failures.length) { setPurgeError(`永久删除项目未完成，已保留项目与聊天索引。${failures.join("；")}`); return; }
-		const wasActive = activeChat?.projectId === id;
-		library.deleteProject(id);
-		if (wasActive) setView("launcher");
+		await runLifecycle(async () => {
+			setPurgeError(undefined);
+			const failures: string[] = [];
+			for (const chat of chats) {
+				try { await browserNative.retireChat(chat.id, true); browserPanel.forget(chat.id); }
+				catch (error) { failures.push(`${chat.title}：${String(error)}`); continue; }
+				if (!chat.hasMessages || !chat.sessionFile) continue;
+				try { await invoke("delete_session_file", { sessionFile: chat.sessionFile }); }
+				catch (error) { failures.push(`${chat.title}：${String(error)}`); }
+			}
+			// Partial deletion would leave a project pointing at half-removed files,
+			// so the index survives and the user can retry.
+			if (failures.length) { setPurgeError(`永久删除项目未完成，已保留项目与聊天索引。${failures.join("；")}`); return; }
+			const wasActive = activeChat?.projectId === id;
+			library.deleteProject(id);
+			if (wasActive) setView("launcher");
+		});
 	}, [activeChat?.projectId, allChats, library, navigationDisabled, pool.canClose]);
 	const displayModels = useMemo(() => modelFamilies.fallback ? state.availableModels : orderedOffers.length ? reconcile(state.model, orderedOffers, state.availableModels) : [], [state.model, state.availableModels, orderedOffers, modelFamilies.fallback]);
 	const displayModel = activeChat?.selectedModel ? displayModels.find((model) => model.provider === activeChat.selectedModel?.provider && model.id === (activeChat.selectedModel.modelId ?? activeChat.selectedModel.id)) ?? { ...activeChat.selectedModel, name: activeChat.selectedModel.id } : undefined;
@@ -319,13 +362,14 @@ export default function App() {
 	}, [newDraft, openSettings, settingsCategory]);
 
 	const send = async (text: string, images?: ImageAttachment[], delivery?: Delivery) => {
-		if (!activeChat) return false;
+		if (!activeChat || lifecycleLock.current) return false;
 		if (!modelFamilies.fallback && !displayModel) { setModelNotice("请先选择已启用的供应商和模型"); return false; }
 		const accepted = await actions.prompt(text, images, delivery);
 		if (accepted && displayModel?.offerId) pendingRecentOffer.current = { id: displayModel.offerId, assistantCount: state.messages.filter((message) => message.role === "assistant").length };
 		if (accepted) library.updateChat(activeChat.id, { updatedAt: Date.now() });
 		return accepted;
 	};
+	const browserActions = useBrowserActions(activeChat?.id, browserPanel, actions, session.isCurrent, send);
 	const selectTool = useCallback((tool: WorkbenchTool) => {
 		if (tool === "files") tool = lastFileTab.current;
 		if (activeTool === tool && sidebarOpen) { setSidebarOpen(false); return; }
@@ -403,7 +447,7 @@ export default function App() {
 		<ModelFamilyContext.Provider value={familyContext}>
 		{pool.runtimes}
 		<div className={`app ${sidebarOpen ? "with-sidebar" : ""}`}>
-			<TitleBar nav={<TitleBarNav sidebarOpen={sidebarOpen} onToggleSidebar={() => setSidebarOpen((value) => !value)} onNewChat={newDraft} onHome={openLauncher} onAddProject={() => setProjectDialogOpen(true)} onOpenSettings={openSettings} messages={state.messages} />} voyageOpen={voyageExpanded} onToggleVoyage={currentView === "chat" ? toggleVoyagePanel : undefined} />
+			<TitleBar nav={<TitleBarNav sidebarOpen={sidebarOpen} onToggleSidebar={() => setSidebarOpen((value) => !value)} onNewChat={newDraft} onHome={openLauncher} onAddProject={() => setProjectDialogOpen(true)} onOpenSettings={openSettings} messages={state.messages} />} voyageOpen={voyageExpanded && !browserPanel.expanded} onToggleVoyage={currentView === "chat" ? toggleVoyage : undefined}>{currentView === "chat" && activeChat && <IconButton className="browser-trigger" size="compact" aria-label="浏览器" aria-pressed={browserPanel.expanded} title={browserPanel.expanded ? "收起浏览器" : "展开浏览器"} onClick={toggleBrowser}><Icon name="monitor" /></IconButton>}</TitleBar>
 			<div className="app-body" style={{ "--sidebar-width": `${shownSidebarWidth}px` } as CSSProperties}>
 			{(!narrowViewport || !sidebarOpen) && <ActivityBar active={activeTool} panelOpen={sidebarOpen} onSelect={selectTool} onOpenSettings={() => openSettings()} />}
 			<div className="workbench-shell">
@@ -411,7 +455,7 @@ export default function App() {
 			{desktopSidebarOpen && <ResizeSeparator label="调整左侧导航宽度" value={shownSidebarWidth} bounds={sidebarBounds} onResize={setSidebarWidthFromDrag} onCommit={commitSidebarWidth} />}
 			<ProjectChangesNavigationContext.Provider value={resultNavigation}>
 			<main className="workspace">
-				<div className={`primary-view ${activeTool !== "chats" ? "preview-hidden" : ""}`}>{currentView === "launcher" ? <>{chatHeader}{workspaceAlerts}<div className="body"><LauncherView activeChat={activeChat} activeProject={activeProject} projects={shownProjects} chats={visibleChats} offers={modelFamilies.offers} recentOfferIds={recentOfferIds} disabled={navigationDisabled || modelFamilies.loading} navigationDisabled={navigationDisabled} loading={modelFamilies.loading} error={modelFamilies.error} onResume={resumeChat} onSelectProject={selectProject} onAddProject={() => setProjectDialogOpen(true)} onManageProviders={() => openSettings("providers")} onRetryModels={modelFamilies.refresh} onStartChat={startLauncherChat} onOpenChat={selectChat} /></div></> : <VoyageWorkspace topBar={<>{chatHeader}{workspaceAlerts}</>} draftTarget={activeChat && activeProject ? { chatId: activeChat.id, cwd: activeProject.path, sessionFile: activeChat.hasMessages ? activeChat.sessionFile : undefined } : undefined} revealMessage={retrieval.reveal} modelNotice={modelNotice} key={`${session.owner.id ?? "loading"}:${session.owner.cwd ?? ""}`} state={displayState} loading={session.loading} connected={connected} pending={session.pending} actions={actions} onSend={send} onReconnect={session.reconnect} projectName={activeProject?.name} railWidth={shownVoyageWidth} availableWidth={workspaceWidth} onRailWidth={setVoyageWidthFromDrag} onRailWidthCommit={commitVoyageWidth} expanded={voyageExpanded} onToggle={toggleVoyagePanel} />}</div>
+				<div className={`primary-view ${activeTool !== "chats" ? "preview-hidden" : ""}`}>{currentView === "launcher" ? <>{chatHeader}{workspaceAlerts}<div className="body"><LauncherView activeChat={activeChat} activeProject={activeProject} projects={shownProjects} chats={visibleChats} offers={modelFamilies.offers} recentOfferIds={recentOfferIds} disabled={navigationDisabled || modelFamilies.loading} navigationDisabled={navigationDisabled} loading={modelFamilies.loading} error={modelFamilies.error} onResume={resumeChat} onSelectProject={selectProject} onAddProject={() => setProjectDialogOpen(true)} onManageProviders={() => openSettings("providers")} onRetryModels={modelFamilies.refresh} onStartChat={startLauncherChat} onOpenChat={selectChat} /></div></> : <BrowserWorkspace chatId={activeChat?.id} controls={browserPanel} browserActions={browserActions} availableWidth={workspaceWidth} width={browserWidth} onWidth={setBrowserWidth} onWidthCommit={commitBrowserWidth} focusRequest={browserFocus.chatId === activeChat?.id ? browserFocus.version : 0} busy={busy || session.loading} onSettings={() => openSettings("browser")} onReconnect={session.reconnect}><VoyageWorkspace topBar={<>{chatHeader}{workspaceAlerts}</>} draftTarget={activeChat && activeProject ? { chatId: activeChat.id, cwd: activeProject.path, sessionFile: activeChat.hasMessages ? activeChat.sessionFile : undefined } : undefined} revealMessage={retrieval.reveal} modelNotice={modelNotice} key={`${session.owner.id ?? "loading"}:${session.owner.cwd ?? ""}`} state={displayState} loading={session.loading} connected={connected && !lifecyclePending} pending={session.pending || lifecyclePending} actions={actions} onSend={send} onReconnect={session.reconnect} projectName={activeProject?.name} railWidth={shownVoyageWidth} availableWidth={workspaceWidth} onRailWidth={setVoyageWidthFromDrag} onRailWidthCommit={commitVoyageWidth} expanded={voyageExpanded && !browserPanel.expanded} onToggle={toggleVoyage} /></BrowserWorkspace>}</div>
 				{activeTool === "git-tree" && <GitTreeWorkspace key={browse.project?.path} project={browse.project} history={gitHistory} onBack={() => { setActiveTool("chats"); setActivePreviewId(undefined); }} onBranches={() => setSidebarOpen((value) => !value)} />}
 				{(activeTool === "files" || activeTool === "git") && (activePreviewId ? <ProjectPreview tabs={previewTabs} activeId={activePreviewId} revision={workbenchRevision} onActivate={setActivePreviewId} onClose={closeProjectPreview} onMode={(id, mode) => setPreviewTabs((current) => current.map((tab) => tab.id === id ? { ...tab, mode } : tab))} onBack={() => setActiveTool("chats")} /> : <FileWorkspaceEmpty project={browse.project} tool={activeTool} />)}
 			</main>

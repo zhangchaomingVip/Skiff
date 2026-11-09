@@ -1,0 +1,26 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Skiff · Browser feasibility probe</title>
+<style>body{margin:0;background:#111827;color:#e5e7eb;font:15px system-ui}header{padding:12px}canvas{width:100%;height:auto;display:block}#status{color:#9ecbff}</style>
+<header>浏览器技术验证 · <span id="status">连接中</span></header><canvas id="screen"></canvas>
+<script>
+window.probe = { frames: 0, urls: [], error: false };
+window.connectStream = (port) => {
+	window.stream?.close(); window.probe = { frames: 0, urls: [], error: false };
+	const ws = window.stream = new WebSocket(`ws://127.0.0.1:${port}/?pacing=ack&maxFps=10`);
+	ws.onerror = () => { window.probe.error = true; document.querySelector("#status").textContent = "连接被拒绝"; };
+	ws.onmessage = async ({ data }) => {
+		const message = JSON.parse(data);
+		if (message.type === "url") { window.probe.urls.push(message.url); document.querySelector("#status").textContent = message.url; }
+		if (message.type !== "frame") return;
+		const frame = new Image(); frame.src = `data:image/jpeg;base64,${message.data}`;
+		await frame.decode(); const canvas = document.querySelector("canvas"); canvas.width = frame.width; canvas.height = frame.height;
+		canvas.getContext("2d").drawImage(frame, 0, 0); window.probe.frames++;
+		if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "ack", seq: message.seq }));
+	};
+};
+window.sendClick = (x, y) => { for (const eventType of ["mousePressed", "mouseReleased"]) window.stream.send(JSON.stringify({ type: "input_mouse", eventType, x, y, button: "left", clickCount: 1 })); };
+document.querySelector("canvas").onclick = (event) => { const box = event.currentTarget.getBoundingClientRect(); window.sendClick((event.clientX-box.left)*event.currentTarget.width/box.width,(event.clientY-box.top)*event.currentTarget.height/box.height); };
+const port = new URLSearchParams(location.search).get("port") || "__SPIKE_STREAM_PORT__";
+if (!port.startsWith("__")) window.connectStream(port);
+</script>

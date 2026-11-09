@@ -1,4 +1,5 @@
 import type { ChatMessage, ContentBlock, ModelInfo } from "./types";
+import { parseBrowserDetails } from "../browser/toolDetails";
 
 function safeJson(value: unknown): string {
 	try {
@@ -72,6 +73,8 @@ export function parseBlocks(content: unknown): ContentBlock[] {
 				name: String(block.name ?? block.toolName ?? "result"),
 				text: extractResultText(block),
 				isError: Boolean(block.isError),
+				browser: parseBrowserDetails(block.details),
+				images: String(block.name ?? block.toolName) === "browser" && Array.isArray(block.content) ? block.content.filter((part) => part?.type === "image" && part.mimeType === "image/png" && typeof part.data === "string" && part.data.length <= 4 * 1024 * 1024 && /^[A-Za-z0-9+/]+={0,2}$/.test(part.data)).slice(0, 1).map((part) => ({ data: part.data, mimeType: part.mimeType })) : undefined,
 				diff: typeof (block.details as Record<string, unknown> | undefined)?.diff === "string" ? String((block.details as Record<string, unknown>).diff) : undefined,
 			});
 		}

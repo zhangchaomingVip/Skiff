@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import "./tokens.css";
 import "./index.css";
 import "./voyage.css";
+import "./browser.css";
 import "./components/ui.css";
 import App from "./App";
 import { syncNativeTheme } from "./theme";

@@ -11,6 +11,7 @@ import type { SettingsEditorHandle } from "./settingsEditor";
 import type { WebSearchControls } from "../chat/webSearch";
 import { WebSearchSettings } from "./WebSearchSettings";
 import { FontSettings } from "./FontSettings";
+import { BrowserSettings } from "./BrowserSettings";
 
 export function SettingsDialog({ initialCategory, restrictions, prompt, providers, archives, search, onRetryModels, onClose, onCategoryChange }: {
 	initialCategory: SettingsCategory;
@@ -51,6 +52,7 @@ export function SettingsDialog({ initialCategory, restrictions, prompt, provider
 			<nav className="settings-nav" aria-label="设置分类">{settingsCategories.map(({ id, label, icon }) => <Button key={id} variant="ghost" aria-pressed={category === id} disabled={navigationLocked || !!restrictions[id]} title={navigationLocked ? "请先返回列表或等待保存完成" : restrictions[id]} onClick={() => switchCategory(id)}><Icon name={icon} size={16} />{label}</Button>)}
 			</nav>
 			<div className="settings-content">
+				{category === "browser" && <fieldset className="settings-config" disabled={!!restrictions.browser}><BrowserSettings onSaved={prompt.onSaved} /></fieldset>}
 				{category === "fonts" && <FontSettings />}
 				{category === "appearance" && <section className="settings-page" aria-labelledby="appearance-title"><h2 id="appearance-title">外观</h2><p className="muted">选择应用主题与主题色，立即生效。</p>
 					<div className="settings-group">

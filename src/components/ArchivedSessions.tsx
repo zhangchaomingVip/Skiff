@@ -49,7 +49,7 @@ export function ArchivedSessions({ chats, projects, busy, canClose, onRestore, o
 			</article>)}
 			{!filtered.length && <p className="archive-empty-list">{query ? "没有匹配的归档会话" : "没有归档会话"}</p>}
 		</div>
-		{deleting && <ConfirmDialog title="删除归档记录" description={`从应用索引中删除「${deleting.title}」？原 pi 会话文件会保留。`} onConfirm={remove} onClose={() => setDeleting(undefined)} />}
+		{deleting && <ConfirmDialog title="删除归档记录" description={`删除「${deleting.title}」的应用索引和专用浏览器登录数据？原 pi 会话文件会保留。`} onConfirm={remove} onClose={() => setDeleting(undefined)} />}
 		{preview && <ArchivePreviewDialog chat={preview} project={projects.find((project) => project.id === preview.projectId)} busy={busy || canClose?.(preview.id) === false} onRestore={() => onRestore(preview.id)} onDelete={() => setDeleting(preview)} onClose={() => setPreview(undefined)} />}
 	</section>;
 }

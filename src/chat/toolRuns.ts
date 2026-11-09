@@ -1,5 +1,6 @@
 import type { ContentBlock } from "./types";
 import { commandRunLabel } from "./commandSummary";
+import { browserActionLabels } from "../browser/toolDetails";
 
 /** Coarse category used to pick an icon and a human phrase for a tool call. */
 export type ToolKind = "read" | "write" | "delete" | "find" | "list" | "command" | "search" | "web" | "other";
@@ -35,7 +36,7 @@ const ACTION_PHRASES: Record<ToolKind, { verb: string; unit: string }> = {
 };
 
 /** Tools that keep the generic "other" layout (input + output) but deserve a real phrase. */
-const LABELS_BY_NAME: Record<string, string> = { read_url: "读取网页" };
+const LABELS_BY_NAME: Record<string, string> = { read_url: "读取网页", browser: "浏览器操作" };
 
 export function toolKind(name: string): ToolKind {
 	return KIND_BY_NAME[name.toLowerCase()] ?? "other";
@@ -60,6 +61,10 @@ export function toolTarget(tool: Tool): string | undefined {
 		return undefined;
 	}
 	const kind = toolKind(tool.name);
+	if (tool.name.toLowerCase() === "browser") {
+		const value = args.action === "open" ? args.url : args.selector ?? args.direction;
+		return typeof value === "string" ? value : undefined;
+	}
 	const keys = kind === "find" || kind === "search" || kind === "web" ? ["pattern", "query", "url", "path", "file", "filePath", "file_path"] : ["command", "path", "file", "filePath", "file_path", "pattern", "query", "url"];
 	for (const key of keys) {
 		const value = args[key];
@@ -123,6 +128,11 @@ export function toolRunSummary(items: ToolRunItem[]): ToolRunSummary {
 /** Expanded details retain the specific action and target of each underlying tool. */
 export function toolCallSummary(item: ToolRunItem): ToolRunSummary {
 	const kind = toolKind(item.block.name);
+	if (item.block.name.toLowerCase() === "browser") {
+		let action = item.result?.browser?.operation;
+		try { action ??= JSON.parse(item.block.argsText).action; } catch { /* Streaming. */ }
+		return { kind, label: browserActionLabels[action ?? ""] ?? "浏览器操作", running: !item.result, error: !!item.result?.isError, steps: 1, plain: true };
+	}
 	return { kind, label: `${item.block.name} · ${actionLabel(kind, [item], !!item.result)}`, running: !item.result, error: !!item.result?.isError, steps: 1 };
 }
 

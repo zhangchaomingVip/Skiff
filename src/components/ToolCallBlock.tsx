@@ -9,6 +9,8 @@ import { ToolSearchResults } from "./ToolSearchResults";
 import { Icon } from "./Icon";
 import { useMemo } from "react";
 import { parseSearchDetails } from "../chat/toolDetails";
+import { browserOutcomeLabel } from "../browser/toolDetails";
+import { ImagePreview } from "./ImagePreview";
 
 type Tool = Extract<ContentBlock, { kind: "tool" }>;
 type Result = Extract<ContentBlock, { kind: "toolResult" }>;
@@ -23,6 +25,7 @@ export function ToolCallBlock({ tool, result }: { tool: Tool; result?: Result })
 	} catch { /* Partial JSON while streaming. */ }
 	const command = typeof args.command === "string" ? args.command : undefined;
 	const name = tool.name.toLowerCase();
+	const browser = name === "browser";
 	const kind = toolKind(name);
 	const writeContent = name === "write" && typeof args.content === "string" ? args.content : undefined;
 	const task = /subagent|agent/.test(name) ? typeof args.task === "string" ? args.task : typeof args.prompt === "string" ? args.prompt : undefined : undefined;
@@ -42,13 +45,17 @@ export function ToolCallBlock({ tool, result }: { tool: Tool; result?: Result })
 	const search = kind === "web";
 	const searchDetails = useMemo(() => search && result && !result.isError ? parseSearchDetails(output) : undefined, [search, result, output]);
 	const searchLabel = searchDetails ? `搜索网页${searchDetails.results.length || !output.trim() || output.trim() === "没有找到相关结果。" ? `（${searchDetails.results.length.toLocaleString("en-US")} 个结果）` : ""}` : undefined;
-	const input = Object.keys(args).length ? JSON.stringify(args, null, 2) : tool.argsText;
+	const safeArgs = browser && typeof args.text === "string" ? { ...args, text: "（填写内容已隐藏）" } : args;
+	const input = Object.keys(safeArgs).length ? JSON.stringify(safeArgs, null, 2) : tool.argsText;
 	const status = !result ? <span className="tool-state running">{tool.done ? "等待结果…" : "准备中…"}</span>
+		: browser && result.browser ? <span className={`tool-state ${result.isError ? "failed" : ""}`}>{browserOutcomeLabel(result.browser.outcome)}</span>
 		: result.isError ? <span className="tool-state failed"><Icon name="alert" size={13} />失败</span>
 		: diff !== undefined || writeContent !== undefined ? <span className="tool-diff-count"><span className="tool-diff-added" aria-label={`新增 ${additions.toLocaleString("en-US")} 行`}>+{additions.toLocaleString("en-US")}</span><span className="tool-diff-removed" aria-label={`删除 ${removals.toLocaleString("en-US")} 行`}>-{removals.toLocaleString("en-US")}</span></span>
 		: undefined;
-	return <ProcessDisclosure className={`tool ${result?.isError ? "err" : ""}`} icon={TOOL_ICONS[kind]} label={searchLabel ? <span className="tool-summary">{searchLabel}</span> : <ToolSummaryLabel label={commandTitle?.title ?? summary.label} plain={!!commandTitle} target={target} targetKind={commandTitle ? "command" : ["read", "write", "delete", "list"].includes(kind) ? "file" : undefined} />} status={status}>
+	return <ProcessDisclosure className={`tool ${result?.isError ? "err" : ""}`} icon={browser ? "monitor" : TOOL_ICONS[kind]} label={searchLabel ? <span className="tool-summary">{searchLabel}</span> : <ToolSummaryLabel label={commandTitle?.title ?? summary.label} plain={!!commandTitle || summary.plain} target={target} targetKind={commandTitle ? "command" : ["read", "write", "delete", "list"].includes(kind) ? "file" : undefined} />} status={status}>
 		<div className={`tool-content${searchDetails ? " tool-search-content" : ""}`}>
+			{browser && result?.browser && <p className="tool-detail-meta">{browserOutcomeLabel(result.browser.outcome)}{result.browser.durationMs !== undefined ? ` · ${(result.browser.durationMs / 1000).toFixed(1)} 秒` : ""} · 操作 {result.browser.requestId}</p>}
+			{browser && result?.images?.map((image, index) => <ImagePreview key={index} src={`data:${image.mimeType};base64,${image.data}`} alt="浏览器页面截图" />)}
 			{command !== undefined && <ToolDetailSection title="命令" copy={{ text: command, label: "复制命令" }}>
 				{cwd && <p className="tool-detail-meta">工作目录 · <span className="tool-detail-path">{cwd}</span></p>}
 				<ToolDetailText text={`$ ${command}`} />

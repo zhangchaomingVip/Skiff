@@ -67,7 +67,7 @@ export type ContentBlock =
 	| { kind: "image"; data: string; mimeType: string }
 	| { kind: "thinking"; text: string }
 	| { kind: "tool"; id: string; name: string; argsText: string; done: boolean }
-	| { kind: "toolResult"; id?: string; name: string; text: string; isError: boolean; diff?: string };
+	| { kind: "toolResult"; id?: string; name: string; text: string; isError: boolean; diff?: string; browser?: import("../browser/toolDetails").BrowserToolDetails; images?: { data: string; mimeType: string }[] };
 
 export interface ChatMessage {
 	entryId?: string;

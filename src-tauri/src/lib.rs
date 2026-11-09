@@ -14,12 +14,14 @@ mod search;
 mod history;
 mod settings_metadata;
 mod project_workbench;
+mod browser;
 
 /// One spawned `pi --mode rpc` session. `child` is kept only so we can kill it
 /// on stop; `stdin` is shared with the reader threads so we can write lines.
 struct Proc {
 	child: Mutex<Child>,
 	stdin: Arc<Mutex<ChildStdin>>,
+	browser_lease: Option<browser::AgentLease>,
 }
 
 #[derive(Default)]
@@ -31,6 +33,7 @@ struct AppState {
 #[serde(rename_all = "camelCase")]
 struct RpcStartOptions {
 	instance_id: Option<String>,
+	chat_id: Option<String>,
 	pi_path: Option<String>,
 	cwd: Option<String>,
 	env: Option<HashMap<String, String>>,
@@ -237,6 +240,9 @@ fn start_session(app: AppHandle, sessions: &Mutex<HashMap<String, Proc>>, option
 			cmd.env(k, v);
 		}
 	}
+	// Credentials belong to this pi process, never to a model-visible prompt or inherited stale runtime.
+	cmd.env_remove("SKIFF_BROWSER_RUNTIME");
+	let mut browser_lease = None;
 	if let Some(dir) = get_pi_agent_dir() {
 		families::prepare_runtime(&dir, &mut cmd)?;
 		// Explicit loading scopes prompt customization to Skiff, including
@@ -247,6 +253,20 @@ fn start_session(app: AppHandle, sessions: &Mutex<HashMap<String, Proc>>, option
 			std::fs::write(&extension, source).map_err(|_| "无法安装 Skiff 提示词扩展")?;
 		}
 		cmd.arg("--extension").arg(extension);
+		if let Some(chat_id) = options.chat_id {
+			let prepared = tauri::async_runtime::block_on(app.state::<browser::BrowserState>().prepare_agent(&app, chat_id));
+			match prepared {
+				Ok(Some(lease)) => {
+					let extension = dir.join("skiff-agent-browser.js");
+					let source = include_str!("pi_extensions/agent_browser.js");
+					let written = std::fs::read_to_string(&extension).ok().as_deref() == Some(source) || std::fs::write(&extension, source).is_ok();
+					if written { cmd.arg("--extension").arg(extension); lease.configure(&mut cmd); browser_lease = Some(lease); }
+					else { eprintln!("[skiff] browser extension unavailable: cannot write extension"); }
+				}
+				Ok(None) => {},
+				Err(error) => eprintln!("[skiff] browser extension unavailable: {error}"),
+			}
+		}
 		// Install the lookup extension up front so a new install only needs an
 		// API key; a failure here must not stop the session from starting.
 		if let Err(error) = search::ensure_extension() {
@@ -270,6 +290,7 @@ fn start_session(app: AppHandle, sessions: &Mutex<HashMap<String, Proc>>, option
 	let app_out = app.clone();
 	let id_out = instance_id.clone();
 	let metadata_dir = get_pi_agent_dir();
+	let browser_observer = browser_lease.clone();
 	std::thread::spawn(move || {
 		let reader = std::io::BufReader::new(stdout);
 		let mut seen_responses = std::collections::HashSet::new();
@@ -289,6 +310,7 @@ fn start_session(app: AppHandle, sessions: &Mutex<HashMap<String, Proc>>, option
 			"type": "bridge_exit",
 			"message": "pi 进程已退出，请检查 pi 安装与配置后重新连接。"
 		}).to_string());
+		drop(browser_observer);
 	});
 
 	// stderr -> `rpc-stderr://<id>` events (surfaced for debugging)
@@ -304,7 +326,7 @@ fn start_session(app: AppHandle, sessions: &Mutex<HashMap<String, Proc>>, option
 	let previous = sessions
 		.lock()
 		.map_err(|_| "session lock poisoned".to_string())?
-		.insert(instance_id, Proc { child: Mutex::new(child), stdin });
+		.insert(instance_id, Proc { child: Mutex::new(child), stdin, browser_lease });
 	if let Some(previous) = previous { terminate_process(previous)?; }
 
 	Ok(())
@@ -354,6 +376,7 @@ fn stop_session(sessions: &Mutex<HashMap<String, Proc>>, instance_id: &str) -> R
 }
 
 fn terminate_process(proc: Proc) -> Result<(), String> {
+	if let Some(lease) = &proc.browser_lease { lease.revoke(); }
 	let mut child = proc
 		.child
 		.lock()
@@ -530,6 +553,7 @@ pub fn run() {
 		.manage(AppState::default())
 		.manage(history::HistoryWorkspace::default())
 		.manage(project_workbench::WorkbenchState::default())
+		.manage(browser::BrowserState::default())
 		// Native folder picker for the add-project dialog.
 		.plugin(tauri_plugin_dialog::init())
 		.invoke_handler(tauri::generate_handler![
@@ -541,6 +565,10 @@ pub fn run() {
 			validate_project_directory,
 			get_workspace_directory,
 			read_system_prompt,
+			browser::browser_dependencies, browser::browser_configure, browser::browser_set_enabled, browser::browser_start,
+			browser::browser_status, browser::browser_find, browser::browser_connection, browser::browser_control, browser::browser_close,
+			browser::browser_begin_control, browser::browser_complete_control,
+			browser::browser_retire_chat, browser::browser_restore_chat,
 			project_workbench::list_project_directory, project_workbench::read_project_file,
 			project_workbench::reveal_project_file,
 			project_workbench::get_project_git_status, project_workbench::get_project_git_diff,
@@ -565,6 +593,7 @@ pub fn run() {
 				// thread could be terminated with its children still running.
 				let ids = sessions.lock().map(|s| s.keys().cloned().collect::<Vec<_>>()).unwrap_or_default();
 				for id in ids { let _ = stop_session(&sessions, &id); }
+				tauri::async_runtime::block_on(window.state::<browser::BrowserState>().shutdown());
 			}
 		})
 		.run(tauri::generate_context!())
@@ -588,7 +617,7 @@ mod tests {
 		let mut command = Command::new("cat");
 		let mut child = command.stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::null()).spawn().unwrap();
 		let stdin = Arc::new(Mutex::new(child.stdin.take().unwrap()));
-		let sessions = Arc::new(Mutex::new(HashMap::from([("test".to_string(), Proc { child: Mutex::new(child), stdin: Arc::clone(&stdin) })])));
+		let sessions = Arc::new(Mutex::new(HashMap::from([("test".to_string(), Proc { child: Mutex::new(child), stdin: Arc::clone(&stdin), browser_lease: None })])));
 		let input = session_stdin(&sessions, "test").unwrap();
 		assert!(sessions.try_lock().is_ok());
 		let locked_input = input.lock().unwrap();

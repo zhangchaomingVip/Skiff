@@ -77,12 +77,12 @@ export function Sidebar({ projects, chats, activeId, selectedProjectId, disabled
 	onAddProject: () => void;
 	onRenameChat: (id: string, title: string) => void;
 	onRenameProject: (id: string, name: string) => void;
-	onDeleteChat: (id: string) => void;
+	onDeleteChat: (id: string) => void | Promise<void>;
 	/** Collapses the project but keeps its chats, drafts and session references. */
 	onHideProject: (id: string) => void;
 	/** Removes the project, its chats and their pi session files. Irreversible. */
 	onPurgeProject: (id: string) => void;
-	onArchiveChat: (id: string) => void;
+	onArchiveChat: (id: string) => void | Promise<void>;
 	/** Irreversible: removes the pi session file, not just the sidebar entry. */
 	onPurgeChat?: (id: string) => void;
 	onTogglePinChat: (id: string, pinned: boolean) => void;
@@ -262,8 +262,8 @@ export function Sidebar({ projects, chats, activeId, selectedProjectId, disabled
 	const bulkBlocked = [...bulkIds].some((id) => canCloseChat?.(id) === false);
 	const bulkHint = bulkBlocked ? "有会话正在生成或等待确认，暂时无法批量操作" : undefined;
 	const bulkActionsDisabled = disabled || !bulkCount || bulkBlocked;
-	const bulkArchive = () => { for (const id of bulkIds) onArchiveChat(id); exitBulkSelection(); };
-	const bulkRemove = () => { for (const id of bulkIds) onDeleteChat(id); exitBulkSelection(); };
+	const bulkArchive = async () => { for (const id of bulkIds) await onArchiveChat(id); exitBulkSelection(); };
+	const bulkRemove = async () => { for (const id of bulkIds) await onDeleteChat(id); exitBulkSelection(); };
 	// Purging awaits each file removal; a failed chat is reported through the
 	// workspace alert like the single-chat flow while the loop moves on.
 	const bulkPurge = async () => { for (const id of bulkIds) await onPurgeChat?.(id); exitBulkSelection(); };
@@ -311,11 +311,11 @@ export function Sidebar({ projects, chats, activeId, selectedProjectId, disabled
 	const visibleProjects = useMemo(() => projects.filter((project) => project.name.toLowerCase().includes(search.toLowerCase()) || chats.some((chat) => chat.projectId === project.id && chat.title.toLowerCase().includes(search.toLowerCase()))), [projects, chats, search]);
 	return (
 		<aside className="sidebar" aria-label="项目与聊天导航" data-connected={connected}>
-			{deleting && <ConfirmDialog title={deleting.kind === "purge" ? "永久删除聊天" : "删除聊天"} description={deleting.kind === "purge" ? `永久删除 ${deleting.name}？${deleting.hasFile ? "将直接删除 pi 会话目录中的对话文件，无法恢复。" : "该聊天还没有 pi 会话文件，只会移除侧栏索引。"}` : `从侧栏删除 ${deleting.name}，pi 会话文件会保留。`} onConfirm={() => { if (deleting.kind === "purge") void onPurgeChat?.(deleting.id); else onDeleteChat(deleting.id); }} onClose={() => setDeleting(undefined)} />}
+			{deleting && <ConfirmDialog title={deleting.kind === "purge" ? "永久删除聊天" : "删除聊天"} description={deleting.kind === "purge" ? `永久删除 ${deleting.name}？${deleting.hasFile ? "将直接删除 pi 会话目录中的对话文件，无法恢复。" : "该聊天还没有 pi 会话文件，只会移除侧栏索引。"}` : `从侧栏删除 ${deleting.name} 及其专用浏览器登录数据，pi 会话文件会保留。`} onConfirm={() => { if (deleting.kind === "purge") void onPurgeChat?.(deleting.id); else onDeleteChat(deleting.id); }} onClose={() => setDeleting(undefined)} />}
 			{removingProject && <ProjectRemoveDialog name={removingProject.name} chatCount={removingProject.chatCount} sessionCount={removingProject.sessionCount} onHide={() => onHideProject(removingProject.id)} onPurge={() => void onPurgeProject(removingProject.id)} onClose={() => setRemovingProject(undefined)} />}
 			{bulkDeleting && <Dialog className="project-dialog" aria-label="批量删除聊天" onClose={() => setBulkDeleting(false)}>
 				<div className="dialog-heading"><h2>删除 {bulkCount} 个聊天</h2><IconButton aria-label="关闭批量删除确认" onClick={() => setBulkDeleting(false)}><Icon name="close" /></IconButton></div>
-				<p>从侧栏移除：仅删除侧栏索引，pi 会话文件保留。永久删除：同时删除 pi 会话目录中的对话文件，无法恢复。</p>
+				<p>从侧栏移除：删除侧栏索引及专用浏览器登录数据，pi 会话文件保留。永久删除：同时删除 pi 会话目录中的对话文件，无法恢复。</p>
 				<div className="dialog-actions">
 					<Button aria-label="取消批量删除" onClick={() => setBulkDeleting(false)}>取消</Button>
 					<Button disabled={bulkActionsDisabled} title={bulkHint} aria-label="从侧栏移除所选聊天" onClick={() => { setBulkDeleting(false); bulkRemove(); }}>从侧栏移除</Button>

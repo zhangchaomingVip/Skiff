@@ -1,0 +1,78 @@
+import assert from "node:assert/strict";
+import { createRequire } from "node:module";
+import { mkdir } from "node:fs/promises";
+import { join } from "node:path";
+
+const require = createRequire(import.meta.url);
+const { chromium } = require(join(process.cwd(), ".playwright-cli/node_modules/playwright-core"));
+const origin = process.argv[2] ?? "http://localhost:1421";
+const output = join(process.cwd(), "dist/browser-control"); await mkdir(output, { recursive: true });
+const browser = await chromium.launch({ channel: "msedge", headless: true });
+try {
+	for (const theme of ["light", "dark"]) {
+		const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+		const errors = []; page.on("pageerror", (error) => errors.push(String(error)));
+		await page.goto(`${origin}/tests/preview.html?fixture=browser&theme=${theme}`);
+		await page.waitForFunction(() => document.querySelector(".sidebar")?.dataset.connected === "true");
+		await page.evaluate(() => { window.skiffPreview.browser.setEnabled(true); window.skiffPreview.browser.set("browser-a"); window.releaseControl = window.skiffPreview.browser.deferControl(); });
+		await page.locator('.browser-screen[data-phase="live"]').waitFor();
+		await page.evaluate(() => window.skiffPreview.browser.failControl("模拟控制权确认失败"));
+		await page.getByRole("button", { name: "接管浏览器", exact: true }).click();
+		await page.getByRole("alert").filter({ hasText: "模拟控制权确认失败" }).waitFor();
+		assert.equal(await page.getByRole("textbox", { name: "浏览器键盘输入", exact: true }).count(), 0, "Failed takeover cannot claim human control");
+		await page.getByRole("button", { name: "接管浏览器", exact: true }).click();
+		await page.getByText("正在接管，请等待在途操作结束…", { exact: true }).waitFor();
+		assert.equal(await page.getByRole("textbox", { name: "浏览器键盘输入", exact: true }).count(), 0, "No input until native drain confirms");
+		await page.evaluate(() => window.releaseControl());
+		const input = page.getByRole("textbox", { name: "浏览器键盘输入", exact: true });
+		await input.waitFor();
+		const rect = await page.locator(".browser-screen canvas").boundingBox();
+		const scale = Math.min(rect.width / 1000, rect.height / 700);
+		const left = rect.x + (rect.width - 1000 * scale) / 2;
+		const top = rect.y + (rect.height - 700 * scale) / 2;
+		await page.mouse.click(left + 200 * scale, top + 320 * scale);
+		await page.mouse.wheel(0, 180);
+		await page.keyboard.type("hello");
+		await input.evaluate((element) => {
+			element.dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true, data: "" }));
+			element.dispatchEvent(new CompositionEvent("compositionend", { bubbles: true, data: "中文输入" }));
+			const data = new DataTransfer(); data.setData("text/plain", "粘贴文本");
+			element.dispatchEvent(new ClipboardEvent("paste", { bubbles: true, clipboardData: data }));
+		});
+		await page.keyboard.down("Shift");
+		await page.getByRole("button", { name: "交还 AI", exact: true }).focus();
+		const messages = await page.evaluate(() => window.skiffPreview.browser.sent.filter((message) => message.type.startsWith("input_")));
+		assert.ok(messages.some((message) => message.eventType === "mousePressed" && Math.abs(message.x - 200) < 2 && Math.abs(message.y - 320) < 2), "Coordinates remove contain padding");
+		assert.ok(messages.some((message) => message.eventType === "char" && message.text === "中文输入"));
+		assert.ok(messages.some((message) => message.eventType === "char" && message.text === "粘贴文本"));
+		assert.ok(messages.some((message) => message.eventType === "mouseWheel" && message.deltaY === 180));
+		assert.ok(messages.some((message) => message.eventType === "keyUp" && message.key === "Shift"), "Blur releases held key");
+		await page.keyboard.up("Shift");
+		await page.screenshot({ path: join(output, `${theme}-human.png`), animations: "disabled" });
+		await page.getByRole("button", { name: "交还 AI", exact: true }).click();
+		await page.getByRole("button", { name: "继续浏览任务", exact: true }).waitFor();
+		assert.equal(await input.count(), 0);
+		assert.ok(await page.evaluate(() => window.skiffPreview.browser.sent.some((message) => message.type === "input_flush")));
+		const before = await page.evaluate(() => window.skiffPreview.commands.filter((call) => call.command === "rpc_send" && JSON.parse(call.args.message).type === "prompt").length);
+		await page.getByRole("button", { name: "继续浏览任务", exact: true }).click();
+		await page.waitForFunction((before) => window.skiffPreview.commands.filter((call) => call.command === "rpc_send" && JSON.parse(call.args.message).type === "prompt").length > before, before);
+		const prompt = await page.evaluate(() => window.skiffPreview.commands.filter((call) => call.command === "rpc_send" && JSON.parse(call.args.message).type === "prompt").at(-1));
+		assert.match(JSON.parse(prompt.args.message).message, /第一步必须调用 browser snapshot/);
+		await page.getByRole("button", { name: "停止任务", exact: true }).click();
+		await page.waitForFunction(() => window.skiffPreview.browser.entries.get("browser-a").control === "stopped");
+		await page.getByRole("button", { name: "接管浏览器", exact: true }).click(); await input.waitFor();
+		await page.setViewportSize({ width: 600, height: 400 });
+		await page.getByRole("button", { name: "返回聊天", exact: true }).waitFor();
+		assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+		await page.screenshot({ path: join(output, `${theme}-narrow.png`), animations: "disabled" });
+		await page.getByRole("button", { name: "返回聊天", exact: true }).click();
+		assert.equal(await page.evaluate(() => window.skiffPreview.browser.entries.get("browser-a").control), "human", "Collapse preserves ownership");
+		await page.getByRole("button", { name: "浏览器", exact: true }).click(); await input.waitFor();
+		await page.getByRole("button", { name: "关闭浏览器", exact: true }).click();
+		await page.getByText("浏览器已关闭", { exact: true }).waitFor();
+		assert.equal(await input.count(), 0);
+		assert.deepEqual(errors, []);
+		await page.close();
+	}
+	console.log("PASS browser control: two-phase takeover, coordinates, keyboard/IME/paste, key release, flush/return/continue, stop/close and themes/narrow");
+} finally { await browser.close(); }

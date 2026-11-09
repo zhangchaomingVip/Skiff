@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 export interface RpcStartOptions {
+	chatId?: string;
 	piPath?: string;
 	cwd?: string;
 	env?: Record<string, string>;
@@ -49,6 +50,7 @@ export class PiRpc {
 			await invoke("rpc_start", {
 				options: {
 					instanceId: this.instanceId,
+					chatId: opts.chatId ?? null,
 					piPath: opts.piPath ?? null,
 					cwd: opts.cwd ?? null,
 					env: opts.env ?? null,
