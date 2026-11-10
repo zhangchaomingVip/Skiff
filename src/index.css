@@ -817,8 +817,6 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .tool-search-site-icon { position: relative; display: flex; align-items: center; justify-content: center; width: var(--space-4); height: var(--space-4); overflow: hidden; border-radius: var(--radius-full); background: var(--panel); color: var(--muted); font-size: var(--font-size-xs); line-height: 1; }
 .tool-search-site-icon img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
 .tool-search-site-icon img.is-loaded { background: var(--bg); }
-.tool-search-actions { display: flex; align-items: center; gap: var(--space-2); min-width: 0; margin-top: var(--space-2); }
-.tool-search-actions > .copy-btn { margin-left: auto; flex-shrink: 0; }
 .diff-add { color: var(--diff-add); background: var(--diff-add-bg); }
 .diff-remove { color: var(--diff-remove); background: var(--diff-remove-bg); }
 .image-trigger { display: block; border: 0; background: transparent; padding: 0; max-width: 100%; cursor: zoom-in; }

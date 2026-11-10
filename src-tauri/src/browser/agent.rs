@@ -426,6 +426,9 @@ impl Action {
 			Self::Scroll { .. } => "scroll",
 			Self::Wait { .. } => "wait",
 			Self::Screenshot => "screenshot",
+			Self::Drag { .. } => "drag",
+			Self::Mouse { .. } => "mouse",
+			Self::Get { .. } => "get",
 		}
 	}
 	fn target_label(&self) -> Option<String> {
@@ -434,6 +437,11 @@ impl Action {
 			Self::Click { selector } | Self::Fill { selector, .. } => Some(selector.clone()),
 			Self::Press { key } => Some(key.clone()),
 			Self::Scroll { direction, .. } => Some(direction.clone()),
+			Self::Drag { source, target, .. } => Some(format!("{source} → {target}")),
+			Self::Mouse { sub, .. } => Some(sub.clone()),
+			Self::Get { kind, selector, .. } => {
+				Some(selector.clone().unwrap_or_else(|| kind.clone()))
+			}
 			_ => None,
 		}
 	}

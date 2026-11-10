@@ -25,6 +25,8 @@ use tokio::sync::{watch, Mutex as AsyncMutex, Notify};
 type Result<T> = std::result::Result<T, String>;
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(20);
 const DRAIN_TIMEOUT: Duration = Duration::from_secs(35);
+// HiDPI screenshots at the panel viewport are roughly 2.4x larger than a 1x capture.
+const SCREENSHOT_LIMIT: u64 = 6 * 1024 * 1024;
 fn opaque() -> String {
 	uuid::Uuid::new_v4().simple().to_string()
 }
@@ -557,6 +559,22 @@ impl Service {
 			),
 		})
 	}
+	/// Panel-driven viewport. Serialized with page actions so a resize never lands mid-capture.
+	pub async fn viewport(&self, target: &Target, width: u32, height: u32, scale: f32) -> Result<()> {
+		let args = viewport_arguments(width, height, scale)?;
+		let entry = self.entry(target)?;
+		if entry.terminal() {
+			return Err("浏览器已关闭，无法调整画面".into());
+		}
+		let _operation = entry.operation.lock().await;
+		ensure_alive(&entry)?;
+		entry
+			.runtime
+			.call(args, Duration::from_secs(10))
+			.await
+			.map(|_| ())
+			.map_err(String::from)
+	}
 	pub async fn execute(
 		&self,
 		target: Target,
@@ -631,17 +649,26 @@ impl Service {
 			}
 			data.active = Some((request_id, false));
 		}
-		if matches!(action, Action::Screenshot) {
+		let screenshot = matches!(action, Action::Screenshot);
+		if screenshot {
 			args.push(
 				entry
 					.runtime
 					.directory
-					.join("capture.png")
+					.join("capture.jpg")
 					.to_string_lossy()
 					.into_owned(),
 			);
 		}
-		let result = entry.runtime.call(args, COMMAND_TIMEOUT).await;
+		// JPEG keeps screenshots small enough to survive relay body limits on every re-send.
+		let result = if screenshot {
+			entry
+				.runtime
+				.call_with_global(args, &["--screenshot-format", "jpeg", "--screenshot-quality", "85"], COMMAND_TIMEOUT)
+				.await
+		} else {
+			entry.runtime.call(args, COMMAND_TIMEOUT).await
+		};
 		let cancelled = {
 			let mut data = entry.data.lock().unwrap();
 			data.active.take().is_some_and(|(_, cancelled)| cancelled)
@@ -669,21 +696,31 @@ impl Service {
 		}
 		if matches!(action, Action::Screenshot) {
 			use base64::Engine;
-			let path = entry.runtime.directory.join("capture.png");
+			let path = entry.runtime.directory.join("capture.jpg");
 			use std::io::Read;
 			let mut bytes = Vec::new();
 			std::fs::File::open(&path)
 				.map_err(|_| "无法读取浏览器截图")?
-				.take(3 * 1024 * 1024 + 1)
+				.take(SCREENSHOT_LIMIT + 1)
 				.read_to_end(&mut bytes)
 				.map_err(|_| "无法读取浏览器截图")?;
 			let _ = std::fs::remove_file(&path);
-			if bytes.len() > 3 * 1024 * 1024 || !bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
-				return Err("截图格式无效或超过 3 MiB 限制".into());
+			if bytes.len() > SCREENSHOT_LIMIT as usize || !bytes.starts_with(&[0xFF, 0xD8, 0xFF]) {
+				return Err("截图格式无效或超过 6 MiB 限制".into());
 			}
 			return Ok(
-				json!({"mimeType":"image/png","data":base64::engine::general_purpose::STANDARD.encode(bytes)}),
+				json!({"mimeType":"image/jpeg","data":base64::engine::general_purpose::STANDARD.encode(bytes)}),
 			);
+		}
+		if let Action::Get { .. } = &action {
+			// get results embed lifecycle/origin noise; keep only the value fields the model needs.
+			let mut clean = serde_json::Map::new();
+			for key in ["x", "y", "width", "height", "value", "text", "title", "url", "count", "html"] {
+				if let Some(value) = result.get(key) {
+					clean.insert(key.into(), value.clone());
+				}
+			}
+			return Ok(Value::Object(clean));
 		}
 		Ok(result)
 	}
@@ -906,6 +943,22 @@ impl Service {
 	}
 }
 
+/// The viewport is expressed in CSS pixels; the live stream keeps CSS resolution, so callers pass device pixels here.
+fn viewport_arguments(width: u32, height: u32, scale: f32) -> Result<Vec<String>> {
+	if !(200..=3000).contains(&width) || !(200..=3000).contains(&height) {
+		return Err("无效的浏览器画面尺寸".into());
+	}
+	if !scale.is_finite() || !(1.0..=3.0).contains(&scale) {
+		return Err("无效的浏览器画面缩放".into());
+	}
+	Ok(vec![
+		"set".into(),
+		"viewport".into(),
+		width.to_string(),
+		height.to_string(),
+		format!("{scale}"),
+	])
+}
 fn check_ai(status: &BrowserStatus, version: u64) -> Result<()> {
 	if status.control != Control::Ai || status.control_version != version {
 		return Err("浏览器控制权已变化，操作未执行".into());
@@ -969,6 +1022,36 @@ pub enum Action {
 	Scroll { direction: String, pixels: u32 },
 	Wait { milliseconds: u32 },
 	Screenshot,
+	Drag {
+		source: String,
+		target: String,
+		#[serde(default)]
+		human: bool,
+	},
+	Mouse {
+		sub: String,
+		#[serde(default)]
+		x: Option<u32>,
+		#[serde(default)]
+		y: Option<u32>,
+		#[serde(default)]
+		button: Option<String>,
+		#[serde(default)]
+		steps: Option<u32>,
+		#[serde(default)]
+		duration: Option<u32>,
+		#[serde(default)]
+		human: bool,
+		#[serde(default)]
+		seed: Option<u32>,
+	},
+	Get {
+		kind: String,
+		#[serde(default)]
+		selector: Option<String>,
+		#[serde(default)]
+		name: Option<String>,
+	},
 }
 impl Action {
 	fn arguments(&self) -> Result<Vec<String>> {
@@ -979,7 +1062,7 @@ impl Action {
 				Ok(value.into())
 			}
 		};
-		let selector = |value: &str| -> Result<String> {
+		let select = |value: &str| -> Result<String> {
 			if value.is_empty() || value.starts_with('-') {
 				Err("无效页面元素选择器".into())
 			} else {
@@ -999,11 +1082,11 @@ impl Action {
 			}
 			Self::Snapshot => vec!["snapshot".into()],
 			Self::Screenshot => vec!["screenshot".into()],
-			Self::Click { selector: value } => vec!["click".into(), selector(value)?],
+			Self::Click { selector: value } => vec!["click".into(), select(value)?],
 			Self::Fill {
 				selector: value,
 				text: value_text,
-			} => vec!["fill".into(), selector(value)?, text(value_text)?],
+			} => vec!["fill".into(), select(value)?, text(value_text)?],
 			Self::Press { key } => {
 				if key.starts_with('-') {
 					return Err("无效按键".into());
@@ -1022,6 +1105,92 @@ impl Action {
 					return Err("单次等待不能超过 10 秒".into());
 				}
 				vec!["wait".into(), milliseconds.to_string()]
+			}
+			Self::Drag {
+				source,
+				target,
+				human,
+			} => {
+				let mut args = vec!["drag".into(), select(source)?, select(target)?];
+				if *human {
+					args.push("--human".into());
+				}
+				args
+			}
+			Self::Mouse {
+				sub,
+				x,
+				y,
+				button,
+				steps,
+				duration,
+				human,
+				seed,
+			} => match sub.as_str() {
+				"move" => {
+					let x = x.ok_or("鼠标移动需要 x 坐标")?;
+					let y = y.ok_or("鼠标移动需要 y 坐标")?;
+					if x > 30000 || y > 30000 {
+						return Err("鼠标坐标超出范围".into());
+					}
+					let mut args =
+						vec!["mouse".into(), "move".into(), x.to_string(), y.to_string()];
+					if let Some(value) = steps {
+						if !(1..=240).contains(value) {
+							return Err("移动事件数无效".into());
+						}
+						args.push("--steps".into());
+						args.push(value.to_string());
+					}
+					if let Some(value) = duration {
+						if *value > 5000 {
+							return Err("移动时长无效".into());
+						}
+						args.push("--duration".into());
+						args.push(value.to_string());
+					}
+					if *human {
+						args.push("--human".into());
+					}
+					if let Some(value) = seed {
+						args.push("--seed".into());
+						args.push(value.to_string());
+					}
+					args
+				}
+				"down" | "up" => {
+					let mut args = vec!["mouse".into(), sub.clone()];
+					if let Some(value) = button {
+						if !["left", "right", "middle"].contains(&value.as_str()) {
+							return Err("无效鼠标按键".into());
+						}
+						args.push(value.clone());
+					}
+					args
+				}
+				_ => return Err("无效鼠标操作".into()),
+			},
+			Self::Get {
+				kind,
+				selector,
+				name,
+			} => {
+				let mut args = vec!["get".into(), kind.clone()];
+				match kind.as_str() {
+					"url" | "title" => {}
+					"attr" => {
+						let value = selector.as_deref().ok_or("读取属性需要选择器")?;
+						let attr = name.as_deref().ok_or("读取属性需要属性名")?;
+						args.push(select(value)?);
+						args.push(text(attr)?);
+					}
+					"box" | "text" | "value" | "count" | "html" => {
+						let value = selector.as_deref().ok_or("该读取类型需要选择器")?;
+						args.push(select(value)?);
+					}
+					_ => return Err("无效读取类型".into()),
+				}
+				args
 			}
 		})
 	}
@@ -1170,6 +1339,21 @@ pub async fn browser_connection(
 	target: Target,
 ) -> Result<Connection> {
 	state.get(&app).await?.connection(&target)
+}
+#[tauri::command]
+pub async fn browser_viewport(
+	app: tauri::AppHandle,
+	state: tauri::State<'_, BrowserState>,
+	target: Target,
+	width: u32,
+	height: u32,
+	scale: f32,
+) -> Result<()> {
+	state
+		.get(&app)
+		.await?
+		.viewport(&target, width, height, scale)
+		.await
 }
 #[tauri::command]
 pub async fn browser_control(

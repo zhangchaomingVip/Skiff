@@ -5,6 +5,7 @@ import {
 	anthropicMessagesApi, createAssistantMessageEventStream,
 	googleGenerativeAIApi, googleVertexApi, openAICompletionsApi, openAIResponsesApi,
 } from "@mariozechner/pi-ai";
+import { trimPayload } from "./payload-budget.js";
 
 /** Present a non-streaming completion to pi's normal streaming parser. */
 export async function adaptResponse(response, api = "openai-completions") {
@@ -131,7 +132,7 @@ export default function modelFamilies(pi) {
 					const http = payload.config.httpOptions ?? {};
 					payload.config.httpOptions = { ...http, headers: { ...http.headers, "x-skiff-response-mode": googleMarker } };
 				}
-				return payload;
+				return trimPayload(payload, api);
 			},
 		};
 		if (!GOOGLE_APIS.has(api) && settings.streaming === false) {

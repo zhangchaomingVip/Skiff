@@ -214,7 +214,7 @@ impl From<Failure> for String {
 }
 
 impl Runtime {
-	pub fn command(&self, args: &[String]) -> Command {
+	fn base(&self) -> Command {
 		let mut command = clean_command(&self.binary, &self.directory);
 		command.args([
 			"--config",
@@ -225,12 +225,27 @@ impl Runtime {
 			&self.session,
 			"--json",
 		]);
+		command
+	}
+	pub fn command(&self, args: &[String]) -> Command {
+		let mut command = self.base();
 		command.args(args);
 		command
 	}
 	pub async fn call(&self, args: Vec<String>, timeout: Duration) -> Result<Value, Failure> {
+		self.call_with_global(args, &[], timeout).await
+	}
+	/// Global flags (e.g. `--screenshot-format`) must precede the `batch` subcommand.
+	pub async fn call_with_global(
+		&self,
+		args: Vec<String>,
+		global: &[&str],
+		timeout: Duration,
+	) -> Result<Value, Failure> {
+		let mut command = self.base();
+		command.args(global);
 		// Batch stdin parses positional arrays without running the global flag parser on page-supplied text.
-		let mut command = self.command(&["batch".into(), "--bail".into(), "--omit-command".into()]);
+		command.args(["batch", "--bail", "--omit-command"]);
 		let bytes = run_with_input(
 			&mut command,
 			timeout,

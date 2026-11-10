@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
 import type { SearchDetails } from "../chat/toolDetails";
-import { CopyButton } from "./CopyButton";
 
 function SiteIcon({ url, source }: { url: string; source: string }) {
 	const [failed, setFailed] = useState(false);
@@ -15,9 +14,6 @@ export function ToolSearchResults({ text, details }: { text: string; details: Se
 			<a className="tool-search-link" href={hit.url} target="_blank" rel="noreferrer"><SiteIcon url={hit.url} source={hit.source} /><span className="tool-search-title">{hit.title}</span><span className="tool-search-source">{hit.source}</span></a>
 		</li>)}</ol>}
 		{details.results.length === 0 && details.intro && <p className="tool-search-empty">{details.intro}</p>}
-		<div className="tool-search-actions">
-			<CopyButton text={text} label="复制搜索结果" />
-		</div>
 		{!text.trim() && <p className="muted">没有找到相关结果。</p>}
 	</div>;
 }

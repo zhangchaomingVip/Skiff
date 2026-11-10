@@ -94,16 +94,22 @@ pub fn projection(entry: &ProviderModel, relay: &RelaySpec) -> Value {
 	}
 	let defaults: Vec<String> = ["minimal", "low", "medium", "high"].iter().map(|value| value.to_string()).collect();
 	let levels = item.thinking_levels.as_deref().unwrap_or(&defaults);
-	json!({
+	let vision = item.vision.unwrap_or(false);
+	let mut projected = json!({
 		"id": item.model_id, "name": if item.alias.is_empty() { &item.model_id } else { &item.alias },
 		"api": api, "provider": key(&relay.id), "streaming": entry.streaming, "tools": entry.tools,
 		"cost": {"input": item.input_cost * multiplier, "output": item.output_cost * multiplier,
 			"cacheRead": item.cache_read_cost * multiplier, "cacheWrite": item.cache_write_cost * multiplier},
 		"currency": item.currency, "contextWindow": item.context_window, "maxTokens": usable_max_tokens(item.max_tokens, item.context_window),
-		"input": if item.vision.unwrap_or(false) { vec!["text", "image"] } else { vec!["text"] },
+		"input": if vision { vec!["text", "image"] } else { vec!["text"] },
 		"reasoning": entry.reasoning, "compat": compat,
 		"thinkingLevelMap": if entry.reasoning { Some(thinking_level_map(levels)) } else { None },
-	})
+	});
+	if vision {
+		// Downscale oversized images as they enter pi's transcript; the request-size guard is the second line.
+		projected["inputLimits"] = json!({"images": {"resize": {"maxWidth": 1568, "maxHeight": 1568, "maxBytes": 300000, "jpegQuality": 85}}});
+	}
+	projected
 }
 
 pub fn offers(config: &FamiliesConfig) -> Vec<RuntimeOffer> {

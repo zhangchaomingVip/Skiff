@@ -1,5 +1,5 @@
 export interface BrowserToolDetails { requestId: string; operation: string; target?: string; durationMs?: number; outcome: string }
-export const browserActionLabels: Record<string, string> = { open: "打开网页", snapshot: "读取页面", click: "点击元素", fill: "填写字段", press: "按键操作", scroll: "滚动页面", wait: "等待页面", screenshot: "截取页面" };
+export const browserActionLabels: Record<string, string> = { open: "打开网页", snapshot: "读取页面", click: "点击元素", fill: "填写字段", press: "按键操作", scroll: "滚动页面", wait: "等待页面", screenshot: "截取页面", drag: "拖拽元素", mouse: "移动鼠标", get: "读取信息" };
 export function parseBrowserDetails(raw: unknown): BrowserToolDetails | undefined {
 	const value = (raw as { skiffBrowser?: BrowserToolDetails } | undefined)?.skiffBrowser;
 	if (!value || typeof value.requestId !== "string" || typeof value.operation !== "string" || !Object.prototype.hasOwnProperty.call(browserActionLabels, value.operation) || typeof value.outcome !== "string") return undefined;

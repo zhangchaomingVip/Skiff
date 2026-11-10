@@ -263,8 +263,7 @@ try {
 		assert.ok(searchDomainBox.x > searchTitleBox.x + searchTitleBox.width);
 		assert.ok(Math.abs(searchTitleBox.y + searchTitleBox.height / 2 - searchDomainBox.y - searchDomainBox.height / 2) < 2);
 		await page.locator(".tool").nth(5).screenshot({ path: `${shots}/details-web-${theme}.jpg`, type: "jpeg", quality: 85 });
-		await web.getByRole("button", { name: "复制搜索结果", exact: true }).click();
-		assert.equal(await page.evaluate(() => window.copiedToolText), searchText);
+		assert.equal(await web.locator(".copy-btn").count(), 0);
 		assert.equal(await cards.nth(6).getByRole("region", { name: "拟议变更", exact: true }).count(), 1);
 		assert.match(await cards.nth(6).getByRole("region", { name: "错误信息", exact: true }).textContent(), /目标文件不存在/);
 		const thinking = page.locator(".thinking").first();

@@ -38,10 +38,10 @@ test("browser validates action fields before sending any request", async () => {
 
 test("browser binds commands to fresh context, returns image and operation metadata", async () => {
 	const calls: { url: string; init: RequestInit; body?: any }[] = [];
-	const png = "iVBORw0KGgo=";
+	const jpeg = "/9j/4AAQSkZJRg==";
 	globalThis.fetch = (async (url: string, init: RequestInit) => {
 		calls.push({ url, init, body: init.body ? JSON.parse(String(init.body)) : undefined });
-		return new Response(JSON.stringify(url.endsWith("/context") ? { success: true, status: { generation: "fresh", controlVersion: 7 } } : { success: true, data: { mimeType: "image/png", data: png }, details: { outcome: "success", target: "current", durationMs: 5 } }));
+		return new Response(JSON.stringify(url.endsWith("/context") ? { success: true, status: { generation: "fresh", controlVersion: 7 } } : { success: true, data: { mimeType: "image/jpeg", data: jpeg }, details: { outcome: "success", target: "current", durationMs: 5 } }));
 	}) as typeof fetch;
 	const { tool, hooks } = load();
 	const result = await tool.execute("tool-1", { action: "screenshot" });
@@ -50,7 +50,7 @@ test("browser binds commands to fresh context, returns image and operation metad
 	assert.equal(calls[1].body.controlVersion, 7);
 	assert.deepEqual(calls[1].body.action, { type: "screenshot" });
 	assert.equal(calls[1].init.redirect, "error");
-	assert.equal(result.content[1].data, png);
+	assert.equal(result.content[1].data, jpeg);
 	assert.equal(result.details.skiffBrowser.toolCallId, "tool-1");
 	assert.equal(result.details.skiffBrowser.target, "current");
 	assert.deepEqual(hooks.tool_result({ toolName: "browser", details: result.details }), { isError: false });

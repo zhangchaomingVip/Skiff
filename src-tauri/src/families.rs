@@ -721,6 +721,11 @@ pub fn prepare_runtime(dir: &Path, cmd: &mut std::process::Command) -> Result<()
 	if std::fs::read_to_string(&extension).ok().as_deref() != Some(source) {
 		std::fs::write(&extension, source).map_err(|_| "无法安装模型家族请求适配器")?;
 	}
+	let budget_extension = dir.join("payload-budget.js");
+	let budget_source = include_str!("pi_extensions/payload-budget.js");
+	if std::fs::read_to_string(&budget_extension).ok().as_deref() != Some(budget_source) {
+		std::fs::write(&budget_extension, budget_source).map_err(|_| "无法安装请求体预算适配器")?;
+	}
 	let encoded = serde_json::to_string(&routes).map_err(|_| "无法编码线路配置")?;
 	// Windows limits the complete child environment to roughly 32 KiB. A
 	// workspace with many routes/models can exceed that when the whole runtime
@@ -1089,7 +1094,17 @@ mod tests {
 		assert_eq!(models["providers"]["skiff-relay-r1"]["models"][1]["input"],json!(["text"]));
 		assert_eq!(runtime_offers(&config).len(),4);
 		let mut cmd=std::process::Command::new("pi"); prepare_runtime(&path,&mut cmd).unwrap();
-		let runtime: Value=serde_json::from_slice(&std::fs::read(path.join("skiff-family-runtime.json")).unwrap()).unwrap(); assert_eq!(runtime[0]["models"][0]["tools"],false); assert_eq!(runtime[0]["models"][1]["tools"],true);
+		let runtime: Value=serde_json::from_slice(&std::fs::read(path.join("skiff-family-runtime.json")).unwrap()).unwrap(); 		assert_eq!(runtime[0]["models"][0]["tools"],false); assert_eq!(runtime[0]["models"][1]["tools"],true);
+		std::fs::remove_dir_all(path).unwrap();
+	}
+	#[test]
+	fn vision_models_project_an_image_resize_limit() {
+		let path = dir("vision-limit"); write_legacy(&path, &legacy()); let config = load_plain(&path).unwrap();
+		let projected = provider_models::projection(config.relays[0].models.first().unwrap(), &config.relays[0]);
+		assert_eq!(projected["inputLimits"]["images"]["resize"]["maxWidth"], json!(1568));
+		assert_eq!(projected["inputLimits"]["images"]["resize"]["maxHeight"], json!(1568));
+		assert_eq!(projected["inputLimits"]["images"]["resize"]["maxBytes"], json!(300000));
+		assert_eq!(projected["inputLimits"]["images"]["resize"]["jpegQuality"], json!(85));
 		std::fs::remove_dir_all(path).unwrap();
 	}
 	#[test]

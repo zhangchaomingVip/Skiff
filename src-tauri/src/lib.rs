@@ -566,7 +566,7 @@ pub fn run() {
 			get_workspace_directory,
 			read_system_prompt,
 			browser::browser_dependencies, browser::browser_configure, browser::browser_set_enabled, browser::browser_start,
-			browser::browser_status, browser::browser_find, browser::browser_connection, browser::browser_control, browser::browser_close,
+			browser::browser_status, browser::browser_find, browser::browser_connection, browser::browser_viewport, browser::browser_control, browser::browser_close,
 			browser::browser_begin_control, browser::browser_complete_control,
 			browser::browser_retire_chat, browser::browser_restore_chat,
 			project_workbench::list_project_directory, project_workbench::read_project_file,

@@ -36,6 +36,7 @@ export const browserNative = {
 	status: (target: BrowserTarget) => invoke<BrowserStatus>("browser_status", { target: targetRef(target) }),
 	find: (chatId: string) => invoke<BrowserStatus | null>("browser_find", { chatId }),
 	connection: (target: BrowserTarget) => invoke<BrowserConnection>("browser_connection", { target: targetRef(target) }),
+	viewport: (target: BrowserTarget, width: number, height: number, scale: number) => invoke<void>("browser_viewport", { target: targetRef(target), width, height, scale }),
 	control: (target: BrowserTarget, operation: "takeOver" | "return" | "stop") => invoke<BrowserStatus>("browser_control", { target: targetRef(target), operation }),
 	beginControl: (target: BrowserTarget, operation: "takeOver" | "return" | "stop") => invoke<BrowserStatus>("browser_begin_control", { target: targetRef(target), operation }),
 	completeControl: (target: BrowserTarget, operation: "takeOver" | "return" | "stop", controlVersion: number) => invoke<BrowserStatus>("browser_complete_control", { target: targetRef(target), operation, controlVersion }),

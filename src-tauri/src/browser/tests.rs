@@ -102,6 +102,153 @@ fn actions_are_arguments_not_shell_programs() {
 	.unwrap();
 	assert_eq!(args.len(), 3);
 	assert_eq!(args[2], "姓名 & $(echo bad) --profile C:\\user");
+	assert!(Action::Drag {
+		source: "--cdp".into(),
+		target: "#drop".into(),
+		human: false,
+	}
+	.arguments()
+	.is_err());
+	assert_eq!(
+		Action::Drag {
+			source: "@e1".into(),
+			target: "@e2".into(),
+			human: true,
+		}
+		.arguments()
+		.unwrap(),
+		vec!["drag", "@e1", "@e2", "--human"]
+	);
+	assert!(Action::Mouse {
+		sub: "move".into(),
+		x: None,
+		y: Some(10),
+		button: None,
+		steps: None,
+		duration: None,
+		human: false,
+		seed: None,
+	}
+	.arguments()
+	.is_err());
+	assert!(Action::Mouse {
+		sub: "move".into(),
+		x: Some(10),
+		y: Some(10),
+		button: None,
+		steps: Some(241),
+		duration: None,
+		human: false,
+		seed: None,
+	}
+	.arguments()
+	.is_err());
+	assert_eq!(
+		Action::Mouse {
+			sub: "move".into(),
+			x: Some(600),
+			y: Some(400),
+			button: None,
+			steps: Some(24),
+			duration: Some(250),
+			human: true,
+			seed: Some(42),
+		}
+		.arguments()
+		.unwrap(),
+		vec![
+			"mouse", "move", "600", "400", "--steps", "24", "--duration", "250", "--human",
+			"--seed", "42"
+		]
+	);
+	assert!(Action::Mouse {
+		sub: "down".into(),
+		x: None,
+		y: None,
+		button: Some("forward".into()),
+		steps: None,
+		duration: None,
+		human: false,
+		seed: None,
+	}
+	.arguments()
+	.is_err());
+	assert_eq!(
+		Action::Mouse {
+			sub: "down".into(),
+			x: None,
+			y: None,
+			button: Some("left".into()),
+			steps: None,
+			duration: None,
+			human: false,
+			seed: None,
+		}
+		.arguments()
+		.unwrap(),
+		vec!["mouse", "down", "left"]
+	);
+	assert!(Action::Get {
+		kind: "attr".into(),
+		selector: Some("#link".into()),
+		name: None,
+	}
+	.arguments()
+	.is_err());
+	assert_eq!(
+		Action::Get {
+			kind: "attr".into(),
+			selector: Some("#link".into()),
+			name: Some("href".into()),
+		}
+		.arguments()
+		.unwrap(),
+		vec!["get", "attr", "#link", "href"]
+	);
+	assert_eq!(
+		Action::Get {
+			kind: "box".into(),
+			selector: Some("@e3".into()),
+			name: None,
+		}
+		.arguments()
+		.unwrap(),
+		vec!["get", "box", "@e3"]
+	);
+	assert_eq!(
+		Action::Get {
+			kind: "url".into(),
+			selector: None,
+			name: None,
+		}
+		.arguments()
+		.unwrap(),
+		vec!["get", "url"]
+	);
+	assert!(Action::Get {
+		kind: "eval".into(),
+		selector: None,
+		name: None,
+	}
+	.arguments()
+	.is_err());
+}
+
+#[test]
+fn viewport_stays_within_bounded_css_size_and_scale() {
+	assert_eq!(
+		viewport_arguments(723, 578, 2.0).unwrap().join(" "),
+		"set viewport 723 578 2"
+	);
+	assert_eq!(
+		viewport_arguments(1000, 800, 1.25).unwrap().join(" "),
+		"set viewport 1000 800 1.25"
+	);
+	assert!(viewport_arguments(199, 578, 2.0).is_err());
+	assert!(viewport_arguments(3001, 578, 2.0).is_err());
+	assert!(viewport_arguments(723, 578, 0.5).is_err());
+	assert!(viewport_arguments(723, 578, 3.5).is_err());
+	assert!(viewport_arguments(723, 578, f32::NAN).is_err());
 }
 
 #[test]

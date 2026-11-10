@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { browserNative, type BrowserDependencies, type BrowserStatus } from "../browser/native";
 import { browserControlLabels, canWatchBrowser } from "../browser/model";
 import { watchBrowser, type BrowserStreamPhase } from "../browser/viewer";
+import { browserViewport } from "../browser/viewport";
 import { attachBrowserInput } from "../browser/input";
 import type { BrowserActions } from "../browser/useBrowserActions";
 import type { BrowserPanelControls } from "../browser/useBrowserPanel";
@@ -10,11 +11,32 @@ import { Icon } from "./Icon";
 
 function BrowserScreen({ status, controls, actions, inputHandle }: { status: BrowserStatus; controls: BrowserPanelControls; actions: BrowserActions; inputHandle: React.MutableRefObject<{ flush: () => Promise<void> } | undefined> }) {
 	const canvas = useRef<HTMLCanvasElement>(null);
+	const screen = useRef<HTMLDivElement>(null);
 	const keyboard = useRef<HTMLTextAreaElement>(null);
 	const viewer = useRef<ReturnType<typeof watchBrowser>>();
 	const current = useRef(controls); current.current = controls;
 	const [phase, setPhase] = useState<BrowserStreamPhase>("connecting");
 	const [attempt, retry] = useState(0);
+	const live = phase === "live";
+	const synced = useRef("");
+	// Chrome streams at CSS resolution, so the viewport carries the panel's device pixels and maps 1:1 there.
+	useEffect(() => {
+		const element = screen.current;
+		if (!element) return;
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		const apply = () => {
+			const request = browserViewport(element.clientWidth, element.clientHeight, window.devicePixelRatio);
+			if (!request) return;
+			const key = `${status.chatId}:${status.generation}:${request.width}x${request.height}@${request.scale}`;
+			if (key === synced.current) return;
+			synced.current = key;
+			void browserNative.viewport({ chatId: status.chatId, generation: status.generation }, request.width, request.height, request.scale).catch(() => { if (synced.current === key) synced.current = ""; });
+		};
+		const observer = new ResizeObserver(() => { clearTimeout(timer); timer = setTimeout(apply, 200); });
+		observer.observe(element);
+		apply();
+		return () => { observer.disconnect(); clearTimeout(timer); };
+	}, [status.chatId, status.generation, live]);
 	useEffect(() => {
 		if (!canvas.current) return;
 		viewer.current = watchBrowser(status, canvas.current, {
@@ -31,7 +53,7 @@ function BrowserScreen({ status, controls, actions, inputHandle }: { status: Bro
 		inputHandle.current = input;
 		return () => { input.dispose(); if (inputHandle.current === input) inputHandle.current = undefined; };
 	}, [interactive, status.controlVersion, status.generation, attempt]);
-	return <div className="browser-screen" data-phase={phase}>
+	return <div className="browser-screen" data-phase={phase} ref={screen}>
 		<canvas ref={canvas} role="img" aria-label="当前聊天的浏览器画面" />
 		{interactive && <textarea ref={keyboard} className="browser-input" aria-label="浏览器键盘输入" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} />}
 		{phase !== "live" && <div className="browser-screen-message" role="status"><Icon name={phase === "disconnected" ? "wifi" : "clock"} size={24} /><strong>{phase === "disconnected" ? "画面连接已断开" : phase === "waiting" ? "等待浏览器画面…" : "正在连接画面…"}</strong><p>{phase === "disconnected" ? "当前画面已失效。重新连接会读取最新页面，不会重复执行操作。" : "连接到当前聊天的浏览器。"}</p>{phase === "disconnected" && <Button onClick={() => { current.current.refresh(); retry((value) => value + 1); }}>重新连接画面</Button>}</div>}
