@@ -7,10 +7,18 @@ await mkdir("dist/git-commit", { recursive: true });
 const browser = await chromium.launch({ headless: true, channel: "msedge" });
 const page = await browser.newPage({ viewport: { width: 1200, height: 800 } });
 page.setDefaultTimeout(10000);
+const errors = [];
+page.on("pageerror", (error) => errors.push(String(error)));
 const panel = () => page.locator(".git-panel");
 const message = () => panel().getByRole("textbox", { name: "提交信息" });
 const commit = () => panel().getByRole("button", { name: "Commit", exact: true });
 const push = () => panel().getByRole("button", { name: "Commit and Push", exact: true });
+const confirmation = () => page.getByRole("dialog", { name: "Push Commit", exact: true });
+const confirmPush = async () => {
+	await push().click();
+	await confirmation().getByRole("button", { name: "Push", exact: true }).click();
+	await confirmation().waitFor({ state: "hidden" });
+};
 const selectAll = async () => {
 	await panel().getByRole("checkbox", { name: "选择全部 Changes", exact: true }).check();
 	await panel().getByRole("checkbox", { name: "选择全部 Unversioned Files", exact: true }).check();
@@ -23,7 +31,9 @@ try {
 		await page.evaluate(() => {
 			const original = window.__TAURI_INTERNALS__.invoke.bind(window.__TAURI_INTERNALS__);
 			window.commitMode = "success";
+			window.commitAttempts = 0;
 			window.__TAURI_INTERNALS__.invoke = async (command, args) => {
+				if (command === "commit_project_files") window.commitAttempts++;
 				if (command === "commit_project_files" && window.commitMode === "defer") {
 					window.sendProgress = (progress) => args.onProgress.onmessage(progress);
 					return new Promise((resolve) => { window.finishCommit = async () => resolve(await original(command, args)); });
@@ -38,8 +48,8 @@ try {
 			};
 		});
 		await page.getByRole("navigation", { name: "工作区工具" }).getByRole("button", { name: "文件", exact: true }).click();
-	await page.getByRole("tab", { name: "Commit", exact: true }).click();
-		await panel().getByRole("button", { name: "刷新 Git 状态" }).click();
+		await page.getByRole("tab", { name: "Commit", exact: true }).click();
+		await page.locator(".workbench-header").getByRole("button", { name: "刷新 Git 状态" }).click();
 		await panel().locator('.git-file[data-kind="added"]').waitFor();
 		assert.equal(await commit().isDisabled(), true);
 		assert.equal(await push().isDisabled(), true);
@@ -57,12 +67,27 @@ try {
 		await message().fill("feat: update selected files");
 		await page.mouse.move(1100, 700);
 		await page.screenshot({ path: `dist/git-commit/${theme}.png`, animations: "disabled" });
-		await page.evaluate(() => { window.commitMode = "reject"; });
 		await push().click();
+		await confirmation().getByRole("heading", { name: "Push Commit", exact: true }).waitFor();
+		assert.deepEqual(await confirmation().locator(".git-path-endpoint").allTextContents(), ["codex/project-workbench", "origin/main"]);
+		assert.match(await confirmation().innerText(), /所选 5 个文件/);
+		assert.equal(await page.evaluate(() => window.commitAttempts), 0, "Opening confirmation must not commit or push");
+		await page.screenshot({ path: `dist/git-commit/${theme}-confirmation.png`, animations: "disabled" });
+		await confirmation().getByRole("button", { name: "Cancel", exact: true }).click();
+		await confirmation().waitFor({ state: "hidden" });
+		assert.equal(await message().inputValue(), "feat: update selected files");
+		assert.equal(await panel().locator(".git-selected-count").innerText(), "已选 5 个文件");
+		await push().click();
+		await confirmation().waitFor();
+		await page.keyboard.press("Escape");
+		await confirmation().waitFor({ state: "hidden" });
+		assert.equal(await page.evaluate(() => window.commitAttempts), 0, "Cancel and Escape must not invoke the write command");
+		await page.evaluate(() => { window.commitMode = "reject"; });
+		await confirmPush();
 		await panel().getByRole("alert").filter({ hasText: "没有配置远程上游" }).waitFor();
 		assert.equal(await message().inputValue(), "feat: update selected files");
 		await page.evaluate(() => { window.commitMode = "defer"; });
-		await push().click();
+		await confirmPush();
 		await page.waitForFunction(() => window.finishCommit);
 		assert.equal(await commit().isDisabled(), true); assert.equal(await push().isDisabled(), true);
 		assert.equal(await message().isDisabled(), true);
@@ -80,7 +105,7 @@ try {
 		assert.equal(await page.evaluate(() => window.skiffPreview.commands.findLast((item) => item.command === "commit_project_files").args.push), true);
 		await selectAll(); await message().fill("push will fail");
 		await page.evaluate(() => { window.commitMode = "push-failure"; });
-		await push().click();
+		await confirmPush();
 		await panel().getByRole("alert").filter({ hasText: "本地提交 a13fc921 已创建并保留" }).waitFor();
 		assert.equal(await message().inputValue(), "");
 		assert.equal(await panel().locator(".git-selected-count").innerText(), "已选 0 个文件");
@@ -88,6 +113,7 @@ try {
 		await page.evaluate(() => { window.commitMode = "success"; });
 		await message().press("Control+Enter");
 		await panel().getByRole("status").filter({ hasText: "已创建本地提交" }).waitFor();
+		assert.equal(await confirmation().count(), 0, "Local Commit remains a single-step action");
 		assert.equal(await page.evaluate(() => window.skiffPreview.commands.findLast((item) => item.command === "commit_project_files").args.push), false);
 	}
 	await page.setViewportSize({ width: 600, height: 680 });
@@ -98,5 +124,12 @@ try {
 	await selectAll(); await message().fill("narrow layout");
 	assert.equal(await panel().evaluate((element) => element.scrollWidth <= element.clientWidth), true);
 	await page.screenshot({ path: "dist/git-commit/narrow.png", animations: "disabled" });
-	console.log("Commit UI: light/dark colors, selected counts, pending lock, local/push success, partial failure, draft retention and narrow layout passed.");
+	await push().click();
+	await confirmation().waitFor();
+	const bounds = await confirmation().boundingBox();
+	assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= 600 && bounds.y >= 0 && bounds.y + bounds.height <= 680);
+	await page.screenshot({ path: "dist/git-commit/narrow-confirmation.png", animations: "disabled" });
+	await confirmation().getByRole("button", { name: "Cancel", exact: true }).click();
+	assert.deepEqual(errors, []);
+	console.log("Commit UI: light/dark, Push confirmation/cancel/Escape, pending progress, local/push success, partial failure, draft retention and narrow layout passed.");
 } finally { await browser.close(); }

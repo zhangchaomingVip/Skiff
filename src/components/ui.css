@@ -63,6 +63,7 @@
 	.ui-field-help { color: var(--secondary); }
 	.ui-field-help[role=alert] { color: var(--danger); }
 	.ui-dialog { color: var(--foreground); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-xl); padding: var(--space-6); max-width: calc(100vw - 24px); max-height: calc(100dvh - 24px); overflow: auto; box-shadow: var(--shadow-elevation-3); animation: ui-enter var(--transition-fast) var(--easing-default); }
+	.ui-dialog.git-push-dialog { padding: var(--space-5); box-shadow: var(--shadow-elevation-2); background: var(--sidebar); }
 	.ui-dialog::backdrop { background: var(--overlay); }
 	.ui-dialog[data-variant=drawer] { position: fixed; inset: 40px auto 0 0; margin: 0; width: min(328px, calc(100vw - 16px)); height: calc(100dvh - 40px); max-height: none; padding: 0; border-radius: 0; overflow: hidden; }
 	.drawer-workbench { width: 100%; height: 100%; display: flex; min-height: 0; }

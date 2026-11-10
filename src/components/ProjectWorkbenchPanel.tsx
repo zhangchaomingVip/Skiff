@@ -171,6 +171,7 @@ function GitPanel({ project, onOpen, onMutated }: { project?: Project; onOpen: (
 	const [writeProgress, setWriteProgress] = useState<string>();
 	const [notice, setNotice] = useState<string>();
 	const [confirmRollback, setConfirmRollback] = useState(false);
+	const [pushConfirmation, setPushConfirmation] = useState<true>();
 	const draftKey = `${project?.id ?? ""}:${status?.repositoryRoot ?? ""}`;
 	const message = drafts[draftKey] ?? "";
 	const refresh = () => project ? projectGitCache.refresh(project.path) : Promise.resolve();
@@ -180,6 +181,7 @@ function GitPanel({ project, onOpen, onMutated }: { project?: Project; onOpen: (
 		if (retained?.version !== status?.version) retainedGitSelections.delete(draftKey);
 	}, [draftKey, status?.version]);
 	useEffect(() => { setWriteError(undefined); setNotice(undefined); setConfirmRollback(false); }, [project?.id]);
+	useEffect(() => { setPushConfirmation(undefined); }, [project?.id, status?.version, status?.branch, status?.upstream]);
 	const select = (paths: string[]) => {
 		setSelected(paths);
 		if (status) retainedGitSelections.set(draftKey, { version: status.version, paths });
@@ -226,11 +228,21 @@ function GitPanel({ project, onOpen, onMutated }: { project?: Project; onOpen: (
 					<div className="git-change-counts" aria-label="所选文件分类统计" aria-live="polite">{Object.entries(counts).filter(([, count]) => count > 0).map(([kind, count]) => <span key={kind} data-kind={kind}>{count} {kind}</span>)}</div>
 				</div>
 				<TextArea aria-label="提交信息" rows={5} placeholder="Commit Message (Ctrl+Enter)" disabled={writing} value={message} onChange={(event) => setDrafts((current) => { const next = { ...current, [draftKey]: event.target.value }; retainedGitDrafts[draftKey] = event.target.value; return next; })} onKeyDown={(event) => { if ((event.ctrlKey || event.metaKey) && event.key === "Enter") { event.preventDefault(); void commit(); } }} />
-				<div className="git-commit-actions"><Button size="compact" variant="primary" disabled={writing || loading || !selected.length || !message.trim() || !!status.operation} onClick={() => void commit()}>Commit</Button><Button size="compact" disabled={writing || loading || !selected.length || !message.trim() || !!status.operation} title="提交所选文件，并推送当前分支到已配置的上游" onClick={() => void commit(true)}>Commit and Push</Button></div>
+				<div className="git-commit-actions"><Button size="compact" variant="primary" disabled={writing || loading || !selected.length || !message.trim() || !!status.operation} onClick={() => void commit()}>Commit</Button><Button size="compact" disabled={writing || loading || !selected.length || !message.trim() || !!status.operation} title="提交所选文件，并推送当前分支到已配置的上游" onClick={() => setPushConfirmation(true)}>Commit and Push</Button></div>
 				{writing && writeProgress && <span className="muted" role="status" aria-live="polite" aria-atomic="true">{writeProgress}</span>}
 			</div>}
 		</>}
 		{confirmRollback && <Dialog className="project-dialog" aria-label="恢复所选文件" onClose={() => setConfirmRollback(false)}><div className="dialog-heading"><h2>恢复到当前 HEAD？</h2><IconButton aria-label="关闭" onClick={() => setConfirmRollback(false)}><Icon name="close" /></IconButton></div><p>项目：{project?.name}<br />将永久丢弃 {rollbackTargets.map((entry) => entry.path).join("、")} 的暂存区与工作区改动。未跟踪文件不会删除。</p><div className="dialog-actions"><Button onClick={() => setConfirmRollback(false)}>取消</Button><Button variant="danger" onClick={() => { setConfirmRollback(false); void rollback(); }}>确认恢复</Button></div></Dialog>}
+		{pushConfirmation && status && <Dialog className="project-dialog git-push-dialog" aria-label="Push Commit" onClose={() => setPushConfirmation(undefined)}>
+			<div className="dialog-heading"><div className="git-push-heading"><span className="git-push-symbol"><Icon name="upload" size={20} /></span><div><h2>Push Commit</h2><p className="git-push-project">{project?.name}</p></div></div><IconButton size="compact" variant="ghost" aria-label="关闭" onClick={() => setPushConfirmation(undefined)}><Icon name="close" /></IconButton></div>
+			<div className="info-card git-path-indicator" aria-label="推送路径">
+				<span className="git-path-endpoint" title={status.branch}><Icon name="git" /><span>{status.branch}</span></span>
+				<span className="git-path-arrow" aria-hidden="true">→</span>
+				<span className="git-path-endpoint" title={status.upstream || "未配置远程上游"}><Icon name="share" /><span>{status.upstream || "未配置远程上游"}</span></span>
+			</div>
+			<p className="git-push-summary">即将提交所选 <strong style={{ color: "var(--accent)" }}>{selected.length}</strong> 个文件，并推送到远程。</p>
+			<div className="dialog-actions"><Button onClick={() => setPushConfirmation(undefined)}>Cancel</Button><Button variant="primary" disabled={writing || loading || !selected.length || !message.trim() || !!status.operation} onClick={() => { setPushConfirmation(undefined); void commit(true); }}>Push</Button></div>
+		</Dialog>}
 	</section>;
 }
 

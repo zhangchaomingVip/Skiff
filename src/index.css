@@ -499,6 +499,18 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .dialog-heading h2 { margin: 0; font-size: var(--font-size-xl); font-weight: var(--font-weight-title); }
 .project-dialog p { font-size: var(--font-size-sm); margin: var(--space-2) 0 var(--space-5); }
 .project-dialog label { display: block; font-size: var(--font-size-sm); margin-bottom: var(--space-2); }
+.git-push-heading { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
+.git-push-heading > div { min-width: 0; }
+.git-push-symbol { display: grid; place-items: center; flex: none; width: var(--space-10); height: var(--space-10); border-radius: var(--radius-md); background: var(--selected); color: var(--accent); }
+.git-push-dialog .git-push-project { margin: var(--space-0-5) 0 0; color: var(--muted); overflow-wrap: anywhere; }
+.git-push-dialog .info-card { margin-top: var(--space-5); padding: var(--space-3); background: var(--surface); border: var(--space-px) solid var(--border); border-radius: var(--radius-md); }
+.git-path-indicator { display: flex; align-items: center; gap: var(--space-3); font-size: var(--font-size-sm); }
+.git-path-endpoint { display: flex; flex: 1; align-items: center; gap: var(--space-1-5); min-width: 0; color: var(--secondary); }
+.git-path-endpoint > svg { flex: none; color: var(--muted); }
+.git-path-endpoint > span { min-width: 0; overflow-wrap: anywhere; }
+.git-path-arrow { flex: none; color: var(--muted); }
+.git-push-dialog .git-push-summary { margin: var(--space-4) 0 0; color: var(--secondary); line-height: var(--line-height-relaxed); }
+.git-push-dialog .dialog-actions { gap: var(--space-3); margin-top: var(--space-5); }
 .project-removal-choices { min-width: 0; margin: var(--space-5) 0 0; padding: 0; border: 0; }
 .project-removal-choices legend { font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); }
 .project-removal-choices p { color: var(--muted); }

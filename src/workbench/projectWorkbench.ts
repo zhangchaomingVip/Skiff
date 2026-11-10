@@ -45,6 +45,7 @@ export interface GitStatus {
 	repositoryRoot: string;
 	scope: string;
 	branch: string;
+	upstream?: string;
 	head?: string;
 	operation?: string;
 	version: string;

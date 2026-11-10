@@ -22,6 +22,10 @@ fn target(repo: &Path) -> Result<PushTarget, String> {
 	Ok(PushTarget { branch, remote: fields[1].into(), reference: fields[2].into() })
 }
 
+pub(super) fn upstream_label(repo: &Path) -> Option<String> {
+	target(repo).ok().map(|destination| format!("{}/{}", destination.remote, destination.reference.strip_prefix("refs/heads/").unwrap_or(&destination.reference)))
+}
+
 fn push_commit(repo: &Path, destination: &PushTarget, commit: &str) -> Result<(), String> {
 	if target(repo)? != *destination { return Err("推送前分支或上游配置发生变化，已停止推送".into()); }
 	let mut command = git_command(repo);
@@ -81,6 +85,7 @@ mod tests {
 		let branch = git_text(&repo, &["branch", "--show-current"], "branch").unwrap();
 		let mut add = git_command(&repo); add.args(["remote", "add", "origin"]).arg(display_path(&remote)); checked(add, "remote").unwrap();
 		let mut upstream = git_command(&repo); upstream.args(["push", "-u", "origin", &branch]); checked(upstream, "upstream").unwrap();
+		assert_eq!(read_status(&repo).unwrap().upstream, Some(format!("origin/{branch}")));
 		fs::write(repo.join("selected.txt"), "changed\n").unwrap();
 		fs::write(repo.join("other.txt"), "unrelated staged\n").unwrap();
 		let mut stage = git_command(&repo); stage.args(["add", "other.txt"]); checked(stage, "stage").unwrap();
@@ -113,6 +118,7 @@ mod tests {
 	fn missing_upstream_does_not_create_commit() {
 		let repo = temporary_repo("commit-push-no-upstream");
 		fs::write(repo.join("file.txt"), "base\n").unwrap(); commit_all(&repo, "base");
+		assert_eq!(read_status(&repo).unwrap().upstream, None);
 		let head = current_head(&repo).unwrap();
 		fs::write(repo.join("file.txt"), "changed\n").unwrap();
 		let error = commit_and_push(&repo, &["file.txt".into()], "must not commit", &read_status(&repo).unwrap().version, &|_| {}).unwrap_err();

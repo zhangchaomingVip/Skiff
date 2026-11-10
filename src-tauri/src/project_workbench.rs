@@ -74,6 +74,7 @@ pub struct GitStatus {
 	repository_root: String,
 	scope: String,
 	branch: String,
+	upstream: Option<String>,
 	head: Option<String>,
 	operation: Option<String>,
 	version: String,
@@ -471,7 +472,7 @@ fn read_status(root: &Path) -> Result<GitStatus, String> {
 	}
 	Ok(GitStatus {
 		repository_root: display_path(&repo), scope, branch: if branch.is_empty() { "detached HEAD".to_string() } else { branch },
-		operation: operation(&repo)?, version, entries, head,
+		upstream: push::upstream_label(&repo), operation: operation(&repo)?, version, entries, head,
 	})
 }
 

@@ -59,13 +59,24 @@ export async function verifyGitCommit(page, temporaryRoot, artifacts) {
 	assert.equal(await git("diff", "--cached", "--name-only"), "other.txt");
 	assert.equal(await git("show", "HEAD:other.txt"), "base");
 	await writeFile(join(root, "new.txt"), "new file to push\n");
-	await panel.getByRole("button", { name: "刷新 Git 状态", exact: true }).click();
+	await page.locator(".workbench-header").getByRole("button", { name: "刷新 Git 状态", exact: true }).click();
 	await panel.getByRole("checkbox", { name: "选择 new.txt", exact: true }).check();
 	await message.fill("Commit and push new file");
 	// A real remote hook keeps the transport pending long enough to inspect its UI.
 	await writeFile(join(remote, "hooks", "pre-receive"), "#!/bin/sh\nsleep 2\n", { mode: 0o755 });
 	await page.evaluate(() => { window.gitCommitProgress = []; });
+	const beforeConfirmation = await git("rev-parse", "HEAD");
 	await panel.getByRole("button", { name: "Commit and Push", exact: true }).click();
+	const confirmation = page.getByRole("dialog", { name: "Push Commit", exact: true });
+	await confirmation.getByRole("heading", { name: "Push Commit", exact: true }).waitFor();
+	assert.deepEqual(await confirmation.locator(".git-path-endpoint").allTextContents(), ["main", "origin/main"]);
+	assert.equal(await git("rev-parse", "HEAD"), beforeConfirmation, "Preview must not create a local commit");
+	assert.equal(await remoteHead(), base, "Preview must not push");
+	await confirmation.getByRole("button", { name: "Cancel", exact: true }).click();
+	assert.equal(await message.inputValue(), "Commit and push new file");
+	await panel.getByRole("button", { name: "Commit and Push", exact: true }).click();
+	await confirmation.getByRole("button", { name: "Push", exact: true }).click();
+	await confirmation.waitFor({ state: "hidden" });
 	await panel.getByRole("status").filter({ hasText: "正在校验…" }).waitFor();
 	await panel.getByRole("status").filter({ hasText: /已提交 .+ → 正在推送…/ }).waitFor();
 	await page.screenshot({ path: join(artifacts, "git-commit-pushing-cdp.png") });
@@ -79,10 +90,11 @@ export async function verifyGitCommit(page, temporaryRoot, artifacts) {
 	await writeFile(join(remote, "hooks", "pre-receive"), "#!/bin/sh\nexit 1\n", { mode: 0o755 });
 	const remoteBeforeFailure = await remoteHead();
 	await writeFile(join(root, "rejected.txt"), "commit must survive push failure\n");
-	await panel.getByRole("button", { name: "刷新 Git 状态", exact: true }).click();
+	await page.locator(".workbench-header").getByRole("button", { name: "刷新 Git 状态", exact: true }).click();
 	await panel.getByRole("checkbox", { name: "选择 rejected.txt", exact: true }).check();
 	await message.fill("Keep local commit after rejection");
 	await panel.getByRole("button", { name: "Commit and Push", exact: true }).click();
+	await confirmation.getByRole("button", { name: "Push", exact: true }).click();
 	await panel.getByRole("alert").filter({ hasText: /本地提交 .+ 已创建并保留；推送失败/ }).waitFor();
 	assert.equal(await remoteHead(), remoteBeforeFailure);
 	assert.notEqual(await git("rev-parse", "HEAD"), remoteBeforeFailure);
