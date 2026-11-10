@@ -1,14 +1,16 @@
 import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Project } from "../chat/workspace";
-import { commitFiles, listDirectory, rollbackFiles, selectedChangeCounts, type DirectoryEntry, type DirectoryPage, type GitEntry, type PreviewMode, type WorkbenchTool } from "../workbench/projectWorkbench";
+import { commitFiles, listDirectory, rollbackFiles, selectedChangeCounts, type DirectoryEntry, type DirectoryPage, type FileWorkbenchTab, type GitEntry, type PreviewMode } from "../workbench/projectWorkbench";
 import { projectGitCache, useProjectGitStatus } from "../workbench/useProjectGitStatus";
 import { Icon } from "./Icon";
 import { Button, Dialog, IconButton, TextArea } from "./ui";
 import { WorkbenchProjectPicker } from "./WorkbenchProjectPicker";
+import { WorkbenchHeaderActions, WorkbenchHeaderActionsContext } from "./WorkbenchHeaderActions";
 import { GitChanges } from "./GitChanges";
 import { projectDiffCache } from "../workbench/projectDiffCache";
 import { FileContextMenuProvider, useFileContextMenu } from "./FileContextMenu";
 import { PROJECT_FILES_UPDATED, retainedFilePages } from "../workbench/projectFiles";
+import { TreeExpansionActions } from "./TreeExpansionActions";
 
 const fileGitLabels: Record<GitEntry["kind"], string> = { modified: "已修改", added: "已新增", untracked: "未跟踪", deleted: "已删除", renamed: "已重命名", conflict: "存在冲突" };
 
@@ -47,6 +49,8 @@ function FilePanel({ project, onOpen }: { project?: Project; onOpen: (project: P
 	const [loading, setLoading] = useState(() => new Set<string>());
 	const [errors, setErrors] = useState(() => new Map<string, string>());
 	const requests = useRef(new Map<string, number>());
+	const expansion = useRef(0);
+	const [expandingAll, setExpandingAll] = useState(false);
 	const prefix = `${project?.id ?? "none"}:`;
 	const key = useCallback((path: string) => `${prefix}${path}`, [prefix]);
 	const expanded = useMemo(() => new Set(expandedByProject[project?.id ?? ""] ?? []), [expandedByProject, project?.id]);
@@ -55,7 +59,8 @@ function FilePanel({ project, onOpen }: { project?: Project; onOpen: (project: P
 	const projectErrors = useMemo(() => new Map(Array.from(errors).filter(([item]) => item.startsWith(prefix)).map(([item, error]) => [item.slice(prefix.length), error])), [errors, prefix]);
 
 	const load = useCallback(async (path: string, force = false) => {
-		if (!project || (!force && pages.has(key(path)))) return;
+		if (!project) return;
+		if (!force && pages.has(key(path))) return pages.get(key(path));
 		const requestKey = key(path);
 		const ticket = (requests.current.get(requestKey) ?? 0) + 1;
 		requests.current.set(requestKey, ticket);
@@ -65,6 +70,7 @@ function FilePanel({ project, onOpen }: { project?: Project; onOpen: (project: P
 			const page = await listDirectory(project.path, path);
 			if (requests.current.get(requestKey) !== ticket) return;
 			setPages((current) => { const next = new Map(current).set(requestKey, page); retainedFilePages.clear(); for (const item of next) retainedFilePages.set(...item); return next; });
+			return page;
 		} catch (error) {
 			if (requests.current.get(requestKey) === ticket) setErrors((current) => new Map(current).set(requestKey, String(error)));
 		} finally {
@@ -74,8 +80,14 @@ function FilePanel({ project, onOpen }: { project?: Project; onOpen: (project: P
 
 	useEffect(() => { if (project) for (const path of ["", ...expanded]) void load(path); }, [project?.id]);
 	useEffect(() => {
+		setExpandingAll(false);
+		return () => { expansion.current++; };
+	}, [project?.id]);
+	const stopExpanding = () => { expansion.current++; setExpandingAll(false); };
+	useEffect(() => {
 		const invalidate = (event: Event) => {
 			const projectId = (event as CustomEvent<string>).detail;
+			if (projectId === project?.id) stopExpanding();
 			const changedPrefix = `${projectId}:`;
 			for (const [key, ticket] of requests.current) if (key.startsWith(changedPrefix)) requests.current.set(key, ticket + 1);
 			setPages((current) => new Map(Array.from(current).filter(([item]) => !item.startsWith(changedPrefix))));
@@ -88,20 +100,50 @@ function FilePanel({ project, onOpen }: { project?: Project; onOpen: (project: P
 	}, [project?.id, prefix, expanded, load]);
 	const toggle = (path: string) => {
 		if (!project) return;
+		stopExpanding();
 		const wasOpen = expanded.has(path);
 		setExpandedByProject((current) => { const next = { ...current, [project.id]: wasOpen ? (current[project.id] ?? []).filter((item) => item !== path) : [...(current[project.id] ?? []), path] }; Object.assign(retainedExpandedProjects, next); return next; });
 		if (!wasOpen) void load(path, projectErrors.has(path));
 	};
 	const refresh = () => {
 		if (!project) return;
+		stopExpanding();
 		setPages((current) => { const next = new Map(Array.from(current).filter(([item]) => !item.startsWith(prefix))); retainedFilePages.clear(); for (const item of next) retainedFilePages.set(...item); return next; });
 		for (const path of ["", ...expanded]) void load(path, true);
 		void projectGitCache.refreshChanged(project.path);
 	};
+	const expandAll = async () => {
+		if (!project || expandingAll) return;
+		const ticket = ++expansion.current;
+		setExpandingAll(true);
+		const queue = [""];
+		const visited = new Set(queue);
+		try {
+			for (let index = 0; index < queue.length && ticket === expansion.current; index++) {
+				const path = queue[index];
+				if (path) setExpandedByProject((current) => {
+					const paths = current[project.id] ?? [];
+					const next = { ...current, [project.id]: paths.includes(path) ? paths : [...paths, path] };
+					retainedExpandedProjects[project.id] = next[project.id];
+					return next;
+				});
+				const page = await load(path);
+				if (ticket !== expansion.current) break;
+				for (const entry of page?.entries ?? []) if (entry.kind === "directory" && !visited.has(entry.path)) {
+					visited.add(entry.path);
+					queue.push(entry.path);
+				}
+			}
+		} finally { if (ticket === expansion.current) setExpandingAll(false); }
+	};
+	const collapseAll = () => {
+		stopExpanding();
+		if (project) setExpandedByProject((current) => { const next = { ...current, [project.id]: [] }; retainedExpandedProjects[project.id] = []; return next; });
+	};
 	const tree = useMemo(() => ({ expanded, pages: projectPages, loading: projectLoading, errors: projectErrors, gitKinds }), [expanded, projectPages, projectLoading, projectErrors, gitKinds]);
 	const root = projectPages.get("");
 	return <section className="workbench-section file-panel" aria-label="项目文件">
-		<div className="workbench-tab-actions"><IconButton size="compact" aria-label="全部折叠" onClick={() => project && setExpandedByProject((current) => { const next = { ...current, [project.id]: [] }; Object.assign(retainedExpandedProjects, next); return next; })}><Icon name="minus" /></IconButton><IconButton size="compact" aria-label="刷新文件树" onClick={refresh}><Icon name="refresh" /></IconButton></div>
+		<WorkbenchHeaderActions tool="files"><TreeExpansionActions disabled={!project} expanding={expandingAll} onExpand={() => void expandAll()} onCollapse={collapseAll} /><IconButton size="compact" variant="ghost" aria-label="刷新文件树" title="刷新文件树" onClick={refresh}><Icon name="refresh" /></IconButton></WorkbenchHeaderActions>
 		{!project ? <div className="workbench-empty">选择一个项目以浏览文件</div> : <div className="file-tree" role="tree" aria-label={`${project.name} 文件树`} ref={(node) => { if (node && node.dataset.project !== project.id) { node.dataset.project = project.id; node.scrollTop = retainedFileScroll.get(project.id) ?? 0; } }} onScroll={(event) => retainedFileScroll.set(project.id, event.currentTarget.scrollTop)}>
 			{projectLoading.has("") && !root && <div className="workbench-empty">正在读取文件…</div>}
 			{projectErrors.has("") && <div className="workbench-empty error"><p>{projectErrors.get("")}</p><Button size="compact" onClick={() => void load("", true)}>重试</Button></div>}
@@ -170,7 +212,7 @@ function GitPanel({ project, onOpen, onMutated }: { project?: Project; onOpen: (
 		finally { projectGitCache.pause(project.path, false); setWriting(false); setWriteProgress(undefined); }
 	};
 	return <section className="workbench-section git-panel" aria-label="Git 变更">
-		<div className="workbench-tab-actions"><IconButton size="compact" variant="ghost" aria-label="刷新 Git 状态" title="刷新 Git 状态" onClick={() => { setWriteError(undefined); void refresh(); }} disabled={loading || writing}><Icon name="refresh" /></IconButton></div>
+		<WorkbenchHeaderActions tool="git"><IconButton size="compact" variant="ghost" aria-label="刷新 Git 状态" title="刷新 Git 状态" onClick={() => { setWriteError(undefined); void refresh(); }} disabled={loading || writing}><Icon name="refresh" /></IconButton></WorkbenchHeaderActions>
 		{!project ? <div className="workbench-empty">选择一个项目以查看 Git 变更</div> : <>
 			{status && <div className="git-repository" title={status.repositoryRoot}><Icon name="git" /><strong title={status.branch}>{status.branch}</strong>{status.head && <code>{status.head.slice(0, 8)}</code>}{status.scope && <small title={`范围：${status.scope}`}>范围：{status.scope}</small>}</div>}
 			{local && <div className="workbench-empty git-local-project" role="status"><span><Icon name="laptop" size={20} />本地</span><p>Local project</p></div>}
@@ -192,14 +234,18 @@ function GitPanel({ project, onOpen, onMutated }: { project?: Project; onOpen: (
 	</section>;
 }
 
-export function ProjectWorkbenchPanel({ tool, onSelectTab, projects, project, following, onSelectProject, onFollow, onAddProject, onOpen, onMutated, history }: { history?: ReactNode; tool: WorkbenchTool; onSelectTab: (tool: "files" | "git") => void; projects: Project[]; project?: Project; following: boolean; onSelectProject: (id: string) => void; onFollow: () => void; onAddProject: () => void; onOpen: (project: Project, path: string, mode: PreviewMode) => void; onMutated: () => void }) {
+export function ProjectWorkbenchPanel({ tool, onSelectTab, projects, project, following, onSelectProject, onFollow, onAddProject, onOpen, onMutated, history }: { history?: ReactNode; tool: FileWorkbenchTab; onSelectTab: (tool: FileWorkbenchTab) => void; projects: Project[]; project?: Project; following: boolean; onSelectProject: (id: string) => void; onFollow: () => void; onAddProject: () => void; onOpen: (project: Project, path: string, mode: PreviewMode) => void; onMutated: () => void }) {
 	const id = useId();
-	const tabs = [{ id: "files", label: "文件" }, { id: "git", label: "Commit" }] as const;
+	const [actionsTarget, setActionsTarget] = useState<HTMLDivElement | null>(null);
+	const tabs = [{ id: "files", label: "文件" }, { id: "git", label: "Commit" }, { id: "git-tree", label: "Git Tree" }] as const;
 	return <aside className="workbench-panel">
 		<FileContextMenuProvider root={project?.path} scope={tool}>
-		<WorkbenchProjectPicker projects={projects} project={project} following={following} onSelect={onSelectProject} onFollow={onFollow} onAdd={onAddProject} />
-		{tool === "git-tree" && history}
-		<div className="workbench-content" hidden={tool === "git-tree"}>
+		<WorkbenchHeaderActionsContext.Provider value={{ target: actionsTarget, tool }}>
+		<header className="workbench-header">
+			<WorkbenchProjectPicker projects={projects} project={project} following={following} onSelect={onSelectProject} onFollow={onFollow} onAdd={onAddProject} />
+			<div className="workbench-header-actions" ref={setActionsTarget} />
+		</header>
+		<div className="workbench-content">
 			<div className="workbench-tabs" role="tablist" aria-label="项目文件与提交">{tabs.map((tab, index) => <button key={tab.id} type="button" id={`${id}-tab-${tab.id}`} role="tab" aria-selected={tool === tab.id} aria-controls={`${id}-panel-${tab.id}`} tabIndex={tool === tab.id ? 0 : -1} onClick={() => onSelectTab(tab.id)} onKeyDown={(event) => {
 				if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
 				event.preventDefault();
@@ -209,7 +255,9 @@ export function ProjectWorkbenchPanel({ tool, onSelectTab, projects, project, fo
 			}}>{tab.label}</button>)}</div>
 			<div className="workbench-tool-slot" role="tabpanel" id={`${id}-panel-files`} aria-labelledby={`${id}-tab-files`} hidden={tool !== "files"}><FilePanel project={project} onOpen={onOpen} /></div>
 			<div className="workbench-tool-slot" role="tabpanel" id={`${id}-panel-git`} aria-labelledby={`${id}-tab-git`} hidden={tool !== "git"}><GitPanel key={project?.id} project={project} onOpen={onOpen} onMutated={onMutated} /></div>
+			<div className="workbench-tool-slot" role="tabpanel" id={`${id}-panel-git-tree`} aria-labelledby={`${id}-tab-git-tree`} hidden={tool !== "git-tree"}>{history}</div>
 		</div>
+		</WorkbenchHeaderActionsContext.Provider>
 		</FileContextMenuProvider>
 	</aside>;
 }

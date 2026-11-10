@@ -26,8 +26,9 @@ export function GitLogColumns({ children }: { children: ReactNode }) {
 		const element = container.current;
 		if (!element?.parentElement) return;
 		const viewport = element.parentElement;
-		const observer = new ResizeObserver(() => setAvailable(viewport.clientWidth));
-		setAvailable(viewport.clientWidth);
+		const measure = () => { if (viewport.clientWidth) setAvailable(viewport.clientWidth); };
+		const observer = new ResizeObserver(measure);
+		measure();
 		observer.observe(viewport);
 		return () => observer.disconnect();
 	}, []);

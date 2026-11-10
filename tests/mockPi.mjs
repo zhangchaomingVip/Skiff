@@ -175,7 +175,9 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 					{ name: "components", path: "src/components", kind: "directory" },
 					{ name: "App.tsx", path: "src/App.tsx", kind: "file", size: 18420 },
 					{ name: "tokens.css", path: "src/tokens.css", kind: "file", size: 8120 },
-				] : [
+				] : args.path === "src/components" ? [
+					{ name: "ProjectPreview.tsx", path: "src/components/ProjectPreview.tsx", kind: "file", size: 4200 },
+				] : args.path ? [] : [
 					{ name: "src", path: "src", kind: "directory" },
 					{ name: "features", path: "features", kind: "directory" },
 					{ name: "package.json", path: "package.json", kind: "file", size: 1240 },

@@ -1,5 +1,6 @@
 @layer pages {
 	.git-tree-workspace { height: 100%; min-height: 0; min-width: 0; display: flex; flex-direction: column; background: var(--workspace-backdrop); container-type: inline-size; }
+	.git-tree-workspace[hidden] { display: none; }
 	.git-history-header { display: flex; align-items: center; gap: var(--space-2); min-height: 44px; padding: var(--space-1) var(--space-3); border-bottom: 1px solid var(--border); }
 	.git-history-header > span { flex: 1; }
 	.git-history-header strong { font-size: var(--font-size-base); font-weight: var(--font-weight-medium); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -13,7 +14,6 @@
 	.git-tree-search:focus-within { outline: 2px solid var(--accent); outline-offset: 1px; }
 	.git-log-toolbar { display: flex; flex-wrap: wrap; align-items: center; border-bottom: 1px solid var(--border); padding-right: var(--space-2); gap: var(--space-1); }
 	.git-log-toolbar .git-tree-search { flex: 1 1 160px; }
-	.git-branches .workbench-toolbar { flex-wrap: wrap; height: auto; min-height: 40px; flex-basis: auto; padding-block: var(--space-1); }
 	.git-log-toolbar > span { max-width: 100px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: var(--font-size-xs); color: var(--secondary); }
 	.git-ref-list { flex: 1; min-height: 0; overflow: auto; padding: 0 var(--space-2); }
 	.git-ref-row, .commit-file { display: flex; align-items: center; gap: var(--space-2); width: 100%; min-height: 30px; padding: var(--space-1) var(--space-2); border: 0; border-radius: var(--radius-base); background: transparent; color: var(--text); font-size: var(--font-size-sm); text-align: left; }
@@ -57,9 +57,14 @@
 	.graph-color-4 { color: var(--accent); }
 	.git-history-more { display: flex; justify-content: center; padding: var(--space-3); color: var(--muted); font-size: var(--font-size-sm); }
 	.git-log-footer { padding: var(--space-2) var(--space-3); border-top: 1px solid var(--border); }
+	.commit-details-content, .commit-details-split { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 	.commit-details-scroll { flex: 1; min-height: 0; overflow: auto; }
-	.commit-changed-files { padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--border); max-height: 40%; overflow: auto; }
+	.commit-changed-files { flex: 0 0 auto; min-height: 0; padding: var(--space-2) var(--space-3); overflow: auto; }
+	.commit-details-split > .resize-separator { display: block; flex: 0 0 var(--space-2); min-width: 0; height: var(--space-2); margin: calc(-1 * var(--space-1)) 0; cursor: row-resize; }
+	.commit-details-split > .resize-separator::after { inset: calc(50% - var(--space-px)) 0 auto; width: auto; height: var(--space-px); background: var(--border); }
+	.commit-details-split > .resize-separator:is(:hover, :focus-visible, .dragging)::after { height: var(--space-0-5); background: var(--accent); }
 	.commit-section-label { display: flex; align-items: center; gap: var(--space-2); font-size: var(--font-size-xs); color: var(--muted); padding: var(--space-1) 0 var(--space-2); }
+	.commit-file-actions { display: flex; align-items: center; margin-left: auto; }
 	.commit-file-folder > div { margin-left: var(--space-3); }
 	.commit-file-folder summary span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 	.commit-file .file-status-A { color: var(--success); }

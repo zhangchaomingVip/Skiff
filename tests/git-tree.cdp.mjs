@@ -33,8 +33,18 @@ export async function verifyGitTree(page, temporaryRoot, artifacts) {
 		localStorage.setItem("skiff.sidebar.open", "true");
 	}, root);
 	await page.reload({ waitUntil: "domcontentloaded" });
-	await page.getByRole("navigation", { name: "工作区工具" }).getByRole("button", { name: "Git 历史", exact: true }).click();
+	if (!await page.getByRole("tab", { name: "Git Tree", exact: true }).isVisible()) await page.getByRole("navigation", { name: "工作区工具" }).getByRole("button", { name: "文件", exact: true }).click();
+	await page.getByRole("tab", { name: "Git Tree", exact: true }).click();
 	await page.getByRole("heading", { name: "Merge history fixture", exact: true }).waitFor();
+	await page.locator(".commit-log-list, .commit-details").evaluateAll((elements) => elements.forEach((element) => { element.dataset.retained = "yes"; }));
+	await page.getByRole("tab", { name: "Commit", exact: true }).click();
+	await page.getByRole("tab", { name: "Git Tree", exact: true }).click();
+	assert.equal(await page.locator(".commit-log-list, .commit-details").evaluateAll((elements) => elements.every((element) => element.dataset.retained === "yes")), true, "Reopening history retains the real list and details DOM");
+	const filesHeight = page.getByRole("separator", { name: "调整提交文件区高度" });
+	const initialHeight = Number(await filesHeight.getAttribute("aria-valuenow"));
+	assert.ok(initialHeight <= 200);
+	await filesHeight.focus(); await page.keyboard.press("ArrowDown");
+	assert.equal(Number(await filesHeight.getAttribute("aria-valuenow")), initialHeight + 12);
 	assert.equal(await page.getByRole("option").count(), 4);
 	await page.getByRole("button", { name: "feature.txt A", exact: true }).click();
 	await page.locator(".history-diff .diff-preview").waitFor();
@@ -56,7 +66,9 @@ export async function verifyGitTree(page, temporaryRoot, artifacts) {
 	console.log("Git Tree 全链路通过：真实分支、合并图、提交详情与历史 Diff；HEAD、index 和工作区未变。");
 
 	// Exercise Update Project with a local-only remote, never the developer's repo.
-	const update = () => page.locator(".git-log-toolbar").getByRole("button", { name: "Update Project", exact: true });
+	const update = () => page.getByRole("button", { name: "Update Project", exact: true });
+	assert.equal(await update().count(), 1);
+	assert.equal(await update().evaluate((element) => !!element.closest(".workbench-header-actions")), true);
 	await update().click();
 	await page.getByRole("alert").filter({ hasText: "未提交" }).waitFor();
 	assert.equal(await readFile(join(root, "history.txt"), "utf8"), "uncommitted content must stay\n");
@@ -75,6 +87,9 @@ export async function verifyGitTree(page, temporaryRoot, artifacts) {
 	await writeGit("add", "."); await writeGit("commit", "-qm", "Remote fast-forward update");
 	await writeGit("push", "origin", "main");
 	const remoteHead = await writeGit("rev-parse", "HEAD");
+	await page.getByRole("button", { name: "分支", exact: true }).click();
+	assert.equal(await update().count(), 1);
+	assert.equal(await update().evaluate((element) => !!element.closest(".git-log-toolbar")), true);
 	await update().click();
 	await page.getByRole("status").filter({ hasText: "快进更新到" }).waitFor();
 	await page.getByRole("heading", { name: "Remote fast-forward update", exact: true }).waitFor();
@@ -86,9 +101,12 @@ export async function verifyGitTree(page, temporaryRoot, artifacts) {
 	const localHead = await git("rev-parse", "HEAD");
 	await writeFile(join(writer, "remote-only.txt"), "different remote commit\n");
 	await writeGit("add", "."); await writeGit("commit", "-qm", "Remote diverging commit"); await writeGit("push", "origin", "main");
-	await page.locator(".git-branches").getByRole("button", { name: "Update Project", exact: true }).click();
+	await page.getByRole("button", { name: "分支", exact: true }).click();
+	await page.locator(".workbench-header-actions").getByRole("button", { name: "Update Project", exact: true }).waitFor();
+	assert.equal(await update().count(), 1);
+	await update().click();
 	await page.getByRole("status").filter({ hasText: "已分叉" }).waitFor();
 	assert.equal(await git("rev-parse", "HEAD"), localHead);
 	assert.equal(await git("status", "--porcelain"), "");
-	console.log("Update Project 全链路通过：未提交改动拦截、远程快进、分叉保留本地提交；两个入口使用相同策略。");
+	console.log("Update Project 全链路通过：侧栏开合仅保留一个入口、未提交改动拦截、远程快进、分叉保留本地提交。");
 }

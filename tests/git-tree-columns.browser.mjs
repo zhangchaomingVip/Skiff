@@ -11,8 +11,11 @@ const errors = [];
 page.on("pageerror", (error) => errors.push(String(error)));
 const summary = () => page.getByRole("separator", { name: "调整提交信息列宽" });
 const author = () => page.getByRole("separator", { name: "调整作者列宽" });
+const filesHeight = () => page.getByRole("separator", { name: "调整提交文件区高度" });
 const open = async () => {
-	await page.getByRole("navigation", { name: "工作区工具" }).getByRole("button", { name: "Git 历史", exact: true }).click();
+	await page.getByRole("navigation", { name: "工作区工具" }).getByRole("button", { name: "文件", exact: true }).waitFor();
+	if (!await page.getByRole("tab", { name: "Git Tree", exact: true }).isVisible()) await page.getByRole("navigation", { name: "工作区工具" }).getByRole("button", { name: "文件", exact: true }).click();
+	await page.getByRole("tab", { name: "Git Tree", exact: true }).click();
 	await page.locator(".commit-metadata h2").waitFor();
 };
 const drag = async (handle, distance, fraction) => {
@@ -25,10 +28,33 @@ const drag = async (handle, distance, fraction) => {
 	await page.mouse.move(x + distance, y, { steps: 8 });
 	await page.mouse.up();
 };
+const dragHeight = async (distance) => {
+	const handle = filesHeight();
+	const box = await handle.boundingBox();
+	const x = box.x + box.width / 2;
+	const y = box.y + box.height / 2;
+	assert.equal(await handle.getAttribute("aria-orientation"), "horizontal");
+	assert.equal(await handle.evaluate((element) => getComputedStyle(element).cursor), "row-resize");
+	await page.mouse.move(x, y);
+	await page.mouse.down();
+	await page.mouse.move(x, y + distance, { steps: 8 });
+	await page.mouse.up();
+};
 try {
 	for (const theme of ["light", "dark"]) {
 		await page.goto(`${origin}/tests/preview.html?fixture=sidebar&theme=${theme}`);
 		await open();
+		await page.waitForFunction(() => Number(document.querySelector('.commit-details-split [role="separator"]')?.getAttribute("aria-valuemax")) > 200);
+		assert.equal(await filesHeight().getAttribute("aria-valuenow"), "200", "File tree starts shorter than the previous 40% pane");
+		const metadataTop = (await page.locator(".commit-metadata").boundingBox()).y;
+		await dragHeight(80);
+		assert.equal(await filesHeight().getAttribute("aria-valuenow"), "280");
+		assert.equal((await page.locator(".commit-metadata").boundingBox()).y, metadataTop + 80);
+		await filesHeight().focus(); await page.keyboard.press("ArrowUp");
+		assert.equal(await filesHeight().getAttribute("aria-valuenow"), "268");
+		await page.getByRole("tab", { name: "Commit", exact: true }).click();
+		await page.getByRole("tab", { name: "Git Tree", exact: true }).click();
+		assert.equal(await filesHeight().getAttribute("aria-valuenow"), "268");
 		const selected = await page.getByRole("option", { selected: true }).textContent();
 		const oldSummary = Number(await summary().getAttribute("aria-valuenow"));
 		const oldAuthor = Number(await author().getAttribute("aria-valuenow"));
@@ -46,6 +72,11 @@ try {
 		await page.screenshot({ path: `dist/git-tree-columns/${theme}.png` });
 		await page.evaluate(() => history.replaceState(null, "", location.pathname + "?fixture=sidebar&persist=1"));
 		await page.reload(); await open();
+		assert.equal(await filesHeight().getAttribute("aria-valuenow"), "268", "File tree height persists across reloads");
+		await filesHeight().focus(); await page.keyboard.press("Home");
+		assert.equal(await filesHeight().getAttribute("aria-valuenow"), "80");
+		await page.keyboard.press("End");
+		assert.equal(await filesHeight().getAttribute("aria-valuenow"), await filesHeight().getAttribute("aria-valuemax"));
 		assert.equal(Number(await summary().getAttribute("aria-valuenow")), oldSummary - 90);
 		assert.equal(Number(await author().getAttribute("aria-valuenow")), oldAuthor + 82);
 		await author().focus(); await page.keyboard.press("Home");
@@ -64,6 +95,9 @@ try {
 	await open();
 	await page.getByRole("button", { name: "HEAD · 当前提交", exact: true }).click();
 	await page.locator(".commit-metadata h2").waitFor();
+	const narrowHeight = Number(await filesHeight().getAttribute("aria-valuenow"));
+	await dragHeight(12);
+	assert.equal(Number(await filesHeight().getAttribute("aria-valuenow")), Math.min(narrowHeight + 12, Number(await filesHeight().getAttribute("aria-valuemax"))));
 	await drag(summary(), 80, .5);
 	assert.ok(await author().isVisible());
 	await page.locator(".commit-log-scroll").evaluate((el) => { el.scrollLeft = el.scrollWidth; });

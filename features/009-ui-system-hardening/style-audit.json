@@ -6,7 +6,8 @@
       "src/index.css",
       "src/voyage.css",
       "src/browser.css",
-      "src/components/ui.css"
+      "src/components/ui.css",
+      "src/components/generation-workspace.css"
     ],
     "tokens": [
       "--accent",
@@ -605,9 +606,9 @@
       "src/index.css:1617 .providers-toolbar .ui-button.provider-status-filter height: var(--control-regular)",
       "src/index.css:1674 .project-name-field > .ui-input height: 52px",
       "src/index.css:1760 .composer .composer-context .ui-button height: var(--control-regular)",
-      "src/index.css:1781 .workbench-project-search .ui-input height: var(--control-compact)",
-      "src/index.css:1789 .workbench-project-actions .ui-button height: var(--control-compact)",
-      "src/index.css:1819 .provider-model-config-levels input height: 100%",
+      "src/index.css:1783 .workbench-project-search .ui-input height: var(--control-compact)",
+      "src/index.css:1791 .workbench-project-actions .ui-button height: var(--control-compact)",
+      "src/index.css:1821 .provider-model-config-levels input height: 100%",
       "src/browser.css:19 .browser-input height: 100%",
       "src/components/ui.css:9 .msg .message-actions .copy-btn, .msg.assistant .message-actions .usage-trigger height: var(--control-compact)",
       "src/components/ui.css:14 .ui-button height: var(--control-regular)",
@@ -615,7 +616,10 @@
       "src/components/ui.css:18 .ui-button[data-size=primary] height: var(--control-primary)",
       "src/components/ui.css:35 .composer-context .ui-button height: var(--control-compact)",
       "src/components/ui.css:44 .composer-actions .ui-icon-button.send-btn height: var(--control-regular)",
-      "src/components/ui.css:54 .ui-input height: var(--control-regular)"
+      "src/components/ui.css:54 .ui-input height: var(--control-regular)",
+      "src/components/generation-workspace.css:2 .generation-controls min-height: 0",
+      "src/components/generation-workspace.css:2 .generation-controls height: 100%",
+      "src/components/generation-workspace.css:23 .generation-ratios .ui-button height: var(--control-regular)"
     ],
     "layers": [
       "src/tokens.css: reset, pages, components, accessibility",
@@ -648,7 +652,8 @@
       "src/browser.css: pages",
       "src/components/ui.css: components",
       "src/components/ui.css: components",
-      "src/components/ui.css: accessibility"
+      "src/components/ui.css: accessibility",
+      "src/components/generation-workspace.css: components"
     ],
     "duplicateSelectors": []
   },

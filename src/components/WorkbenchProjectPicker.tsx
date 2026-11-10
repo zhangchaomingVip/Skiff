@@ -49,7 +49,7 @@ export function WorkbenchProjectPicker({ projects, project, following, onSelect,
 	const close = () => { setOpen(false); anchor.current?.focus(); };
 	return <div className="workbench-project-picker" onBlur={(event) => { if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget)) setOpen(false); }}>
 		<Button ref={anchor} variant="ghost" className="workbench-project-trigger" aria-label={`浏览项目：${project?.name ?? "选择项目"}`} aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? id : undefined} title={project?.path} onClick={() => setOpen((value) => !value)} onKeyDown={(event) => { if (event.key === "ArrowDown") { event.preventDefault(); setOpen(true); } }}>
-			<Icon name="folder" size={18} /><span className="workbench-project-name">{project?.name ?? "选择项目"}</span><Icon name="chevron" size={14} />
+			<span className="workbench-project-badge"><Icon name="folder" size={16} /></span><span className="workbench-project-name">{project?.name ?? "选择项目"}</span><Icon name="chevron" size={14} />
 		</Button>
 		{open && <Popover anchor={anchor} id={id} className="workbench-project-popover" aria-label="选择浏览项目" onClose={() => setOpen(false)}>
 			<ProjectOptions projects={projects} project={project} onSelect={(projectId) => { onSelect(projectId); close(); }} />

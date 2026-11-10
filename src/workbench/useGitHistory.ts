@@ -17,20 +17,27 @@ export function useGitHistory(project: Project | undefined, enabled: boolean, re
 	activeRoot.current = root;
 	const updated = useRef(onUpdated);
 	updated.current = onUpdated;
-	const [state, setState] = useState<{ key: string; data?: GitHistory; loading: boolean; error?: string }>();
+	const cache = useRef(new Map<string, GitHistory>());
+	const [state, setState] = useState<{ key: string; queryKey: string; data?: GitHistory; loading: boolean; error?: string }>();
+	const queryKey = JSON.stringify([root, choice.reference, choice.limit]);
 	const key = JSON.stringify([root, choice.reference, choice.limit, refresh, revision, git.status?.head]);
 	const current = state?.key === key ? state : undefined;
 	useEffect(() => {
 		if (!enabled || !root || git.local) return;
+		const cached = cache.current.get(key);
+		if (cached) { setState({ key, queryKey, data: cached, loading: false }); return; }
 		let cancelled = false;
-		setState({ key, loading: true });
+		setState((previous) => ({ key, queryKey, data: previous?.queryKey === queryKey ? previous.data : undefined, loading: true }));
 		void readGitHistory(root, choice.reference, choice.limit).then((data) => {
-			if (!cancelled) setState({ key, data, loading: false });
-		}).catch((error) => { if (!cancelled) setState({ key, error: String(error), loading: false }); });
+			if (cancelled) return;
+			cache.current.set(key, data);
+			if (cache.current.size > 20) cache.current.delete(cache.current.keys().next().value!);
+			setState({ key, queryKey, data, loading: false });
+		}).catch((error) => { if (!cancelled) setState((previous) => ({ key, queryKey, data: previous?.queryKey === queryKey ? previous.data : undefined, error: String(error), loading: false })); });
 		return () => { cancelled = true; };
 	}, [key, enabled, git.local]);
 	const change = (value: Partial<typeof choice>) => { if (root) setChoices((current) => ({ ...current, [root]: { ...choice, ...value } })); };
-	const data = current?.data;
+	const data = current?.data ?? cache.current.get(key) ?? (state?.queryKey === queryKey ? state.data : undefined);
 	const selected = data?.commits.find((commit) => commit.hash === choice.selected) ?? data?.commits[0];
 	const update = async () => {
 		if (!project || pendingUpdate.current) return;
@@ -52,6 +59,7 @@ export function useGitHistory(project: Project | undefined, enabled: boolean, re
 			setNotices((current) => ({ ...current, [target.path]: { tone: "error", text: `${target.name}：${String(error)}` } }));
 		} finally {
 			projectGitCache.pause(target.path, false);
+			for (const cachedKey of cache.current.keys()) if (JSON.parse(cachedKey)[0] === target.path) cache.current.delete(cachedKey);
 			if (activeRoot.current === target.path) setRefresh((value) => value + 1);
 			await projectGitCache.refreshAll();
 			pendingUpdate.current = false; setUpdating(false);
@@ -61,7 +69,7 @@ export function useGitHistory(project: Project | undefined, enabled: boolean, re
 		data, selected, reference: choice.reference, limit: choice.limit,
 		update, updating: updating && pendingProject.current?.path === root, canUpdate: !!root && !git.local && !updating, notice: root ? notices[root] : undefined,
 		updateTitle: updating ? `${pendingProject.current?.name} 正在更新，请稍候` : `更新 ${project?.name ?? "项目"} 的当前分支 ${data?.branch || git.status?.branch || ""}（仅快进，不切换分支）`,
-		loading: !!root && !git.local && (!current || current.loading), error: current?.error, local: git.local,
+		loading: !!root && !git.local && !cache.current.has(key) && (!current || current.loading), error: current?.error, local: git.local,
 		select: (hash: string) => change({ selected: hash }),
 		selectRef: (reference: string) => change({ reference, selected: undefined, limit: 100 }),
 		more: () => change({ limit: Math.min(1000, choice.limit + 100) }),

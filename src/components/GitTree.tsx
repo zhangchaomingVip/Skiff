@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Project } from "../chat/workspace";
 import { layoutCommitGraph, readCommitDiff, readGitCommit, type CommitDetail, type CommitFile, type GraphRow, type HistoryCommit, type HistoryRef } from "../workbench/gitHistory";
 import type { GitHistoryState } from "../workbench/useGitHistory";
@@ -8,6 +8,9 @@ import { Button, IconButton, Input } from "./ui";
 import { CopyButton } from "./CopyButton";
 import { DiffText } from "./ProjectPreview";
 import { GitLogColumns } from "./GitLogColumns";
+import { WorkbenchHeaderActions } from "./WorkbenchHeaderActions";
+import { ResizeSeparator } from "./ResizeSeparator";
+import { TreeExpansionActions } from "./TreeExpansionActions";
 import "./git-tree.css";
 
 const commitDateFormat = new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
@@ -22,7 +25,7 @@ export function GitBranches({ history, onSelect }: { history: GitHistoryState; o
 	const filtered = refs.filter((ref) => ref.label.toLocaleLowerCase().includes(query.toLocaleLowerCase()));
 	const row = (ref: HistoryRef) => <button key={ref.name} className="git-ref-row" aria-pressed={history.reference === ref.name} onClick={() => onSelect(ref.name)} title={ref.name}><Icon name={ref.kind === "tag" ? "flag" : "git"} /><span>{ref.label}</span>{ref.name === `refs/heads/${history.data?.branch}` && <small>当前</small>}</button>;
 	return <section className="workbench-section git-branches" aria-label="分支树">
-		<div className="workbench-toolbar"><strong>Git Tree</strong><span /><UpdateProjectButton history={history} /></div>
+		<WorkbenchHeaderActions tool="git-tree"><UpdateProjectButton history={history} /></WorkbenchHeaderActions>
 		<div className="git-tree-search"><Icon name="search" /><Input appearance="plain" aria-label="搜索分支或标签" placeholder="分支或标签" value={query} onChange={(event) => setQuery(event.target.value)} /></div>
 		<div className="git-ref-list">
 			<button className="git-ref-row" aria-pressed={!history.reference} onClick={() => onSelect("")}><Icon name="git" /><span>所有分支</span></button>
@@ -83,7 +86,40 @@ function CommitFiles({ node, selected, onSelect }: { node: FileNode; selected?: 
 	return <>{[...node.directories].sort(([a], [b]) => a.localeCompare(b)).map(([name, child]) => <details className="commit-file-folder" key={name} open><summary><Icon name="chevron" /><Icon name="folder" /><span>{name}</span></summary><div><CommitFiles node={child} selected={selected} onSelect={onSelect} /></div></details>)}{node.files.map((file) => <button className="commit-file" key={file.path} aria-pressed={selected === file.path} title={file.oldPath ? `${file.oldPath} → ${file.path}` : file.path} onClick={() => onSelect(file)}><Icon name="file" /><span>{file.path.split("/").pop()}</span><small className={`file-status-${file.status[0]}`}>{file.status[0]}</small></button>)}</>;
 }
 
+const filesHeightKey = "skiff.git-tree.files-height.v1";
+
+function CommitDetailsSplit({ files, children }: { files: ReactNode; children: ReactNode }) {
+	const container = useRef<HTMLDivElement>(null);
+	const [available, setAvailable] = useState(0);
+	const [preferredHeight, setPreferredHeight] = useState<number | undefined>(() => {
+		try {
+			const value = JSON.parse(localStorage.getItem(filesHeightKey) ?? "null");
+			return typeof value === "number" && Number.isFinite(value) ? Math.max(80, Math.min(1200, value)) : undefined;
+		} catch { return undefined; }
+	});
+	useEffect(() => {
+		const element = container.current;
+		if (!element) return;
+		const measure = () => { if (element.clientHeight) setAvailable(element.clientHeight); };
+		const observer = new ResizeObserver(measure);
+		observer.observe(element);
+		measure();
+		return () => observer.disconnect();
+	}, []);
+	const bounds = { min: 80, max: Math.max(80, available - 120) };
+	const height = Math.max(bounds.min, Math.min(bounds.max, preferredHeight ?? Math.min(200, available * .35)));
+	return <div className="commit-details-split" ref={container}>
+		<section className="commit-changed-files" aria-label="提交变更文件" style={{ flexBasis: height }}>{files}</section>
+		<ResizeSeparator label="调整提交文件区高度" orientation="horizontal" value={height} bounds={bounds} onResize={setPreferredHeight} onCommit={(value) => {
+			setPreferredHeight(value);
+			try { localStorage.setItem(filesHeightKey, JSON.stringify(value)); } catch { /* Resizing still works without storage. */ }
+		}} />
+		<div className="commit-details-scroll">{children}</div>
+	</div>;
+}
+
 function CommitDetails({ root, commit, refs }: { root: string; commit: HistoryCommit; refs: HistoryRef[] }) {
+	const filesTree = useRef<HTMLDivElement>(null);
 	const [detail, setDetail] = useState<CommitDetail>();
 	const [error, setError] = useState<string>();
 	const [retry, setRetry] = useState(0);
@@ -95,20 +131,21 @@ function CommitDetails({ root, commit, refs }: { root: string; commit: HistoryCo
 		return () => { cancelled = true; };
 	}, [root, commit.hash, retry]);
 	const tree = useMemo(() => buildFileTree(detail?.files ?? []), [detail]);
+	const expandFiles = (open: boolean) => { for (const folder of filesTree.current?.querySelectorAll<HTMLDetailsElement>("details") ?? []) folder.open = open; };
 	return <aside className="commit-details" aria-label="提交详情">
 		<div className="workbench-toolbar"><strong>提交详情</strong><span /><CopyButton text={commit.hash} label="复制提交 hash" /></div>
-		<div className="commit-details-scroll">
+		<div className="commit-details-content">
 			{!detail && !error && <p className="workbench-empty" role="status">正在读取提交…</p>}
 			{error && <div className="workbench-empty error" role="alert"><p>{error}</p><Button size="compact" onClick={() => setRetry((value) => value + 1)}>重试提交详情</Button></div>}
-			{detail && <><section className="commit-changed-files" aria-label="提交变更文件"><div className="commit-section-label">变更文件 <span>{detail.files.length}</span></div>{detail.files.length ? <CommitFiles node={tree} selected={file?.path} onSelect={setFile} /> : <p className="workbench-empty">此提交在项目范围内没有文件变更</p>}</section>
+			{detail && <CommitDetailsSplit files={<><div className="commit-section-label">变更文件 <span>{detail.files.length}</span><div className="commit-file-actions"><TreeExpansionActions disabled={!tree.directories.size} onExpand={() => expandFiles(true)} onCollapse={() => expandFiles(false)} /></div></div><div ref={filesTree}>{detail.files.length ? <CommitFiles node={tree} selected={file?.path} onSelect={setFile} /> : <p className="workbench-empty">此提交在项目范围内没有文件变更</p>}</div></>}>
 				<section className="commit-metadata"><h2>{commit.subject}</h2><div className="commit-hash">{commit.hash.slice(0, 12)}</div><p>{commit.author}<br /><span>{commit.email}</span><br /><time dateTime={commit.date}>{new Date(commit.date).toLocaleString()}</time></p>{refs.length > 0 && <div className="commit-ref-badges">{refs.map((ref) => <span key={ref.name} title={ref.name}><Icon name={ref.kind === "tag" ? "flag" : "git"} />{ref.label}</span>)}</div>}{detail.message.trim() !== commit.subject.trim() && <pre>{detail.message.split("\n").slice(1).join("\n").trim()}</pre>}<p className="commit-parent-note">{detail.parents.length > 1 ? `合并提交 · 与第一父提交 ${detail.parents[0].slice(0, 8)} 比较` : detail.parents.length ? `父提交 ${detail.parents[0].slice(0, 8)}` : "初始提交 · 与空目录比较"}</p></section>
-			</>}
-			{file && <HistoryDiff key={file.path} root={root} hash={commit.hash} file={file} onClose={() => setFile(undefined)} />}
+				{file && <HistoryDiff key={file.path} root={root} hash={commit.hash} file={file} onClose={() => setFile(undefined)} />}
+			</CommitDetailsSplit>}
 		</div>
 	</aside>;
 }
 
-export function GitTreeWorkspace({ project, history, onBack, onBranches }: { project?: Project; history: GitHistoryState; onBack: () => void; onBranches: () => void }) {
+export function GitTreeWorkspace({ project, history, branchesOpen, hidden, onBack, onBranches }: { project?: Project; history: GitHistoryState; branchesOpen: boolean; hidden: boolean; onBack: () => void; onBranches: () => void }) {
 	const [query, setQuery] = useState("");
 	const commits = history.data?.commits ?? [];
 	const graph = useMemo(() => layoutCommitGraph(commits), [commits]);
@@ -117,15 +154,15 @@ export function GitTreeWorkspace({ project, history, onBack, onBranches }: { pro
 	const visible = commits.flatMap((commit, index) => `${commit.subject} ${commit.author} ${commit.hash}`.toLocaleLowerCase().includes(normalizedQuery) ? [{ commit, graph: graph[index] }] : []);
 	const selectedRefs = history.data?.refs.filter((ref) => ref.hash === history.selected?.hash) ?? [];
 	const referenceLabel = history.reference === "HEAD" ? "HEAD" : history.data?.refs.find((ref) => ref.name === history.reference)?.label ?? "所有分支";
-	return <section className="git-tree-workspace" aria-label="Git Tree 历史">
+	return <section className="git-tree-workspace" aria-label="Git Tree 历史" hidden={hidden}>
 		<header className="git-history-header"><Button size="compact" variant="ghost" onClick={onBack}><Icon name="message" />返回对话</Button><span /><strong>{project?.name ?? "Git Tree"}</strong><small>提交历史</small><Button className="git-branch-toggle" size="compact" variant="ghost" onClick={onBranches}><Icon name="git" />分支</Button></header>
 		{!project ? <div className="workbench-empty">选择一个项目以浏览提交历史</div> : history.local ? <div className="workbench-empty"><Icon name="laptop" size={24} /><p>本地项目，尚未创建 Git 仓库</p></div> : <div className="git-history-columns">
 			<section className="commit-log" aria-label="提交记录">
-				<div className="git-log-toolbar"><div className="git-tree-search"><Icon name="search" /><Input appearance="plain" aria-label="搜索已加载提交" placeholder="搜索已加载提交、作者或 hash" value={query} onChange={(event) => setQuery(event.target.value)} /></div><span title={history.reference || "所有分支"}>{referenceLabel}</span><UpdateProjectButton history={history} /></div>
+				<div className="git-log-toolbar"><div className="git-tree-search"><Icon name="search" /><Input appearance="plain" aria-label="搜索已加载提交" placeholder="搜索已加载提交、作者或 hash" value={query} onChange={(event) => setQuery(event.target.value)} /></div><span title={history.reference || "所有分支"}>{referenceLabel}</span>{!branchesOpen && <UpdateProjectButton history={history} />}</div>
 				{history.notice && <div className={`workbench-banner ${history.notice.tone}`} role={history.notice.tone === "error" ? "alert" : "status"}>{history.notice.text}</div>}
 				{history.error && <div className="workbench-empty error" role="alert"><p>{history.error}</p><Button size="compact" onClick={history.refresh}>重试历史</Button>{history.reference && <Button size="compact" onClick={() => history.selectRef("")}>查看所有分支</Button>}</div>}
-				{history.loading && <div className="workbench-empty" role="status">正在读取提交历史…</div>}
-				{!history.loading && !history.error && <><div className="commit-log-scroll"><GitLogColumns><div className="commit-log-list" role="listbox" aria-label="提交列表">{visible.map(({ commit, graph: row }) => <button key={commit.hash} role="option" aria-selected={history.selected?.hash === commit.hash} className="commit-log-row" onClick={() => history.select(commit.hash)} onKeyDown={(event) => { if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); const next = event.key === "ArrowDown" ? event.currentTarget.nextElementSibling : event.currentTarget.previousElementSibling; (next as HTMLElement | null)?.focus(); (next as HTMLButtonElement | null)?.click(); } }} title={`${commit.subject}\n${commit.hash}\n${commit.author} · ${new Date(commit.date).toLocaleString()}`}>
+				{history.loading && !history.data && <div className="workbench-empty" role="status">正在读取提交历史…</div>}
+				{history.data && <><div className="commit-log-scroll"><GitLogColumns><div className="commit-log-list" role="listbox" aria-label="提交列表">{visible.map(({ commit, graph: row }) => <button key={commit.hash} role="option" aria-selected={history.selected?.hash === commit.hash} className="commit-log-row" onClick={() => history.select(commit.hash)} onKeyDown={(event) => { if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); const next = event.key === "ArrowDown" ? event.currentTarget.nextElementSibling : event.currentTarget.previousElementSibling; (next as HTMLElement | null)?.focus(); (next as HTMLButtonElement | null)?.click(); } }} title={`${commit.subject}\n${commit.hash}\n${commit.author} · ${new Date(commit.date).toLocaleString()}`}>
 						<span className="commit-row-main"><CommitGraph row={row} width={width} filtered={!!normalizedQuery} /><span className="commit-subject">{commit.subject}</span></span><span className="commit-author">{commit.author}</span><time dateTime={commit.date}>{commitDateFormat.format(new Date(commit.date))}</time>
 					</button>)}</div>{!visible.length && <p className="workbench-empty">{query ? "已加载记录中没有匹配的提交" : "此范围暂无提交"}</p>}{history.data?.hasMore && <div className="git-history-more">{history.limit < 1000 ? <Button size="compact" onClick={history.more}>加载更多提交</Button> : <span>已显示最近 1000 条，请选择分支缩小范围</span>}</div>}</GitLogColumns></div><footer className="git-log-footer">{commits.length} 条提交{normalizedQuery && ` · 匹配 ${visible.length} 条（搜索时隐藏连线）`}</footer></>}
 			</section>

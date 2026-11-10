@@ -24,8 +24,19 @@ try {
 		const chatId = await activeChat();
 		await page.getByRole("navigation", { name: "工作区工具" }).getByRole("button", { name: "文件", exact: true }).click();
 		assert.equal(await trigger().innerText(), "Skiff");
+		await page.mouse.move(1300, 900);
+		assert.equal(await trigger().evaluate((element) => getComputedStyle(element).backgroundColor), "rgba(0, 0, 0, 0)");
+		const badge = page.locator(".workbench-project-badge");
+		assert.deepEqual(await badge.evaluate((element) => { const style = getComputedStyle(element); return [style.width, style.height, style.borderTopWidth, style.borderRadius]; }), ["24px", "24px", "1px", await trigger().evaluate((element) => getComputedStyle(element).borderRadius)]);
+		assert.equal(await badge.locator("svg").evaluate((element) => getComputedStyle(element).transform), "none", "Only the dropdown chevron rotates, not the folder badge");
+		assert.equal(await page.locator(".workbench-project-name").evaluate((element) => getComputedStyle(element).fontWeight), "600");
+		await trigger().hover();
+		await page.waitForFunction(() => { const element = document.querySelector(".workbench-project-trigger"); return element.matches(":hover") && getComputedStyle(element).backgroundColor !== "rgba(0, 0, 0, 0)"; });
+		assert.notEqual(await trigger().evaluate((element) => getComputedStyle(element).backgroundColor), "rgba(0, 0, 0, 0)");
 		await trigger().click();
 		await search().waitFor();
+		await page.mouse.move(1300, 900);
+		assert.notEqual(await trigger().evaluate((element) => getComputedStyle(element).backgroundColor), "rgba(0, 0, 0, 0)", "An expanded project picker retains its hover tint");
 		assert.equal(await search().evaluate((el) => el === document.activeElement), true);
 		assert.deepEqual(await picker().getByRole("option").allTextContents(), ["Skiff", "aiagent", "cc-switch"]);
 		assert.equal(await picker().getByRole("option", { name: "Skiff", exact: true }).getAttribute("aria-selected"), "true");
@@ -64,6 +75,15 @@ try {
 		await trigger().click();
 		await page.locator(".titlebar").click({ position: { x: 450, y: 15 } });
 		await picker().waitFor({ state: "hidden" });
+		// At 200px, a long label yields space to all file actions while the badge stays square.
+		await page.getByRole("tab", { name: "文件", exact: true }).click();
+		await page.getByRole("separator", { name: "调整左侧导航宽度", exact: true }).focus();
+		await page.keyboard.press("Home");
+		await page.locator(".workbench-project-name").evaluate((element) => { element.textContent = "一个名称很长且需要自动省略的项目 Project with a long name"; });
+		assert.equal(await page.locator(".workbench-project-name").evaluate((element) => element.scrollWidth > element.clientWidth && getComputedStyle(element).textOverflow === "ellipsis"), true);
+		assert.equal(await page.locator(".workbench-header").evaluate((element) => element.scrollWidth <= element.clientWidth), true);
+		for (const name of ["全部展开", "全部折叠", "刷新文件树"]) assert.equal(await page.locator(".workbench-header").getByRole("button", { name, exact: true }).isVisible(), true);
+		await page.screenshot({ path: fileURLToPath(new URL(`${theme}-compact-header.png`, output)), animations: "disabled" });
 	}
 
 	// The picker also lives inside the narrow-screen navigation dialog.

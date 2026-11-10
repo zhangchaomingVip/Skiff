@@ -48,6 +48,8 @@ const paths = {
 	spark: "m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5L12 3Z",
 	star: "m12 3 2.78 5.63L21 9.54l-4.5 4.39L17.56 20 12 17.08 6.44 20l1.06-6.07L3 9.54l6.22-.91L12 3Z",
 	image: "M3 3h18v18H3Zm0 14 6-6 5 5 3-3 4 4M16 7h.01",
+	imageSpark: "M11 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-6M3 16l5-5 5 5 3-3 5 5M18 2l1.3 3.7L23 7l-3.7 1.3L18 12l-1.3-3.7L13 7l3.7-1.3L18 2Z",
+	video: "M3 8h18v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8ZM3 8V4a1 1 0 0 1 1-1h16a1 1 0 0 1 1 1v4M8 3 5 8m9-5-3 5m9-5-3 5m-7 4v6l5-3-5-3Z",
 	eye: "M2 12s3-7 10-7 10 7 10 7-3 7-10 7S2 12 2 12ZM15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z",
 	"eye-off": "m3 3 18 18M10.6 10.6a2 2 0 0 0 2.8 2.8M9.9 5.2A11 11 0 0 1 12 5c7 0 10 7 10 7a17 17 0 0 1-3 4M6.6 6.6A17 17 0 0 0 2 12s3 7 10 7a11 11 0 0 0 5.4-1.4",
 	clock: "M12 8v5l3 2M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0Z",
@@ -58,6 +60,8 @@ const paths = {
 	pin: "M12 17v5M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4h-4a2 2 0 0 0 0 4h1v4.76Z",
 	checkbox: "M4 4h16v16H4Zm4 8 3 3 6-6.5",
 	minus: "M5 12h14",
+	expandAll: "m8 8 4-4 4 4M8 16l4 4 4-4",
+	collapseAll: "m8 4 4 4 4-4M8 20l4-4 4 4",
 	/* Straight trunk with two nodes and a branch curving into the upper node, so the
 	   stroke never stops short of a circle the way the old hooked path did. */
 	git: "M6 3v12M18 3a3 3 0 1 0 0 6 3 3 0 1 0 0-6ZM6 15a3 3 0 1 0 0 6 3 3 0 1 0 0-6ZM18 9a9 9 0 0 1-9 9",

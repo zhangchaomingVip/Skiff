@@ -1,7 +1,13 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import type { Project } from "../chat/workspace";
 
-export type WorkbenchTool = "chats" | "files" | "git" | "git-tree";
+export type FileWorkbenchTab = "files" | "git" | "git-tree";
+export type GenerationTool = "image-generation" | "video-generation";
+export type WorkbenchTool = "chats" | FileWorkbenchTab | GenerationTool;
+
+export function isFileWorkbenchTab(tool: WorkbenchTool): tool is FileWorkbenchTab {
+	return tool === "files" || tool === "git" || tool === "git-tree";
+}
 
 export interface DirectoryEntry {
 	name: string;

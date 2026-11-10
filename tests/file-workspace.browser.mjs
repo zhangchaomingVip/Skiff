@@ -56,9 +56,9 @@ try {
 		await page.getByRole("button", { name: "浏览项目：Skiff", exact: true }).click();
 		await page.getByRole("option", { name: "aiagent", exact: true }).click();
 		assert.match(await empty.locator(".file-workspace-project").innerText(), /^aiagent/);
-		await tool("Git 历史").click();
+		await page.getByRole("tab", { name: "Git Tree", exact: true }).click();
 		await page.locator(".git-tree-workspace").waitFor();
-		await tool("文件").click();
+		await page.getByRole("tab", { name: "文件", exact: true }).click();
 		await empty.waitFor();
 		assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem("skiff.workspace.v1")).activeId), chatId);
 		await page.setViewportSize({ width: 390, height: 760 });
