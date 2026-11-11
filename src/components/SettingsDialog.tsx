@@ -12,14 +12,17 @@ import type { WebSearchControls } from "../chat/webSearch";
 import { WebSearchSettings } from "./WebSearchSettings";
 import { FontSettings } from "./FontSettings";
 import { BrowserSettings } from "./BrowserSettings";
+import { ImageGenerationSettings } from "./ImageGenerationSettings";
+import type { GenerationStudio } from "../workbench/useGenerationStudio";
 
-export function SettingsDialog({ initialCategory, restrictions, prompt, providers, archives, search, onRetryModels, onClose, onCategoryChange }: {
+export function SettingsDialog({ initialCategory, restrictions, prompt, providers, archives, search, images, onRetryModels, onClose, onCategoryChange }: {
 	initialCategory: SettingsCategory;
 	restrictions: SettingsRestrictions;
 	prompt: ComponentProps<typeof PromptSettings>;
 	providers: Omit<ProvidersSettingsProps, "onLockChange" | "focusLocation">;
 	archives: ComponentProps<typeof ArchivedSessions>;
 	search: WebSearchControls;
+	images: GenerationStudio["images"];
 	onRetryModels: () => void;
 	onClose: () => void;
 	/** Lets the shell reopen preferences on the tab the user left. */
@@ -54,6 +57,7 @@ export function SettingsDialog({ initialCategory, restrictions, prompt, provider
 			<div className="settings-content">
 				{category === "browser" && <fieldset className="settings-config" disabled={!!restrictions.browser}><BrowserSettings onSaved={prompt.onSaved} /></fieldset>}
 				{category === "fonts" && <FontSettings />}
+				{category === "images" && <ImageGenerationSettings images={images} ref={editor} onLockChange={updateInteraction} />}
 				{category === "appearance" && <section className="settings-page" aria-labelledby="appearance-title"><h2 id="appearance-title">外观</h2><p className="muted">选择应用主题与主题色，立即生效。</p>
 					<div className="settings-group">
 						<div className="settings-row">
@@ -100,7 +104,7 @@ export function SettingsDialog({ initialCategory, restrictions, prompt, provider
 		</div>
 		{switchTarget && <Dialog className="project-dialog" aria-labelledby="settings-discard-title" initialFocus={switchCancel} onClose={() => setSwitchTarget(undefined)}>
 			<div className="dialog-heading"><h2 id="settings-discard-title">放弃更改并切换？</h2></div>
-			<p>当前供应商有未保存的更改，切换分类将放弃这些更改。</p>
+			<p>当前设置有未保存的更改，切换分类将放弃这些更改。</p>
 			<div className="dialog-actions">
 				<Button ref={switchCancel} variant="secondary" onClick={() => setSwitchTarget(undefined)}>继续编辑</Button>
 				<Button variant="primary" onClick={() => { setCategory(switchTarget); setSwitchTarget(undefined); }}>放弃更改并切换</Button>

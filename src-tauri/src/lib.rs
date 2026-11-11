@@ -15,6 +15,7 @@ mod history;
 mod settings_metadata;
 mod project_workbench;
 mod browser;
+mod generation;
 
 /// One spawned `pi --mode rpc` session. `child` is kept only so we can kill it
 /// on stop; `stdin` is shared with the reader threads so we can write lines.
@@ -554,6 +555,8 @@ pub fn run() {
 		.manage(history::HistoryWorkspace::default())
 		.manage(project_workbench::WorkbenchState::default())
 		.manage(browser::BrowserState::default())
+		.manage(generation::GenerationState::default())
+		.setup(|app| { generation::setup(app.handle()).map_err(std::io::Error::other)?; Ok(()) })
 		// Native folder picker for the add-project dialog.
 		.plugin(tauri_plugin_dialog::init())
 		.invoke_handler(tauri::generate_handler![
@@ -561,6 +564,9 @@ pub fn run() {
 			rpc_send,
 			rpc_stop,
 			open_url,
+			generation::get_image_generation_config, generation::save_image_generation_service, generation::delete_image_generation_service,
+			generation::list_image_generation_jobs, generation::start_image_generation, generation::cancel_image_generation,
+			generation::reveal_image_generation_asset, generation::export_image_generation_asset,
 			get_pi_auth_status,
 			validate_project_directory,
 			get_workspace_directory,

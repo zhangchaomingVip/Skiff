@@ -28,9 +28,12 @@ import { verifyToolResultsAndRetries } from "./retry.cdp.mjs";
 import { verifyNativeBrowser, verifyNativeBrowserShutdown } from "./browser-native.cdp.mjs";
 import { createBrowserToolScenario, verifyBrowserTools } from "./browser-tools.cdp.mjs";
 import { createLifecycleScenario, verifyBrowserLifecycle } from "./browser-lifecycle.cdp.mjs";
+import { createImageGenerationScenario, verifyImageGeneration } from "./image-generation.cdp.mjs";
 
 const CDP_PORT = 9222;
 const modelPickerOnly = process.argv.includes("--model-picker");
+const imagesOnly = process.argv.includes("--images");
+const imageScenario = createImageGenerationScenario();
 const retryOnly = process.argv.includes("--retry");
 const browserToolsOnly = process.argv.includes("--browser-tools");
 const browserLifecycleOnly = process.argv.includes("--browser-lifecycle");
@@ -61,6 +64,7 @@ const browserScenario = browserLifecycleOnly ? await createLifecycleScenario(MOD
 let retryScenario;
 let scenarioRequests = 0;
 const server = createServer((request, response) => {
+	if (imageScenario.handle(request, response)) return;
 	const send = (status, body) => { response.writeHead(status, { "Content-Type": "application/json" }); response.end(body); };
 	if (request.method === "GET" && request.url === "/v1/models") return send(200, JSON.stringify({ data: [{ id: MODEL_ID }, { id: "provider-private-alias", vision: true, tools: false, reasoning: false, context_window: 64000, max_output_tokens: 2048 }] }));
 	if (request.method === "POST" && request.url === "/v1/chat/completions") {
@@ -148,7 +152,7 @@ await writeFile(join(agentDir, "skiff-families.json"), JSON.stringify(families, 
 if (retryOnly) await writeFile(join(agentDir, "settings.json"), JSON.stringify({ retry: { enabled: true, maxRetries: 5, baseDelayMs: 250, maxAgentDelayMs: 1000, provider: { maxRetries: 0 } } }));
 
 // --- 拉起桌面 dev 实例（CDP 调试端口 + 临时数据目录）----------------------------
-const env = { ...process.env, PI_CODING_AGENT_DIR: agentDir, SKIFF_BROWSER_DATA_DIR: join(root, "browsers"), WEBVIEW2_USER_DATA_FOLDER: join(root, "webview"), WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${CDP_PORT} --enable-automation` };
+const env = { ...process.env, PI_CODING_AGENT_DIR: agentDir, SKIFF_GENERATION_DIR: join(root, "generation"), SKIFF_BROWSER_DATA_DIR: join(root, "browsers"), WEBVIEW2_USER_DATA_FOLDER: join(root, "webview"), WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${CDP_PORT} --enable-automation` };
 // Optional already-built debug binary, for verification while a developer's
 // Vite/Tauri instance owns port 1420. Copy it and isolate WebView2 storage so
 // neither its executable nor its workspace can be affected by this run.
@@ -194,7 +198,7 @@ try {
 	console.log("CDP 端点已就绪，正在附身窗口…");
 
 	browser = await chromium.connectOverCDP(cdpUrl);
-	if (browserOnly) {
+	if (browserOnly || imagesOnly) {
 		const diagnostic = await browser.newBrowserCDPSession();
 		const { arguments: browserArguments } = await diagnostic.send("Browser.getBrowserCommandLine");
 		const profileArgument = browserArguments.find((argument) => argument.startsWith("--user-data-dir="));
@@ -244,7 +248,17 @@ try {
 	console.log("已在启动台点击「开始聊天」，等待聊天视图…");
 
 	await page.waitForSelector(".composer-input", { timeout: 60_000 });
-	if (browserOnly) {
+	if (imagesOnly) {
+		await verifyImageGeneration(page, imageScenario, `http://127.0.0.1:${mockPort}/v1`, join(root, "generation"), artifacts);
+		// Reloading an empty conversation returns to the launcher. Enter the chat
+		// through its real start control before checking the independent pi flow.
+		if (await page.locator(".launcher-row").count()) await page.locator(".launcher-row", { hasText: MODEL_ID }).getByRole("button", { name: "开始聊天" }).click();
+		await page.fill(".composer-input", "生图后验证普通聊天。");
+		await page.click(".send-btn");
+		await page.waitForFunction((reply) => document.body.innerText.includes(reply), REPLY, { timeout: 90000 });
+		assert.ok(requests.length > 0, "Ordinary pi chat remains functional after generating images");
+		assert.deepEqual(pageErrors, []);
+	} else if (browserOnly) {
 		if (browserToolsOnly) await verifyBrowserTools(page, browserScenario, requests, artifacts);
 		if (browserLifecycleOnly) await verifyBrowserLifecycle(page, browserScenario, requests, artifacts, root);
 		await verifyNativeBrowser(page);

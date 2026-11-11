@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { useImageGeneration } from "./useImageGeneration";
+import { imageAssetUrl, sizeRatio, type ImageJob } from "./imageGeneration";
 
 export type GenerationKind = "image" | "video";
 export const generationRatios = ["1:1", "16:9", "9:16", "4:3"] as const;
@@ -7,6 +9,9 @@ export type GenerationRatio = typeof generationRatios[number];
 export interface GenerationDraft {
 	prompt: string;
 	modelId: string;
+	serviceId: string;
+	size: string;
+	quality: string;
 	ratio: GenerationRatio;
 	motion: number;
 	duration: number;
@@ -21,6 +26,7 @@ export interface GenerationAsset {
 	prompt?: string;
 	ratio?: GenerationRatio;
 	createdAt: number;
+	job?: ImageJob;
 }
 
 export interface GenerationReference {
@@ -41,10 +47,21 @@ function validateMedia(file: File, kind: GenerationKind) {
 
 /** Session-owned local media stays available across tools without persisting blob URLs. */
 export function useGenerationStudio() {
+	const images = useImageGeneration();
 	const [drafts, setDrafts] = useState<Record<GenerationKind, GenerationDraft>>({
-		image: { prompt: "", modelId: "", ratio: "1:1", motion: 35, duration: 5, fps: 24 },
-		video: { prompt: "", modelId: "", ratio: "16:9", motion: 35, duration: 5, fps: 24 },
+		image: { prompt: "", modelId: "", serviceId: "", size: "", quality: "auto", ratio: "1:1", motion: 35, duration: 5, fps: 24 },
+		video: { prompt: "", modelId: "", serviceId: "", size: "", quality: "auto", ratio: "16:9", motion: 35, duration: 5, fps: 24 },
 	});
+	useEffect(() => {
+		if (!images.config) return;
+		setDrafts((current) => {
+			const previous = current.image;
+			const services = images.config!.services;
+			const service = services.find((item) => item.id === previous.serviceId) ?? services.find((item) => item.id === images.config!.defaultServiceId) ?? services[0];
+			const model = service?.models.find((item) => item.id === previous.modelId) ?? service?.models.find((item) => item.id === service.defaultModel) ?? service?.models[0];
+			return { ...current, image: { ...previous, serviceId: service?.id ?? "", modelId: model?.id ?? "", size: model?.sizes.includes(previous.size) ? previous.size : model?.sizes[0] ?? "" } };
+		});
+	}, [images.config]);
 	const [assets, setAssets] = useState<GenerationAsset[]>([]);
 	const [reference, setReference] = useState<GenerationReference>();
 	const [referenceError, setReferenceError] = useState<string>();
@@ -85,7 +102,8 @@ export function useGenerationStudio() {
 		if (asset.prompt) updateDraft("video", { prompt: asset.prompt });
 		if (asset.ratio) updateDraft("video", { ratio: asset.ratio });
 	};
-	return { drafts, updateDraft, assets, importAssets, reference, uploadReference, removeReference: () => replaceReference(), useImageForVideo, referenceError, clearReferenceError: () => setReferenceError(undefined), errors, clearError };
+	const generated: GenerationAsset[] = images.jobs.filter((job) => job.status === "completed" && job.path).map((job) => ({ id: job.id, kind: "image", url: imageAssetUrl(job.path!), name: `skiff-${job.id.slice(0, 8)}.png`, prompt: job.prompt, ratio: generationRatios.find((ratio) => ratio === sizeRatio(job.actualSize ?? job.size)), createdAt: job.createdAt, job }));
+	return { drafts, updateDraft, assets: [...generated, ...assets], importAssets, reference, uploadReference, removeReference: () => replaceReference(), useImageForVideo, referenceError, clearReferenceError: () => setReferenceError(undefined), errors, clearError, images };
 }
 
 export type GenerationStudio = ReturnType<typeof useGenerationStudio>;

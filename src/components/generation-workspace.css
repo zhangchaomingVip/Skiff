@@ -9,6 +9,16 @@
 	.generation-form { display: flex; flex: 1; flex-direction: column; min-height: 0; }
 	.generation-fields { display: flex; flex: 1; flex-direction: column; gap: var(--space-5); min-height: 0; overflow: auto; padding: var(--space-5) var(--space-4); }
 	.generation-field { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+	.generation-field-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); min-height: var(--control-compact); }
+	.generation-field-heading > label { display: flex; align-items: center; gap: var(--space-2); color: var(--text); font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); }
+	.generation-field-heading > label > span { color: var(--muted); font-size: var(--font-size-xs); font-weight: var(--font-weight-regular); }
+	.generation-field-heading .ui-icon-button { color: var(--muted); }
+	.generation-controls[data-kind=image] .generation-fields { gap: var(--space-6); }
+	.generation-controls[data-kind=image] .ui-textarea { min-height: 192px; line-height: var(--line-height-relaxed); }
+	.generation-service-control { display: flex; align-items: center; gap: var(--space-1); }
+	.generation-service-control > select { min-width: 0; flex: 1; }
+	.generation-service-control > .ui-tooltip-wrap { flex: none; }
+	.generation-service-control .ui-icon-button { color: var(--secondary); }
 	.generation-field > label, .generation-field-label { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); color: var(--text); font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); }
 	.generation-field > label > span, .generation-field-label > small { color: var(--muted); font-size: var(--font-size-xs); font-weight: var(--font-weight-regular); }
 	.generation-field > label > output { color: var(--secondary); font-size: var(--font-size-xs); font-weight: var(--font-weight-regular); font-variant-numeric: tabular-nums; }
@@ -24,6 +34,51 @@
 	.generation-ratios .ui-button-content { gap: var(--space-1); font-size: var(--font-size-xs); }
 	.generation-ratios .ui-button[aria-pressed=true] { border-color: color-mix(in srgb, var(--accent) 48%, var(--border)); background: color-mix(in srgb, var(--accent) 7%, var(--surface)); color: var(--accent); }
 	.generation-ratio-shape { display: block; flex: none; height: var(--space-2); max-width: var(--space-3); border: 1px solid currentColor; border-radius: var(--radius-xs); }
+	.generation-resolution { margin: 0; padding: 0; border: 0; }
+	.generation-resolution legend { margin-bottom: var(--space-2); padding: 0; color: var(--text); font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); }
+	.generation-resolution > div { display: flex; gap: var(--space-2); }
+	.generation-resolution .ui-button { flex: 1; height: var(--control-primary); border: 1px solid var(--border); border-radius: var(--radius-lg); background: transparent; color: var(--secondary); }
+	.generation-resolution .ui-button[aria-pressed=true] { border-color: color-mix(in srgb, var(--accent) 48%, var(--border)); background: color-mix(in srgb, var(--accent) 5%, var(--surface)); color: var(--accent); }
+	.generation-image-ratios > div { grid-template-columns: repeat(auto-fit, minmax(52px, 1fr)); gap: var(--space-2); }
+	.generation-image-ratios .ui-button { height: auto; min-height: 76px; border-radius: var(--radius-lg); padding: var(--space-2) var(--space-1); }
+	.generation-image-ratios .ui-button-content { flex-direction: column; justify-content: center; gap: var(--space-2); width: 100%; }
+	.generation-image-ratios .ui-button:disabled { border-color: var(--border); background: transparent; }
+	.generation-ratio-glyph { display: grid; place-items: center; width: var(--space-6); height: var(--space-6); flex: none; color: currentColor; }
+	.generation-ratio-glyph > .generation-ratio-shape { min-width: 0; max-width: none; background: color-mix(in srgb, currentColor 4%, transparent); }
+	.image-settings-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); padding-block: var(--space-3); }
+	.image-generation-settings .settings-row-hint { overflow-wrap: anywhere; }
+	.image-generation-settings .settings-row > .ui-input:not([type=checkbox]) { width: 100%; }
+	.generation-task-list { display: flex; flex-direction: column; gap: var(--space-3); margin-top: var(--space-6); }
+	.generation-task { display: flex; align-items: flex-start; gap: var(--space-3); padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); }
+	.generation-task > div { min-width: 0; flex: 1; }
+	.generation-task p { margin: var(--space-2) 0; overflow-wrap: anywhere; white-space: pre-wrap; font-size: var(--font-size-sm); }
+	.generation-task strong { color: var(--text); font-size: var(--font-size-sm); }
+	.generation-task small { display: block; color: var(--muted); font-size: var(--font-size-xs); overflow-wrap: anywhere; }
+	.generation-task-message { color: var(--secondary); }
+	.generation-saved-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+	.generation-asset-info { display: flex; justify-content: space-between; gap: var(--space-2); margin: 0; padding: 0 var(--space-3) var(--space-3); color: var(--muted); font-size: var(--font-size-xs); }
+	.generation-asset-info > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+	.generation-asset-info > span:nth-child(2) { flex: none; white-space: nowrap; }
+	.generation-more-trigger { color: var(--muted); }
+	.generation-card-caption .ui-tooltip-wrap:has([aria-expanded=true]) > .ui-tooltip { display: none; }
+	.generation-card:hover .generation-more-trigger, .generation-card:focus-within .generation-more-trigger, .generation-more-trigger[aria-expanded=true] { color: var(--text); background: var(--hover); }
+	.generation-actions-menu { display: flex; flex-direction: column; gap: var(--space-0-5); width: min(220px, calc(100vw - 24px)); padding: var(--space-1); }
+	.generation-actions-menu > .ui-button { justify-content: flex-start; width: 100%; min-height: var(--control-primary); padding-inline: var(--space-3); }
+	.generation-actions-menu > .ui-button .ui-button-content { justify-content: flex-start; }
+	.generation-copy-status { padding: var(--space-1) var(--space-3); color: var(--secondary); font-size: var(--font-size-xs); }
+	.generation-pending-preview { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-3); aspect-ratio: 4 / 3; max-height: min(440px, 48vh); overflow: hidden; background: color-mix(in srgb, var(--accent) 4%, var(--subtle)); }
+	.generation-pending-glow { position: absolute; inset: 0; background: linear-gradient(110deg, transparent 20%, color-mix(in srgb, var(--accent) 12%, transparent) 50%, transparent 80%); background-size: 220% 100%; animation: generation-shimmer 3s ease-in-out infinite; }
+	.generation-pending-icon { display: grid; place-items: center; width: var(--space-12); height: var(--space-12); border: 1px solid var(--border); border-radius: var(--radius-xl); background: var(--surface); color: var(--accent); }
+	.generation-pending-caption { position: relative; color: var(--secondary); font-size: var(--font-size-xs); }
+	.generation-pending-content { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2); padding: var(--space-4); }
+	.generation-pending-content > strong { color: var(--text); font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); }
+	.generation-pending-content > p { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; margin: 0; color: var(--secondary); font-size: var(--font-size-sm); line-height: var(--line-height-relaxed); overflow-wrap: anywhere; }
+	.generation-pending-content > small { color: var(--muted); font-size: var(--font-size-xs); overflow-wrap: anywhere; }
+	.generation-pending-content > .ui-button { margin-left: calc(-1 * var(--space-2)); color: var(--secondary); }
+	.generation-preview-info { max-height: 180px; padding: var(--space-3) var(--space-4); overflow: auto; }
+	.generation-preview-info p { margin: 0 0 var(--space-2); white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--font-size-sm); }
+	.generation-preview-info small { display: block; color: var(--muted); font-size: var(--font-size-xs); }
+	.generation-preview-info .generation-saved-actions { padding: var(--space-3) 0 0; }
 	.generation-field .generation-range { height: var(--space-4); margin: 0; padding: 0; border: 0; background: transparent; accent-color: var(--accent); cursor: pointer; }
 	.generation-range-ends { display: flex; justify-content: space-between; color: var(--muted); font-size: var(--font-size-xs); }
 	.generation-file-input { display: none; }
@@ -45,12 +100,17 @@
 	.generation-submit > p { display: flex; justify-content: center; align-items: center; gap: var(--space-1-5); margin: 0; color: var(--secondary); font-size: var(--font-size-xs); }
 	.generation-connection-dot { width: var(--space-1); height: var(--space-1); border-radius: var(--radius-full); background: var(--muted); }
 	.generation-submit > small { color: var(--muted); font-size: var(--font-size-xs); text-align: center; }
+	.generation-shortcut { display: flex; align-items: center; justify-content: center; gap: var(--space-2); color: var(--muted); font-size: var(--font-size-xs); }
+	.generation-shortcut > kbd { font: inherit; letter-spacing: .03em; }
 	.generation-submit > .ui-button:disabled { border-color: var(--border); background: var(--subtle); color: var(--muted); }
-	.generation-gallery { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; background: var(--workspace-backdrop); }
+	.generation-gallery { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; background: var(--workspace-backdrop); container: generation-gallery / inline-size; }
 	.generation-workspace-header { display: flex; align-items: center; gap: var(--space-2); min-height: 44px; padding: var(--space-1) var(--space-3); border-bottom: 1px solid var(--border); }
 	.generation-workspace-header > span { flex: 1; }
 	.generation-gallery-scroll { display: flex; flex: 1; flex-direction: column; min-height: 0; overflow: auto; padding: var(--space-8); }
-	.generation-gallery-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); }
+	.generation-gallery-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-4); }
+	.generation-gallery-heading-actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-3); }
+	.generation-gallery-heading-actions > .ui-segmented { flex: none; }
+	.generation-gallery-heading-actions > .generation-import { border: 1px solid var(--border); background: transparent; color: var(--secondary); }
 	.generation-eyebrow { color: var(--muted); font-size: var(--font-size-xs); letter-spacing: .14em; }
 	.generation-gallery-heading h2 { display: flex; align-items: center; gap: var(--space-3); margin: var(--space-2) 0; color: var(--text); font-size: var(--font-size-xl); font-weight: var(--font-weight-title); }
 	.generation-gallery-heading h2 > span { color: var(--muted); font-family: var(--font-family-mono); font-size: var(--font-size-sm); font-weight: var(--font-weight-regular); }
@@ -66,14 +126,29 @@
 	.generation-empty > p { margin: 0; color: var(--secondary); font-size: var(--font-size-sm); line-height: var(--line-height-relaxed); white-space: pre-line; }
 	.generation-empty > .ui-button { margin-top: var(--space-2); color: var(--accent); }
 	.generation-empty > small { max-width: 320px; color: var(--muted); font-size: var(--font-size-xs); }
-	.generation-gallery-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr)); align-content: start; gap: var(--space-5); margin-top: var(--space-6); }
+	.generation-gallery-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr)); align-items: start; align-content: start; gap: var(--space-5); margin-top: var(--space-6); }
+	.generation-gallery[data-columns="1"] .generation-gallery-grid { grid-template-columns: minmax(0, 1fr); }
+	.generation-gallery[data-columns="2"] .generation-gallery-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+	.generation-gallery[data-columns="3"] .generation-gallery-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+	.generation-gallery[data-columns="4"] .generation-gallery-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-3); }
 	.generation-card { position: relative; min-width: 0; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-xl); background: var(--surface); box-shadow: var(--shadow-xs); }
+	.generation-card-media { position: relative; }
 	.generation-card-preview { position: relative; display: block; width: 100%; aspect-ratio: 4 / 3; overflow: hidden; padding: 0; border: 0; border-radius: var(--radius-xl) var(--radius-xl) 0 0; background: var(--subtle); }
 	.generation-card-preview > img, .generation-card-preview > video { display: block; width: 100%; height: 100%; object-fit: cover; }
+	.generation-card[data-kind=image] .generation-card-preview { max-height: min(440px, 48vh); background: color-mix(in srgb, var(--subtle) 70%, var(--surface)); }
+	.generation-card[data-kind=image] .generation-card-preview > img { object-fit: contain; }
+	.generation-hover-actions { --generation-glass: color-mix(in srgb, var(--overlay-image) 80%, transparent); position: absolute; top: var(--space-2); right: var(--space-2); display: flex; align-items: center; gap: var(--space-0-5); padding: var(--space-1); border: 1px solid color-mix(in srgb, var(--action-foreground) 18%, transparent); border-radius: var(--radius-lg); background: var(--generation-glass); color: var(--action-foreground); box-shadow: var(--shadow-xs); backdrop-filter: blur(4px); opacity: 0; transform: translateY(-4px); pointer-events: none; transition: opacity var(--transition-fast), transform var(--transition-fast); }
+	.generation-card-media:hover .generation-hover-actions, .generation-card-media:focus-within .generation-hover-actions { opacity: 1; transform: translateY(0); pointer-events: auto; }
+	.generation-hover-actions .ui-icon-button[data-variant=ghost] { color: var(--action-foreground); }
+	.generation-hover-actions .ui-icon-button[data-variant=ghost]:hover, .generation-hover-actions .ui-icon-button[data-variant=ghost]:focus-visible { color: var(--action-foreground); background: color-mix(in srgb, var(--action-foreground) 16%, transparent); }
+	.generation-hover-actions .ui-icon-button:focus-visible { outline-color: var(--action-foreground); }
+	.generation-hover-feedback { position: absolute; top: calc(100% + var(--space-1)); right: 0; padding: var(--space-1) var(--space-2); border-radius: var(--radius-md); background: var(--generation-glass); color: var(--action-foreground); font-size: var(--font-size-xs); white-space: nowrap; backdrop-filter: blur(4px); }
+	.generation-hover-actions:has(.generation-hover-feedback) .ui-tooltip { display: none; }
 	.generation-card-play { position: absolute; inset: 0; display: grid; place-items: center; color: var(--text); }
 	.generation-card-play > svg { box-sizing: content-box; padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-full); background: var(--surface); }
 	.generation-card-caption { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-3); }
-	.generation-card-caption > strong { flex: 1; min-width: 0; overflow: hidden; color: var(--secondary); font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); text-overflow: ellipsis; white-space: nowrap; }
+	.generation-card-caption:has(.generation-more-trigger) { padding-block: var(--space-2); }
+	.generation-card-caption > strong { flex: 1; min-width: 0; overflow: hidden; color: var(--text); font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); text-overflow: ellipsis; white-space: nowrap; }
 	.generation-card-caption > .ui-chip { flex: none; font-size: var(--font-size-xs); }
 	.generation-card-actions { position: absolute; top: var(--space-2); right: var(--space-2); opacity: 0; pointer-events: none; transition: opacity var(--transition-fast); }
 	.generation-card:hover .generation-card-actions, .generation-card:focus-within .generation-card-actions { opacity: 1; pointer-events: auto; }
@@ -89,7 +164,24 @@
 	.generation-preview-media { display: flex; justify-content: center; align-items: center; min-height: 180px; background: var(--subtle); }
 	.generation-preview-media > img, .generation-preview-media > video { display: block; width: 100%; max-height: calc(100dvh - 200px); object-fit: contain; }
 	.generation-preview-dialog > footer { display: flex; justify-content: flex-end; padding: var(--space-3) var(--space-4); border-top: 1px solid var(--border); }
-	@media (hover: none) { .generation-card-actions { position: static; padding: 0 var(--space-3) var(--space-3); opacity: 1; pointer-events: auto; } }
+	@keyframes generation-shimmer { 0%, 100% { background-position: 160% 0; } 50% { background-position: -60% 0; } }
+	@media (prefers-reduced-motion: reduce) { .generation-pending-glow { animation: none; } }
+	@media (pointer: coarse) {
+		.generation-actions-menu > .ui-button { min-height: 44px; }
+		.generation-more-trigger.ui-icon-button[data-size=compact] { width: 44px; height: 44px; }
+		.generation-hover-actions .ui-icon-button[data-size=compact] { width: 44px; height: 44px; }
+	}
+	@media (hover: none) {
+		.generation-card-actions { position: static; padding: 0 var(--space-3) var(--space-3); opacity: 1; pointer-events: auto; }
+		.generation-hover-actions { opacity: 1; transform: none; pointer-events: auto; }
+	}
+	@container generation-gallery (max-width: 960px) {
+		.generation-gallery[data-columns="3"] .generation-gallery-grid, .generation-gallery[data-columns="4"] .generation-gallery-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+	}
+	@container generation-gallery (max-width: 600px) {
+		.generation-gallery[data-columns] .generation-gallery-grid { grid-template-columns: minmax(0, 1fr); }
+		.generation-gallery-heading-actions { width: 100%; justify-content: space-between; gap: var(--space-2); }
+	}
 	@media (max-width: 760px) {
 		.generation-gallery-scroll { padding: var(--space-5); }
 		.generation-gallery-heading { align-items: flex-start; gap: var(--space-2); }

@@ -49,7 +49,7 @@ try {
 		assert.equal(await page.getByRole("combobox", { name: "模型", exact: true }).isDisabled(), true);
 		await screenshot(`${theme}-image-empty`);
 		await prompt().fill("午后，窗边的一束花，柔和的奶油色光线");
-		await page.getByRole("group", { name: "画面比例", exact: true }).getByRole("button", { name: "4:3", exact: true }).click();
+		assert.equal(await page.getByRole("group", { name: "画面比例", exact: true }).getByRole("button", { name: "4:3", exact: true }).isDisabled(), true);
 		await tool("生成视频").click();
 		await page.getByRole("complementary", { name: "生成视频参数", exact: true }).waitFor();
 		assert.deepEqual(await selectedAppearance(tool("生成视频")), appearance);
@@ -66,7 +66,7 @@ try {
 		await screenshot(`${theme}-video-empty`);
 		await tool("生图").click();
 		assert.match(await prompt().inputValue(), /奶油色/);
-		assert.equal(await page.getByRole("button", { name: "4:3", exact: true }).getAttribute("aria-pressed"), "true");
+		assert.equal(await page.getByRole("button", { name: "4:3", exact: true }).getAttribute("aria-pressed"), "false");
 		await importInput("图片").setInputFiles({ name: "wrong.txt", mimeType: "text/plain", buffer: Buffer.from("invalid") });
 		await page.getByRole("alert").filter({ hasText: "请选择 PNG" }).waitFor();
 		assert.equal(await page.locator(".generation-card").count(), 0);
