@@ -421,3 +421,17 @@ node tests/sidebar-bulk.browser.mjs http://localhost:1421
 - 旧 `sidebar-archive.browser.mjs` 的过时断言仍按 F 节记录，不算通过；本功能归档/恢复/删除由新的双主题 lifecycle、bulk、真实 CDP 和原生测试覆盖。
 
 G1–G7 已完成，M4 交付验收通过。
+
+### 2026-11-11：关闭实例后直接重开
+
+修正手动关闭浏览器同时撤销 pi 工具凭据的问题：关闭仍取消待执行请求、结束当前 generation 并保留 profile，但保留当前 pi 的浏览器能力。只有携带关闭后最新 generation/controlVersion 的显式 open 才能创建新实例；关闭前的迟到 open 和关闭后的 snapshot 均不能隐式启动浏览器。禁用、归档、删除及 pi 重连仍撤销原凭据。关闭态移除“重新连接聊天”按钮，说明直接让 AI 再次打开网页。
+
+验证结果：
+
+- `npm test`：406/406；浏览器扩展覆盖关闭后工具保留、禁止 snapshot 隐式重开、显式 open 后绑定新实例。
+- `cargo test --manifest-path src-tauri/Cargo.toml --lib`：75 通过、4 项需要真实浏览器的测试保持忽略；新增原生测试验证凭据仍可认证、取消排队请求及拒绝关闭前的迟到 open。
+- `npm run build`、`npm run check:ui`、`npm run test:styles` 通过；样式审计与对比度检查均为 0 错误。
+- `browser-control.browser.mjs`、`browser-panel.browser.mjs` 深浅主题通过；关闭态截图位于 `dist/browser-control/{light,dark}-closed.png`。
+- `node tests/browser-native.release.mjs --browser-lifecycle` 通过真实 release WebView2 → Tauri → Rust → pi → agent-browser → Chrome。新增步骤点击真实“关闭浏览器”，无需重连同一 pi 即可再次 open；模型请求仍包含 browser，新 generation 恢复原聊天的 Cookie，另一聊天的 generation 不变。后续原有接管、重连、归档、恢复和删除回归同样通过。
+
+全链路使用临时 pi、浏览器 profile 和 WebView2 数据目录，已在写入测试工作区前核验实际 user-data-dir，并保留 localStorage 快照、finally 还原与刷盘等待。没有调用远程业务系统或真实模型。

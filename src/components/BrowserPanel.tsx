@@ -115,11 +115,10 @@ export function BrowserPanel({ chatId, controls, browserActions, compact, focusR
 		{watch && status ? controls.visible ? <BrowserScreen key={`${status.chatId}:${status.generation}`} status={status} controls={controls} actions={browserActions} inputHandle={inputHandle} /> : <div className="browser-empty"><Icon name="monitor" size={28} /><strong>画面已暂停</strong><p>返回此聊天后显示最新画面，浏览器任务继续运行。</p></div> : <div className="browser-empty" role="status">
 			<Icon name={error || dependencyError || failed ? "wifi" : status?.control === "starting" ? "clock" : "monitor"} size={28} />
 			<strong>{error ? "浏览器服务暂不可用" : status?.control === "starting" ? "正在启动浏览器…" : failed ? browserControlLabels[status.control] : status?.control === "closing" ? "正在关闭浏览器…" : status?.control === "closed" ? "浏览器已关闭" : !dependencies ? "正在检查浏览器…" : !dependencies.ready ? "浏览器尚未就绪" : !dependencies.enabled ? "AI 浏览器尚未启用" : "让 AI 帮你浏览网页"}</strong>
-			<p>{error ?? dependencyError ?? status?.error ?? (failed ? "重新准备后，向 AI 描述要打开的网页。" : status?.control === "starting" ? "首次启动可能需要几秒，画面就绪后会自动显示。" : status?.control === "closed" ? "在聊天中让 AI 再次打开网页，即可开始新的浏览任务。" : dependencies && !dependencies.ready ? dependencies.message : dependencies && !dependencies.enabled ? "在设置中开启后，向 AI 描述浏览任务。" : "在聊天中发送网址或描述任务，AI 操作时可以在这里观看。")}</p>
+			<p>{error ?? dependencyError ?? status?.error ?? (failed ? "重新准备后，向 AI 描述要打开的网页。" : status?.control === "starting" ? "首次启动可能需要几秒，画面就绪后会自动显示。" : status?.control === "closed" ? "当前页面已关闭。在聊天中让 AI 再次打开网页即可开始新任务，无需重连；此聊天的登录状态会保留。" : dependencies && !dependencies.ready ? dependencies.message : dependencies && !dependencies.enabled ? "在设置中开启后，向 AI 描述浏览任务。" : "在聊天中发送网址或描述任务，AI 操作时可以在这里观看。")}</p>
 			{failed && <><p>重新准备会关闭当前页面，保留此聊天的登录状态。</p><Button disabled={busy || preparing} loading={preparing} title={busy ? "请等待当前轮次结束后再重新准备" : undefined} onClick={() => void prepare()}>关闭并重新准备</Button></>}
 			{error && <Button onClick={controls.refresh}>重新检测</Button>}
 			{!status && <div className="browser-empty-actions"><Button disabled={checking} onClick={() => { recheck((value) => value + 1); controls.refresh(); }}>{checking ? "正在检测…" : "重新检测"}</Button><Button onClick={onSettings}>浏览器设置</Button></div>}
-			{status?.control === "closed" && <Button disabled={busy} onClick={onReconnect}>重新连接聊天</Button>}
 		</div>}
 		{actionError && <p className="browser-panel-error" role="alert">{actionError}</p>}
 		<footer className="browser-panel-footer">AI 与此画面使用同一浏览器。收起面板后任务继续。</footer>

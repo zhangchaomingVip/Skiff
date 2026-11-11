@@ -71,6 +71,9 @@ try {
 		await page.getByRole("button", { name: "关闭浏览器", exact: true }).click();
 		await page.getByText("浏览器已关闭", { exact: true }).waitFor();
 		assert.equal(await input.count(), 0);
+		assert.equal(await page.getByRole("button", { name: "重新连接聊天", exact: true }).count(), 0);
+		await page.getByText(/无需重连；此聊天的登录状态会保留/).waitFor();
+		await page.screenshot({ path: join(output, `${theme}-closed.png`), animations: "disabled" });
 		assert.deepEqual(errors, []);
 		await page.close();
 	}

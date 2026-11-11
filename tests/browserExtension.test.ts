@@ -89,6 +89,31 @@ test("revoked leases deactivate browser without removing other tools", async () 
 	assert.equal((await extension.tool.execute("revoked", { action: "snapshot" })).details.skiffBrowser.outcome, "unavailable");
 });
 
+test("a closed instance keeps the tool available and reopens only on explicit open", async () => {
+	const commands: any[] = [];
+	let closed = true;
+	globalThis.fetch = (async (url: string, init: RequestInit) => {
+		if (url.endsWith("/context")) return new Response(JSON.stringify({ success: true, status: { generation: closed ? "closed-instance" : "new-instance", controlVersion: closed ? 8 : 1, control: closed ? "closed" : "ai", requiresSnapshot: closed } }));
+		const command = JSON.parse(String(init.body));
+		commands.push(command);
+		closed = false;
+		return new Response(JSON.stringify({ success: true, data: command.action.type === "snapshot" ? { snapshot: "new page" } : {}, details: { outcome: "success" } }));
+	}) as typeof fetch;
+	const extension = load();
+	await extension.hooks.before_agent_start();
+	assert.deepEqual(extension.active, ["read", "browser"]);
+	const snapshot = await extension.tool.execute("closed-snapshot", { action: "snapshot" });
+	assert.equal(snapshot.details.skiffBrowser.outcome, "closed");
+	assert.match(snapshot.content[0].text, /open/);
+	assert.equal(commands.length, 0);
+	assert.equal((await extension.tool.execute("reopen", { action: "open", url: "http://localhost/" })).details.skiffBrowser.outcome, "success");
+	assert.equal(commands[0].generation, "closed-instance");
+	assert.equal(commands[0].controlVersion, 8);
+	assert.equal((await extension.tool.execute("new-snapshot", { action: "snapshot" })).details.skiffBrowser.outcome, "success");
+	assert.equal(commands[1].generation, "new-instance");
+	assert.deepEqual(extension.active, ["read", "browser"]);
+});
+
 test("human takeover and stale generation remain explicit error outcomes", async () => {
 	for (const [status, expected] of [[200, "humanControl"], [409, "closed"]] as const) {
 		globalThis.fetch = (async (url: string) => new Response(JSON.stringify(url.endsWith("/context") ? { success: true, status: { generation: "old", controlVersion: 1 } } : { success: false, error: "人工控制中", details: { outcome: "humanControl" } }), { status: url.endsWith("/context") ? 200 : status })) as typeof fetch;

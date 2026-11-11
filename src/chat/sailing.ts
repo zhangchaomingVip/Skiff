@@ -240,7 +240,10 @@ export function advanceVoyageContext(previous: VoyageContext | undefined, key: s
 	return { key, inputs, input, lastRequestInput, context, estimated, source, version: retained?.version };
 }
 
-/** Usage belongs to the most recent user prompt, including any intermediate assistant steps. */
+/** Usage belongs to the most recent user prompt, including any intermediate assistant steps.
+ * newInput excludes cache reads but includes cache writes and repeated uncached
+ * context across requests. It is neither unique content nor the complete bill.
+ */
 export function currentTurnStats(messages: ChatMessage[], models: ModelInfo[] = [], current?: ModelInfo): { durationMs?: number; input?: number; total?: number; newInput?: number; cacheRead?: number; cacheWrite?: number; hitRate?: number; output?: number; reasoning?: number; cost?: CostSummary } {
 	let userIndex = -1;
 	for (let index = messages.length - 1; index >= 0; index--) {

@@ -856,7 +856,9 @@ impl Service {
 			.cloned()
 			.collect();
 		for permit in permits {
-			permit.revoke();
+			// Closing ends this instance, not the pi process's browser capability.
+			// Pending work is cancelled; a fresh, version-checked open can start another instance.
+			permit.cancel_pending();
 		}
 		{
 			let _input = entry.input.lock().await;

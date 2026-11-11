@@ -68,6 +68,9 @@ impl Permit {
 		if self.revoked.swap(true, Ordering::SeqCst) {
 			return;
 		}
+		self.cancel_pending();
+	}
+	pub(super) fn cancel_pending(&self) {
 		let requests = self.requests.lock().unwrap();
 		for (id, request) in requests.iter() {
 			if request.finished.load(Ordering::SeqCst) {
@@ -300,15 +303,31 @@ async fn execute(service: Arc<Service>, permit: Arc<Permit>, command: AgentComma
 		if request.cancelled.load(Ordering::SeqCst) || permit.revoked.load(Ordering::SeqCst) {
 			return Err("浏览器操作已取消".into());
 		}
-		let target = if let Some(target) = binding.as_ref() {
+		let reopen = if let Some(target) = binding.as_ref() {
 			if command.generation.as_deref() != Some(&target.generation) {
 				return Err("浏览器实例已变化，未执行旧操作".into());
 			}
-			target.clone()
+			*request.target.lock().unwrap() = Some(target.clone());
+			let status = service.status(target).await?;
+			if status.control == Control::Closed {
+				if !matches!(command.action, Action::Open { .. }) {
+					return Err("浏览器已关闭，请使用 open 打开网页，开始新的浏览任务".into());
+				}
+				// A pre-close open must not recreate a browser after the user closed it.
+				if command.control_version != Some(status.control_version) {
+					return Err("浏览器已关闭，未执行关闭前的旧操作，请重新读取状态后打开网页".into());
+				}
+				true
+			} else {
+				false
+			}
 		} else {
 			if !matches!(command.action, Action::Open { .. }) || command.generation.is_some() {
 				return Err("请先打开网页，再读取或操作页面".into());
 			}
+			true
+		};
+		let target = if reopen {
 			let status = service
 				.start_checked(
 					permit.chat_id.clone(),
@@ -318,6 +337,8 @@ async fn execute(service: Arc<Service>, permit: Arc<Permit>, command: AgentComma
 				.await?;
 			*binding = Some(status.target.clone());
 			status.target
+		} else {
+			binding.as_ref().unwrap().clone()
 		};
 		*request.target.lock().unwrap() = Some(target.clone());
 		drop(binding);
@@ -330,7 +351,11 @@ async fn execute(service: Arc<Service>, permit: Arc<Permit>, command: AgentComma
 			return Err("浏览器操作已取消".into());
 		}
 		let status = service.status(&target).await?;
-		let version = command.control_version.unwrap_or(status.control_version);
+		let version = if reopen {
+			status.control_version
+		} else {
+			command.control_version.unwrap_or(status.control_version)
+		};
 		if command.generation.is_some() && command.control_version.is_none() {
 			return Err("缺少浏览器控制权版本".into());
 		}
@@ -536,6 +561,47 @@ mod tests {
 	}
 
 	#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+	async fn closing_preserves_lease_but_cancels_pending_and_rejects_stale_open() {
+		let root = std::env::temp_dir().join(format!("skiff-agent-close-{}", opaque()));
+		let service = Service::new(root.clone(), vec![]).await.unwrap();
+		let mut settings = service.settings.lock().unwrap().clone();
+		settings.enabled = true;
+		service.configure(settings).await.unwrap();
+		let lease = service.grant_agent("chat".into()).unwrap().unwrap();
+		// A fixture with no daemon exercises close without launching Chrome.
+		let entry = service.new_entry("chat", "fixture".into(), 3_600_000).unwrap();
+		entry.update(Control::Ai, None);
+		service.entries.lock().unwrap().insert("chat".into(), entry.clone());
+		let before = entry.status();
+		*lease.permit.binding.lock().await = Some(before.target.clone());
+		let queued = Arc::new(Request::new());
+		lease.permit.requests.lock().unwrap().insert("queued".into(), queued.clone());
+		let closed = service.close(&before.target).await.unwrap();
+		assert_eq!(closed.control, Control::Closed);
+		assert!(!lease.permit.revoked.load(Ordering::SeqCst));
+		assert!(queued.cancelled.load(Ordering::SeqCst));
+		let response = reqwest::Client::new()
+			.get(format!("http://127.0.0.1:{}/v1/agent/context", service.port))
+			.bearer_auth(&lease.token).send().await.unwrap();
+		assert_eq!(response.status(), 200);
+		assert_eq!(response.json::<Value>().await.unwrap()["status"]["control"], "closed");
+		let stale = execute(service.clone(), lease.permit.clone(), AgentCommand {
+			request_id: "stale-open".into(), generation: Some(before.target.generation.clone()),
+			control_version: Some(before.control_version),
+			action: Action::Open { url: "http://127.0.0.1:1".into() },
+		}).await;
+		assert_eq!(stale["success"], false, "{stale}");
+		assert!(stale["error"].as_str().unwrap().contains("关闭前"));
+		let snapshot = call(&service, &lease, "closed-snapshot", json!({"type":"snapshot"})).await;
+		assert_eq!(snapshot["details"]["outcome"], "closed", "{snapshot}");
+		assert_eq!(service.entries.lock().unwrap()["chat"].status().target.generation, before.target.generation);
+		service.shutdown().await.unwrap();
+		drop(lease);
+		drop(service);
+		let _ = std::fs::remove_dir_all(root);
+	}
+
+	#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 	#[ignore = "requires Windows and real agent-browser 0.41.2; isolated local fixture"]
 	async fn real_agent_tools_cancel_takeover_and_reconnect() {
 		use axum::{response::Html, routing::get};
@@ -660,7 +726,10 @@ mod tests {
 				true
 			);
 			service.close(&target).await.unwrap();
-			assert!(next.permit.revoked.load(Ordering::SeqCst));
+			assert!(!next.permit.revoked.load(Ordering::SeqCst));
+			let reopened = call(&service, &next, "reopen", json!({"type":"open","url":url})).await;
+			assert_eq!(reopened["success"], true, "{reopened}");
+			assert_ne!(reopened["details"]["browser"]["generation"], target.generation);
 		})
 		.catch_unwind()
 		.await;

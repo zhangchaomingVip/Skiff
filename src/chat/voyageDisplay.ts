@@ -1,6 +1,7 @@
 import type { VoyageMetrics } from "./useVoyageMetrics";
 import type { ChatMessage, ModelInfo } from "./types";
 import { advanceVoyageContext, currentTurnMessages, currentTurnStats } from "./sailing";
+import { voyageProcessStats } from "./voyageBento";
 
 type Source = Pick<VoyageMetrics, "streaming" | "speed" | "averageSpeed" | "ttftMs" | "peakSpeed" | "turn" | "telemetry" | "context" | "limit" | "ratio" | "contextSource">;
 
@@ -9,7 +10,7 @@ export interface VoyageDisplay {
 	turnKey: string;
 	speedStarted: boolean;
 	speed?: { value?: number; ttftMs?: number; peakSpeed?: number };
-	tokens?: { total: number; input: number; output: number; trend: (number | undefined)[] };
+	tokens?: { total: number; input: number; output: number; fresh?: number; steps: number; trend: (number | undefined)[] };
 	cache?: { input: number; read: number; write: number };
 	context?: { used: number; limit: number; ratio: number; source: Source["contextSource"] };
 	retained: { speed: boolean; tokens: boolean; cache: boolean; context: boolean };
@@ -31,7 +32,7 @@ export function advanceVoyageDisplay(previous: VoyageDisplay | undefined, source
 	return {
 		identity, turnKey, speedStarted,
 		speed: speedReady ? { value: source.streaming ? source.speed : source.averageSpeed, ttftMs: source.ttftMs, peakSpeed: source.peakSpeed } : last?.speed,
-		tokens: tokensReady ? { total: turn.total!, input: turn.input!, output: turn.output!, trend: source.telemetry.inputTrend } : last?.tokens,
+		tokens: tokensReady ? { total: turn.total!, input: turn.input!, output: turn.output!, fresh: turn.newInput, steps: source.telemetry.turn.steps, trend: source.telemetry.inputTrend } : last?.tokens,
 		cache: cacheReady ? { input: turn.input!, read: turn.cacheRead!, write: turn.cacheWrite! } : last?.cache,
 		context: contextReady ? { used: source.context!, limit: source.limit!, ratio: source.ratio, source: source.contextSource } : oldContext,
 		retained: { speed: !speedReady && !!last?.speed, tokens: !tokensReady && !!last?.tokens, cache: !cacheReady && !!last?.cache, context: !contextReady && !!oldContext },
@@ -53,6 +54,6 @@ export function restoreVoyageDisplay(source: Source, messages: ChatMessage[], id
 		...source, streaming: false, averageSpeed: performance?.averageSpeed, ttftMs: performance?.ttftMs, peakSpeed: undefined,
 		turn: currentTurnStats(previous),
 		context: context.context, contextSource: context.source, ratio: context.context !== undefined && source.limit ? context.context / source.limit : 0,
-		telemetry: { ...source.telemetry, inputTrend: source.telemetry.inputTrend.slice(0, -1) },
+		telemetry: { ...source.telemetry, turn: voyageProcessStats(replies), inputTrend: source.telemetry.inputTrend.slice(0, -1) },
 	}, identity, "previous");
 }

@@ -22,14 +22,17 @@ export async function createLifecycleScenario(model) {
 		close() { site.closeAllConnections(); site.close(); },
 		handle(payload, response) {
 			const user = [...payload.messages].reverse().find((message) => message.role === "user");
-			const match = textOf(user).match(/\[F ([AB]) (set|read|restore)\]/);
+			const match = textOf(user).match(/\[F ([AB]) (set|read|restore|reopen)\]/);
 			if (!match) return false;
 			const [key, owner, operation] = match;
 			if (owner === "B" && operation === "set" && steps.get("[F A set]") === 3) overlapped = true;
 			const step = steps.get(key) ?? 0; steps.set(key, step + 1);
 			let action;
 			if (operation === "set") action = [{ action: "open", url: `${base}/set/${owner}` }, { action: "snapshot" }, { action: "wait", milliseconds: owner === "A" ? 6000 : 2500 }, { action: "snapshot" }][step];
-			else if (operation === "restore") action = [{ action: "open", url: `${base}/read` }, { action: "snapshot" }][step];
+			else if (operation === "restore" || operation === "reopen") {
+				assert.ok(payload.tools.some((tool) => tool.function?.name === "browser"), "Closing must keep browser in the same pi process's active tools");
+				action = [{ action: "open", url: `${base}/read` }, { action: "snapshot" }][step];
+			}
 			else action = [{ action: "snapshot" }][step];
 			if (!action) assert.ok(textOf(payload.messages.at(-1)).includes(`owner=${owner}`), `Wrong browser cookie/context for ${key}: ${textOf(payload.messages.at(-1))}`);
 			const delta = action ? { tool_calls: [{ index: 0, id: `f-${owner}-${operation}-${step}`, type: "function", function: { name: "browser", arguments: JSON.stringify(action) } }] } : { content: `F完成:${owner}:${operation}` };
@@ -62,9 +65,19 @@ export async function verifyBrowserLifecycle(page, scenario, requests, artifacts
 	await page.getByText("F完成:B:set", { exact: true }).waitFor({ timeout: 60000 }); await idle();
 	await select("A"); await page.getByText("F完成:A:set", { exact: true }).waitFor({ timeout: 60000 }); await idle();
 	assert.equal(scenario.overlapped, true, "Two real pi browser rounds must overlap, not just run in sequence");
-	const first = await invoke("browser_find", { chatId: a }); const second = await invoke("browser_find", { chatId: b });
+	let first = await invoke("browser_find", { chatId: a }); const second = await invoke("browser_find", { chatId: b });
 	assert.notEqual(first.generation, second.generation);
 	await page.waitForFunction((a) => document.querySelector(".browser-panel")?.dataset.chatId === a && document.querySelector(".browser-screen")?.dataset.phase === "live", a);
+	const initialGeneration = first.generation;
+	await page.getByRole("button", { name: "关闭浏览器", exact: true }).click();
+	await page.getByText("浏览器已关闭", { exact: true }).waitFor(); await idle();
+	assert.equal(await page.getByRole("button", { name: "重新连接聊天", exact: true }).count(), 0);
+	assert.equal((await invoke("browser_find", { chatId: b })).generation, second.generation);
+	await send("[F A reopen] 再次打开网页，保留此前登录状态。");
+	await page.getByText("F完成:A:reopen", { exact: true }).waitFor({ timeout: 60000 }); await idle();
+	first = await invoke("browser_find", { chatId: a });
+	assert.notEqual(first.generation, initialGeneration, "Reopen must create a new browser instance");
+	assert.equal((await invoke("browser_find", { chatId: b })).generation, second.generation);
 	await page.getByRole("button", { name: "接管浏览器", exact: true }).click(); await page.getByRole("textbox", { name: "浏览器键盘输入", exact: true }).waitFor();
 	await select("B");
 	await page.waitForFunction((b) => document.querySelector(".browser-panel")?.dataset.chatId === b, b);
@@ -100,5 +113,5 @@ export async function verifyBrowserLifecycle(page, scenario, requests, artifacts
 	await invoke("browser_retire_chat", { chatId: b, deleteProfile: true });
 	await select("B");
 	await page.waitForSelector(".composer-input");
-	console.log("F 全链路通过：真实双 pi 并行/后台完成、独立 cookie 和画面/控制权、重连同实例、归档关闭保留 profile、恢复按需重开恢复 cookie、永久删除仅清理所属 profile。");
+	console.log("F 全链路通过：真实双 pi 并行/后台完成、独立 cookie 和画面/控制权、关闭保留工具并在同一 pi 中重开恢复 cookie、重连同实例、归档关闭保留 profile、恢复按需重开恢复 cookie、永久删除仅清理所属 profile。");
 }

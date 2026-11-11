@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { contextComposition, decodeTiming, formatLatency, turnInputPath, turnInputTrend, voyageProcessStats } from "../src/chat/voyageBento.ts";
+import { cacheReading, contextComposition, decodeTiming, formatLatency, formatPeakSpeed, netTokenUsage, turnInputPath, turnInputTrend, voyageProcessStats } from "../src/chat/voyageBento.ts";
 import { processEvent } from "../src/chat/voyageTimeline.ts";
 import { cacheSavingsRatio } from "../src/chat/cost.ts";
 import type { ChatMessage } from "../src/chat/types.ts";
@@ -23,6 +23,35 @@ test("latency retains subsecond precision", () => {
 	assert.equal(formatLatency(380), "380ms");
 	assert.equal(formatLatency(2800), "2.8s");
 	assert.equal(formatLatency(), "—");
+});
+
+test("cache preparation requires a reported zero read and positive writes, not missing usage", () => {
+	assert.deepEqual(cacheReading(150000, 0, 150000), { hit: 0, preparing: true });
+	assert.deepEqual(cacheReading(150000, 100000, 50000), { hit: 2 / 3, preparing: false });
+	assert.deepEqual(cacheReading(150000, 0, 0), { hit: 0, preparing: false });
+	assert.deepEqual(cacheReading(0, 0, 0), { hit: undefined, preparing: false });
+	for (const invalid of [undefined, NaN, Infinity, -1]) {
+		assert.equal(cacheReading(150000, invalid, 150000).preparing, false);
+		assert.equal(cacheReading(150000, invalid, 150000).hit, undefined);
+		assert.equal(cacheReading(150000, 0, invalid).preparing, false);
+	}
+});
+
+test("missing or unsampled speed peaks have an explicit fallback", () => {
+	for (const missing of [undefined, NaN, Infinity, -1, 0]) assert.equal(formatPeakSpeed(missing), "峰值暂无");
+	assert.equal(formatPeakSpeed(135.8), "速率峰值 136 tok/s");
+});
+
+test("net usage includes complete output and cache writes, with explicit partial and missing data", () => {
+	assert.equal(netTokenUsage(3300, 3670), 6970);
+	assert.equal(netTokenUsage(1000), 1000);
+	assert.equal(netTokenUsage(0, 0), 0);
+	assert.equal(netTokenUsage(undefined, 1000), undefined);
+	for (const invalid of [NaN, Infinity, -1]) {
+		assert.equal(netTokenUsage(invalid, 1000), undefined);
+		assert.equal(netTokenUsage(1000, invalid), undefined);
+	}
+	assert.equal(netTokenUsage(Number.MAX_VALUE, Number.MAX_VALUE), undefined);
 });
 
 test("input trend groups model steps by user turn and excludes cache reads and output", () => {

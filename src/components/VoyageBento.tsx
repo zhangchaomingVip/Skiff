@@ -6,9 +6,9 @@ import type { VoyageMetrics } from "../chat/useVoyageMetrics";
 import { gaugePosition } from "../chat/sailing";
 import { formatDuration, formatTokens } from "../chat/usage";
 import { costTooltip, formatCosts } from "../chat/cost";
-import { formatLatency, turnInputPath } from "../chat/voyageBento";
+import { cacheReading, formatLatency, formatPeakSpeed, netTokenUsage, turnInputPath } from "../chat/voyageBento";
 
-const tokens = (value?: number) => value === undefined ? "—" : formatTokens(Math.round(value));
+const tokens = (value?: number) => value === undefined || !Number.isFinite(value) || value < 0 ? "—" : formatTokens(Math.round(value));
 const exact = (value?: number) => value === undefined ? "—" : Math.round(value).toLocaleString("zh-CN");
 const elapsed = (value?: number) => value === undefined ? "—" : formatDuration(value);
 const rate = (value?: number) => value === undefined ? "—" : `${value.toFixed(1)} tok/s`;
@@ -17,29 +17,41 @@ function Ledger({ rows }: { rows: [string, ReactNode][] }) {
 	return <dl className="voyage-telemetry-ledger">{rows.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>;
 }
 
-function WeatherRing({ value, cache = false }: { value?: number; cache?: boolean }) {
+function WeatherRing({ value, preparing = false, animate = false }: { value?: number; preparing?: boolean; animate?: boolean }) {
 	const gradient = useId();
 	const progress = value !== undefined && Number.isFinite(value) ? Math.max(0, Math.min(1, value)) * 100 : undefined;
-	return <svg className={`voyage-weather-ring${progress === undefined ? " is-unknown" : ""}`} viewBox="0 0 32 32" width="32" height="32">
-		{cache && <defs><linearGradient id={gradient} x1="0" y1="1" x2="1" y2="0"><stop offset="0" stopColor="var(--voyage-cache-reading)" /><stop offset="1" stopColor="var(--voyage-mint)" /></linearGradient></defs>}
+	return <svg className={`voyage-weather-ring${preparing ? ` is-building${animate ? " is-preparing" : ""}` : progress === undefined ? " is-unknown" : ""}`} viewBox="0 0 32 32" width="54" height="54">
+		<defs><linearGradient id={gradient} x1="0" y1="1" x2="1" y2="0"><stop offset="0" stopColor="var(--voyage-cache-reading)" /><stop offset="1" stopColor="var(--voyage-mint)" /></linearGradient></defs>
 		<circle className="voyage-weather-ring-track" cx="16" cy="16" r="12" />
-		{progress !== undefined && progress > 0 && <circle className="voyage-weather-ring-active" cx="16" cy="16" r="12" pathLength="100" stroke={cache ? `url(#${gradient})` : "currentColor"} strokeLinecap="round" strokeDasharray={`${progress} 100`} transform="rotate(-90 16 16)" />}
+		{preparing ? <circle className="voyage-weather-ring-preparation" cx="16" cy="16" r="12" pathLength="100" stroke={`url(#${gradient})`} strokeDasharray="4 6" /> : progress !== undefined && progress > 0 && <circle className="voyage-weather-ring-active" cx="16" cy="16" r="12" pathLength="100" stroke={`url(#${gradient})`} strokeLinecap="round" strokeDasharray={`${progress} 100`} transform="rotate(-90 16 16)" />}
 	</svg>;
+}
+
+function ContextCapacity({ value }: { value?: number }) {
+	const progress = value !== undefined && Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : undefined;
+	return <div className={`voyage-weather-capacity${progress === undefined ? " is-unknown" : ""}`}>
+		{progress !== undefined && <div className="voyage-weather-capacity-used" style={{ width: `${progress * 100}%` }} />}
+	</div>;
 }
 
 function TokenTrend({ values }: { values: (number | undefined)[] }) {
 	const gradient = useId();
 	const shape = turnInputPath(values);
-	return <svg className="voyage-weather-spark" viewBox="0 0 100 32" preserveAspectRatio="none">
+	const current = shape.points.find((point) => point.turn === values.length);
+	// Multi-turn values occupy y=5..29; center that band on the shared chart slot.
+	const frameY = values.length > 1 && shape.points.length ? 1 : 0;
+	const emptyY = shape.points.length && values.length > 1 ? 29 : 16;
+	return <svg className="voyage-weather-spark" viewBox={`0 ${frameY} 100 32`} preserveAspectRatio="none">
 		<defs><linearGradient id={gradient} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="var(--voyage-sky)" stopOpacity=".25" /><stop offset="1" stopColor="var(--voyage-sky)" stopOpacity="0" /></linearGradient></defs>
 		{shape.area && <path className="voyage-weather-spark-area" d={shape.area} fill={`url(#${gradient})`} />}
-		{shape.line ? <path className="voyage-weather-spark-line" d={shape.line} vectorEffect="non-scaling-stroke" /> : <path className="voyage-weather-spark-empty" d={`M4 ${values.length === 1 && shape.points.length ? 16 : 29} H96`} vectorEffect="non-scaling-stroke" />}
-		{shape.markers.map((point) => <circle key={point.turn} className="voyage-weather-spark-point" cx={point.x} cy={point.y} r="1.8" />)}
+		{shape.line ? <path className="voyage-weather-spark-line" d={shape.line} vectorEffect="non-scaling-stroke" /> : <path className="voyage-weather-spark-empty" d={`M4 ${emptyY} H96`} vectorEffect="non-scaling-stroke" />}
+		{current && <circle className="voyage-weather-spark-halo" cx={current.x} cy={current.y} r="4" />}
+		{shape.markers.map((point) => <circle key={point.turn} className={`voyage-weather-spark-point${point.turn === values.length ? " is-current" : ""}`} cx={point.x} cy={point.y} r="1.8" />)}
 	</svg>;
 }
 
-function WeatherCard({ name, icon, label, value, unit, summary, tone = "", retained = false, children, details, detailTitle }: {
-	name: string; icon: IconName; label: string; value: string; unit?: string; summary: [string, string]; tone?: string; retained?: boolean; children: ReactNode; details: ReactNode; detailTitle: string;
+function WeatherCard({ name, icon, label, value, unit, summary, description, tone = "", retained = false, children, details, detailTitle }: {
+	name: string; icon: IconName; label: string; value: string; unit?: string; summary: [ReactNode, ReactNode]; description?: string; tone?: string; retained?: boolean; children: ReactNode; details: ReactNode; detailTitle: string;
 }) {
 	const panelId = useId();
 	const anchor = useRef<HTMLButtonElement>(null);
@@ -50,7 +62,8 @@ function WeatherCard({ name, icon, label, value, unit, summary, tone = "", retai
 		<div className="voyage-weather-reading"><strong>{value}</strong>{unit && <small>{unit}</small>}</div>
 		<div className="voyage-weather-viz" aria-hidden="true">{children}</div>
 		<p className="voyage-weather-summary">{summary.map((part, index) => <span key={index}>{part}</span>)}</p>
-		<button ref={anchor} type="button" className="voyage-weather-trigger" aria-label={`${label}明细`} aria-describedby={retained ? `${panelId}-reading` : undefined} aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? panelId : undefined} onClick={() => setOpen((value) => !value)}><span className="sr-only">查看{label}明细</span></button>
+		{description && <span className="sr-only" id={`${panelId}-description`}>{description}</span>}
+		<button ref={anchor} type="button" className="voyage-weather-trigger" title={description} aria-label={`${label}明细`} aria-describedby={[retained ? `${panelId}-reading` : "", description ? `${panelId}-description` : ""].filter(Boolean).join(" ") || undefined} aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? panelId : undefined} onClick={() => setOpen((value) => !value)}><span className="sr-only">查看{label}明细</span></button>
 		{open && createPortal(<Popover anchor={anchor} onClose={close} id={panelId} className="voyage-telemetry-popover" aria-label={detailTitle}>
 			<header className="voyage-telemetry-head"><h3>{detailTitle}</h3><IconButton size="compact" variant="ghost" aria-label="关闭指标明细" onClick={close}><Icon name="close" size={14} /></IconButton></header>
 			{retained && <p className="voyage-telemetry-pending">卡片暂显最近读数；以下为本轮数据，随上报更新。</p>}
@@ -69,16 +82,18 @@ export function VoyageBento({ metrics }: { metrics: VoyageMetrics }) {
 	const hit = totalInput !== undefined && totalInput > 0 && cacheRead !== undefined ? Math.max(0, Math.min(1, cacheRead / totalInput)) : undefined;
 	const speed = metrics.streaming ? metrics.speed : metrics.averageSpeed;
 	const shownSpeed = display.speed?.value ?? speed;
-	const shownTokens = display.tokens ?? { total, input: totalInput, output, trend: telemetry.inputTrend };
+	const shownTokens = display.tokens ?? { total, input: totalInput, output, fresh, steps: process.steps, trend: telemetry.inputTrend };
 	const shownCache = display.cache ?? { input: totalInput, read: cacheRead, write: cacheWrite };
-	const shownHit = shownCache.input !== undefined && shownCache.input > 0 && shownCache.read !== undefined ? Math.max(0, Math.min(1, shownCache.read / shownCache.input)) : undefined;
+	const { hit: shownHit, preparing: cachePreparing } = cacheReading(shownCache.input, shownCache.read, shownCache.write);
 	const shownContext = display.context ?? { used: metrics.context, limit: metrics.limit, ratio: metrics.ratio };
 	const position = gaugePosition(shownSpeed ?? 0);
 	const avgTtft = telemetry.session.avgTtftMs;
 	const shownTtft = display.speed ? display.speed.ttftMs : metrics.ttftMs;
 	const shownPeak = display.speed ? display.speed.peakSpeed : metrics.peakSpeed;
-	const speedSummary: [string, string] = [`首字 ${formatLatency(shownTtft)}`, `速率峰值 ${shownPeak === undefined ? "—" : `${Math.round(shownPeak)} tok/s`}`];
-	const tokenSummary: [string, string] = [`输入 ${tokens(shownTokens.input)} tok`, `输出 ${tokens(shownTokens.output)} tok`];
+	const speedSummary: [string, string] = [`首字 ${formatLatency(shownTtft)}`, formatPeakSpeed(shownPeak)];
+	const netUsage = netTokenUsage(shownTokens.fresh, shownTokens.output);
+	const tokenSummary: [ReactNode, ReactNode] = [<><span className="voyage-token-part">输出 {tokens(shownTokens.output)}</span><span className="voyage-token-separator"> · </span><span className="voyage-token-part">新增输入 {tokens(shownTokens.fresh)}</span></>, <><span className="voyage-token-part">总吞吐 {tokens(shownTokens.total)}</span>{" "}<span className="voyage-token-part">(含缓存)</span></>];
+	const tokenDescription = `${display.retained.tokens ? "最近一轮" : "本轮"}新增消耗 ${tokens(netUsage)} tok = 非缓存输入（含写入）+ 完整输出（含思考）；总吞吐 ${tokens(shownTokens.total)} tok${shownTokens.steps > 1 ? `（含 ${shownTokens.steps} 步往返）` : ""}；非缓存输入（含写入）${tokens(shownTokens.fresh)} tok。此数不是去重内容量或费用。趋势为历史各轮非缓存输入，${shownTokens.trend.length ? `当前标记为第 ${shownTokens.trend.length} 轮` : "等待用量上报"}。`;
 	const previousInput = telemetry.inputTrend[telemetry.inputTrend.length - 2];
 	const currentInput = telemetry.inputTrend[telemetry.inputTrend.length - 1];
 	const inputDelta = currentInput !== undefined && previousInput !== undefined ? currentInput - previousInput : undefined;
@@ -105,7 +120,9 @@ export function VoyageBento({ metrics }: { metrics: VoyageMetrics }) {
 					<circle className="voyage-weather-hub" cx="56" cy="31" r="3" />
 				</svg>
 			</WeatherCard>
-			<WeatherCard name="tokens" icon="tokens" label="Token 用量" value={tokens(shownTokens.total)} unit="tok" summary={tokenSummary} retained={display.retained.tokens} detailTitle="本轮进程与用量" details={<>
+			<WeatherCard name="tokens" icon="tokens" label="Token 用量" value={netUsage === undefined ? "—" : `+${tokens(netUsage)}`} unit="tok" summary={tokenSummary} description={tokenDescription} retained={display.retained.tokens} detailTitle="本轮进程与用量" details={<>
+				<div className="voyage-telemetry-input-highlight"><span>非缓存输入（含写入）</span><strong>{tokens(fresh)} tok</strong></div>
+				<p className="voyage-telemetry-note">主读数为非缓存输入（含写入）+ 完整输出（含思考）。本轮{process.steps > 1 ? `含 ${process.steps} 步模型往返` : "用量按模型请求统计"}，总吞吐含重复发送的上下文与缓存读取。非缓存输入不是去重后的新增内容；缓存读取也可能计费，实际费用见缓存账单。</p>
 				<Ledger rows={[["对话轮数 / Agent 步数", `${process.turns} / ${process.steps}`], ["用量已上报 / 总步数", `${process.reportedSteps} / ${process.steps}`], ["工具调用总数", exact(process.calls)], ["成功 / 失败 / 未完成", `${process.succeeded} / ${process.failed} / ${process.unresolved}`], ["本轮运行耗时", elapsed(process.durationMs)], ["非缓存输入（含写入）", exact(fresh)], ["本轮较上轮新增输入", inputDelta === undefined ? "—" : `${inputDelta > 0 ? "+" : ""}${exact(inputDelta)} tok`], ["缓存读取", exact(cacheRead)], ["输出（含思考）", exact(output)], ["其中思考", exact(reasoning)], ["Token 合计", exact(total)]]} />
 				<div className="voyage-telemetry-subhead">本轮时间分配</div><div className="voyage-telemetry-timebar" aria-hidden="true"><i style={{ width: timingShare(modelMs) === "—" ? "0%" : timingShare(modelMs) }} /><i style={{ width: timingShare(toolMs) === "—" ? "0%" : timingShare(toolMs) }} /></div>
 				<Ledger rows={[["模型 / 工具", `${timingShare(modelMs)} / ${timingShare(toolMs)}`]]} />
@@ -119,15 +136,15 @@ export function VoyageBento({ metrics }: { metrics: VoyageMetrics }) {
 				<Ledger rows={[["当前上下文 / 窗口", `${exact(metrics.context)} / ${exact(metrics.limit)}`], ["系统提示词", "未独立上报"], ["工具定义", "未独立上报"], ["系统、工具定义等开销", compositionValue(composition?.overhead)], ["对话文本（含思考）", compositionValue(composition?.conversation)], ["工具调用与结果", compositionValue(composition?.toolResults)]]} />
 				<p className="voyage-telemetry-note">来源：{metrics.contextSource === "pi" ? "pi 上下文快照" : metrics.contextSource === "last-request" ? "最近模型请求" : metrics.contextSource === "local-estimate" ? "本地文本估算" : "暂无数据"}。构成按可见文本估算，其余计入系统、工具定义等开销。{composition?.scaled ? "压缩后按当前总量等比缩放。" : "图片等非文本内容可能计入开销。"}{contextWarning ? "已超过 80%，建议开启新话题。" : ""}</p>
 			</>}>
-				<WeatherRing value={contextKnown ? shownContext.ratio : undefined} />
+				<ContextCapacity value={contextKnown ? shownContext.ratio : undefined} />
 			</WeatherCard>
-			<WeatherCard name="cache" icon="refresh" label="缓存" value={shownHit === undefined ? "—" : `${(shownHit * 100).toFixed(1)}%`} unit="命中" summary={cacheSummary} tone={shownHit === undefined || shownHit === 0 ? "is-quiet" : shownHit > .7 ? "is-saving" : ""} retained={display.retained.cache} detailTitle="本轮缓存账单" details={<>
+			<WeatherCard name="cache" icon="refresh" label="缓存" value={cachePreparing ? "写入准备" : shownHit === undefined ? "—" : `${(shownHit * 100).toFixed(1)}%`} unit={cachePreparing ? undefined : "命中"} summary={cacheSummary} description={cachePreparing ? `已上报缓存写入 ${tokens(shownCache.write)} tok，等待后续请求复用；当前尚无缓存读取。` : undefined} tone={cachePreparing ? "is-building" : shownHit === undefined || shownHit === 0 ? "is-quiet" : shownHit > .7 ? "is-saving" : ""} retained={display.retained.cache} detailTitle="本轮缓存账单" details={<>
 				<Ledger rows={[["输入总量（含缓存）", exact(totalInput)], ["缓存读取 / 复用", exact(cacheRead)], ["缓存创建", exact(cacheWrite)], ["非缓存输入（含写入）", exact(fresh)], ["缓存命中率", hit === undefined ? "—" : `${(hit * 100).toFixed(2)}%`], ["预估费用", formatCosts(cost, 6)], ["费用节省", savings === undefined ? "—" : `${(savings * 100).toFixed(2)}%`], ["会话累计费用", formatCosts(metrics.sessionCost, 6)]]} />
 				<div className="voyage-telemetry-subhead">会话缓存</div>
 				<Ledger rows={[["累计缓存读取", exact(telemetry.usageKnown ? usage.cacheRead : undefined)], ["累计命中率", telemetry.usageKnown && usage.inputTotal > 0 ? `${(usage.hitRate * 100).toFixed(2)}%` : "—"], ["累计费用节省", telemetry.sessionCacheSavings === undefined ? "—" : `${(telemetry.sessionCacheSavings * 100).toFixed(2)}%`]]} />
 				<p className="voyage-telemetry-note">{costTooltip(cost)}。命中率 = 缓存读取 / 输入总量。节省对比缓存按原价计费的完整账单，含输出。{savings === undefined ? "定价不全、生成中或多币种时不估算节省。" : ""}</p>
 			</>}>
-				<WeatherRing value={shownHit} cache />
+				<WeatherRing value={shownHit} preparing={cachePreparing} animate={metrics.streaming && !display.retained.cache} />
 			</WeatherCard>
 		</div>
 	</div>;

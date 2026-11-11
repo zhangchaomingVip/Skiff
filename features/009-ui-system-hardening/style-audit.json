@@ -208,6 +208,7 @@
       "--voyage-cache-saving-spectrum",
       "--voyage-cache-spectrum",
       "--voyage-card-bg",
+      "--voyage-chart-height",
       "--voyage-chip-blue",
       "--voyage-chip-foreground",
       "--voyage-chip-mint",

@@ -7,7 +7,7 @@ import { summarizeUsage } from "../src/chat/usage.ts";
 
 const known: Parameters<typeof advanceVoyageDisplay>[1] = {
 	streaming: false, speed: 0, averageSpeed: 128, ttftMs: 1200, peakSpeed: 245,
-	turn: { input: 34000, output: 2800, total: 36800, cacheRead: 32000, cacheWrite: 0 },
+	turn: { input: 34000, output: 2800, total: 36800, newInput: 2000, cacheRead: 32000, cacheWrite: 0 },
 	context: 36800, limit: 200000, ratio: .184, contextSource: "last-request",
 	telemetry: { turn: voyageProcessStats([]), session: voyageProcessStats([]), usage: summarizeUsage([]), usageKnown: true, composition: undefined, inputTrend: [2000] },
 };
@@ -25,6 +25,14 @@ test("new turns retain coherent readings and their chart until current data arri
 	assert.equal(pending.turn.total, 0); // Display retention never changes the current bill.
 	assert.equal(pending.turn.input, undefined);
 	assert.equal(waiting.tokens!.input + waiting.tokens!.output, waiting.tokens!.total);
+});
+
+test("retained token explanations keep their own step count and non-cached input", () => {
+	const previous = advanceVoyageDisplay(undefined, { ...known, telemetry: { ...known.telemetry, turn: { ...known.telemetry.turn, steps: 3 } } }, "chat", "first");
+	const waiting = advanceVoyageDisplay(previous, { ...pending, telemetry: { ...pending.telemetry, turn: { ...pending.telemetry.turn, steps: 1 } } }, "chat", "next");
+	assert.equal(waiting.tokens?.steps, 3);
+	assert.equal(waiting.tokens?.fresh, 2000);
+	assert.equal(waiting.retained.tokens, true);
 });
 
 test("speed resumes independently while usage waits; a real pause can still display zero", () => {
@@ -97,6 +105,8 @@ test("reopening a waiting conversation restores its preceding reported turn with
 	];
 	const restored = restoreVoyageDisplay(pending, messages, "chat", { id: "model-a", provider: "mock" });
 	assert.equal(restored?.tokens?.total, 36800);
+	assert.equal(restored?.tokens?.fresh, 2000);
+	assert.equal(restored?.tokens?.steps, 1);
 	assert.deepEqual(restored?.tokens?.trend, [2000]);
 	assert.equal(restored?.speed?.value, 128);
 	assert.equal(restored?.cache?.read, 32000);

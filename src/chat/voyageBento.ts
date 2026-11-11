@@ -82,6 +82,27 @@ export function formatLatency(ms?: number): string {
 	return ms < 1000 ? `${Math.round(ms)}ms` : `${(ms / 1000).toFixed(1)}s`;
 }
 
+export function formatPeakSpeed(speed?: number): string {
+	return speed !== undefined && Number.isFinite(speed) && speed > 0 ? `速率峰值 ${Math.round(speed)} tok/s` : "峰值暂无";
+}
+
+/** Display usage excludes cache reads; it is not a deduplicated content count or a price. */
+export function netTokenUsage(fresh?: number, output?: number): number | undefined {
+	if (fresh === undefined || !Number.isFinite(fresh) || fresh < 0) return undefined;
+	if (output !== undefined && (!Number.isFinite(output) || output < 0)) return undefined;
+	const total = fresh + (output ?? 0);
+	return Number.isFinite(total) ? total : undefined;
+}
+
+/** Cache writes prepare reuse; they are not a failed cache hit. Missing is not zero. */
+export function cacheReading(input?: number, read?: number, write?: number) {
+	const valid = (value?: number): value is number => value !== undefined && Number.isFinite(value) && value >= 0;
+	return {
+		hit: valid(input) && input > 0 && valid(read) ? Math.min(1, read / input) : undefined,
+		preparing: read === 0 && valid(write) && write > 0,
+	};
+}
+
 /** One reported non-cached input total per user turn, including cache writes. */
 export function turnInputTrend(messages: ChatMessage[]): (number | undefined)[] {
 	const values: (number | undefined)[] = [];

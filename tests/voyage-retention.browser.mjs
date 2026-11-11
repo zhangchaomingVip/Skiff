@@ -27,7 +27,7 @@ try {
 	await render(first);
 	const before = await readings();
 	assert.equal(before[0].value, "128.0");
-	assert.equal(before[1].value, "36.8k");
+	assert.equal(before[1].value, "+4.8k");
 	const waiting = { ...structuredClone(first), isStreaming: true, activeRun: { startedAt: await page.evaluate(() => Date.now()), promptId: "next", turnId: "turn:next" } };
 	// The optimistic interval before the new user message arrives also keeps the readings.
 	await render(waiting);
@@ -78,8 +78,8 @@ try {
 	await render(waiting);
 	const after = await readings();
 	assert.equal(after[0].value, "64.0");
-	assert.equal(after[1].value, "11.5k");
-	assert.deepEqual(after[1].summary, ["输入 10.5k tok", "输出 1k tok"]);
+	assert.equal(after[1].value, "+2.5k");
+	assert.deepEqual(after[1].summary, ["输出 1k · 新增输入 1.5k", "总吞吐 11.5k (含缓存)"]);
 	assert.equal(after[2].value, "5.8%");
 	assert.equal(after[3].value, "85.7%");
 	assert.equal(await page.locator(".voyage-weather-pending").count(), 0);

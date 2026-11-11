@@ -108,7 +108,7 @@ export default function setup(pi) {
 	const request = async (path, options = {}) => {
 		const response = await fetch(`${config.url}/${path}`, { ...options, headers, redirect: "error" });
 		if (response.status === 401 || response.status === 403) { deactivate(); return { success: false, error: "浏览器工具已禁用或聊天已重新连接，请重新连接后再试。", details: { outcome: "unavailable" } }; }
-		if (response.status === 409) return { success: false, error: "浏览器实例已变化或关闭，请重新连接聊天后核对页面。", details: { outcome: "closed" } };
+		if (response.status === 409) return { success: false, error: "浏览器实例已变化，请重新核对状态；若页面已关闭，使用 open 打开网页。", details: { outcome: "closed" } };
 		if (!response.ok) return { success: false, error: "浏览器服务暂不可用，请检查连接状态。", details: { outcome: "unavailable" } };
 		return response.json();
 	};
@@ -122,6 +122,7 @@ export default function setup(pi) {
 			"Use drag for element-to-element moves. For slider captchas: get box for the slider's exact position (use its center), screenshot to locate the gap and compute the horizontal distance, then mouse move to the slider center → mouse down → mouse move to the target (human: true, steps 20-30, duration 300-600) → mouse up.",
 			"After dragging a slider, screenshot to check the piece aligns with the gap; if misaligned, screenshot again, compute the offset, and fine-tune with down/move/up — don't blindly repeat the same coordinates.",
 			"Verify with snapshot or screenshot after actions; on human takeover, cancellation, or revoked credentials, stop browser actions and do not auto-retry clicks or submissions.",
+			"Closing a browser ends only that instance. When the user asks to browse again, use open to create a new instance; old page refs are invalid. Do not reopen automatically after a cancelled action.",
 		],
 		parameters: {
 			type: "object",
@@ -165,7 +166,8 @@ export default function setup(pi) {
 				const context = await request("context", { signal: combined });
 				if (context.success !== true) return { content: [{ type: "text", text: context.error }], details: { skiffBrowser: { ...details, ...context.details, durationMs: Date.now() - started } } };
 				if (combined.aborted) throw new Error("cancelled");
-				if (context.status?.requiresSnapshot && action.type !== "snapshot") return { content: [{ type: "text", text: "用户已交还浏览器，请先调用 snapshot 获取新的页面和元素引用，然后继续原任务。" }], details: { skiffBrowser: { ...details, outcome: "snapshotRequired", durationMs: Date.now() - started } } };
+				if (context.status?.control === "closed" && action.type !== "open") return { content: [{ type: "text", text: "浏览器已关闭。用户需要继续浏览时，请使用 open 打开网页，再 snapshot 获取新的页面引用；无需重新连接聊天。" }], details: { skiffBrowser: { ...details, outcome: "closed", durationMs: Date.now() - started } } };
+				if (context.status?.control !== "closed" && context.status?.requiresSnapshot && action.type !== "snapshot") return { content: [{ type: "text", text: "用户已交还浏览器，请先调用 snapshot 获取新的页面和元素引用，然后继续原任务。" }], details: { skiffBrowser: { ...details, outcome: "snapshotRequired", durationMs: Date.now() - started } } };
 				const result = await request("command", { method: "POST", signal: combined, body: JSON.stringify({ requestId, generation: context.status?.generation ?? null, controlVersion: context.status?.controlVersion ?? null, action }) });
 				details = { ...details, ...result.details, durationMs: Date.now() - started };
 				if (result.success !== true) return { content: [{ type: "text", text: failureText(result) }], details: { skiffBrowser: details } };
