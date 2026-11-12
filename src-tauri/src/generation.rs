@@ -9,6 +9,7 @@ use tokio::sync::watch;
 
 const MAX_IMAGE: usize = 32 * 1024 * 1024;
 const MAX_RESPONSE: usize = 48 * 1024 * 1024;
+const MAX_REFERENCE: usize = 20 * 1024 * 1024;
 
 #[derive(Default)]
 pub struct GenerationState {
@@ -111,7 +112,7 @@ fn save_service(dir: &Path, input: ServiceInput) -> Result<ConfigView, String> {
 	if input.models.is_empty() || input.models.len() > 32 { return Err("请配置 1–32 个图片模型".into()); }
 	for model in &input.models {
 		if model.id.trim().is_empty() || model.id != model.id.trim() || model.id.len() > 200 || model.id.chars().any(char::is_control) || !ids.insert(&model.id) { return Err("模型 ID 不能为空、包含控制字符或重复".into()); }
-		if model.sizes.is_empty() || model.sizes.len() > 16 || model.sizes.iter().any(|size| dimensions(size).is_none()) { return Err("请填写有效尺寸，例如 1024x1024；边长须为 256–4096 的 16 倍数，宽高比在 1:3 到 3:1 之间".into()); }
+		if model.sizes.is_empty() || model.sizes.len() > 32 || model.sizes.iter().any(|size| dimensions(size).is_none()) { return Err("每个模型请填写 1–32 个有效尺寸，例如 1024x1024；边长须为 256–4096 的 16 倍数，宽高比在 1:3 到 3:1 之间".into()); }
 	}
 	if !ids.contains(&input.default_model) { return Err("默认模型必须在模型列表中".into()); }
 	let key = input.api_key.as_deref().unwrap_or("").trim();
@@ -159,6 +160,53 @@ pub struct ImageJob {
 	#[serde(default)] usage: Option<Value>,
 	#[serde(default)] revised_prompt: Option<String>,
 	#[serde(default)] actual_size: Option<String>,
+	#[serde(default)] reference: Option<ImageReference>,
+	#[serde(default)] removed: bool,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImageReference { name: String, mime: String, width: u32, height: u32 }
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReferenceInput { name: String, data_url: String }
+
+fn reference_extension(mime: &str) -> Result<&'static str, String> {
+	match mime { "image/png" => Ok("png"), "image/jpeg" => Ok("jpg"), "image/webp" => Ok("webp"), _ => Err("参考图仅支持 PNG、JPEG 或 WebP".into()) }
+}
+
+fn validate_reference(input: ReferenceInput) -> Result<(ImageReference, Vec<u8>), String> {
+	let (prefix, encoded) = input.data_url.split_once(",").ok_or("参考图编码无效")?;
+	let mime = prefix.strip_prefix("data:").and_then(|s| s.strip_suffix(";base64")).ok_or("参考图须为本机图片数据")?;
+	reference_extension(mime)?;
+	if encoded.len() > MAX_REFERENCE * 4 / 3 + 4 { return Err("参考图超过 20 MB，请使用较小图片".into()); }
+	let bytes = STANDARD.decode(encoded).map_err(|_| "参考图编码无效")?;
+	if bytes.is_empty() || bytes.len() > MAX_REFERENCE { return Err("参考图为空或超过 20 MB".into()); }
+	let format = image::guess_format(&bytes).map_err(|_| "无法识别参考图格式")?;
+	if format.to_mime_type() != mime { return Err("参考图格式与文件内容不符".into()); }
+	let (width, height) = image::ImageReader::with_format(std::io::Cursor::new(&bytes), format).into_dimensions().map_err(|_| "参考图尺寸无效")?;
+	if width == 0 || height == 0 || width > 8192 || height > 8192 || width as u64 * height as u64 > 16 * 1024 * 1024 { return Err("参考图须不超过 1600 万像素，单边不超过 8192 像素".into()); }
+	let mut reader = image::ImageReader::with_format(std::io::Cursor::new(&bytes), format);
+	let mut limits = image::Limits::default(); limits.max_alloc = Some(128 * 1024 * 1024); limits.max_image_width = Some(8192); limits.max_image_height = Some(8192); reader.limits(limits);
+	reader.decode().map_err(|_| "参考图无法解码，请重新选择有效图片")?;
+	let name: String = input.name.rsplit(['/', '\\']).next().unwrap_or("参考图").chars().filter(|c| !c.is_control()).take(200).collect();
+	Ok((ImageReference { name: if name.is_empty() { "参考图".into() } else { name }, mime: mime.into(), width, height }, bytes))
+}
+
+fn reference_path(dir: &Path, job: &ImageJob) -> Result<PathBuf, String> {
+	valid_id(&job.id)?;
+	let reference = job.reference.as_ref().ok_or("任务没有参考图")?;
+	Ok(dir.join("image-inputs").join(format!("{}.{}", job.id, reference_extension(&reference.mime)?)))
+}
+
+fn save_reference(dir: &Path, job: &ImageJob, bytes: &[u8]) -> Result<(), String> {
+	let path = reference_path(dir, job)?;
+	std::fs::create_dir_all(path.parent().unwrap()).map_err(|_| "无法创建参考图目录")?;
+	let temporary = path.with_extension("tmp");
+	std::fs::write(&temporary, bytes).map_err(|_| "无法保存参考图快照")?;
+	std::fs::rename(&temporary, path).map_err(|_| "无法完成参考图保存")?;
+	Ok(())
 }
 
 impl ImageJob {
@@ -199,12 +247,32 @@ pub fn list_image_generation_jobs(app: AppHandle, state: State<'_, GenerationSta
 	list_jobs(&data_dir(&app)?, &active)
 }
 
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GenerateInput { id: String, service_id: String, model_id: String, prompt: String, size: String, quality: String }
+fn set_asset_removed(dir: &Path, id: &str, removed: bool) -> Result<ImageJob, String> {
+	let mut job = read_job(dir, id)?;
+	if job.status != "completed" { return Err("只能移除或恢复已完成的图片作品".into()); }
+	job.removed = removed;
+	job.save(dir)?;
+	Ok(job)
+}
 
 #[tauri::command]
-pub fn start_image_generation(app: AppHandle, state: State<'_, GenerationState>, input: GenerateInput) -> Result<ImageJob, String> {
+pub fn set_image_generation_asset_removed(app: AppHandle, state: State<'_, GenerationState>, id: String, removed: bool) -> Result<ImageJob, String> {
+	let _gate = state.gate.lock().map_err(|_| "作品目录正在使用")?;
+	set_asset_removed(&data_dir(&app)?, &id, removed)
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GenerateInput { id: String, service_id: String, model_id: String, prompt: String, size: String, quality: String, reference: Option<ReferenceInput> }
+
+#[tauri::command]
+pub async fn start_image_generation(app: AppHandle, input: GenerateInput) -> Result<ImageJob, String> {
+	// Decoding a reference and writing its snapshot must not block the UI thread.
+	tauri::async_runtime::spawn_blocking(move || start_image_generation_inner(app, input)).await.map_err(|_| "无法提交图片任务".to_string())?
+}
+
+fn start_image_generation_inner(app: AppHandle, input: GenerateInput) -> Result<ImageJob, String> {
+	let state = app.state::<GenerationState>();
 	let _gate = state.gate.lock().map_err(|_| "生成服务正在使用")?;
 	let dir = data_dir(&app)?;
 	valid_id(&input.id)?;
@@ -220,7 +288,9 @@ pub fn start_image_generation(app: AppHandle, state: State<'_, GenerationState>,
 	let prompt = input.prompt.trim().to_string();
 	if prompt.is_empty() || prompt.chars().count() > 32000 { return Err("提示词须为 1–32000 个字符".into()); }
 	let key = super::crypto::open(&service.api_key).map_err(|_| "无法解密生图 Key，请在设置中重新填写")?;
-	let job = ImageJob { id: input.id, status: "generating".into(), prompt, service_id: service.id.clone(), service_name: service.name.clone(), model_id: input.model_id, size: input.size, quality: input.quality, created_at: SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() as u64, message: None, path: None, usage: None, revised_prompt: None, actual_size: None };
+	let reference = input.reference.map(validate_reference).transpose()?;
+	let job = ImageJob { id: input.id, status: "generating".into(), prompt, service_id: service.id.clone(), service_name: service.name.clone(), model_id: input.model_id, size: input.size, quality: input.quality, created_at: SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() as u64, message: None, path: None, usage: None, revised_prompt: None, actual_size: None, reference: reference.as_ref().map(|(info, _)| info.clone()), removed: false };
+	if let Some((_, bytes)) = reference { save_reference(&dir, &job, &bytes)?; }
 	job.save(&dir)?;
 	let (sender, mut cancel) = watch::channel(false);
 	active.insert(job.id.clone(), sender);
@@ -289,12 +359,25 @@ async fn generate(dir: &Path, service: &Service, key: &str, job: &mut ImageJob) 
 }
 
 async fn generate_with_client(dir: &Path, service: &Service, key: &str, job: &mut ImageJob, client: &reqwest::Client) -> Result<(), String> {
-	let response = client.post(format!("{}/images/generations", service.base_url)).bearer_auth(key).json(&json!({
-		"model": job.model_id, "prompt": job.prompt, "size": job.size, "quality": job.quality, "n": 1, "output_format": "png"
-	})).send().await.map_err(network_error)?;
+	let request = if let Some(reference) = &job.reference {
+		let path = reference_path(dir, job)?;
+		if std::fs::metadata(&path).map_err(|_| "参考图快照丢失，未提交生成")?.len() > MAX_REFERENCE as u64 { return Err("参考图快照超过 20 MB，未提交生成".into()); }
+		let bytes = std::fs::read(&path).map_err(|_| "无法读取参考图快照，未提交生成")?;
+		let part = reqwest::multipart::Part::bytes(bytes).file_name(format!("reference.{}", reference_extension(&reference.mime)?)).mime_str(&reference.mime).map_err(|_| "参考图类型无效")?;
+		let form = reqwest::multipart::Form::new().text("model", job.model_id.clone()).text("prompt", job.prompt.clone()).text("size", job.size.clone()).text("quality", job.quality.clone()).text("n", "1").text("output_format", "png").part("image", part);
+		client.post(format!("{}/images/edits", service.base_url)).bearer_auth(key).multipart(form)
+	} else {
+		client.post(format!("{}/images/generations", service.base_url)).bearer_auth(key).json(&json!({
+			"model": job.model_id, "prompt": job.prompt, "size": job.size, "quality": job.quality, "n": 1, "output_format": "png"
+		}))
+	};
+	let response = request.send().await.map_err(network_error)?;
 	let status = response.status();
 	let body = bounded_body(response, if status.is_success() { MAX_RESPONSE } else { 64 * 1024 }).await?;
-	if !status.is_success() { return Err(response_error(status.as_u16(), &body, key)); }
+	if !status.is_success() {
+		let error = response_error(status.as_u16(), &body, key);
+		return Err(if job.reference.is_some() { format!("图生图失败：{error}；请确认服务和模型支持图片编辑接口，未自动改为文生图。") } else { error });
+	}
 	let payload: Value = serde_json::from_slice(&body).map_err(|_| "图片服务没有返回有效的 JSON 数据，请检查 API 地址")?;
 	if payload.get("error").is_some() { return Err(response_error(200, &body, key)); }
 	let image = payload.pointer("/data/0").ok_or("图片服务未返回图片")?;

@@ -16,6 +16,7 @@ mod settings_metadata;
 mod project_workbench;
 mod browser;
 mod generation;
+mod video_generation;
 
 /// One spawned `pi --mode rpc` session. `child` is kept only so we can kill it
 /// on stop; `stdin` is shared with the reader threads so we can write lines.
@@ -556,6 +557,7 @@ pub fn run() {
 		.manage(project_workbench::WorkbenchState::default())
 		.manage(browser::BrowserState::default())
 		.manage(generation::GenerationState::default())
+		.manage(video_generation::VideoState::default())
 		.setup(|app| { generation::setup(app.handle()).map_err(std::io::Error::other)?; Ok(()) })
 		// Native folder picker for the add-project dialog.
 		.plugin(tauri_plugin_dialog::init())
@@ -567,6 +569,10 @@ pub fn run() {
 			generation::get_image_generation_config, generation::save_image_generation_service, generation::delete_image_generation_service,
 			generation::list_image_generation_jobs, generation::start_image_generation, generation::cancel_image_generation,
 			generation::reveal_image_generation_asset, generation::export_image_generation_asset,
+			generation::set_image_generation_asset_removed,
+			video_generation::get_video_generation_config, video_generation::save_video_generation_service, video_generation::delete_video_generation_service,
+			video_generation::list_video_generation_jobs, video_generation::start_video_generation, video_generation::control_video_generation,
+			video_generation::reveal_video_generation_asset, video_generation::export_video_generation_asset,
 			get_pi_auth_status,
 			validate_project_directory,
 			get_workspace_directory,

@@ -13,9 +13,10 @@ import { WebSearchSettings } from "./WebSearchSettings";
 import { FontSettings } from "./FontSettings";
 import { BrowserSettings } from "./BrowserSettings";
 import { ImageGenerationSettings } from "./ImageGenerationSettings";
+import { VideoGenerationSettings } from "./VideoGenerationSettings";
 import type { GenerationStudio } from "../workbench/useGenerationStudio";
 
-export function SettingsDialog({ initialCategory, restrictions, prompt, providers, archives, search, images, onRetryModels, onClose, onCategoryChange }: {
+export function SettingsDialog({ initialCategory, restrictions, prompt, providers, archives, search, images, videos, onRetryModels, onClose, onCategoryChange }: {
 	initialCategory: SettingsCategory;
 	restrictions: SettingsRestrictions;
 	prompt: ComponentProps<typeof PromptSettings>;
@@ -23,6 +24,7 @@ export function SettingsDialog({ initialCategory, restrictions, prompt, provider
 	archives: ComponentProps<typeof ArchivedSessions>;
 	search: WebSearchControls;
 	images: GenerationStudio["images"];
+	videos: GenerationStudio["videos"];
 	onRetryModels: () => void;
 	onClose: () => void;
 	/** Lets the shell reopen preferences on the tab the user left. */
@@ -58,6 +60,7 @@ export function SettingsDialog({ initialCategory, restrictions, prompt, provider
 				{category === "browser" && <fieldset className="settings-config" disabled={!!restrictions.browser}><BrowserSettings onSaved={prompt.onSaved} /></fieldset>}
 				{category === "fonts" && <FontSettings />}
 				{category === "images" && <ImageGenerationSettings images={images} ref={editor} onLockChange={updateInteraction} />}
+				{category === "videos" && <VideoGenerationSettings videos={videos} ref={editor} onLockChange={updateInteraction} />}
 				{category === "appearance" && <section className="settings-page" aria-labelledby="appearance-title"><h2 id="appearance-title">外观</h2><p className="muted">选择应用主题与主题色，立即生效。</p>
 					<div className="settings-group">
 						<div className="settings-row">

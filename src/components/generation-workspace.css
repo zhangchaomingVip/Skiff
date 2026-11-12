@@ -39,6 +39,7 @@
 	.generation-resolution > div { display: flex; gap: var(--space-2); }
 	.generation-resolution .ui-button { flex: 1; height: var(--control-primary); border: 1px solid var(--border); border-radius: var(--radius-lg); background: transparent; color: var(--secondary); }
 	.generation-resolution .ui-button[aria-pressed=true] { border-color: color-mix(in srgb, var(--accent) 48%, var(--border)); background: color-mix(in srgb, var(--accent) 5%, var(--surface)); color: var(--accent); }
+	.generation-resolution .ui-button small { color: var(--muted); font-size: var(--font-size-xs); }
 	.generation-image-ratios > div { grid-template-columns: repeat(auto-fit, minmax(52px, 1fr)); gap: var(--space-2); }
 	.generation-image-ratios .ui-button { height: auto; min-height: 76px; border-radius: var(--radius-lg); padding: var(--space-2) var(--space-1); }
 	.generation-image-ratios .ui-button-content { flex-direction: column; justify-content: center; gap: var(--space-2); width: 100%; }
@@ -55,6 +56,12 @@
 	.generation-task strong { color: var(--text); font-size: var(--font-size-sm); }
 	.generation-task small { display: block; color: var(--muted); font-size: var(--font-size-xs); overflow-wrap: anywhere; }
 	.generation-task-message { color: var(--secondary); }
+	.generation-task .generation-task-excerpt, .generation-task .generation-task-message { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
+	.generation-task-details > summary { color: var(--accent); font-size: var(--font-size-xs); cursor: pointer; }
+	.generation-gallery-views { align-self: flex-start; max-width: 100%; margin-top: var(--space-5); }
+	.generation-gallery-views > .ui-segmented { flex-wrap: wrap; max-width: 100%; }
+	.generation-gallery-notice { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-top: var(--space-3); padding: var(--space-2) var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-lg); color: var(--secondary); background: var(--surface); font-size: var(--font-size-xs); }
+	.generation-gallery-notice > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 	.generation-saved-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 	.generation-asset-info { display: flex; justify-content: space-between; gap: var(--space-2); margin: 0; padding: 0 var(--space-3) var(--space-3); color: var(--muted); font-size: var(--font-size-xs); }
 	.generation-asset-info > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -137,6 +144,8 @@
 	.generation-card-preview > img, .generation-card-preview > video { display: block; width: 100%; height: 100%; object-fit: cover; }
 	.generation-card[data-kind=image] .generation-card-preview { max-height: min(440px, 48vh); background: color-mix(in srgb, var(--subtle) 70%, var(--surface)); }
 	.generation-card[data-kind=image] .generation-card-preview > img { object-fit: contain; }
+	.generation-card[data-kind=video] .generation-card-preview { max-height: min(440px, 48vh); }
+	.generation-card[data-kind=video] .generation-card-preview > video { object-fit: contain; }
 	.generation-hover-actions { --generation-glass: color-mix(in srgb, var(--overlay-image) 80%, transparent); position: absolute; top: var(--space-2); right: var(--space-2); display: flex; align-items: center; gap: var(--space-0-5); padding: var(--space-1); border: 1px solid color-mix(in srgb, var(--action-foreground) 18%, transparent); border-radius: var(--radius-lg); background: var(--generation-glass); color: var(--action-foreground); box-shadow: var(--shadow-xs); backdrop-filter: blur(4px); opacity: 0; transform: translateY(-4px); pointer-events: none; transition: opacity var(--transition-fast), transform var(--transition-fast); }
 	.generation-card-media:hover .generation-hover-actions, .generation-card-media:focus-within .generation-hover-actions { opacity: 1; transform: translateY(0); pointer-events: auto; }
 	.generation-hover-actions .ui-icon-button[data-variant=ghost] { color: var(--action-foreground); }
@@ -153,6 +162,7 @@
 	.generation-card-actions { position: absolute; top: var(--space-2); right: var(--space-2); opacity: 0; pointer-events: none; transition: opacity var(--transition-fast); }
 	.generation-card:hover .generation-card-actions, .generation-card:focus-within .generation-card-actions { opacity: 1; pointer-events: auto; }
 	.generation-card-actions > .ui-button { border-color: var(--border); background: var(--surface); box-shadow: var(--shadow-xs); }
+	.generation-card[data-kind=video] .generation-card-actions { position: static; padding: 0 var(--space-3) var(--space-3); opacity: 1; pointer-events: auto; }
 	.generation-session-note { margin: var(--space-6) 0 0; color: var(--muted); font-size: var(--font-size-xs); }
 	.generation-gallery-error { margin: var(--space-3) 0 0; color: var(--danger); font-size: var(--font-size-sm); }
 	.generation-media-failed { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-2); width: 100%; height: 100%; color: var(--muted); font-size: var(--font-size-xs); }
@@ -163,7 +173,7 @@
 	.generation-preview-dialog > header small { color: var(--muted); font-size: var(--font-size-xs); }
 	.generation-preview-media { display: flex; justify-content: center; align-items: center; min-height: 180px; background: var(--subtle); }
 	.generation-preview-media > img, .generation-preview-media > video { display: block; width: 100%; max-height: calc(100dvh - 200px); object-fit: contain; }
-	.generation-preview-dialog > footer { display: flex; justify-content: flex-end; padding: var(--space-3) var(--space-4); border-top: 1px solid var(--border); }
+	.generation-preview-dialog > footer { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-2); padding: var(--space-3) var(--space-4); border-top: 1px solid var(--border); }
 	@keyframes generation-shimmer { 0%, 100% { background-position: 160% 0; } 50% { background-position: -60% 0; } }
 	@media (prefers-reduced-motion: reduce) { .generation-pending-glow { animation: none; } }
 	@media (pointer: coarse) {

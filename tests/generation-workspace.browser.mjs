@@ -56,12 +56,8 @@ try {
 		assert.equal(await prompt().inputValue(), "");
 		assert.equal(await page.getByRole("heading", { name: "让灵感动起来", exact: true }).isVisible(), true);
 		await prompt().fill("镜头缓缓推进，微风轻拂花瓣");
-		await page.getByRole("slider", { name: /运动幅度/ }).focus(); await page.keyboard.press("End");
-		await page.getByRole("slider", { name: /时长/ }).focus(); await page.keyboard.press("End");
-		await page.getByRole("slider", { name: /帧率/ }).focus(); await page.keyboard.press("Home");
-		assert.equal(await page.getByRole("slider", { name: /运动幅度/ }).inputValue(), "100");
-		assert.equal(await page.getByRole("slider", { name: /时长/ }).inputValue(), "15");
-		assert.equal(await page.getByRole("slider", { name: /帧率/ }).inputValue(), "12");
+		assert.equal(await page.getByRole("slider").count(), 0);
+		assert.equal(await page.getByRole("combobox", { name: "时长", exact: true }).inputValue(), "5");
 		await page.locator(".generation-fields").evaluate((element) => { element.scrollTop = 0; });
 		await screenshot(`${theme}-video-empty`);
 		await tool("生图").click();
@@ -88,7 +84,7 @@ try {
 		await firstCard.getByRole("button", { name: "以此图生成视频", exact: true }).click();
 		assert.equal(await tool("生成视频").getAttribute("aria-pressed"), "true");
 		assert.equal(await prompt().inputValue(), "镜头缓缓推进，微风轻拂花瓣");
-		assert.equal(await page.getByRole("slider", { name: /时长/ }).inputValue(), "15");
+		assert.equal(await page.getByRole("combobox", { name: "时长", exact: true }).inputValue(), "5");
 		assert.equal(await page.locator(".generation-reference-image img").getAttribute("src"), assetUrl);
 		await page.getByRole("button", { name: "移除首帧参考图", exact: true }).click();
 		assert.equal(await page.evaluate((url) => window.revokedMedia.includes(url), assetUrl), false, "Removing a shared reference must keep its gallery image alive");
@@ -141,7 +137,7 @@ try {
 		await page.getByRole("button", { name: "创作参数", exact: true }).click();
 		assert.match(await prompt().inputValue(), /奶油色/);
 		assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-		console.log(`PASS ${theme}: navigation style parity, independent drafts, ratios/sliders, import validation, image/video previews, loop playback, image-to-video reference, URL cleanup, chat/Commit restoration and collapsed controls`);
+		console.log(`PASS ${theme}: navigation style parity, independent drafts, capability controls, import validation, image/video previews, loop playback, image-to-video reference, URL cleanup, chat/Commit restoration and collapsed controls`);
 	}
 	for (const width of [760, 390]) {
 		await page.setViewportSize({ width, height: 800 });

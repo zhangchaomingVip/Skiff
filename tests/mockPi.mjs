@@ -2,9 +2,11 @@
 import { gitHistoryFixture } from "./gitHistoryFixture.mjs";
 import { installMockBrowser } from "./mockBrowser.mjs";
 import { installMockGeneration } from "./mockGeneration.mjs";
+import { installMockVideoGeneration } from "./mockVideoGeneration.mjs";
 export function installMockPi(target, storage, fixture, sessionOverrides) {
 	const browser = installMockBrowser(target);
 	const generation = installMockGeneration(target, storage);
+	const videos = installMockVideoGeneration(target, storage);
 	const callbacks = new Map();
 	const listeners = new Map();
 	const processes = new Map();
@@ -149,6 +151,7 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 		async invoke(command, args) {
 			if (command.startsWith("browser_")) return browser.invoke(command, args);
 			if (command.includes("image_generation")) return generation.invoke(command, args);
+			if (command.includes("video_generation")) return videos.invoke(command, args);
 			// Model discovery credentials must never enter the preview command log.
 			commands.push({ command, args: command === "discover_relay_models" ? { baseUrl: args.baseUrl } : command === "test_settings_connection" ? { ...args, relay: { ...args.relay, apiKey: "[redacted]" } } : command === "test_provider_connection" || command === "probe_relay_endpoint" ? { ...args, apiKey: "[redacted]" } : args });
 			if (command === "plugin:event|listen") { const id = ++sequence; listeners.set(id, args); return id; }
@@ -444,5 +447,5 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 			}
 		},
 	};
-	return { browser, generation, relays, families, metadata, referencePrices, discovery, failNextOrder: () => { failOrder = true; }, failNextBatch: () => { failBatch = true; }, histories, saved, commands, processes, listeners, callbacks, emit, testRequests, pendingTests, deferTests: (value) => { deferTests = value; }, failNextSend: () => { failSend = true; }, settleOnNextClearQueue: () => { settleOnNextClearQueue = true; }, setDialogPath: (value) => { dialogPath = value; } };
+	return { browser, generation, videos, relays, families, metadata, referencePrices, discovery, failNextOrder: () => { failOrder = true; }, failNextBatch: () => { failBatch = true; }, histories, saved, commands, processes, listeners, callbacks, emit, testRequests, pendingTests, deferTests: (value) => { deferTests = value; }, failNextSend: () => { failSend = true; }, settleOnNextClearQueue: () => { settleOnNextClearQueue = true; }, setDialogPath: (value) => { dialogPath = value; } };
 }

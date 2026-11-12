@@ -4,6 +4,41 @@ use axum::{extract::Request, response::IntoResponse, Router};
 
 const PNG: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=";
 
+fn reference_png() -> Vec<u8> {
+	let image = image::RgbaImage::from_pixel(4, 3, image::Rgba([10, 100, 200, 80]));
+	let mut bytes = std::io::Cursor::new(vec![]); image.write_to(&mut bytes, image::ImageFormat::Png).unwrap(); bytes.into_inner()
+}
+
+#[test]
+fn validates_reference_content_and_keeps_legacy_job_records_readable() {
+	let bytes = reference_png();
+	let (info, decoded) = validate_reference(ReferenceInput { name: "C:\\private\\reference.png".into(), data_url: format!("data:image/png;base64,{}", STANDARD.encode(&bytes)) }).unwrap();
+	assert_eq!((info.width, info.height), (4, 3)); assert_eq!(info.name, "reference.png"); assert_eq!(decoded, bytes, "Preserve original input and transparency");
+	for data_url in ["https://example.com/a.png".into(), "data:image/png;base64,".into(), "data:image/png;base64,bm90IGEgcG5n".into(), format!("data:image/jpeg;base64,{}", STANDARD.encode(&bytes))] {
+		assert!(validate_reference(ReferenceInput { name: "test".into(), data_url }).is_err());
+	}
+	let mut encoded = serde_json::to_value(job()).unwrap(); encoded.as_object_mut().unwrap().remove("reference"); encoded.as_object_mut().unwrap().remove("removed");
+	let old: ImageJob = serde_json::from_value(encoded).unwrap(); assert!(old.reference.is_none());
+	assert!(!old.removed);
+}
+
+#[test]
+fn removing_gallery_asset_is_durable_reversible_and_keeps_original_and_metadata() {
+	let dir = TestDir::new(); let mut task = job();
+	assert!(set_asset_removed(&dir.0, "../config", true).is_err());
+	task.save(&dir.0).unwrap(); assert!(set_asset_removed(&dir.0, &task.id, true).is_err());
+	std::fs::create_dir_all(dir.0.join("assets")).unwrap();
+	let path = dir.0.join("assets").join(format!("{}.png", task.id));
+	let bytes = reference_png(); std::fs::write(&path, &bytes).unwrap();
+	task.status = "completed".into(); task.path = Some(path.to_string_lossy().into()); task.usage = Some(json!({"total_tokens":42})); task.save(&dir.0).unwrap();
+	let hidden = set_asset_removed(&dir.0, &task.id, true).unwrap(); assert!(hidden.removed); assert_eq!(hidden.status, "completed");
+	assert_eq!(hidden.prompt, task.prompt); assert_eq!(hidden.usage, task.usage);
+	assert!(list_jobs(&dir.0, &HashMap::new()).unwrap()[0].removed);
+	assert_eq!(std::fs::read(asset_path(&dir.0, &task.id).unwrap()).unwrap(), bytes);
+	let restored = set_asset_removed(&dir.0, &task.id, false).unwrap(); assert!(!restored.removed);
+	assert_eq!(std::fs::read(&path).unwrap(), bytes);
+}
+
 struct TestDir(PathBuf);
 impl TestDir {
 	fn new() -> Self { let dir = std::env::temp_dir().join(format!("skiff-generation-test-{}", uuid::Uuid::new_v4())); std::fs::create_dir_all(&dir).unwrap(); Self(dir) }
@@ -21,7 +56,7 @@ fn input() -> ServiceInput {
 }
 
 fn job() -> ImageJob {
-	ImageJob { id: uuid::Uuid::new_v4().to_string(), status: "generating".into(), prompt: "A paper boat".into(), service_id: "test".into(), service_name: "Test Images".into(), model_id: "test-image".into(), size: "1024x1024".into(), quality: "auto".into(), created_at: 42, message: None, path: None, usage: None, revised_prompt: None, actual_size: None }
+	ImageJob { id: uuid::Uuid::new_v4().to_string(), status: "generating".into(), prompt: "A paper boat".into(), service_id: "test".into(), service_name: "Test Images".into(), model_id: "test-image".into(), size: "1024x1024".into(), quality: "auto".into(), created_at: 42, message: None, path: None, usage: None, revised_prompt: None, actual_size: None, reference: None, removed: false }
 }
 
 #[cfg(windows)]
@@ -52,6 +87,9 @@ fn rejects_bad_endpoints_dimensions_and_model_config() {
 	let mut bad = input(); bad.models[0].sizes = vec!["1:1".into()]; assert!(save_service(&dir.0, bad).is_err());
 	let mut bad = input(); bad.default_model = "missing".into(); assert!(save_service(&dir.0, bad).is_err());
 	let mut bad = input(); bad.models.push(bad.models[0].clone()); assert!(save_service(&dir.0, bad).is_err());
+	assert_eq!(dimensions("3840x2160"), Some((3840, 2160)));
+	assert_eq!(dimensions("2880x2880"), Some((2880, 2880)));
+	let mut bad = input(); bad.models[0].sizes = (0..33).map(|i| format!("{}x{}", 256 + i * 16, 256 + i * 16)).collect(); assert!(save_service(&dir.0, bad).err().unwrap().contains("1–32"));
 }
 
 #[test]
@@ -82,6 +120,19 @@ async fn mock(mode: &'static str) -> (String, Arc<AtomicUsize>, tokio::task::Joi
 				return ([("content-type", "image/png")], STANDARD.decode(PNG).unwrap()).into_response();
 			}
 			calls.fetch_add(1, Ordering::SeqCst);
+			if mode.starts_with("edit") {
+				assert_eq!(request.uri().path(), "/v1/images/edits");
+				assert_eq!(request.headers().get("authorization").unwrap(), "Bearer dummy-key");
+				assert!(request.headers().get("content-type").unwrap().to_str().unwrap().starts_with("multipart/form-data; boundary="));
+				let bytes = axum::body::to_bytes(request.into_body(), 65536).await.unwrap();
+				let text = String::from_utf8_lossy(&bytes);
+				for field in ["model", "prompt", "size", "quality", "n", "output_format", "image"] { assert!(text.contains(&format!("name=\"{field}\""))); }
+				assert!(text.contains("filename=\"reference.png\"")); assert!(text.contains("Content-Type: image/png"));
+				let original = reference_png(); assert!(bytes.windows(original.len()).any(|part| part == original));
+				if mode == "edit-error" { return (axum::http::StatusCode::NOT_FOUND, axum::Json(json!({"error":{"message":"edits unsupported dummy-key"}}))).into_response(); }
+				if mode == "edit-timeout" { tokio::time::sleep(Duration::from_millis(250)).await; }
+				return axum::Json(json!({"data":[{"b64_json":PNG}],"usage":{"total_tokens":64}})).into_response();
+			}
 			assert_eq!(request.uri().path(), "/v1/images/generations");
 			assert_eq!(request.headers().get("authorization").unwrap(), "Bearer dummy-key");
 			let body: Value = serde_json::from_slice(&axum::body::to_bytes(request.into_body(), 65536).await.unwrap()).unwrap();
@@ -138,4 +189,26 @@ async fn timeout_never_repeats_a_billable_request() {
 	assert!(error.contains("超时")); assert!(error.contains("计费"));
 	assert_eq!(count.load(Ordering::SeqCst), 1);
 	server.abort();
+}
+
+#[tokio::test]
+async fn edits_send_snapshot_as_multipart_and_never_fall_back_or_retry() {
+	for mode in ["edit", "edit-error", "edit-timeout"] {
+		let dir = TestDir::new(); let (base, count, server) = mock(mode).await;
+		let service = Service { id: "test".into(), name: "Test".into(), base_url: base, api_key: "unused".into(), models: vec![], default_model: "test-image".into() };
+		let (reference, bytes) = validate_reference(ReferenceInput { name: "source.png".into(), data_url: format!("data:image/png;base64,{}", STANDARD.encode(reference_png())) }).unwrap();
+		let mut task = job(); task.reference = Some(reference); save_reference(&dir.0, &task, &bytes).unwrap(); task.save(&dir.0).unwrap();
+		let client = reqwest::Client::builder().timeout(Duration::from_millis(if mode == "edit-timeout" { 80 } else { 2000 })).retry(reqwest::retry::never()).build().unwrap();
+		let result = generate_with_client(&dir.0, &service, "dummy-key", &mut task, &client).await;
+		if mode == "edit" {
+			result.unwrap(); task.save(&dir.0).unwrap();
+			assert_eq!(task.status, "completed"); assert_eq!(task.usage.as_ref().unwrap()["total_tokens"], 64);
+			assert_eq!(read_job(&dir.0, &task.id).unwrap().reference.unwrap().name, "source.png");
+		} else {
+			let error = result.unwrap_err(); assert!(!error.contains("dummy-key"));
+			if mode == "edit-error" { assert!(error.contains("图生图失败") && error.contains("未自动改为文生图")); }
+		}
+		assert_eq!(count.load(Ordering::SeqCst), 1);
+		assert_eq!(std::fs::read(reference_path(&dir.0, &task).unwrap()).unwrap(), bytes); server.abort();
+	}
 }

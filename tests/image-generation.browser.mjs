@@ -61,6 +61,7 @@ try {
 		await page.getByText("正在生成图片…", { exact: true }).waitFor();
 		await page.screenshot({ path: `dist/image-generation/${theme}-generating.png`, animations: "disabled" });
 		await page.getByRole("button", { name: "停止等待", exact: true }).click();
+		await page.getByRole("group", { name: "画廊视图", exact: true }).getByRole("button", { name: /^失败记录/ }).click();
 		await page.getByText("已停止等待", { exact: true }).waitFor();
 		await page.evaluate(() => window.skiffPreview.generation.setMode("success"));
 		await prompt().press("Meta+Enter");
@@ -83,6 +84,7 @@ try {
 		await page.keyboard.press("Escape");
 		await page.evaluate(() => window.skiffPreview.generation.setMode("failure"));
 		await prompt().fill("失败用例"); await generate().click();
+		await page.getByRole("group", { name: "画廊视图", exact: true }).getByRole("button", { name: /^失败记录/ }).click();
 		await page.getByText("生成失败", { exact: true }).waitFor();
 		assert.match(await page.locator(".generation-task-list").innerText(), /429/);
 		assert.equal(await page.evaluate(() => window.skiffPreview.generation.calls.filter((call) => call.prompt === "失败用例").length), 1);

@@ -1,4 +1,4 @@
-# OpenAI 文生图（第一期）
+# OpenAI 图片生成
 
 ## 使用
 
@@ -7,6 +7,8 @@
 3. 填写账户已开通的图片模型 ID 和实际支持的尺寸，选择默认模型并保存。默认预填 `gpt-image-2.5-flare`；模型支持情况以服务商和当前账户为准。可添加多个服务、多个模型。保存不会调用接口或消耗额度。
 4. 回到生图页，填写提示词，选择服务、模型、尺寸与质量，然后生成。每次一张，按服务商计费。
 5. 成功作品自动保存，支持大图预览、复用提示词、另存为和打开所在文件夹。导入作品仍只在当前运行期间保留。
+6. 需要图生图时，在生图页上传参考图，或在作品菜单/图片预览中选择「以此图生成图片」，填写修改描述后生成。服务需要支持 `/images/edits`，单张图片编辑的范围、输入限制与验证见 [038 · 图生图](../038-image-to-image/task.md)。
+7. 2K/4K 显示「待配置」时，点击进入设置，编辑对应服务/模型并添加尺寸预设，按服务实际支持范围保存后即可选择。每模型最多 32 个尺寸，配置不会创建生成任务；详见 [040 · 分辨率配置](../040-image-resolution-configuration/task.md)。
 
 官方协议依据：[Image generation](https://developers.openai.com/api/docs/guides/image-generation)、[Create image](https://developers.openai.com/api/reference/resources/images/methods/generate)。调用 `POST /images/generations`，携带 `model`、`prompt`、`size`、`quality`、`n: 1`、`output_format: png`。不发送 GPT Image 不支持的旧参数 `response_format`。接受 `data[0].b64_json`，也兼容返回 `data[0].url` 的服务；第一期只保存 PNG。尺寸由模型配置提供，实际输出尺寸从 PNG 头读取，不拉伸或裁切。
 
@@ -27,7 +29,7 @@
 
 切换工具、打开设置和 WebView 重载不会取消 Rust 任务。停止等待会取消本地请求，但无法承诺取消服务端计费。应用重启后，仍处于生成中而无活动执行器的记录标记为已中断，明确提示服务端可能继续处理，不自动恢复付费请求。已完成记录保留提示词、服务、模型、请求尺寸、实际尺寸、时间、服务返回的用量和 revised_prompt。
 
-第一期不包括图片编辑、参考图生图、视频生成、自动模型发现、批量出图和价格估算。真实 OpenAI 账户权限与计费仍需用户配置 Key 后验证。
+单张参考图生图由 [038](../038-image-to-image/task.md) 接入，视频由 [037](../037-muse-video-generation/README.md) 接入。暂不包含图片蒙版编辑、多图合成、自动模型发现、批量出图和价格估算。真实 OpenAI/中转站账户权限与计费仍需相应服务验证。
 
 ## 验证
 

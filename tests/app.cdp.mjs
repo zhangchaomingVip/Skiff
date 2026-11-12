@@ -29,10 +29,13 @@ import { verifyNativeBrowser, verifyNativeBrowserShutdown } from "./browser-nati
 import { createBrowserToolScenario, verifyBrowserTools } from "./browser-tools.cdp.mjs";
 import { createLifecycleScenario, verifyBrowserLifecycle } from "./browser-lifecycle.cdp.mjs";
 import { createImageGenerationScenario, verifyImageGeneration } from "./image-generation.cdp.mjs";
+import { createVideoGenerationScenario, verifyVideoGeneration } from "./video-generation.cdp.mjs";
 
 const CDP_PORT = 9222;
 const modelPickerOnly = process.argv.includes("--model-picker");
 const imagesOnly = process.argv.includes("--images");
+const videosOnly = process.argv.includes("--videos");
+const videoScenario = createVideoGenerationScenario();
 const imageScenario = createImageGenerationScenario();
 const retryOnly = process.argv.includes("--retry");
 const browserToolsOnly = process.argv.includes("--browser-tools");
@@ -65,6 +68,7 @@ let retryScenario;
 let scenarioRequests = 0;
 const server = createServer((request, response) => {
 	if (imageScenario.handle(request, response)) return;
+	if (videoScenario.handle(request, response)) return;
 	const send = (status, body) => { response.writeHead(status, { "Content-Type": "application/json" }); response.end(body); };
 	if (request.method === "GET" && request.url === "/v1/models") return send(200, JSON.stringify({ data: [{ id: MODEL_ID }, { id: "provider-private-alias", vision: true, tools: false, reasoning: false, context_window: 64000, max_output_tokens: 2048 }] }));
 	if (request.method === "POST" && request.url === "/v1/chat/completions") {
@@ -161,12 +165,15 @@ if (process.env.SKIFF_CDP_BINARY) {
 	executable = join(root, "skiff-cdp.exe");
 	await copyFile(process.env.SKIFF_CDP_BINARY, executable);
 }
-const dev = executable ? spawn(executable, [], { cwd: repoRoot, env }) : spawn("cmd.exe", ["/c", "npm run tauri -- dev"], { cwd: repoRoot, env });
+let dev = executable ? spawn(executable, [], { cwd: repoRoot, env }) : spawn("cmd.exe", ["/c", "npm run tauri -- dev"], { cwd: repoRoot, env });
 const devLog = [];
-dev.stdout.on("data", (chunk) => devLog.push(chunk));
-dev.stderr.on("data", (chunk) => devLog.push(chunk));
 let devExit;
-dev.on("exit", (code, signal) => { devExit = `${code ?? signal}`; });
+const observeDesktop = (process) => {
+	process.stdout.on("data", (chunk) => devLog.push(chunk));
+	process.stderr.on("data", (chunk) => devLog.push(chunk));
+	process.on("exit", (code, signal) => { if (process === dev) devExit = `${code ?? signal}`; });
+};
+observeDesktop(dev);
 
 const writeArtifacts = async () => {
 	await writeFile(join(artifacts, "cdp-dev.log"), devLog.join("")).catch(() => {});
@@ -198,7 +205,7 @@ try {
 	console.log("CDP 端点已就绪，正在附身窗口…");
 
 	browser = await chromium.connectOverCDP(cdpUrl);
-	if (browserOnly || imagesOnly) {
+	if (browserOnly || imagesOnly || videosOnly) {
 		const diagnostic = await browser.newBrowserCDPSession();
 		const { arguments: browserArguments } = await diagnostic.send("Browser.getBrowserCommandLine");
 		const profileArgument = browserArguments.find((argument) => argument.startsWith("--user-data-dir="));
@@ -248,15 +255,36 @@ try {
 	console.log("已在启动台点击「开始聊天」，等待聊天视图…");
 
 	await page.waitForSelector(".composer-input", { timeout: 60_000 });
-	if (imagesOnly) {
-		await verifyImageGeneration(page, imageScenario, `http://127.0.0.1:${mockPort}/v1`, join(root, "generation"), artifacts);
+	if (videosOnly || imagesOnly) {
+		if (videosOnly) page = await verifyVideoGeneration(page, videoScenario, `http://127.0.0.1:${mockPort}/v1`, join(root, "generation"), artifacts, async () => {
+			await new Promise((resolve) => { execFile("taskkill", ["/PID", String(dev.pid), "/T", "/F"], () => resolve()); });
+			await browser.close().catch(() => {});
+			devExit = undefined;
+			dev = executable ? spawn(executable, [], { cwd: repoRoot, env }) : spawn("cmd.exe", ["/c", "npm run tauri -- dev"], { cwd: repoRoot, env });
+			observeDesktop(dev);
+			const deadline = Date.now() + 120000;
+			while (true) {
+				if (devExit !== undefined) throw new Error(`Restarted desktop exited: ${devExit}`);
+				try { if ((await fetch("http://127.0.0.1:9222/json/version")).ok) break; } catch {}
+				if (Date.now() > deadline) throw new Error("Restarted desktop CDP timeout");
+				await sleep(500);
+			}
+			browser = await chromium.connectOverCDP("http://127.0.0.1:9222");
+			const diagnostic = await browser.newBrowserCDPSession();
+			const { arguments: args } = await diagnostic.send("Browser.getBrowserCommandLine");
+			assert.ok(args.some((arg) => arg.startsWith("--user-data-dir=") && arg.toLowerCase().includes(root.toLowerCase())), "Restart must retain isolated profile");
+			page = browser.contexts()[0].pages()[0] ?? await browser.contexts()[0].waitForEvent("page");
+			page.on("pageerror", (error) => pageErrors.push(String(error)));
+			return page;
+		});
+		if (imagesOnly) await verifyImageGeneration(page, imageScenario, `http://127.0.0.1:${mockPort}/v1`, join(root, "generation"), artifacts);
 		// Reloading an empty conversation returns to the launcher. Enter the chat
 		// through its real start control before checking the independent pi flow.
 		if (await page.locator(".launcher-row").count()) await page.locator(".launcher-row", { hasText: MODEL_ID }).getByRole("button", { name: "开始聊天" }).click();
-		await page.fill(".composer-input", "生图后验证普通聊天。");
+		await page.fill(".composer-input", "创作后验证普通聊天。");
 		await page.click(".send-btn");
 		await page.waitForFunction((reply) => document.body.innerText.includes(reply), REPLY, { timeout: 90000 });
-		assert.ok(requests.length > 0, "Ordinary pi chat remains functional after generating images");
+		assert.ok(requests.length > 0, "Ordinary pi chat remains functional after media generation");
 		assert.deepEqual(pageErrors, []);
 	} else if (browserOnly) {
 		if (browserToolsOnly) await verifyBrowserTools(page, browserScenario, requests, artifacts);

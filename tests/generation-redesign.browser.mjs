@@ -121,7 +121,7 @@ try {
 		await page.getByRole("menu", { name: "作品操作", exact: true }).waitFor();
 		await page.screenshot({ path: `${output}/${theme}-actions.png`, animations: "disabled" });
 		await page.keyboard.press("End");
-		assert.equal(await page.getByRole("menuitem", { name: "以此图生成视频" }).evaluate((element) => element === document.activeElement), true);
+		assert.equal(await page.getByRole("menuitem", { name: "从画廊移除" }).evaluate((element) => element === document.activeElement), true);
 		await page.keyboard.press("Home"); await page.keyboard.press("Escape");
 		await more.click(); await page.getByRole("heading", { name: /灵感画廊/ }).click();
 		assert.equal(await page.getByRole("menu").count(), 0, "Outside click closes the menu");
@@ -144,7 +144,9 @@ try {
 		assert.equal(await page.locator(".generation-pending-glow").evaluate((element) => getComputedStyle(element).animationName), "none");
 		await page.emulateMedia({ reducedMotion: "no-preference" });
 		await page.getByRole("button", { name: "停止等待", exact: true }).click();
+		await page.getByRole("group", { name: "画廊视图", exact: true }).getByRole("button", { name: /^失败记录/ }).click();
 		await page.getByText("已停止等待", { exact: true }).waitFor();
+		await page.getByRole("group", { name: "画廊视图", exact: true }).getByRole("button", { name: /^作品 / }).click();
 		await page.locator('input[aria-label="导入图片作品"]').setInputFiles(["my_sketch.png", "ceea955e-cda1-4249-aeda-a87197123456.png", "a".repeat(64) + ".png"].map((name) => ({ name, mimeType: "image/png", buffer: testImage() })));
 		const importedTitles = await page.locator(".generation-card-caption > strong").allTextContents();
 		assert.ok(importedTitles.includes("my_sketch.png"));

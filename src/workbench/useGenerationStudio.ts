@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useImageGeneration } from "./useImageGeneration";
+import { useVideoGeneration } from "./useVideoGeneration";
+import type { VideoJob } from "./videoGeneration";
 import { imageAssetUrl, sizeRatio, type ImageJob } from "./imageGeneration";
 
 export type GenerationKind = "image" | "video";
@@ -13,9 +15,7 @@ export interface GenerationDraft {
 	size: string;
 	quality: string;
 	ratio: GenerationRatio;
-	motion: number;
 	duration: number;
-	fps: number;
 }
 
 export interface GenerationAsset {
@@ -27,6 +27,8 @@ export interface GenerationAsset {
 	ratio?: GenerationRatio;
 	createdAt: number;
 	job?: ImageJob;
+	videoJob?: VideoJob;
+	removed?: boolean;
 }
 
 export interface GenerationReference {
@@ -48,9 +50,10 @@ function validateMedia(file: File, kind: GenerationKind) {
 /** Session-owned local media stays available across tools without persisting blob URLs. */
 export function useGenerationStudio() {
 	const images = useImageGeneration();
+	const videos = useVideoGeneration();
 	const [drafts, setDrafts] = useState<Record<GenerationKind, GenerationDraft>>({
-		image: { prompt: "", modelId: "", serviceId: "", size: "", quality: "auto", ratio: "1:1", motion: 35, duration: 5, fps: 24 },
-		video: { prompt: "", modelId: "", serviceId: "", size: "", quality: "auto", ratio: "16:9", motion: 35, duration: 5, fps: 24 },
+		image: { prompt: "", modelId: "", serviceId: "", size: "", quality: "auto", ratio: "1:1", duration: 5 },
+		video: { prompt: "", modelId: "", serviceId: "", size: "", quality: "auto", ratio: "9:16", duration: 5 },
 	});
 	useEffect(() => {
 		if (!images.config) return;
@@ -62,12 +65,25 @@ export function useGenerationStudio() {
 			return { ...current, image: { ...previous, serviceId: service?.id ?? "", modelId: model?.id ?? "", size: model?.sizes.includes(previous.size) ? previous.size : model?.sizes[0] ?? "" } };
 		});
 	}, [images.config]);
+	useEffect(() => {
+		if (!videos.config) return;
+		setDrafts((current) => {
+			const previous = current.video;
+			const services = videos.config!.services;
+			const service = services.find((item) => item.id === previous.serviceId) ?? services.find((item) => item.id === videos.config!.defaultServiceId) ?? services[0];
+			const model = service?.models.find((item) => item.id === previous.modelId) ?? service?.models.find((item) => item.id === service.defaultModel) ?? service?.models[0];
+			return { ...current, video: { ...previous, serviceId: service?.id ?? "", modelId: model?.id ?? "", duration: model?.durations.includes(previous.duration) ? previous.duration : model?.durations[0] ?? 5, ratio: "9:16" } };
+		});
+	}, [videos.config]);
 	const [assets, setAssets] = useState<GenerationAsset[]>([]);
 	const [reference, setReference] = useState<GenerationReference>();
 	const [referenceError, setReferenceError] = useState<string>();
+	const [imageReference, setImageReference] = useState<GenerationReference>();
+	const [imageReferenceError, setImageReferenceError] = useState<string>();
 	const [errors, setErrors] = useState<Partial<Record<GenerationKind, string>>>({});
 	const urls = useRef(new Set<string>());
 	const referenceRef = useRef<GenerationReference>();
+	const imageReferenceRef = useRef<GenerationReference>();
 	useEffect(() => () => { for (const url of urls.current) URL.revokeObjectURL(url); urls.current.clear(); }, []);
 	const createUrl = (file: File) => {
 		const url = URL.createObjectURL(file);
@@ -95,15 +111,35 @@ export function useGenerationStudio() {
 		try { validateMedia(file, "image"); replaceReference({ url: createUrl(file), name: file.name }); }
 		catch (error) { setReferenceError(String(error instanceof Error ? error.message : error)); }
 	};
+	const replaceImageReference = (next?: GenerationReference) => {
+		const previous = imageReferenceRef.current;
+		if (previous && !previous.assetId) { URL.revokeObjectURL(previous.url); urls.current.delete(previous.url); }
+		imageReferenceRef.current = next; setImageReference(next); setImageReferenceError(undefined);
+	};
+	const uploadImageReference = (file: File) => {
+		try { validateMedia(file, "image"); replaceImageReference({ url: createUrl(file), name: file.name }); }
+		catch (error) { setImageReferenceError(String(error instanceof Error ? error.message : error)); }
+	};
+	const useImageForImage = (asset: GenerationAsset) => {
+		if (asset.kind !== "image") return;
+		replaceImageReference({ url: asset.url, name: asset.name, assetId: asset.id });
+	};
 	const useImageForVideo = (asset: GenerationAsset) => {
 		if (asset.kind !== "image") return;
 		replaceReference({ url: asset.url, name: asset.name, assetId: asset.id });
 		// An imported image has no prompt; keep any motion direction already drafted.
 		if (asset.prompt) updateDraft("video", { prompt: asset.prompt });
-		if (asset.ratio) updateDraft("video", { ratio: asset.ratio });
+		updateDraft("video", { ratio: "9:16" });
+	};
+	const setAssetRemoved = async (asset: GenerationAsset, removed: boolean) => {
+		if (asset.kind !== "image") return false;
+		if (asset.job) return images.setRemoved(asset.id, removed);
+		setAssets((current) => current.map((item) => item.id === asset.id ? { ...item, removed } : item));
+		return true;
 	};
 	const generated: GenerationAsset[] = images.jobs.filter((job) => job.status === "completed" && job.path).map((job) => ({ id: job.id, kind: "image", url: imageAssetUrl(job.path!), name: `skiff-${job.id.slice(0, 8)}.png`, prompt: job.prompt, ratio: generationRatios.find((ratio) => ratio === sizeRatio(job.actualSize ?? job.size)), createdAt: job.createdAt, job }));
-	return { drafts, updateDraft, assets: [...generated, ...assets], importAssets, reference, uploadReference, removeReference: () => replaceReference(), useImageForVideo, referenceError, clearReferenceError: () => setReferenceError(undefined), errors, clearError, images };
+	const generatedVideos: GenerationAsset[] = videos.jobs.filter((job) => job.status === "completed" && job.path).map((job) => ({ id: job.id, kind: "video", url: imageAssetUrl(job.path!), name: `skiff-${job.id.slice(0, 8)}.mp4`, prompt: job.prompt, ratio: "9:16", createdAt: job.createdAt, videoJob: job }));
+	return { drafts, updateDraft, assets: [...generatedVideos, ...generated, ...assets], importAssets, reference, uploadReference, removeReference: () => replaceReference(), useImageForVideo, referenceError, clearReferenceError: () => setReferenceError(undefined), imageReference, uploadImageReference, removeImageReference: () => replaceImageReference(), useImageForImage, imageReferenceError, clearImageReferenceError: () => setImageReferenceError(undefined), errors, clearError, images, videos, setAssetRemoved };
 }
 
 export type GenerationStudio = ReturnType<typeof useGenerationStudio>;

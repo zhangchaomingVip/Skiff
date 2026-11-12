@@ -5,6 +5,7 @@ import { useSettingsEditor, type SettingsEditorHandle } from "./settingsEditor";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { Icon } from "./Icon";
 import { Button, Input, Select } from "./ui";
+import { imageResolutions, imageSizePresets, maxImageSizes, parseImageSizes } from "../workbench/imageSizes";
 
 type Draft = { kind: "service"; input: ImageServiceInput; original: string; sizes: string[] };
 export const ImageGenerationSettings = forwardRef<SettingsEditorHandle, { images: GenerationStudio["images"]; onLockChange: (locked: boolean, pending: boolean) => void }>(function ImageGenerationSettings({ images, onLockChange }, ref) {
@@ -19,13 +20,13 @@ export const ImageGenerationSettings = forwardRef<SettingsEditorHandle, { images
 	const patch = (input: Partial<ImageServiceInput>) => setDraft((current) => current && ({ ...current, input: { ...current.input, ...input } }));
 	const submit = () => mutate(async () => {
 		if (!draft) return false;
-		const input = { ...draft.input, models: draft.input.models.map((model, index) => ({ id: model.id.trim(), sizes: [...new Set(draft.sizes[index].split(/[,，\s]+/).filter(Boolean))] })) };
+		const input = { ...draft.input, models: draft.input.models.map((model, index) => ({ id: model.id.trim(), sizes: parseImageSizes(draft.sizes[index]) })) };
 		const next = await imageGenerationNative.save(input);
 		images.setConfig(next); closeDraft(); return true;
 	});
 	return <section ref={contentRef} className="settings-page image-generation-settings" aria-labelledby="image-generation-title">
 		<h2 id="image-generation-title">图片生成</h2>
-		<p className="muted">通过 OpenAI Images 接口生成图片，支持自定义兼容服务。独立于聊天模型，每次生成一张并自动保存到本地。</p>
+		<p className="muted">通过 OpenAI Images 接口生成图片，支持自定义兼容服务。图生图需要服务支持图片编辑接口。独立于聊天模型，每次生成一张并自动保存到本地。</p>
 		{!draft ? <>
 			<div className="image-settings-actions"><Button onClick={() => edit()} disabled={images.loading || !images.config}><Icon name="plus" />添加生成服务</Button><Button onClick={() => void images.refresh()} disabled={images.loading} loading={images.loading}>重新读取</Button></div>
 			{images.config?.services.map((service) => <div className="settings-group" key={service.id}><div className="settings-row"><div className="settings-row-text"><strong className="settings-row-title">{service.name}{images.config?.defaultServiceId === service.id ? " · 默认" : ""}</strong><span className="settings-row-hint">{service.baseUrl} · {service.models.length} 个模型 · Key {service.keyHint}</span></div><Button onClick={() => edit(service)} aria-label={`编辑生成服务 ${service.name}`}>编辑</Button><Button onClick={() => setRemoving(service)} aria-label={`删除生成服务 ${service.name}`}>删除</Button></div></div>)}
@@ -42,6 +43,11 @@ export const ImageGenerationSettings = forwardRef<SettingsEditorHandle, { images
 				{draft.input.models.map((model, index) => <div className="settings-group" key={index}>
 					<div className="settings-row is-stacked"><label htmlFor={`image-model-${index}`} className="settings-row-title">模型 ID {index + 1}</label><Input id={`image-model-${index}`} required value={model.id} onChange={(event) => { const models = draft.input.models.map((item, position) => position === index ? { ...item, id: event.target.value } : item); patch({ models, defaultModel: draft.input.defaultModel === model.id ? event.target.value : draft.input.defaultModel }); }} /></div>
 					<div className="settings-row is-stacked"><label htmlFor={`image-sizes-${index}`} className="settings-row-title">可用尺寸 {index + 1}</label><Input id={`image-sizes-${index}`} required value={draft.sizes[index]} onChange={(event) => setDraft({ ...draft, sizes: draft.sizes.map((value, position) => position === index ? event.target.value : value) })} /><span className="settings-row-hint">以英文逗号分隔，例如 1024x1024, 1536x1024, 1024x1536；只填写此模型实际支持的尺寸。</span></div>
+					<div className="image-settings-actions" role="group" aria-label={`尺寸预设 ${index + 1}`}>{imageResolutions.map((resolution) => {
+						const current = parseImageSizes(draft.sizes[index]);
+						const merged = [...new Set([...current, ...imageSizePresets[resolution]])];
+						return <Button key={resolution} size="compact" disabled={merged.length > maxImageSizes || merged.length === current.length} title={merged.length > maxImageSizes ? "每模型最多 32 个尺寸，请先移除不用的尺寸" : imageSizePresets[resolution].join("、")} onClick={() => setDraft({ ...draft, sizes: draft.sizes.map((value, position) => position === index ? merged.join(", ") : value) })}>添加 {resolution} 尺寸</Button>;
+					})}</div><p className="settings-row-hint">预设只是常见尺寸示例，不会检测模型能力；请按服务商支持范围添加或删减后保存。4K 档包含约 800 万像素的方图/竖图，每模型最多 32 个尺寸。</p>
 					{draft.input.models.length > 1 && <div className="image-settings-actions"><Button onClick={() => { const models = draft.input.models.filter((_, position) => position !== index); setDraft({ ...draft, input: { ...draft.input, models, defaultModel: draft.input.defaultModel === model.id ? models[0].id : draft.input.defaultModel }, sizes: draft.sizes.filter((_, position) => position !== index) }); }}>移除模型 {index + 1}</Button></div>}
 				</div>)}
 				<div className="image-settings-actions"><Button disabled={draft.input.models.length >= 32} onClick={() => setDraft({ ...draft, input: { ...draft.input, models: [...draft.input.models, { id: "", sizes: ["1024x1024"] }] }, sizes: [...draft.sizes, "1024x1024"] })}><Icon name="plus" />添加模型</Button></div>
