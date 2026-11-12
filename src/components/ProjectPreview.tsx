@@ -20,6 +20,10 @@ function TextPreview({ content, path }: { content: string; path: string }) {
 	return <div className="source-preview"><div className="source-lines" aria-hidden="true">{content.split("\n").map((_, index) => <span key={index}>{index + 1}</span>)}</div><pre><code className="hljs" dangerouslySetInnerHTML={{ __html: html }} /></pre></div>;
 }
 
+function ImageFilePreview({ content, mimeType, name }: { content: string; mimeType: string; name: string }) {
+	return <div className="file-image-preview"><img src={`data:${mimeType};base64,${content}`} alt={`预览 ${name}`} /></div>;
+}
+
 export const DiffText = memo(function DiffText({ content }: { content: string }) {
 	return <div className="diff-preview">{content.split("\n").map((line, index) => <div key={index} className={line.startsWith("+") && !line.startsWith("+++") ? "add" : line.startsWith("-") && !line.startsWith("---") ? "remove" : line.startsWith("@@") ? "hunk" : ""}><span>{index + 1}</span><code>{line || " "}</code></div>)}</div>;
 });
@@ -61,6 +65,7 @@ export function ProjectPreview({ tabs, activeId, revision, onActivate, onClose, 
 	}, [key]);
 	if (!tab) return null;
 	const text = result?.kind === "text" ? result.content : undefined;
+	const image = result?.kind === "image" && result.content && result.mimeType ? { content: result.content, mimeType: result.mimeType } : undefined;
 	return <section className="project-preview" aria-label="文件预览">
 		<header className="preview-header">
 			<Button size="compact" variant="ghost" onClick={onBack}><Icon name="arrow" />返回聊天</Button>
@@ -71,7 +76,8 @@ export function ProjectPreview({ tabs, activeId, revision, onActivate, onClose, 
 			{loading && <div className="preview-state">正在读取…</div>}
 			{error && <div className="preview-state error"><Icon name="alert" size={20} /><p>无法预览这个文件</p><span>{error}</span><Button size="compact" onClick={refreshPreview}>重试</Button></div>}
 			{result?.kind === "binary" && <div className="preview-state"><Icon name="file" size={24} /><p>二进制内容无法以文本预览</p></div>}
-			{result?.kind === "tooLarge" && <div className="preview-state"><Icon name="file" size={24} /><p>文件超过 2 MB 预览上限</p><span>{(result.size / 1024 / 1024).toFixed(1)} MB</span></div>}
+			{result?.kind === "tooLarge" && <div className="preview-state"><Icon name="file" size={24} /><p>文件超过预览上限</p><span>{(result.size / 1024 / 1024).toFixed(1)} MB</span></div>}
+			{image && <ImageFilePreview content={image.content} mimeType={image.mimeType} name={tab.name} />}
 			{tab.mode === "file" && typeof text === "string" && <TextPreview content={text} path={tab.path} />}
 			{tab.mode === "diff" && typeof text === "string" && <><DiffText content={text} />{(result as DiffPreview).truncated && <div className="workbench-limit">Diff 超过 2 MB，仅显示前段内容</div>}</>}
 		</div>

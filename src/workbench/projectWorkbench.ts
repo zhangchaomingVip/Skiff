@@ -24,8 +24,9 @@ export interface DirectoryPage {
 
 export interface FilePreview {
 	path: string;
-	kind: "text" | "binary" | "tooLarge";
+	kind: "text" | "image" | "binary" | "tooLarge";
 	content?: string;
+	mimeType?: string;
 	size: number;
 	modifiedMs?: number;
 	version: string;

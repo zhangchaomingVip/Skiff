@@ -1,4 +1,5 @@
 use serde::Serialize;
+use base64::{engine::general_purpose::STANDARD, Engine as _};
 #[path = "git_history.rs"]
 pub mod history;
 #[path = "git_update.rs"]
@@ -18,6 +19,7 @@ use std::{
 
 const DIRECTORY_LIMIT: usize = 500;
 const TEXT_LIMIT: u64 = 2 * 1024 * 1024;
+const IMAGE_LIMIT: u64 = 16 * 1024 * 1024;
 const DIFF_LIMIT: usize = 2 * 1024 * 1024;
 
 pub struct WorkbenchState {
@@ -51,6 +53,7 @@ pub struct FilePreview {
 	path: String,
 	kind: &'static str,
 	content: Option<String>,
+	mime_type: Option<&'static str>,
 	size: u64,
 	modified_ms: Option<u64>,
 	version: String,
@@ -278,6 +281,20 @@ fn looks_binary(bytes: &[u8]) -> bool {
 	bytes.iter().take(8192).any(|byte| *byte == 0)
 }
 
+fn image_mime_type(path: &Path, bytes: &[u8]) -> Option<&'static str> {
+	if bytes.starts_with(b"\x89PNG\r\n\x1a\n") { return Some("image/png"); }
+	if bytes.starts_with(&[0xff, 0xd8, 0xff]) { return Some("image/jpeg"); }
+	if bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a") { return Some("image/gif"); }
+	if bytes.len() >= 12 && &bytes[..4] == b"RIFF" && &bytes[8..12] == b"WEBP" { return Some("image/webp"); }
+	if bytes.starts_with(b"BM") { return Some("image/bmp"); }
+	if bytes.len() >= 12 && &bytes[4..8] == b"ftyp" && (&bytes[8..12] == b"avif" || &bytes[8..12] == b"avis") { return Some("image/avif"); }
+	if path.extension().and_then(|extension| extension.to_str()).is_some_and(|extension| extension.eq_ignore_ascii_case("svg")) {
+		let text = std::str::from_utf8(bytes).ok()?.trim_start_matches('\u{feff}').trim_start();
+		if text.starts_with("<svg") || text.starts_with("<?xml") && text.contains("<svg") { return Some("image/svg+xml"); }
+	}
+	None
+}
+
 #[tauri::command]
 pub async fn read_project_file(root: String, path: String) -> Result<FilePreview, String> {
 	tauri::async_runtime::spawn_blocking(move || {
@@ -287,15 +304,21 @@ pub async fn read_project_file(root: String, path: String) -> Result<FilePreview
 		if !metadata.is_file() { return Err("所选路径不是文件".to_string()); }
 		let modified_ms = metadata.modified().ok().and_then(|time| time.duration_since(UNIX_EPOCH).ok()).map(|value| value.as_millis() as u64);
 		let version = fingerprint(&metadata);
-		if metadata.len() > TEXT_LIMIT {
-			return Ok(FilePreview { path: normalized_relative(&relative), kind: "tooLarge", content: None, size: metadata.len(), modified_ms, version });
+		if metadata.len() > IMAGE_LIMIT {
+			return Ok(FilePreview { path: normalized_relative(&relative), kind: "tooLarge", content: None, mime_type: None, size: metadata.len(), modified_ms, version });
 		}
 		let bytes = fs::read(&file).map_err(|error| format!("无法读取文件：{error}"))?;
+		if let Some(mime_type) = image_mime_type(&file, &bytes) {
+			return Ok(FilePreview { path: normalized_relative(&relative), kind: "image", content: Some(STANDARD.encode(bytes)), mime_type: Some(mime_type), size: metadata.len(), modified_ms, version });
+		}
+		if metadata.len() > TEXT_LIMIT {
+			return Ok(FilePreview { path: normalized_relative(&relative), kind: "tooLarge", content: None, mime_type: None, size: metadata.len(), modified_ms, version });
+		}
 		if looks_binary(&bytes) {
-			return Ok(FilePreview { path: normalized_relative(&relative), kind: "binary", content: None, size: metadata.len(), modified_ms, version });
+			return Ok(FilePreview { path: normalized_relative(&relative), kind: "binary", content: None, mime_type: None, size: metadata.len(), modified_ms, version });
 		}
 		let content = String::from_utf8(bytes).map_err(|_| "文件不是 UTF-8 文本，无法安全预览".to_string())?;
-		Ok(FilePreview { path: normalized_relative(&relative), kind: "text", content: Some(content), size: metadata.len(), modified_ms, version })
+		Ok(FilePreview { path: normalized_relative(&relative), kind: "text", content: Some(content), mime_type: None, size: metadata.len(), modified_ms, version })
 	}).await.map_err(|error| error.to_string())?
 }
 

@@ -172,6 +172,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .preview-state p { margin: 0; color: var(--text); }
 .preview-state span { max-width: 620px; overflow-wrap: anywhere; }
 .preview-state.error svg, .preview-state.error p { color: var(--danger); }
+.file-image-preview { min-height: 100%; display: flex; align-items: center; justify-content: center; padding: var(--space-6); background: var(--subtle); }
+.file-image-preview img { display: block; max-width: 100%; max-height: calc(100dvh - 180px); object-fit: contain; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--panel-2); box-shadow: var(--shadow-sm); }
 .source-preview { min-width: max-content; display: grid; grid-template-columns: auto 1fr; font-family: var(--font-family-mono); font-size: var(--font-size-sm); line-height: 1.65; }
 .source-lines { position: sticky; left: 0; z-index: 1; display: flex; flex-direction: column; padding: var(--space-3) var(--space-3); border-right: 1px solid var(--border); background: var(--panel-2); color: var(--muted); text-align: right; user-select: none; }
 .source-preview pre { min-width: 0; margin: 0; padding: var(--space-3) var(--space-4); background: transparent; }
