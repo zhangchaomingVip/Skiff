@@ -10,7 +10,8 @@ export interface ImageService {
 	models: ImageModel[];
 	defaultModel: string;
 }
-export interface ImageGenerationConfig { services: ImageService[]; defaultServiceId: string }
+export type ImageConcurrencyLimit = 0 | 3 | 5 | 10;
+export interface ImageGenerationConfig { services: ImageService[]; defaultServiceId: string; concurrencyLimit: ImageConcurrencyLimit }
 export type ImageServiceInput = Omit<ImageService, "id" | "configured" | "keyHint"> & { id?: string; apiKey?: string; makeDefault: boolean };
 export interface ImageJob {
 	id: string;
@@ -44,6 +45,7 @@ export const imageGenerationNative = {
 	config: () => invoke<ImageGenerationConfig>("get_image_generation_config"),
 	save: (input: ImageServiceInput) => invoke<ImageGenerationConfig>("save_image_generation_service", { input }),
 	remove: (id: string) => invoke<ImageGenerationConfig>("delete_image_generation_service", { id }),
+	setConcurrency: (limit: ImageConcurrencyLimit) => invoke<ImageGenerationConfig>("set_image_generation_concurrency", { limit }),
 	jobs: () => invoke<ImageJob[]>("list_image_generation_jobs"),
 	start: (input: { id: string; serviceId: string; modelId: string; prompt: string; size: string; quality: string; reference?: { name: string; dataUrl: string } }) => invoke<ImageJob>("start_image_generation", { input }),
 	cancel: (id: string) => invoke<void>("cancel_image_generation", { id }),

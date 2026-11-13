@@ -29,9 +29,19 @@ struct Service {
 	models: Vec<ImageModel>, default_model: String,
 }
 
-#[derive(Default, Deserialize, Serialize)]
+fn default_concurrency_limit() -> usize { 5 }
+
+#[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct Config { services: Vec<Service>, default_service_id: String }
+struct Config {
+	services: Vec<Service>, default_service_id: String,
+	#[serde(default = "default_concurrency_limit")]
+	concurrency_limit: usize,
+}
+
+impl Default for Config {
+	fn default() -> Self { Self { services: vec![], default_service_id: String::new(), concurrency_limit: default_concurrency_limit() } }
+}
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -42,7 +52,7 @@ pub struct ServiceView {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ConfigView { services: Vec<ServiceView>, default_service_id: String }
+pub struct ConfigView { services: Vec<ServiceView>, default_service_id: String, concurrency_limit: usize }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -53,7 +63,7 @@ pub struct ServiceInput {
 
 impl Config {
 	fn view(&self) -> ConfigView {
-		ConfigView { default_service_id: self.default_service_id.clone(), services: self.services.iter().map(|service| ServiceView {
+		ConfigView { concurrency_limit: self.concurrency_limit, default_service_id: self.default_service_id.clone(), services: self.services.iter().map(|service| ServiceView {
 			id: service.id.clone(), name: service.name.clone(), base_url: service.base_url.clone(), models: service.models.clone(), default_model: service.default_model.clone(),
 			configured: !service.api_key.is_empty(),
 			key_hint: super::crypto::open(&service.api_key).map(|key| format!("…{}", key.chars().rev().take(4).collect::<Vec<_>>().into_iter().rev().collect::<String>())).unwrap_or_else(|_| "密钥需重新填写".into()),
@@ -148,6 +158,25 @@ pub fn delete_image_generation_service(app: AppHandle, state: State<'_, Generati
 	if config.default_service_id == id { config.default_service_id = config.services.first().map(|s| s.id.clone()).unwrap_or_default(); }
 	write_json(&dir.join("config.json"), &config)?;
 	Ok(config.view())
+}
+
+fn save_concurrency_limit(dir: &Path, limit: usize) -> Result<ConfigView, String> {
+	if ![0, 3, 5, 10].contains(&limit) { return Err("图片并发数须为 3、5、10 或不限".into()); }
+	let mut config = read_config(dir)?;
+	config.concurrency_limit = limit;
+	write_json(&dir.join("config.json"), &config)?;
+	Ok(config.view())
+}
+
+#[tauri::command]
+pub fn set_image_generation_concurrency(app: AppHandle, state: State<'_, GenerationState>, limit: usize) -> Result<ConfigView, String> {
+	let _gate = state.gate.lock().map_err(|_| "图片配置正在使用")?;
+	save_concurrency_limit(&data_dir(&app)?, limit)
+}
+
+fn check_capacity(limit: usize, active_count: usize) -> Result<(), String> {
+	if limit > 0 && active_count >= limit { return Err(format!("已有 {active_count} 个图片任务进行中，已达到并发上限 {limit}；请等待完成或在图片生成设置中调整")); }
+	Ok(())
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -279,8 +308,8 @@ fn start_image_generation_inner(app: AppHandle, input: GenerateInput) -> Result<
 	// The client request ID makes retries of the IPC submission idempotent.
 	if dir.join("jobs").join(format!("{}.json", input.id)).exists() { return read_job(&dir, &input.id); }
 	let mut active = state.active.lock().map_err(|_| "生成状态不可用")?;
-	if !active.is_empty() { return Err("已有图片正在生成，请等待完成或取消".into()); }
 	let config = read_config(&dir)?;
+	check_capacity(config.concurrency_limit, active.len())?;
 	let service = config.services.iter().find(|service| service.id == input.service_id).ok_or("请先配置图片生成服务")?.clone();
 	let model = service.models.iter().find(|model| model.id == input.model_id).ok_or("请选择有效的图片模型")?;
 	if !model.sizes.contains(&input.size) { return Err("所选模型未配置此尺寸".into()); }
@@ -307,7 +336,7 @@ fn start_image_generation_inner(app: AppHandle, input: GenerateInput) -> Result<
 			task.message = Some(error);
 		}
 		// Hold the active map through the final write so a poll cannot mark this
-		// job interrupted, or a new job begin before final persistence finishes.
+		// job interrupted or release its capacity before final persistence finishes.
 		if let Ok(mut active) = active_jobs.lock() {
 			if task.save(&dir).is_err() {
 				// Keep the previous durable pending record: next read reports interruption.

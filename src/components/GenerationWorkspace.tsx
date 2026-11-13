@@ -86,7 +86,7 @@ function ImageGenerationControls({ studio, onConfigure }: { studio: GenerationSt
 	const service = images.config?.services.find((item) => item.id === draft.serviceId);
 	const model = service?.models.find((item) => item.id === draft.modelId);
 	const configured = !!service?.configured && !!model;
-	const canGenerate = configured && !images.loading && !images.running && !images.submitting && !!draft.prompt.trim() && !!model?.sizes.includes(draft.size);
+	const canGenerate = configured && !images.loading && !images.atCapacity && !images.submitting && !!draft.prompt.trim() && !!model?.sizes.includes(draft.size);
 	return <aside className="generation-controls" data-kind="image" aria-label="生图参数">
 		<header className="generation-controls-header"><span className="generation-mode-icon"><Icon name="imageSpark" size={20} /></span><div><h1>生图</h1><p>让想象，慢慢成形</p></div></header>
 		<form className="generation-form" onSubmit={(event) => { event.preventDefault(); if (canGenerate) void images.generate({ serviceId: draft.serviceId, modelId: draft.modelId, prompt: draft.prompt, size: draft.size, quality: draft.quality }, studio.imageReference); }}>
@@ -114,7 +114,7 @@ function ImageGenerationControls({ studio, onConfigure }: { studio: GenerationSt
 				<ImageSizeControls size={draft.size} sizes={model?.sizes ?? []} onChange={(size) => update({ size })} onConfigure={onConfigure} />
 				{configured && <div className="generation-field"><label htmlFor={`${id}-quality`}>质量</label><Select id={`${id}-quality`} value={draft.quality} onChange={(event) => update({ quality: event.target.value })}><option value="auto">自动</option><option value="low">低</option><option value="medium">中</option><option value="high">高</option></Select><p className="generation-field-hint">更大的尺寸和更高的质量可能增加耗时与费用。</p></div>}
 			</div>
-			<footer className="generation-submit"><p id={`${id}-service`}><span className="generation-connection-dot" />{images.loading ? "正在读取图片生成服务" : images.running ? "图片正在生成，可切换到其他页面" : configured ? `${studio.imageReference ? "图生图 · " : ""}使用 ${service.name}` : "尚未配置图片生成服务"}</p><Button type="submit" variant="primary" size="primary" disabled={!canGenerate} aria-describedby={`${id}-service`} loading={images.submitting}><Icon name="spark" />生成图片</Button><span className="generation-shortcut">快速生成 <kbd>{isMacPlatform() ? "⌘" : "Ctrl"} ↵</kbd></span><small>每次生成一张，按服务商计费；作品自动保存。</small></footer>
+			<footer className="generation-submit"><p id={`${id}-service`}><span className="generation-connection-dot" />{images.loading ? "正在读取图片生成服务" : images.running ? `进行中 ${images.runningCount} / ${images.concurrencyLimit || "不限"}${images.atCapacity ? " · 已达上限，可在生图设置中调整" : " · 可继续生成"}` : configured ? `${studio.imageReference ? "图生图 · " : ""}使用 ${service.name}` : "尚未配置图片生成服务"}</p><Button type="submit" variant="primary" size="primary" disabled={!canGenerate} aria-describedby={`${id}-service`} loading={images.submitting}><Icon name="spark" />生成图片</Button><span className="generation-shortcut">快速生成 <kbd>{isMacPlatform() ? "⌘" : "Ctrl"} ↵</kbd></span><small>每次生成一张，按服务商计费；作品自动保存。</small></footer>
 		</form>
 	</aside>;
 }
@@ -240,7 +240,7 @@ function ImageGenerationGallery({ kind, studio, onParameters, onBack, onImageToV
 		if (changed) setNotice({ message: changed.status === "failed" ? "生成失败，已收进失败记录。" : "任务已结束，记录已收进失败记录。", target: "failures" });
 		previousJobs.current = studio.images.jobs;
 	}, [studio.images.jobs]);
-	useEffect(() => { if (studio.images.submitting) { setView("gallery"); setNotice(undefined); } }, [studio.images.submitting]);
+	useEffect(() => { if (studio.images.submitting) { setView("gallery"); setNotice(undefined); galleryScroll.current?.scrollTo({ top: 0 }); } }, [studio.images.submitting]);
 	useEffect(() => { galleryScroll.current?.scrollTo({ top: 0 }); }, [hasPending, view]);
 	const changeView = (next: typeof view) => { setView(next); setNotice(undefined); };
 	const importMedia = () => fileInput.current?.click();
@@ -261,7 +261,7 @@ function ImageGenerationGallery({ kind, studio, onParameters, onBack, onImageToV
 			{notice && <div className="generation-gallery-notice" role="status"><span>{notice.message}</span>{view !== notice.target && <Button size="compact" variant="ghost" onClick={() => changeView(notice.target)}>{notice.target === "failures" ? "查看失败记录" : notice.target === "removed" ? "查看已移除" : "查看作品"}</Button>}<IconButton size="compact" variant="ghost" aria-label="关闭画廊提示" onClick={() => setNotice(undefined)}><Icon name="close" size={14} /></IconButton></div>}
 			{view === "failures" ? <GenerationTaskHistory jobs={settled} studio={studio} /> : <>
 				{(assets.length > 0 || (view === "gallery" && hasPending)) && <div className="generation-gallery-grid">
-					{view === "gallery" && hasPending && !pending.length && <PendingImageCard studio={studio} />}
+					{view === "gallery" && studio.images.submitting && <PendingImageCard studio={studio} />}
 					{view === "gallery" && pending.map((job) => <PendingImageCard key={job.id} job={job} studio={studio} />)}
 					{assets.map((asset) => <article className="generation-card" key={asset.id} data-kind="image">
 						<div className="generation-card-media"><button className="generation-card-preview" aria-label={`预览图片：${asset.name}`} onClick={() => setSelected(asset)}><MediaView asset={asset} /></button>{asset.job && view === "gallery" && <ImageHoverActions studio={studio} asset={asset} />}</div>

@@ -2,12 +2,15 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { testImage } from "./imageFixture.mjs";
+import { verifyImageConcurrency } from "./image-concurrency.cdp.mjs";
 
 export function createImageGenerationScenario() {
 	const requests = [];
+	const held = new Map();
 	let mode = "success";
 	return {
 		requests, setMode(value) { mode = value; },
+		finish(prompt, outcome = "success") { const finish = held.get(prompt); assert.ok(finish, `No held image request for ${prompt}`); held.delete(prompt); finish(outcome); },
 		handle(request, response) {
 			if (request.method !== "POST" || !["/v1/images/generations", "/v1/images/edits"].includes(request.url)) return false;
 			const chunks = [];
@@ -25,12 +28,13 @@ export function createImageGenerationScenario() {
 				} else payload = JSON.parse(body.toString());
 				requests.push({ endpoint: request.url, payload, image, authorization: request.headers.authorization });
 				const outcome = mode;
-				const finish = () => {
+				const finish = (result = outcome) => {
 					if (response.destroyed) return;
-					response.writeHead(outcome === "failure" ? editing ? 404 : 429 : 200, { "Content-Type": "application/json" });
-					response.end(JSON.stringify(outcome === "failure" ? { error: { message: "mock quota exceeded" } } : { data: [{ b64_json: testImage().toString("base64") }], usage: { total_tokens: 42 } }));
+					response.writeHead(result === "failure" ? editing ? 404 : 429 : 200, { "Content-Type": "application/json" });
+					response.end(JSON.stringify(result === "failure" ? { error: { message: "mock quota exceeded" } } : { data: [{ b64_json: testImage().toString("base64") }], usage: { total_tokens: 42 } }));
 				};
-				setTimeout(finish, outcome === "pending" ? 5000 : 400);
+				if (outcome === "held") { held.set(payload.prompt, finish); response.once("close", () => held.delete(payload.prompt)); }
+				else setTimeout(finish, outcome === "pending" ? 5000 : 400);
 			});
 			return true;
 		},
@@ -174,6 +178,7 @@ export async function verifyImageGeneration(page, scenario, baseUrl, dir, artifa
 	assert.match(await page.evaluate(async (id) => { try { await window.__TAURI_INTERNALS__.invoke("set_image_generation_asset_removed", { id, removed: true }); return "unexpected"; } catch (error) { return String(error); } }, failedId), /只能移除/);
 	assert.equal(scenario.requests.length, beforeFailure + 1, "Removing/restoring does not create image requests");
 	await page.screenshot({ path: join(artifacts, "image-gallery-cdp.png") });
+	await verifyImageConcurrency(page, scenario, config.services[0].id, dir, artifacts);
 	await tool("对话").click();
 	console.log("PASS real image chain: generation/edits, privacy, reload/idempotence/cancellation, separate failure history, durable gallery removal/restore with originals preserved, and errors without fallback verified");
 }

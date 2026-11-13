@@ -3,15 +3,29 @@
 const fixtureImage = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGMIqLizBQAFGQJZDqNUNAAAAABJRU5ErkJggg==";
 export function installMockGeneration(target, storage) {
 	let config = JSON.parse(storage?.getItem("skiff.test.images.config") ?? '{"services":[],"defaultServiceId":""}');
+	config.concurrencyLimit ??= 5;
 	let jobs = JSON.parse(storage?.getItem("skiff.test.images.jobs") ?? "[]");
 	let mode = "success";
+	let deferJobs = false, deferredJobs;
 	const calls = [];
 	const persist = () => { storage?.setItem("skiff.test.images.config", JSON.stringify(config)); storage?.setItem("skiff.test.images.jobs", JSON.stringify(jobs)); };
 	return {
 		calls, setMode(value) { mode = value; },
+		deferNextJobs() { deferJobs = true; },
+		get hasDeferredJobs() { return !!deferredJobs; },
+		releaseJobs() { deferredJobs?.(); deferredJobs = undefined; },
+		finishJob(id, status = "completed") { const job = jobs.find((item) => item.id === id); if (!job || job.status !== "generating") throw new Error("Job is not generating"); Object.assign(job, status === "failed" ? { status, message: "mock failure (HTTP 429)" } : { status, path: fixtureImage, actualSize: "1x1" }); persist(); },
 		async invoke(command, args) {
 			if (command === "get_image_generation_config") return structuredClone(config);
-			if (command === "list_image_generation_jobs") return structuredClone(jobs);
+			if (command === "list_image_generation_jobs") {
+				const snapshot = structuredClone(jobs);
+				if (deferJobs) { deferJobs = false; return new Promise((resolve) => { deferredJobs = () => resolve(snapshot); }); }
+				return snapshot;
+			}
+			if (command === "set_image_generation_concurrency") {
+				if (![0, 3, 5, 10].includes(args.limit)) throw new Error("图片并发数无效");
+				config.concurrencyLimit = args.limit; persist(); return structuredClone(config);
+			}
 			if (command === "save_image_generation_service") {
 				const input = args.input;
 				if (!input.apiKey && !input.id) throw new Error("请填写图片生成服务的 API Key");
@@ -26,7 +40,7 @@ export function installMockGeneration(target, storage) {
 			if (command === "delete_image_generation_service") { config.services = config.services.filter((item) => item.id !== args.id); if (config.defaultServiceId === args.id) config.defaultServiceId = config.services[0]?.id ?? ""; persist(); return structuredClone(config); }
 			if (command === "start_image_generation") {
 				const existing = jobs.find((job) => job.id === args.input.id); if (existing) return structuredClone(existing);
-				if (jobs.some((job) => job.status === "generating" || job.status === "saving")) throw new Error("已有图片正在生成");
+				if (config.concurrencyLimit && jobs.filter((job) => job.status === "generating" || job.status === "saving").length >= config.concurrencyLimit) throw new Error("已达到图片并发上限");
 				const { reference, ...input } = args.input;
 				calls.push({ ...structuredClone(input), ...(reference ? { reference: { name: reference.name, dataPrefix: reference.dataUrl.slice(0, reference.dataUrl.indexOf(",") + 1) } } : {}) });
 				let metadata;

@@ -40,7 +40,7 @@ try {
 		await tool("生图").click(); assert.equal(await page.locator(".generation-reference-image img").getAttribute("src"), imageUrl);
 		await page.evaluate(() => window.skiffPreview.generation.setMode("pending"));
 		await generate().click(); await page.getByText("正在生成图片…", { exact: true }).waitFor();
-		await prompt().press("Control+Enter");
+		assert.equal(await generate().isEnabled(), true, "An accepted edit leaves capacity for another task");
 		const first = await page.evaluate(() => window.skiffPreview.generation.calls);
 		assert.equal(first.length, 1); assert.equal(first[0].reference.name, original.name); assert.equal(first[0].reference.dataPrefix, "data:image/png;base64,");
 		await page.getByRole("button", { name: "移除图生图参考图", exact: true }).click();

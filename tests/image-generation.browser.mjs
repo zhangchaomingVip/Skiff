@@ -51,9 +51,8 @@ try {
 		await page.getByText("正在生成图片…", { exact: true }).waitFor();
 		assert.equal(await page.locator(".generation-gallery-grid > :first-child").getAttribute("aria-busy"), "true");
 		assert.equal(await page.locator(".generation-pending-glow").count(), 1);
-		await prompt().press("Control+Enter");
-		assert.equal(await page.evaluate(() => window.skiffPreview.generation.calls.length), 1, "Shortcut never duplicates a pending submission");
-		assert.equal(await generate().isDisabled(), true);
+		assert.equal(await page.evaluate(() => window.skiffPreview.generation.calls.length), 1);
+		assert.equal(await generate().isEnabled(), true, "An accepted task does not block the next submission");
 		const call = await page.evaluate(() => window.skiffPreview.generation.calls[0]);
 		assert.equal(call.modelId, "test-image"); assert.equal(call.size, "1536x864");
 		assert.equal("apiKey" in call, false);

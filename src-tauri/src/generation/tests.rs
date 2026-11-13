@@ -59,6 +59,37 @@ fn job() -> ImageJob {
 	ImageJob { id: uuid::Uuid::new_v4().to_string(), status: "generating".into(), prompt: "A paper boat".into(), service_id: "test".into(), service_name: "Test Images".into(), model_id: "test-image".into(), size: "1024x1024".into(), quality: "auto".into(), created_at: 42, message: None, path: None, usage: None, revised_prompt: None, actual_size: None, reference: None, removed: false }
 }
 
+#[test]
+fn concurrency_defaults_migrates_and_enforces_only_supported_limits() {
+	let dir = TestDir::new();
+	assert_eq!(read_config(&dir.0).unwrap().concurrency_limit, 5);
+	write_json(&dir.0.join("config.json"), &json!({"services":[],"defaultServiceId":""})).unwrap();
+	assert_eq!(read_config(&dir.0).unwrap().view().concurrency_limit, 5);
+	for limit in [3, 5, 10, 0] {
+		assert_eq!(save_concurrency_limit(&dir.0, limit).unwrap().concurrency_limit, limit);
+		assert_eq!(read_config(&dir.0).unwrap().concurrency_limit, limit);
+		if limit > 0 {
+			assert!(check_capacity(limit, limit - 1).is_ok());
+			assert!(check_capacity(limit, limit).is_err());
+			assert!(check_capacity(limit, limit + 2).is_err(), "Lowering the limit blocks submissions until capacity returns");
+		} else { assert!(check_capacity(limit, 1000).is_ok()); }
+	}
+	for limit in [1, 4, 6, 20] { assert!(save_concurrency_limit(&dir.0, limit).is_err()); }
+	assert_eq!(read_config(&dir.0).unwrap().concurrency_limit, 0);
+}
+
+#[cfg(windows)]
+#[test]
+fn concurrency_updates_preserve_services_and_service_edits_preserve_concurrency() {
+	let dir = TestDir::new(); let view = save_service(&dir.0, input()).unwrap();
+	let key = read_config(&dir.0).unwrap().services[0].api_key.clone();
+	save_concurrency_limit(&dir.0, 10).unwrap();
+	let config = read_config(&dir.0).unwrap();
+	assert_eq!(config.services[0].api_key, key); assert_eq!(config.default_service_id, view.default_service_id);
+	let mut edit = input(); edit.id = Some(view.default_service_id); edit.api_key = None;
+	assert_eq!(save_service(&dir.0, edit).unwrap().concurrency_limit, 10);
+}
+
 #[cfg(windows)]
 #[test]
 fn credentials_are_encrypted_masked_and_preserved_on_edit() {

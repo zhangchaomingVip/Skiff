@@ -29,13 +29,16 @@ export function useImageGeneration() {
 		finally { if (mounted.current) setLoading(false); }
 	}, []);
 	useEffect(() => { void refresh(); }, [refresh]);
-	const running = jobs.some(imageJobPending);
+	const runningCount = jobs.filter(imageJobPending).length;
+	const running = runningCount > 0;
+	const concurrencyLimit = config?.concurrencyLimit ?? 5;
+	const atCapacity = concurrencyLimit > 0 && runningCount >= concurrencyLimit;
 	useEffect(() => {
 		if (!running) return;
 		let stopped = false;
 		let timer: ReturnType<typeof setTimeout>;
 		const poll = async () => {
-			try { const revision = jobRevision.current; const next = await imageGenerationNative.jobs(); if (!stopped && revision === jobRevision.current) { setJobs(next); setError(undefined); } }
+			try { const revision = jobRevision.current; const next = await imageGenerationNative.jobs(); if (!stopped && !requestPending.current && revision === jobRevision.current) { setJobs(next); setError(undefined); } }
 			catch (reason) { if (!stopped) setError(`无法更新生成状态：${String(reason)}`); }
 			if (!stopped) timer = setTimeout(() => void poll(), 1000);
 		};
@@ -43,8 +46,10 @@ export function useImageGeneration() {
 		return () => { stopped = true; clearTimeout(timer); };
 	}, [running]);
 	const generate = async (input: Omit<Parameters<typeof imageGenerationNative.start>[0], "id" | "reference">, source?: { url: string; name: string }) => {
-		if (requestPending.current || running || loading) return;
-		requestPending.current = true; setSubmitting(true); setError(undefined);
+		if (requestPending.current || atCapacity || loading) return;
+		// Polls taken before or during submission may omit the new task. Invalidate
+		// both sets of snapshots when submission starts and when its reply settles.
+		requestPending.current = true; jobRevision.current++; setSubmitting(true); setError(undefined);
 		try {
 			const reference = source ? await prepareImageReference(source) : undefined;
 			const job = await imageGenerationNative.start({ ...input, id: crypto.randomUUID(), ...(reference ? { reference } : {}) });
@@ -54,7 +59,7 @@ export function useImageGeneration() {
 			// An IPC reply may be lost after the native task was accepted. Read its
 			// durable status before allowing a new submission; never retry the POST.
 			try { await refreshJobs(); } catch { if (mounted.current) setLoading(true); }
-		} finally { requestPending.current = false; if (mounted.current) setSubmitting(false); }
+		} finally { jobRevision.current++; requestPending.current = false; if (mounted.current) setSubmitting(false); }
 	};
 	const cancel = async (id: string) => {
 		try { await imageGenerationNative.cancel(id); await refreshJobs(); }
@@ -75,5 +80,5 @@ export function useImageGeneration() {
 		} catch (reason) { if (mounted.current) setError(String(reason)); return false; }
 		finally { mutationPending.current = false; jobRevision.current++; if (mounted.current) setMutatingId(undefined); }
 	};
-	return { config, setConfig, jobs, loading, error, refresh, generate, running, submitting, cancel, assetAction, setRemoved, mutatingId };
+	return { config, setConfig, jobs, loading, error, refresh, generate, running, runningCount, concurrencyLimit, atCapacity, submitting, cancel, assetAction, setRemoved, mutatingId };
 }

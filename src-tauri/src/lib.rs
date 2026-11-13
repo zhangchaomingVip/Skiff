@@ -567,6 +567,7 @@ pub fn run() {
 			rpc_stop,
 			open_url,
 			generation::get_image_generation_config, generation::save_image_generation_service, generation::delete_image_generation_service,
+			generation::set_image_generation_concurrency,
 			generation::list_image_generation_jobs, generation::start_image_generation, generation::cancel_image_generation,
 			generation::reveal_image_generation_asset, generation::export_image_generation_asset,
 			generation::set_image_generation_asset_removed,
