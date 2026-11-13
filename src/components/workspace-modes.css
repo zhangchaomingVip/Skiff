@@ -1,0 +1,52 @@
+@layer components {
+	.workbench-shell[hidden], .design-gallery-route[hidden] { display: none; }
+	/* Title-bar segmented control: a recessed track with the active mode raised on a
+	   surface chip. Two pixels of padding around a 24px tab keeps the whole control at
+	   the 28px compact height, so it sits inside the 40px strip without a second bar.
+	   Only the buttons capture the pointer; the track padding still drags the window. */
+	.workspace-mode-switcher { display: flex; align-self: center; align-items: center; gap: var(--space-0-5); flex: none; margin-left: var(--space-1); padding: var(--space-0-5); border-radius: var(--radius-lg); background: color-mix(in srgb, var(--text) 4%, transparent); }
+	.workspace-mode-switcher > button { display: flex; align-items: center; gap: var(--space-1); height: 24px; padding: 0 var(--space-2); border: 0; border-radius: var(--radius-md); background: transparent; color: var(--muted); font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); transition: background-color var(--transition-fast) ease, color var(--transition-fast) ease, box-shadow var(--transition-fast) ease; }
+	.workspace-mode-switcher > button:hover { background: var(--hover); color: var(--text); }
+	.workspace-mode-switcher > button[aria-pressed="true"] { background: var(--surface); color: var(--accent); box-shadow: var(--shadow-xs); }
+	.workspace-mode-switcher > button:focus-visible { outline: 2px solid var(--accent); outline-offset: var(--space-px); }
+	.design-sidebar { display: flex; flex-direction: column; gap: var(--space-5); flex: 0 0 var(--sidebar-width); width: var(--sidebar-width); min-height: 0; overflow: auto; padding: var(--space-5) var(--space-3); border-right: 1px solid var(--sidebar-border); background: var(--sidebar-backdrop); }
+	.design-sidebar > header { padding-inline: var(--space-2); }
+	.design-sidebar h1 { margin: var(--space-1) 0; color: var(--text); font-size: var(--font-size-xl); font-weight: var(--font-weight-semibold); }
+	.design-sidebar header p { margin: 0; color: var(--muted); font-size: var(--font-size-xs); }
+	.design-sidebar h2 { display: block; margin: 0 0 var(--space-2); padding-inline: var(--space-2); color: var(--muted); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); }
+	.design-quick-create { display: flex; flex-direction: column; gap: var(--space-1); }
+	.design-quick-create > .ui-button { justify-content: flex-start; }
+	.design-collections { display: flex; flex-direction: column; gap: var(--space-1); }
+	.design-collections > button { display: flex; align-items: center; gap: var(--space-2); min-height: var(--control-primary); padding: var(--space-2); border: 0; border-radius: var(--radius-md); background: transparent; color: var(--secondary); text-align: left; font-size: var(--font-size-sm); }
+	.design-collections > button > span { flex: 1; }
+	.design-collections > button > small { color: var(--muted); font-variant-numeric: tabular-nums; }
+	.design-collections > button:hover { background: var(--hover); }
+	.design-collections > button[aria-current=page] { color: var(--accent); background: var(--selected); }
+	.design-collections > button:focus-visible { outline: 2px solid var(--accent); outline-offset: var(--space-px); }
+	.design-sidebar-footer { display: flex; flex-direction: column; gap: var(--space-2); margin-top: auto; padding-top: var(--space-4); border-top: 1px solid var(--sidebar-border); }
+	.design-sidebar-footer > small { padding-inline: var(--space-2); color: var(--muted); font-size: var(--font-size-xs); line-height: var(--line-height-relaxed); }
+	.design-task-summary { display: flex; justify-content: space-between; gap: var(--space-1); padding-inline: var(--space-2); color: var(--muted); font-size: var(--font-size-xs); }
+	.design-task-summary strong { display: block; margin-top: var(--space-1); color: var(--text); font-size: var(--font-size-base); font-weight: var(--font-weight-medium); font-variant-numeric: tabular-nums; }
+	.design-main { display: flex; flex: 1; min-width: 0; min-height: 0; }
+	.design-parameters { display: flex; flex: none; min-width: 280px; min-height: 0; border-right: 1px solid var(--sidebar-border); }
+	.design-parameters > .generation-controls { flex: 1; width: 100%; }
+	.design-main > .resize-separator { flex: 0 0 var(--space-2); margin-inline: calc(-1 * var(--space-1)); }
+	.design-results { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; }
+	.design-gallery-route { display: flex; flex: 1; min-width: 0; min-height: 0; }
+	.design-gallery-breadcrumb { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--secondary); font-size: var(--font-size-xs); }
+	.design-asset-notice { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); padding: var(--space-2) var(--space-4); border-bottom: 1px solid var(--border); background: var(--surface); color: var(--secondary); font-size: var(--font-size-xs); overflow-wrap: anywhere; }
+	.design-asset-notice[role=alert] { color: var(--danger); }
+	.design-workspace .generation-gallery { container-type: inline-size; }
+	.design-workspace .generation-gallery-grid { display: block; flex: none; column-count: 3; column-gap: var(--space-4); }
+	.design-workspace .generation-gallery[data-columns="1"] .generation-gallery-grid { column-count: 1; }
+	.design-workspace .generation-gallery[data-columns="2"] .generation-gallery-grid { column-count: 2; }
+	.design-workspace .generation-gallery[data-columns="4"] .generation-gallery-grid { column-count: 4; }
+	.design-workspace .generation-gallery-grid > .generation-card { display: block; width: 100%; margin-bottom: var(--space-4); break-inside: avoid; }
+	.design-workspace .generation-card[data-kind=image] .generation-card-preview { aspect-ratio: auto; }
+	.design-workspace .generation-card[data-kind=image] .generation-card-preview > img { height: auto; max-height: min(540px, 60vh); object-fit: contain; }
+	.drawer-workbench > .design-sidebar { width: 100%; flex: 1; }
+	.ui-dialog[data-variant=drawer]:has(> .generation-controls) { width: min(420px, calc(100vw - 24px)); }
+	.ui-dialog[data-variant=drawer] > .generation-controls { width: 100%; flex: 1; }
+	@container (max-width: 720px) { .design-workspace .generation-gallery:is([data-columns="3"], [data-columns="4"]) .generation-gallery-grid { column-count: 2; } }
+	@container (max-width: 440px) { .design-workspace .generation-gallery[data-columns] .generation-gallery-grid { column-count: 1; } }
+}

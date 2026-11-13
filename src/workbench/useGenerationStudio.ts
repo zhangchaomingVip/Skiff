@@ -3,6 +3,10 @@ import { useImageGeneration } from "./useImageGeneration";
 import { useVideoGeneration } from "./useVideoGeneration";
 import type { VideoJob } from "./videoGeneration";
 import { imageAssetUrl, sizeRatio, type ImageJob } from "./imageGeneration";
+import { invoke } from "@tauri-apps/api/core";
+import type { Project } from "../chat/workspace";
+import { invalidateProjectFiles } from "./projectFiles";
+import { projectGitCache } from "./useProjectGitStatus";
 
 export type GenerationKind = "image" | "video";
 export const generationRatios = ["1:1", "16:9", "9:16", "4:3"] as const;
@@ -29,6 +33,7 @@ export interface GenerationAsset {
 	job?: ImageJob;
 	videoJob?: VideoJob;
 	removed?: boolean;
+	path?: string;
 }
 
 export interface GenerationReference {
@@ -47,8 +52,9 @@ function validateMedia(file: File, kind: GenerationKind) {
 	if (file.size > limit * 1024 * 1024) throw new Error(`文件过大，请选择 ${limit} MB 以内的${kind === "image" ? "图片" : "视频"}。`);
 }
 
-/** Session-owned local media stays available across tools without persisting blob URLs. */
-export function useGenerationStudio() {
+/** Session-owned local media stays available across tools without persisting blob URLs.
+ *  Artwork comes only from this studio; Code project files are never mirrored in. */
+export function useGenerationStudio(project?: Project) {
 	const images = useImageGeneration();
 	const videos = useVideoGeneration();
 	const [drafts, setDrafts] = useState<Record<GenerationKind, GenerationDraft>>({
@@ -139,7 +145,13 @@ export function useGenerationStudio() {
 	};
 	const generated: GenerationAsset[] = images.jobs.filter((job) => job.status === "completed" && job.path).map((job) => ({ id: job.id, kind: "image", url: imageAssetUrl(job.path!), name: `skiff-${job.id.slice(0, 8)}.png`, prompt: job.prompt, ratio: generationRatios.find((ratio) => ratio === sizeRatio(job.actualSize ?? job.size)), createdAt: job.createdAt, job }));
 	const generatedVideos: GenerationAsset[] = videos.jobs.filter((job) => job.status === "completed" && job.path).map((job) => ({ id: job.id, kind: "video", url: imageAssetUrl(job.path!), name: `skiff-${job.id.slice(0, 8)}.mp4`, prompt: job.prompt, ratio: "9:16", createdAt: job.createdAt, videoJob: job }));
-	return { drafts, updateDraft, assets: [...generatedVideos, ...generated, ...assets], importAssets, reference, uploadReference, removeReference: () => replaceReference(), useImageForVideo, referenceError, clearReferenceError: () => setReferenceError(undefined), imageReference, uploadImageReference, removeImageReference: () => replaceImageReference(), useImageForImage, imageReferenceError, clearImageReferenceError: () => setImageReferenceError(undefined), errors, clearError, images, videos, setAssetRemoved };
+	const saveToProject = async (asset: GenerationAsset, target: Project) => {
+		const source = asset.path ?? asset.job?.path ?? asset.videoJob?.path;
+		if (!source) throw new Error("请先将作品保存到设计资产库。");
+		const path = await invoke<string>("save_design_asset_to_project", { root: target.path, source, name: asset.name });
+		invalidateProjectFiles(target.id); void projectGitCache.refreshChanged(target.path); return path;
+	};
+	return { project, drafts, updateDraft, assets: [...generatedVideos, ...generated, ...assets], importAssets, reference, uploadReference, removeReference: () => replaceReference(), useImageForVideo, referenceError, clearReferenceError: () => setReferenceError(undefined), imageReference, uploadImageReference, removeImageReference: () => replaceImageReference(), useImageForImage, imageReferenceError, clearImageReferenceError: () => setImageReferenceError(undefined), errors, clearError, images, videos, setAssetRemoved, saveToProject };
 }
 
 export type GenerationStudio = ReturnType<typeof useGenerationStudio>;

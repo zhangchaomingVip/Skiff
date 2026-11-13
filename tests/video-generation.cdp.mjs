@@ -1,3 +1,4 @@
+import { workbenchTool } from "./workspace-navigation.mjs";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -37,7 +38,8 @@ export function createVideoGenerationScenario() {
 }
 
 export async function verifyVideoGeneration(page, scenario, baseUrl, dir, artifacts, restartDesktop) {
-	const tool = (name) => page.getByRole("navigation", { name: "工作区工具" }).getByRole("button", { name, exact: true });
+	await page.setViewportSize({ width: 1600, height: 1000 });
+	const tool = (name) => workbenchTool(page, name);
 	const settings = () => page.getByRole("dialog", { name: "设置", exact: true });
 	const generate = () => page.locator(".generation-controls").getByRole("button", { name: "生成视频", exact: true });
 	const invoke = (command, args) => page.evaluate(({ command, args }) => window.__TAURI_INTERNALS__.invoke(command, args), { command, args });
@@ -91,7 +93,7 @@ export async function verifyVideoGeneration(page, scenario, baseUrl, dir, artifa
 	await page.getByRole("button", { name: "继续查询", exact: true }).click();
 	await page.waitForFunction(() => document.querySelector('.generation-task[data-status="in_progress"]'));
 	const before = scenario.requests.length;
-	scenario.setMode("success"); page = await restartDesktop();
+	scenario.setMode("success"); page = await restartDesktop(); await page.setViewportSize({ width: 1600, height: 1000 });
 	await page.waitForFunction(() => document.querySelectorAll(".generation-card").length === 3, null, { timeout: 30000 });
 	assert.equal(scenario.requests.length, before, "A fresh Rust process must recover by GET, never POST");
 	jobs = await invoke("list_video_generation_jobs"); assert.equal(jobs.find((j) => j.id === pending.id).status, "completed");

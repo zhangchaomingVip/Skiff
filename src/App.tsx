@@ -10,7 +10,7 @@ import { useBrowserPanel } from "./browser/useBrowserPanel";
 import { browserNative } from "./browser/native";
 import { useBrowserActions } from "./browser/useBrowserActions";
 import { Icon } from "./components/Icon";
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type SetStateAction } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { usePiSessions } from "./chat/usePiSessions";
 import { useSessionRef } from "./chat/useSessionValue";
@@ -45,7 +45,12 @@ import { FileWorkspaceEmpty } from "./components/FileWorkspaceEmpty";
 import { ProjectChangesNavigationContext } from "./workbench/projectChangesNavigation";
 import { isFileWorkbenchTab, openPreviewTab, previewId, resolveBrowseProject, type FileWorkbenchTab, type PreviewMode, type PreviewTab, type WorkbenchTool } from "./workbench/projectWorkbench";
 import { useGenerationStudio } from "./workbench/useGenerationStudio";
-import { GenerationControls, GenerationGallery } from "./components/GenerationWorkspace";
+import { DesignWorkspace } from "./components/DesignWorkspace";
+import { WorkspaceRoute } from "./components/WorkspaceRoute";
+import { WorkspaceModeSwitcher } from "./components/WorkspaceModeSwitcher";
+import { useWorkspaceMode } from "./workbench/useWorkspaceMode";
+import type { WorkspaceMode } from "./workbench/workspaceMode";
+import "./components/workspace-modes.css";
 import type { Project } from "./chat/workspace";
 
 type AppView = "launcher" | "chat";
@@ -85,19 +90,27 @@ export default function App() {
 	const { session } = pool;
 	const { state, connected, actions } = session;
 	const { modelNotice, setModelNotice } = session;
-	const [activeTool, setActiveTool] = useState<WorkbenchTool>(() => { try { const value = JSON.parse(localStorage.getItem("skiff.workbench.v1") ?? "null")?.tool; return value === "files" || value === "git" || value === "git-tree" || value === "image-generation" || value === "video-generation" ? value : "chats"; } catch { return "chats"; } });
-	const lastFileTab = useRef<FileWorkbenchTab>(isFileWorkbenchTab(activeTool) ? activeTool : "files");
-	useEffect(() => { if (isFileWorkbenchTab(activeTool)) lastFileTab.current = activeTool; }, [activeTool]);
-	const generationStudio = useGenerationStudio();
-	const generationKind = activeTool === "image-generation" ? "image" : activeTool === "video-generation" ? "video" : undefined;
-	const [sidebarOpen, setSidebarOpen] = useState(() => { if (window.innerWidth <= 760) return false; try { return localStorage.getItem("skiff.sidebar.open") !== "false"; } catch { return true; } });
-	useEffect(() => { try { localStorage.setItem("skiff.sidebar.open", String(sidebarOpen)); } catch { /* Layout can still be used without storage. */ } }, [sidebarOpen]);
+	const { workspaceMode, setWorkspaceMode, activeTool, codeTool, designTool, setActiveTool } = useWorkspaceMode();
+	// The activity rail owns the mode switch. Flushing the draft and closing popovers
+	// before the route changes keeps what was typed in one workspace from leaking away.
+	const switchWorkspaceMode = (next: WorkspaceMode) => { void drafts.flush(); dismissPopovers(); setWorkspaceMode(next); };
+	const lastFileTab = useRef<FileWorkbenchTab>(isFileWorkbenchTab(codeTool) ? codeTool : "files");
+	useEffect(() => { if (isFileWorkbenchTab(codeTool)) lastFileTab.current = codeTool; }, [codeTool]);
+	const generationStudio = useGenerationStudio(activeProject);
+	const generationKind = designTool === "video-generation" ? "video" : "image";
+	const [codeSidebarOpen, setCodeSidebarOpen] = useState(() => { if (window.innerWidth <= 760) return false; try { return localStorage.getItem("skiff.sidebar.open") !== "false"; } catch { return true; } });
+	const [designSidebarOpen, setDesignSidebarOpen] = useState(() => { if (window.innerWidth <= 760) return false; try { return localStorage.getItem("skiff.design.sidebar.open") !== "false"; } catch { return true; } });
+	const sidebarOpen = workspaceMode === "code" ? codeSidebarOpen : designSidebarOpen;
+	const setSidebarOpen = useCallback((value: SetStateAction<boolean>) => workspaceMode === "code" ? setCodeSidebarOpen(value) : setDesignSidebarOpen(value), [workspaceMode]);
+	useEffect(() => { try { localStorage.setItem("skiff.sidebar.open", String(codeSidebarOpen)); localStorage.setItem("skiff.design.sidebar.open", String(designSidebarOpen)); } catch { /* Layout remains usable without storage. */ } }, [codeSidebarOpen, designSidebarOpen]);
 	useEffect(() => { try { localStorage.setItem("skiff.workbench.v1", JSON.stringify({ version: 1, tool: activeTool })); } catch { /* Tool selection remains available for this run. */ } }, [activeTool]);
 	const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth);
-	const [sidebarWidth, setSidebarWidth] = useState(() => readPreferredWidth("skiff.sidebar.width", 232, 200, 420));
+	const [codeSidebarWidth, setCodeSidebarWidth] = useState(() => readPreferredWidth("skiff.sidebar.width", 232, 200, 420));
+	const [designSidebarWidth, setDesignSidebarWidth] = useState(() => readPreferredWidth("skiff.design.sidebar.width", 216, 200, 320));
+	const sidebarWidth = workspaceMode === "code" ? codeSidebarWidth : designSidebarWidth;
 	const [voyageWidth, setVoyageWidth] = useState(() => readPreferredWidth("skiff.voyage.width", 260, 240, 480));
 	const [voyageExpanded, toggleVoyagePanel] = useVoyagePanel();
-	const browserPanel = useBrowserPanel(activeChat?.id, currentView === "chat" && activeTool === "chats");
+	const browserPanel = useBrowserPanel(activeChat?.id, workspaceMode === "code" && currentView === "chat" && codeTool === "chats");
 	const [browserFocus, setBrowserFocus] = useState<{ chatId?: string; version: number }>({ version: 0 });
 	const [browserWidth, setBrowserWidth] = useState(() => readPreferredWidth("skiff.browser.width", 560, 320, 1000));
 	const commitBrowserWidth = useCallback((value: number) => { setBrowserWidth(value); try { localStorage.setItem("skiff.browser.width", String(value)); } catch { /* Width remains available without storage. */ } }, []);
@@ -121,7 +134,7 @@ export default function App() {
 	const [previewTabs, setPreviewTabs] = useState<PreviewTab[]>([]);
 	const [activePreviewId, setActivePreviewId] = useState<string>();
 	const [workbenchRevision, setWorkbenchRevision] = useState(0);
-	const gitHistory = useGitHistory(browse.project, activeTool === "git-tree", workbenchRevision, (project) => { invalidateProjectFiles(project.id); setWorkbenchRevision((value) => value + 1); });
+	const gitHistory = useGitHistory(browse.project, workspaceMode === "code" && codeTool === "git-tree", workbenchRevision, (project) => { invalidateProjectFiles(project.id); setWorkbenchRevision((value) => value + 1); });
 	const search = useWebSearch(actions, connected, session.reconnect, session.owner, session.isCurrent);
 	const busy = state.isStreaming || session.pending;
 	const [recentOfferIds, setRecentOfferIds] = useState<string[]>(loadRecentOffers);
@@ -169,17 +182,18 @@ export default function App() {
 		setSettingsCategory(settingsRestrictions[target] ? "appearance" : target);
 	}, [settingsCategory, settingsRestrictions]);
 	const narrowViewport = viewportWidth <= 760;
+	useEffect(() => { if (narrowViewport) setDesignSidebarOpen(false); }, [narrowViewport]);
 	useEffect(() => { if (narrowViewport && browserPanel.expanded) setSidebarOpen(false); }, [narrowViewport, browserPanel.expanded]);
 	useEffect(() => { if (narrowViewport && settingsCategory) setSidebarOpen(false); }, [narrowViewport, settingsCategory]);
 	const desktopSidebarOpen = sidebarOpen && !narrowViewport;
-	const sidebarMinimum = generationKind ? 280 : 200;
-	const sidebarBounds = { min: sidebarMinimum, max: Math.max(sidebarMinimum, Math.min(420, viewportWidth - 416)) };
+	const sidebarMinimum = 200;
+	const sidebarBounds = { min: sidebarMinimum, max: Math.max(sidebarMinimum, Math.min(workspaceMode === "design" ? 320 : 420, viewportWidth - 416)) };
 	const shownSidebarWidth = Math.max(sidebarBounds.min, Math.min(sidebarWidth, sidebarBounds.max));
 	const workspaceWidth = viewportWidth - 50 - (desktopSidebarOpen ? shownSidebarWidth + 8 : 0);
 	const voyageBounds = { min: 240, max: Math.max(240, Math.min(480, workspaceWidth - 368)) };
 	const shownVoyageWidth = Math.max(voyageBounds.min, Math.min(voyageWidth, voyageBounds.max));
-	const setSidebarWidthFromDrag = useCallback((value: number) => setSidebarWidth(value), []);
-	const commitSidebarWidth = useCallback((value: number) => { setSidebarWidth(value); try { localStorage.setItem("skiff.sidebar.width", String(value)); } catch { /* Width still applies for this session. */ } }, []);
+	const setSidebarWidthFromDrag = useCallback((value: number) => workspaceMode === "code" ? setCodeSidebarWidth(value) : setDesignSidebarWidth(value), [workspaceMode]);
+	const commitSidebarWidth = useCallback((value: number) => { setSidebarWidthFromDrag(value); try { localStorage.setItem(workspaceMode === "code" ? "skiff.sidebar.width" : "skiff.design.sidebar.width", String(value)); } catch { /* Width still applies for this session. */ } }, [workspaceMode, setSidebarWidthFromDrag]);
 	const setVoyageWidthFromDrag = useCallback((value: number) => setVoyageWidth(value), []);
 	const commitVoyageWidth = useCallback((value: number) => { setVoyageWidth(value); try { localStorage.setItem("skiff.voyage.width", String(value)); } catch { /* Width still applies for this session. */ } }, []);
 	const runLifecycle = async (operation: () => Promise<void>) => {
@@ -287,7 +301,6 @@ export default function App() {
 	}, [actions, session.isCurrent, validOfferIds]);
 	const displayState = { ...state, model: displayModel, availableModels: displayModels };
 
-	const openLauncher = useCallback(() => { void drafts.flush(); setSelectedProjectId(undefined); if (library.workspace) { setActiveTool("chats"); setActivePreviewId(undefined); setView("launcher"); if (window.innerWidth <= 760) setSidebarOpen(false); } }, [library.workspace]);
 	const resumeChat = useCallback(() => { if (activeChat) setView("chat"); }, [activeChat]);
 	const selectChat = useCallback((id: string) => {
 		if (navigationDisabled) return;
@@ -357,14 +370,14 @@ export default function App() {
 				event.preventDefault(); openSettings(); return;
 			}
 			if (settingsCategory || document.querySelector("dialog[open]")) return;
-			if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "n") {
+			if (workspaceMode === "code" && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "n") {
 				event.preventDefault();
 				newDraft();
 			}
 		};
 		window.addEventListener("keydown", onKeyDown);
 		return () => window.removeEventListener("keydown", onKeyDown);
-	}, [newDraft, openSettings, settingsCategory]);
+	}, [newDraft, openSettings, settingsCategory, workspaceMode]);
 
 	const send = async (text: string, images?: ImageAttachment[], delivery?: Delivery) => {
 		if (!activeChat || lifecycleLock.current) return false;
@@ -451,23 +464,23 @@ export default function App() {
 	return (
 		<ModelFamilyContext.Provider value={familyContext}>
 		{pool.runtimes}
-		<div className={`app ${sidebarOpen ? "with-sidebar" : ""}`}>
-			<TitleBar nav={<TitleBarNav sidebarOpen={sidebarOpen} onToggleSidebar={() => setSidebarOpen((value) => !value)} onNewChat={newDraft} onHome={openLauncher} onAddProject={() => setProjectDialogOpen(true)} onOpenSettings={openSettings} messages={state.messages} />} voyageOpen={voyageExpanded && !browserPanel.expanded} onToggleVoyage={currentView === "chat" ? toggleVoyage : undefined}>{currentView === "chat" && activeChat && <IconButton className="browser-trigger" size="compact" aria-label="浏览器" aria-pressed={browserPanel.expanded} title={browserPanel.expanded ? "收起浏览器" : "展开浏览器"} onClick={toggleBrowser}><Icon name="monitor" /></IconButton>}</TitleBar>
+		<div className={`app ${sidebarOpen ? "with-sidebar" : ""}`} data-workspace-mode={workspaceMode}>
+			<TitleBar nav={<><TitleBarNav sidebarOpen={sidebarOpen} onToggleSidebar={() => setSidebarOpen((value) => !value)} /><WorkspaceModeSwitcher mode={workspaceMode} onChange={switchWorkspaceMode} /></>} voyageOpen={voyageExpanded && !browserPanel.expanded} onToggleVoyage={workspaceMode === "code" && currentView === "chat" ? toggleVoyage : undefined}>{workspaceMode === "code" && currentView === "chat" && activeChat && <IconButton className="browser-trigger" size="compact" aria-label="浏览器" aria-pressed={browserPanel.expanded} title={browserPanel.expanded ? "收起浏览器" : "展开浏览器"} onClick={toggleBrowser}><Icon name="monitor" /></IconButton>}</TitleBar>
 			<div className="app-body" style={{ "--sidebar-width": `${shownSidebarWidth}px` } as CSSProperties}>
-			{(!narrowViewport || !sidebarOpen) && <ActivityBar active={activeTool} panelOpen={sidebarOpen} onSelect={selectTool} onOpenSettings={() => openSettings()} />}
-			<div className="workbench-shell">
-			{sidebarOpen && !(narrowViewport && settingsCategory) && <SidebarPresentation activityBar={<ActivityBar active={activeTool} panelOpen={sidebarOpen} onSelect={selectTool} onOpenSettings={() => openSettings()} />} onClose={() => setSidebarOpen(false)}>{activeTool === "chats" ? <Sidebar projects={shownProjects} chats={visibleChats} activeId={activeChat?.id} selectedProjectId={selectedProjectId} disabled={navigationDisabled} runningIds={pool.runningIds} canCloseChat={pool.canClose} navigationDisabled={navigationDisabled} connected={connected} onNewChat={newDraft} statuses={pool.statuses} searchProgress={retrieval.progress} searchQuery={retrieval.query} onSearch={retrieval.setQuery} onSearchMatch={retrieval.openMatch} onSelectChat={selectChat} onSelectProject={selectProject} onAddProject={() => setProjectDialogOpen(true)} onRenameChat={library.renameChat} onRenameProject={library.renameProject} onDeleteChat={deleteArchivedChat} onHideProject={hideProject} onPurgeProject={purgeProject} onArchiveChat={archiveChat} onPurgeChat={purgeChat} onTogglePinChat={(id, pinned) => library.updateChat(id, { pinned })} /> : generationKind ? <GenerationControls key={generationKind} kind={generationKind} studio={generationStudio} onConfigure={() => openSettings(generationKind === "video" ? "videos" : "images")} /> : isFileWorkbenchTab(activeTool) && <ProjectWorkbenchPanel history={<GitBranches key={browse.project?.path} history={gitHistory} onSelect={(reference) => { gitHistory.selectRef(reference); if (narrowViewport) setSidebarOpen(false); }} />} tool={activeTool} onSelectTab={setActiveTool} projects={shownProjects} project={browse.project} following={!browse.manualProjectId} onSelectProject={setManualBrowseProjectId} onFollow={() => setManualBrowseProjectId(undefined)} onAddProject={() => setProjectDialogOpen(true)} onOpen={openProjectPreview} onMutated={() => setWorkbenchRevision((value) => value + 1)} />}</SidebarPresentation>}
-			{desktopSidebarOpen && <ResizeSeparator label="调整左侧导航宽度" value={shownSidebarWidth} bounds={sidebarBounds} onResize={setSidebarWidthFromDrag} onCommit={commitSidebarWidth} />}
+			{(!narrowViewport || !sidebarOpen) && <ActivityBar mode={workspaceMode} active={activeTool} panelOpen={sidebarOpen} onSelect={selectTool} onOpenSettings={() => openSettings()} />}
+			<WorkspaceRoute className="workbench-shell code-workspace" active={workspaceMode === "code"} label="Code 工作区">
+			{codeSidebarOpen && !(narrowViewport && (workspaceMode !== "code" || settingsCategory)) && <SidebarPresentation active={workspaceMode === "code"} activityBar={<ActivityBar mode={workspaceMode} active={codeTool} panelOpen={sidebarOpen} onSelect={selectTool} onOpenSettings={() => openSettings()} />} onClose={() => setSidebarOpen(false)}>{codeTool === "chats" ? <Sidebar projects={shownProjects} chats={visibleChats} activeId={activeChat?.id} selectedProjectId={selectedProjectId} disabled={navigationDisabled} runningIds={pool.runningIds} canCloseChat={pool.canClose} navigationDisabled={navigationDisabled} connected={connected} onNewChat={newDraft} statuses={pool.statuses} searchProgress={retrieval.progress} searchQuery={retrieval.query} onSearch={retrieval.setQuery} onSearchMatch={retrieval.openMatch} onSelectChat={selectChat} onSelectProject={selectProject} onAddProject={() => setProjectDialogOpen(true)} onRenameChat={library.renameChat} onRenameProject={library.renameProject} onDeleteChat={deleteArchivedChat} onHideProject={hideProject} onPurgeProject={purgeProject} onArchiveChat={archiveChat} onPurgeChat={purgeChat} onTogglePinChat={(id, pinned) => library.updateChat(id, { pinned })} /> : isFileWorkbenchTab(codeTool) && <ProjectWorkbenchPanel history={<GitBranches key={browse.project?.path} history={gitHistory} onSelect={(reference) => { gitHistory.selectRef(reference); if (narrowViewport) setSidebarOpen(false); }} />} tool={codeTool} onSelectTab={setActiveTool} projects={shownProjects} project={browse.project} following={!browse.manualProjectId} onSelectProject={setManualBrowseProjectId} onFollow={() => setManualBrowseProjectId(undefined)} onAddProject={() => setProjectDialogOpen(true)} onOpen={openProjectPreview} onMutated={() => setWorkbenchRevision((value) => value + 1)} />}</SidebarPresentation>}
+			{workspaceMode === "code" && desktopSidebarOpen && <ResizeSeparator label="调整左侧导航宽度" value={shownSidebarWidth} bounds={sidebarBounds} onResize={setSidebarWidthFromDrag} onCommit={commitSidebarWidth} />}
 			<ProjectChangesNavigationContext.Provider value={resultNavigation}>
 			<main className="workspace">
-				<div className={`primary-view ${activeTool !== "chats" ? "preview-hidden" : ""}`}>{currentView === "launcher" ? <>{chatHeader}{workspaceAlerts}<div className="body"><LauncherView activeChat={activeChat} activeProject={activeProject} projects={shownProjects} chats={visibleChats} offers={modelFamilies.offers} recentOfferIds={recentOfferIds} disabled={navigationDisabled || modelFamilies.loading} navigationDisabled={navigationDisabled} loading={modelFamilies.loading} error={modelFamilies.error} onResume={resumeChat} onSelectProject={selectProject} onAddProject={() => setProjectDialogOpen(true)} onManageProviders={() => openSettings("providers")} onRetryModels={modelFamilies.refresh} onStartChat={startLauncherChat} onOpenChat={selectChat} /></div></> : <BrowserWorkspace chatId={activeChat?.id} controls={browserPanel} browserActions={browserActions} availableWidth={workspaceWidth} width={browserWidth} onWidth={setBrowserWidth} onWidthCommit={commitBrowserWidth} focusRequest={browserFocus.chatId === activeChat?.id ? browserFocus.version : 0} busy={busy || session.loading} onSettings={() => openSettings("browser")} onReconnect={session.reconnect}><VoyageWorkspace topBar={<>{chatHeader}{workspaceAlerts}</>} draftTarget={activeChat && activeProject ? { chatId: activeChat.id, cwd: activeProject.path, sessionFile: activeChat.hasMessages ? activeChat.sessionFile : undefined } : undefined} revealMessage={retrieval.reveal} modelNotice={modelNotice} key={`${session.owner.id ?? "loading"}:${session.owner.cwd ?? ""}`} state={displayState} loading={session.loading} connected={connected && !lifecyclePending} pending={session.pending || lifecyclePending} actions={actions} onSend={send} onReconnect={session.reconnect} projectName={activeProject?.name} railWidth={shownVoyageWidth} availableWidth={workspaceWidth} onRailWidth={setVoyageWidthFromDrag} onRailWidthCommit={commitVoyageWidth} expanded={voyageExpanded && !browserPanel.expanded} onToggle={toggleVoyage} /></BrowserWorkspace>}</div>
-				<GitTreeWorkspace key={browse.project?.path} project={browse.project} history={gitHistory} branchesOpen={sidebarOpen} hidden={activeTool !== "git-tree"} onBack={() => setActiveTool("chats")} onBranches={() => setSidebarOpen((value) => !value)} />
-				{generationKind && <GenerationGallery key={generationKind} kind={generationKind} studio={generationStudio} onParameters={() => setSidebarOpen((value) => !value)} onBack={() => setActiveTool("chats")} onImageToImage={(asset) => { generationStudio.useImageForImage(asset); setSidebarOpen(true); }} onImageToVideo={(asset) => { generationStudio.useImageForVideo(asset); setActiveTool("video-generation"); setSidebarOpen(true); }} />}
+				<div className={`primary-view ${codeTool !== "chats" ? "preview-hidden" : ""}`}>{currentView === "launcher" ? <>{chatHeader}{workspaceAlerts}<div className="body"><LauncherView activeChat={activeChat} activeProject={activeProject} projects={shownProjects} chats={visibleChats} offers={modelFamilies.offers} recentOfferIds={recentOfferIds} disabled={navigationDisabled || modelFamilies.loading} navigationDisabled={navigationDisabled} loading={modelFamilies.loading} error={modelFamilies.error} onResume={resumeChat} onSelectProject={selectProject} onAddProject={() => setProjectDialogOpen(true)} onManageProviders={() => openSettings("providers")} onRetryModels={modelFamilies.refresh} onStartChat={startLauncherChat} onOpenChat={selectChat} /></div></> : <BrowserWorkspace chatId={activeChat?.id} controls={browserPanel} browserActions={browserActions} availableWidth={workspaceWidth} width={browserWidth} onWidth={setBrowserWidth} onWidthCommit={commitBrowserWidth} focusRequest={browserFocus.chatId === activeChat?.id ? browserFocus.version : 0} busy={busy || session.loading} onSettings={() => openSettings("browser")} onReconnect={session.reconnect}><VoyageWorkspace topBar={<>{chatHeader}{workspaceAlerts}</>} draftTarget={activeChat && activeProject ? { chatId: activeChat.id, cwd: activeProject.path, sessionFile: activeChat.hasMessages ? activeChat.sessionFile : undefined } : undefined} revealMessage={retrieval.reveal} modelNotice={modelNotice} key={`${session.owner.id ?? "loading"}:${session.owner.cwd ?? ""}`} state={displayState} loading={session.loading} connected={connected && !lifecyclePending} pending={session.pending || lifecyclePending} actions={actions} onSend={send} onReconnect={session.reconnect} projectName={activeProject?.name} railWidth={shownVoyageWidth} availableWidth={workspaceWidth} onRailWidth={setVoyageWidthFromDrag} onRailWidthCommit={commitVoyageWidth} expanded={workspaceMode === "code" && voyageExpanded && !browserPanel.expanded} onToggle={toggleVoyage} /></BrowserWorkspace>}</div>
+				<GitTreeWorkspace key={browse.project?.path} project={browse.project} history={gitHistory} branchesOpen={sidebarOpen} hidden={codeTool !== "git-tree"} onBack={() => setActiveTool("chats")} onBranches={() => setSidebarOpen((value) => !value)} />
 				{/* Keep previews mounted while another tool owns the workspace so returning restores their scroll position. */}
-				{activeTool !== "chats" && <div className={`file-workspace-view ${activeTool !== "files" && activeTool !== "git" ? "preview-hidden" : ""}`}>{activePreviewId ? <ProjectPreview tabs={previewTabs} activeId={activePreviewId} revision={workbenchRevision} onActivate={setActivePreviewId} onClose={closeProjectPreview} onMode={(id, mode) => setPreviewTabs((current) => current.map((tab) => tab.id === id ? { ...tab, mode } : tab))} onBack={() => setActiveTool("chats")} /> : <FileWorkspaceEmpty project={browse.project} tool={activeTool === "git" ? "git" : "files"} />}</div>}
+				{(previewTabs.length > 0 || isFileWorkbenchTab(codeTool)) && <div className={`file-workspace-view ${codeTool !== "files" && codeTool !== "git" ? "preview-hidden" : ""}`}>{activePreviewId ? <ProjectPreview tabs={previewTabs} activeId={activePreviewId} revision={workbenchRevision} onActivate={setActivePreviewId} onClose={closeProjectPreview} onMode={(id, mode) => setPreviewTabs((current) => current.map((tab) => tab.id === id ? { ...tab, mode } : tab))} onBack={() => setActiveTool("chats")} /> : <FileWorkspaceEmpty project={browse.project} tool={codeTool === "git" ? "git" : "files"} />}</div>}
 			</main>
 			</ProjectChangesNavigationContext.Provider>
-			</div>
+			</WorkspaceRoute>
+			<DesignWorkspace settingsOpen={!!settingsCategory} active={workspaceMode === "design"} kind={generationKind} studio={generationStudio} onKind={(kind) => setActiveTool(kind === "image" ? "image-generation" : "video-generation")} onConfigure={(kind) => openSettings(kind === "image" ? "images" : "videos")} sidebarOpen={designSidebarOpen && !(narrowViewport && !!settingsCategory)} onCloseSidebar={() => setDesignSidebarOpen(false)} sidebarResize={workspaceMode === "design" && desktopSidebarOpen && <ResizeSeparator label="调整设计导航宽度" value={shownSidebarWidth} bounds={sidebarBounds} onResize={setSidebarWidthFromDrag} onCommit={commitSidebarWidth} />} activityBar={<ActivityBar mode="design" active={designTool} panelOpen={designSidebarOpen} onSelect={selectTool} onOpenSettings={() => openSettings()} />} project={activeProject} onOpenCodeFile={(project, path) => { if (activeProject?.id !== project.id) library.selectProject(project.id); setActiveTool("files"); openProjectPreview(project, path, "file"); setCodeSidebarOpen(true); }} />
 			</div>
 			{retrieval.historyView && <HistorySearchDialog {...retrieval.historyView} onClose={retrieval.closeHistory} />}
 			{shownProjects.length > MAX_PROJECTS ? <ProjectListLimit projects={shownProjects} onRemove={(ids) => { for (const id of ids) library.hideProject(id); }} /> : projectDialogOpen && <ProjectDialog projects={shownProjects} onAdd={library.addProject} onClose={() => setProjectDialogOpen(false)} />}

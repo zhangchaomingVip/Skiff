@@ -126,7 +126,7 @@ fn display_path(path: &Path) -> String {
 	value
 }
 
-fn canonical_root(root: &str) -> Result<PathBuf, String> {
+pub(crate) fn canonical_root(root: &str) -> Result<PathBuf, String> {
 	let root = PathBuf::from(root);
 	if !root.is_absolute() || !root.is_dir() {
 		return Err("项目目录不存在或不是绝对路径".to_string());
@@ -153,7 +153,7 @@ fn clean_relative(value: &str, allow_empty: bool) -> Result<PathBuf, String> {
 	Ok(clean)
 }
 
-fn project_path(root: &Path, relative: &str, must_exist: bool) -> Result<(PathBuf, PathBuf), String> {
+pub(crate) fn project_path(root: &Path, relative: &str, must_exist: bool) -> Result<(PathBuf, PathBuf), String> {
 	let relative = clean_relative(relative, true)?;
 	let candidate = root.join(&relative);
 	if must_exist {

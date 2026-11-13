@@ -1,3 +1,4 @@
+import { workbenchTool } from "./workspace-navigation.mjs";
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { chromium } from "../.playwright-cli/node_modules/playwright-core/index.mjs";
@@ -9,7 +10,7 @@ const browser = await chromium.launch({ headless: true, channel: "msedge" });
 const page = await browser.newPage({ viewport: { width: 1440, height: 960 } });
 page.setDefaultTimeout(15000);
 const errors = []; page.on("pageerror", (error) => errors.push(String(error)));
-const tool = (name) => page.getByRole("navigation", { name: "工作区工具" }).getByRole("button", { name, exact: true });
+const tool = (name) => workbenchTool(page, name);
 const view = (name) => page.getByRole("group", { name: "画廊视图", exact: true }).getByRole("button", { name: new RegExp(`^${name} `) });
 try {
 	for (const theme of ["light", "dark"]) {
@@ -19,10 +20,12 @@ try {
 			const base = { serviceId: "service", serviceName: "Mock", modelId: "test-image", size: "1024x1024", quality: "auto", createdAt: Date.now(), prompt: "保留的作品" };
 			localStorage.setItem("skiff.test.images.config", JSON.stringify({ defaultServiceId: "service", services: [{ id: "service", name: "Mock", configured: true, keyHint: "…test", baseUrl: "https://example.invalid/v1", models: [{ id: "test-image", sizes: ["1024x1024"] }], defaultModel: "test-image" }] }));
 			localStorage.setItem("skiff.test.images.jobs", JSON.stringify([{ ...base, id: "saved", status: "completed", path: image, actualSize: "32x32" }, ...["failed", "cancelled", "interrupted"].map((status, i) => ({ ...base, id: `ended-${i}`, status, prompt: `失败提示词 ${i} ${"长提示词，".repeat(70)}`, message: "HTTP 400：服务无法生成此图片。" }))]));
-			localStorage.setItem("skiff.workbench.v1", JSON.stringify({ version: 1, tool: "image-generation" }));
+			localStorage.removeItem("skiff.workspace.navigation.v1"); localStorage.setItem("skiff.workbench.v1", JSON.stringify({ version: 1, tool: "image-generation" }));
 			const url = new URL(location.href); url.searchParams.set("persist", "1"); history.replaceState(null, "", url);
 		}, `data:image/png;base64,${testImage().toString("base64")}`);
 		await page.reload(); await view("作品").waitFor();
+		// Jobs load asynchronously, so wait for the persisted work instead of sampling the list.
+		await page.locator(".generation-card").first().waitFor();
 		assert.equal(await page.locator(".generation-card").count(), 1);
 		assert.equal(await page.locator(".generation-task-list").count(), 0, "Historical failures never occupy the gallery");
 		assert.equal(await view("失败记录").innerText(), "失败记录 3");

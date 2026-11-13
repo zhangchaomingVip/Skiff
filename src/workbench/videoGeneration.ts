@@ -12,6 +12,7 @@ export interface VideoJob {
 	duration: number; ratio: string; resolution: string; createdAt: number; completedAt?: number; hasReference: boolean;
 	remoteId?: string; remoteStatus?: string; progress?: number; message?: string; path?: string; usage?: Record<string, unknown>;
 	actualWidth?: number; actualHeight?: number; actualDuration?: number; actualFps?: number;
+	projectRoot?: string;
 }
 export const videoJobActive = (job: VideoJob) => ["submitting", "queued", "in_progress", "downloading"].includes(job.status);
 export const videoJobBlocks = (job: VideoJob) => !["completed", "failed", "abandoned", "download_failed"].includes(job.status) && job.remoteStatus !== "completed";
@@ -24,7 +25,7 @@ export const videoGenerationNative = {
 	save: (input: VideoServiceInput) => invoke<VideoConfig>("save_video_generation_service", { input }),
 	remove: (id: string) => invoke<VideoConfig>("delete_video_generation_service", { id }),
 	jobs: () => invoke<VideoJob[]>("list_video_generation_jobs"),
-	start: (input: { id: string; serviceId: string; modelId: string; prompt: string; duration: number; ratio: string; reference?: string }) => invoke<VideoJob>("start_video_generation", { input }),
+	start: (input: { id: string; serviceId: string; modelId: string; prompt: string; duration: number; ratio: string; reference?: string; projectRoot?: string }) => invoke<VideoJob>("start_video_generation", { input }),
 	control: (id: string, action: "pause" | "resume" | "abandon") => invoke<void>("control_video_generation", { id, action }),
 	export: (id: string) => invoke<boolean>("export_video_generation_asset", { id }),
 	reveal: (id: string) => invoke<void>("reveal_video_generation_asset", { id }),

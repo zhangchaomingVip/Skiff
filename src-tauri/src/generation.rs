@@ -191,6 +191,7 @@ pub struct ImageJob {
 	#[serde(default)] actual_size: Option<String>,
 	#[serde(default)] reference: Option<ImageReference>,
 	#[serde(default)] removed: bool,
+	#[serde(default)] project_root: Option<String>,
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -292,7 +293,7 @@ pub fn set_image_generation_asset_removed(app: AppHandle, state: State<'_, Gener
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GenerateInput { id: String, service_id: String, model_id: String, prompt: String, size: String, quality: String, reference: Option<ReferenceInput> }
+pub struct GenerateInput { id: String, service_id: String, model_id: String, prompt: String, size: String, quality: String, reference: Option<ReferenceInput>, project_root: Option<String> }
 
 #[tauri::command]
 pub async fn start_image_generation(app: AppHandle, input: GenerateInput) -> Result<ImageJob, String> {
@@ -318,7 +319,7 @@ fn start_image_generation_inner(app: AppHandle, input: GenerateInput) -> Result<
 	if prompt.is_empty() || prompt.chars().count() > 32000 { return Err("提示词须为 1–32000 个字符".into()); }
 	let key = super::crypto::open(&service.api_key).map_err(|_| "无法解密生图 Key，请在设置中重新填写")?;
 	let reference = input.reference.map(validate_reference).transpose()?;
-	let job = ImageJob { id: input.id, status: "generating".into(), prompt, service_id: service.id.clone(), service_name: service.name.clone(), model_id: input.model_id, size: input.size, quality: input.quality, created_at: SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() as u64, message: None, path: None, usage: None, revised_prompt: None, actual_size: None, reference: reference.as_ref().map(|(info, _)| info.clone()), removed: false };
+	let job = ImageJob { id: input.id, status: "generating".into(), prompt, service_id: service.id.clone(), service_name: service.name.clone(), model_id: input.model_id, size: input.size, quality: input.quality, created_at: SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() as u64, message: None, path: None, usage: None, revised_prompt: None, actual_size: None, reference: reference.as_ref().map(|(info, _)| info.clone()), removed: false, project_root: input.project_root };
 	if let Some((_, bytes)) = reference { save_reference(&dir, &job, &bytes)?; }
 	job.save(&dir)?;
 	let (sender, mut cancel) = watch::channel(false);

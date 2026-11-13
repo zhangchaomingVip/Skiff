@@ -12,7 +12,7 @@ impl Drop for TestDir {
 fn config(dir: &Path, base: &str) {
 	write_json(&dir.join("video-config.json"), &Config { default_service_id: "test".into(), services: vec![Service { id: "test".into(), name: "Test Videos".into(), base_url: base.into(), api_key: "dummy-video-key".into(), models: vec![VideoModel { id: "muse-video".into(), durations: vec![5], ratios: vec!["9:16".into()], reference_enabled: true }], default_model: "muse-video".into() }] }).unwrap();
 }
-fn input() -> GenerateInput { GenerateInput { id: uuid::Uuid::new_v4().to_string(), service_id: "test".into(), model_id: "muse-video".into(), prompt: "A blue paper boat".into(), duration: 5, ratio: "9:16".into(), reference: None } }
+fn input() -> GenerateInput { GenerateInput { id: uuid::Uuid::new_v4().to_string(), service_id: "test".into(), model_id: "muse-video".into(), prompt: "A blue paper boat".into(), duration: 5, ratio: "9:16".into(), reference: None, project_root: None } }
 fn video() -> Vec<u8> { STANDARD.decode(include_str!("../../../tests/fixtures/video.mp4.b64").trim()).unwrap() }
 fn jpeg() -> Vec<u8> {
 	let mut bytes = vec![];

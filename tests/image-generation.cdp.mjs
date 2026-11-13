@@ -1,3 +1,4 @@
+import { workbenchTool } from "./workspace-navigation.mjs";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -42,7 +43,8 @@ export function createImageGenerationScenario() {
 }
 
 export async function verifyImageGeneration(page, scenario, baseUrl, dir, artifacts) {
-	const tool = (name) => page.getByRole("navigation", { name: "工作区工具" }).getByRole("button", { name, exact: true });
+	await page.setViewportSize({ width: 1600, height: 1000 });
+	const tool = (name) => workbenchTool(page, name);
 	const settings = () => page.getByRole("dialog", { name: "设置", exact: true });
 	const generate = () => page.getByRole("button", { name: "生成图片", exact: true });
 	await tool("生图").click();

@@ -33,7 +33,7 @@ try {
 		await page.locator(".composer-input").waitFor();
 		await page.evaluate(() => {
 			localStorage.setItem("skiff.test.images.config", JSON.stringify({ defaultServiceId: "images", services: [{ id: "images", name: "并发验证", baseUrl: "http://127.0.0.1/v1", configured: true, keyHint: "…test", defaultModel: "test-image", models: [{ id: "test-image", sizes: ["1024x1024"] }] }] }));
-			localStorage.setItem("skiff.workbench.v1", JSON.stringify({ version: 1, tool: "image-generation" }));
+			localStorage.removeItem("skiff.workspace.navigation.v1"); localStorage.setItem("skiff.workbench.v1", JSON.stringify({ version: 1, tool: "image-generation" }));
 		});
 		await page.goto(`${origin}/tests/preview.html?fixture=sidebar&persist=1&theme=${theme}`);
 		await prompt().waitFor();

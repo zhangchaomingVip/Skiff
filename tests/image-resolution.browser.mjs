@@ -1,3 +1,4 @@
+import { workbenchTool } from "./workspace-navigation.mjs";
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { chromium } from "../.playwright-cli/node_modules/playwright-core/index.mjs";
@@ -13,7 +14,7 @@ try {
 	for (const theme of ["light", "dark"]) {
 		await page.setViewportSize({ width: 1440, height: 960 });
 		await page.goto(`http://localhost:1421/tests/preview.html?fixture=sidebar&theme=${theme}`);
-		await page.getByRole("navigation", { name: "工作区工具", exact: true }).getByRole("button", { name: "生图", exact: true }).click();
+		await workbenchTool(page, "生图").click();
 		await page.getByRole("button", { name: "配置生成服务", exact: true }).click();
 		await settings().getByRole("button", { name: "添加生成服务", exact: true }).click();
 		await settings().getByRole("textbox", { name: "API Key", exact: true }).fill("dummy-key");
@@ -46,6 +47,7 @@ try {
 		assert.equal(await page.evaluate(() => window.skiffPreview.generation.calls.length), 0, "Configuring/selecting dimensions never generates or charges");
 		await page.screenshot({ path: `dist/image-resolution/${theme}-configured.png` });
 		await page.setViewportSize({ width: 390, height: 780 });
+		await page.getByRole("button", { name: "创作参数", exact: true }).click();
 		assert.equal(await page.locator(".generation-controls").evaluate((element) => element.scrollWidth > element.clientWidth), false);
 		await resolution().scrollIntoViewIfNeeded();
 		await page.screenshot({ path: `dist/image-resolution/${theme}-narrow.png` });

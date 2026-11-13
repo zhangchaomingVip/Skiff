@@ -183,7 +183,7 @@ try {
 	await page.getByRole("tabpanel", { name: "文件", exact: true }).waitFor();
 	assert.equal(await page.locator(".git-tree-workspace").isVisible(), false);
 	// The previous standalone history preference opens the third tab after reload.
-	await page.evaluate(() => localStorage.setItem("skiff.workbench.v1", JSON.stringify({ version: 1, tool: "git-tree" })));
+	await page.evaluate(() => { localStorage.removeItem("skiff.workspace.navigation.v1"); localStorage.setItem("skiff.workbench.v1", JSON.stringify({ version: 1, tool: "git-tree" })); });
 	await page.setViewportSize({ width: 1200, height: 800 });
 	await page.goto(`${origin}/tests/preview.html?fixture=sidebar&persist=1&theme=dark`);
 	await page.locator(".commit-metadata h2").waitFor();

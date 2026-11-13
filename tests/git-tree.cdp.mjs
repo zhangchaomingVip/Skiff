@@ -29,7 +29,7 @@ export async function verifyGitTree(page, temporaryRoot, artifacts) {
 	const index = await readFile(join(root, ".git", "index"));
 	await page.evaluate((root) => {
 		localStorage.setItem("skiff.workspace.v1", JSON.stringify({ version: 1, projects: [{ id: "history-project", name: "History fixture", path: root }], chats: [{ id: "history-chat", projectId: "history-project", title: "History", updatedAt: Date.now(), hasMessages: false }], activeId: "history-chat" }));
-		localStorage.setItem("skiff.workbench.v1", JSON.stringify({ version: 1, tool: "chats" }));
+		localStorage.removeItem("skiff.workspace.navigation.v1"); localStorage.setItem("skiff.workbench.v1", JSON.stringify({ version: 1, tool: "chats" }));
 		localStorage.setItem("skiff.sidebar.open", "true");
 	}, root);
 	await page.reload({ waitUntil: "domcontentloaded" });

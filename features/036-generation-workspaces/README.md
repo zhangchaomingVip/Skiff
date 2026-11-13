@@ -1,8 +1,8 @@
 # 生图与视频创作空间
 
-Activity Bar 在「文件」之后提供「生图」「生成视频」，复用既有按钮尺寸、选中与悬停态及 1.6px 线性图标。原有文件 / Commit / Git Tree Tab 的选择记忆不受影响，创作空间选择沿用 `skiff.workbench.v1`。
+顶层由 [042 · Code / Design 双工作区](../042-code-design-workspaces/task.md) 接管：顶栏分段控制器切换 Code 与 Design，Activity Bar 随模式展示「对话 / 文件」或「生图 / 生成视频」。原有文件 / Commit / Git Tree Tab 的选择记忆不受影响；旧 `skiff.workbench.v1` 工具偏好自动迁入独立的 Code / Design 导航状态。
 
-两个空间共用 `GenerationControls` 与 `GenerationGallery`，采用左侧参数、右侧作品画廊的布局。桌面参数栏最小 280px，可拖动或收起；760px 以下复用工作区导航抽屉，通过「创作参数」重新打开。图片与视频提示词、比例等参数独立保存于 App 运行期间，切换工具不会清空。聊天组件与文件预览保持原有状态。
+图片与视频共用 `GenerationControls` 与 `GenerationGallery`，在 Design 内采用左侧参数、右侧瀑布流作品画廊的布局；独立的 Design 导航侧栏提供创作入口、资产分组与任务统计。桌面参数栏最小 280px，可拖动或收起；空间不足时通过「创作参数」打开独立抽屉。图片与视频提示词、比例等参数独立保存于 App 运行期间，切换工具或模式不会清空。聊天组件与文件预览保持原有状态，不再通过生成页的「返回对话」切换。
 
 图片参数包含提示词、模型选择器和模型支持的比例/尺寸。视频已由 [037 · Muse 视频生成](../037-muse-video-generation/README.md) 接入，首版开放 5 秒、9:16 和可拖放/替换的实验性首帧参考图，移除了没有对应接口能力的运动幅度和帧率滑块。所有表单控件均支持键盘操作。
 

@@ -23,7 +23,7 @@ export async function verifyGitCommit(page, temporaryRoot, artifacts) {
 	await git("add", "other.txt");
 	await page.evaluate((root) => {
 		localStorage.setItem("skiff.workspace.v1", JSON.stringify({ version: 1, projects: [{ id: "commit-project", name: "Commit fixture", path: root }], chats: [{ id: "commit-chat", projectId: "commit-project", title: "Commit", updatedAt: Date.now(), hasMessages: false }], activeId: "commit-chat" }));
-		localStorage.setItem("skiff.workbench.v1", JSON.stringify({ version: 1, tool: "chats" })); localStorage.setItem("skiff.sidebar.open", "true");
+		localStorage.removeItem("skiff.workspace.navigation.v1"); localStorage.setItem("skiff.workbench.v1", JSON.stringify({ version: 1, tool: "chats" })); localStorage.setItem("skiff.sidebar.open", "true");
 	}, root);
 	await page.reload({ waitUntil: "domcontentloaded" });
 	await page.getByRole("navigation", { name: "工作区工具" }).getByRole("button", { name: "文件", exact: true }).click();

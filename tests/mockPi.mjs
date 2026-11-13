@@ -3,7 +3,9 @@ import { gitHistoryFixture } from "./gitHistoryFixture.mjs";
 import { installMockBrowser } from "./mockBrowser.mjs";
 import { installMockGeneration } from "./mockGeneration.mjs";
 import { installMockVideoGeneration } from "./mockVideoGeneration.mjs";
+import { installMockDesignAssets } from "./mockDesignAssets.mjs";
 export function installMockPi(target, storage, fixture, sessionOverrides) {
+	const designAssets = installMockDesignAssets();
 	const browser = installMockBrowser(target);
 	const generation = installMockGeneration(target, storage);
 	const videos = installMockVideoGeneration(target, storage);
@@ -149,6 +151,7 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 		transformCallback(callback) { const id = ++sequence; callbacks.set(id, callback); return id; },
 		unregisterCallback(id) { callbacks.delete(id); },
 		async invoke(command, args) {
+			if (command.includes("design_asset")) return designAssets.invoke(command, args);
 			if (command.startsWith("browser_")) return browser.invoke(command, args);
 			if (command.includes("image_generation")) return generation.invoke(command, args);
 			if (command.includes("video_generation")) return videos.invoke(command, args);
@@ -447,5 +450,5 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 			}
 		},
 	};
-	return { browser, generation, videos, relays, families, metadata, referencePrices, discovery, failNextOrder: () => { failOrder = true; }, failNextBatch: () => { failBatch = true; }, histories, saved, commands, processes, listeners, callbacks, emit, testRequests, pendingTests, deferTests: (value) => { deferTests = value; }, failNextSend: () => { failSend = true; }, settleOnNextClearQueue: () => { settleOnNextClearQueue = true; }, setDialogPath: (value) => { dialogPath = value; } };
+	return { designAssets, browser, generation, videos, relays, families, metadata, referencePrices, discovery, failNextOrder: () => { failOrder = true; }, failNextBatch: () => { failBatch = true; }, histories, saved, commands, processes, listeners, callbacks, emit, testRequests, pendingTests, deferTests: (value) => { deferTests = value; }, failNextSend: () => { failSend = true; }, settleOnNextClearQueue: () => { settleOnNextClearQueue = true; }, setDialogPath: (value) => { dialogPath = value; } };
 }

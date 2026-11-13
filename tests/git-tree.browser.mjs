@@ -25,7 +25,7 @@ try {
 		await page.goto(`${origin}/tests/preview.html?fixture=sidebar&theme=${theme}`);
 		await page.waitForFunction(() => document.querySelector(".sidebar")?.dataset.connected === "true");
 		const chat = await page.evaluate(() => JSON.parse(localStorage.getItem("skiff.workspace.v1")).activeId);
-		assert.deepEqual(await page.locator(".activity-button").evaluateAll((els) => els.map((el) => el.getAttribute("aria-label"))), ["对话", "文件", "生图", "生成视频", "设置"]);
+		assert.deepEqual(await page.locator(".activity-button").evaluateAll((els) => els.map((el) => el.getAttribute("aria-label"))), ["对话", "文件", "设置"]);
 		await openHistory();
 		await page.locator(".commit-metadata h2").waitFor();
 		await assertUpdateLocation(".workbench-header-actions");

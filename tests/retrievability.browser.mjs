@@ -19,8 +19,6 @@ const message = () => page.getByRole("textbox", { name: "聊天消息" });
 const ready = () => wait(() => !!document.querySelector(".composer") && !document.querySelector(".session-loading") && document.querySelector(".sidebar")?.dataset.connected === "true");
 const select = async (id) => { await page.locator(".project-chats .chat-link").filter({ has: page.locator(".chat-title", { hasText: new RegExp(`^Session ${id}$`) }) }).click({ position: { x: 24, y: 16 } }); await ready(); };
 const searchInput = () => page.getByRole("textbox", { name: "搜索项目与聊天" });
-// The sidebar title is a static heading, so the launcher is reached via 文件 → 主页.
-const home = async () => { await page.getByRole("navigation", { name: "应用菜单" }).getByRole("button", { name: "文件", exact: true }).click(); await page.getByRole("menuitem", { name: "主页", exact: true }).click(); };
 const search = async (text) => { await searchInput().fill(text); await wait(() => document.querySelector(".sidebar-search-results [role=status]")?.textContent.includes("已搜索")); };
 const persisted = (id) => page.evaluate(async (id) => {
 	const db = await new Promise((resolve, reject) => { const r = indexedDB.open("skiff-drafts"); r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error); });
@@ -100,8 +98,6 @@ try {
 	await select(1); await select(0);
 	assert.equal(await message().inputValue(), "未发送的正文草稿");
 	assert.equal(await page.getByRole("button", { name: "移除文件 notes.txt" }).count(), 1);
-	await home(); await page.getByRole("button", { name: "返回聊天" }).click();
-	assert.equal(await message().inputValue(), "未发送的正文草稿");
 	await page.evaluate(() => window.retrievalFixture.drafts.flush());
 	assert.equal((await persisted("s0")).attachments[0].body, "附件内容保持完整");
 	await page.goto(`${base}/tests/retrievability.html?restore=1`); await ready();
@@ -120,14 +116,13 @@ try {
 	await wait(() => document.querySelector(".composer-input")?.value === "");
 	await page.evaluate(() => window.retrievalFixture.drafts.flush()); assert.equal(await persisted("s0"), undefined);
 	await wait(() => !document.querySelector('.composer button[aria-label="停止生成"]'));
-	evidence.checks.push("text and attachment survive navigation/home/reload; failed send retains; accepted send clears only submitted draft");
+	evidence.checks.push("text and attachment survive navigation and reload; failed send retains; accepted send clears only submitted draft");
 	await message().fill("保留非空草稿"); await page.keyboard.press("Control+n"); await ready();
 	const draftId = await active(); assert.notEqual(draftId, "s0"); assert.equal(await message().inputValue(), "");
 	await message().fill("新草稿也要保留");
 	await page.goto(`${base}/tests/retrievability.html?restore=1`); await ready();
 	assert.equal(await active(), draftId); assert.equal(await message().inputValue(), "新草稿也要保留");
 	await page.keyboard.press("Control+n"); await ready(); assert.notEqual(await active(), draftId);
-	await home(); await page.getByRole("heading", { name: "选择一个模型，开始工作" }).waitFor();
 	await select(0); assert.equal(await message().inputValue(), "保留非空草稿");
 	await select(1);
 	await page.evaluate(() => {

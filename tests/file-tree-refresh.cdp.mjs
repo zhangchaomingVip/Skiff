@@ -10,7 +10,7 @@ export async function verifyFileTreeRefresh(page, temporaryRoot, artifacts, mode
 	await writeFile(join(root, "notes", "initial.md"), "Initial file\n");
 	await page.evaluate((root) => {
 		localStorage.setItem("skiff.workspace.v1", JSON.stringify({ version: 1, projects: [{ id: "refresh-project", name: "File refresh fixture", path: root }], chats: [{ id: "refresh-chat", projectId: "refresh-project", title: "File refresh", updatedAt: Date.now(), hasMessages: false }], activeId: "refresh-chat" }));
-		localStorage.setItem("skiff.workbench.v1", JSON.stringify({ version: 1, tool: "files" }));
+		localStorage.removeItem("skiff.workspace.navigation.v1"); localStorage.setItem("skiff.workbench.v1", JSON.stringify({ version: 1, tool: "files" }));
 		localStorage.setItem("skiff.sidebar.open", "true");
 	}, root);
 	await page.reload({ waitUntil: "domcontentloaded" });

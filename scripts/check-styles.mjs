@@ -8,7 +8,7 @@ const root = fileURLToPath(new URL("../", import.meta.url));
 export function auditStyles(overrides = {}) {
 	const read = (file) => overrides[file] ?? fs.readFileSync(path.join(root, file), "utf8");
 	const sources = [];
-	const files = ["src/tokens.css", "src/index.css", "src/voyage.css", "src/browser.css", "src/components/ui.css", "src/components/generation-workspace.css"];
+	const files = ["src/tokens.css", "src/index.css", "src/voyage.css", "src/browser.css", "src/components/ui.css", "src/components/generation-workspace.css", "src/components/workspace-modes.css"];
 	const sheets = files.map((file) => ({ file, sheet: postcss.parse(read(file), { from: file }) }));
 	const definitions = new Set();
 	for (const { sheet } of sheets) sheet.walkDecls((decl) => { if (decl.prop.startsWith("--")) definitions.add(decl.prop); });

@@ -12,7 +12,7 @@ page.setDefaultTimeout(10000);
 const errors = [];
 page.on("pageerror", (error) => errors.push(String(error)));
 await page.context().grantPermissions(["clipboard-read", "clipboard-write"], { origin });
-const gridColumns = (target = page) => target.locator(".generation-gallery-grid").evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(" ").length);
+const gridColumns = (target = page) => target.locator(".generation-gallery-grid").evaluate((element) => Number(getComputedStyle(element).columnCount));
 
 async function seed(theme, target = page) {
 	await target.goto(`${origin}/tests/preview.html?fixture=sidebar&theme=${theme}`);
@@ -36,7 +36,7 @@ async function seed(theme, target = page) {
 			{ prompt: "今天也有温柔的小事发生", size: "1024x1024", path: makeImage(480, 480, "#cdb8a7") },
 		];
 		localStorage.setItem("skiff.test.images.jobs", JSON.stringify(examples.map((example, index) => ({ ...example, id: crypto.randomUUID(), serviceId, serviceName: "灵感工作室", modelId: "image-studio", actualSize: example.size, quality: "auto", createdAt: Date.now() - index * 1000, status: "completed" }))));
-		localStorage.setItem("skiff.workbench.v1", JSON.stringify({ version: 1, tool: "image-generation" }));
+		localStorage.removeItem("skiff.workspace.navigation.v1"); localStorage.setItem("skiff.workbench.v1", JSON.stringify({ version: 1, tool: "image-generation" }));
 	});
 	await target.goto(`${origin}/tests/preview.html?fixture=sidebar&persist=1&theme=${theme}`);
 	await target.waitForFunction(() => [...document.querySelectorAll(".generation-card-preview img")].length === 3 && [...document.querySelectorAll(".generation-card-preview img")].every((img) => img.naturalWidth > 0));
@@ -82,7 +82,7 @@ try {
 		for (const viewport of [{ width: 2560, height: 1440 }, { width: 1920, height: 1080 }]) {
 			await page.setViewportSize(viewport);
 			assert.equal(await gridColumns(), 2);
-			assert.ok((await page.locator(".generation-card-preview").first().boundingBox()).height <= 440);
+			assert.ok((await page.locator(".generation-card-preview").first().boundingBox()).height <= 540);
 			assert.ok(await page.locator(".generation-card").first().evaluate((element) => element.getBoundingClientRect().bottom <= innerHeight), "The whole first card fits on a wide-screen viewport");
 			await page.screenshot({ path: `${output}/${theme}-wide-${viewport.width}.png`, animations: "disabled" });
 		}
@@ -110,8 +110,9 @@ try {
 		assert.equal(await page.getByRole("dialog", { name: "图片预览", exact: true }).count(), 0, "Quick actions never open the image preview");
 		assert.equal(await page.evaluate(() => window.skiffPreview.generation.calls.filter((call) => call.command === "export_image_generation_asset").length), 1);
 		await page.screenshot({ path: `${output}/${theme}-four-columns-hover.png`, animations: "disabled" });
-		for (const [width, expected] of [[1200, 2], [900, 1], [1440, 4]]) {
+		for (const [width, expected] of [[1200, 2], [900, 2], [1440, 4]]) {
 			await page.setViewportSize({ width, height: 1040 });
+			await page.waitForFunction((columns) => Number(getComputedStyle(document.querySelector(".generation-gallery-grid")).columnCount) === columns, expected);
 			assert.equal(await gridColumns(), expected, `Preferred four columns adapt at ${width}px`);
 			assert.equal(await density.getByRole("button", { name: "4 列", exact: true }).getAttribute("aria-pressed"), "true");
 			assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);

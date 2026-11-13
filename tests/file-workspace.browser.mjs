@@ -41,7 +41,7 @@ try {
 		assert.equal(await empty.count(), 0);
 		await tool("对话").click();
 		await chat.waitFor({ state: "visible" });
-		assert.equal(await page.locator(".project-preview").count(), 0);
+		assert.equal(await page.locator(".project-preview").isVisible(), false);
 		assert.equal(await page.locator(".composer-input").inputValue(), "文件区切换后保留草稿");
 		await tool("文件").click();
 		await page.locator(".source-preview").waitFor();

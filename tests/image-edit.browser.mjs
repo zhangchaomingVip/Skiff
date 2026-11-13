@@ -1,3 +1,4 @@
+import { workbenchTool } from "./workspace-navigation.mjs";
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { chromium } from "../.playwright-cli/node_modules/playwright-core/index.mjs";
@@ -9,7 +10,7 @@ const browser = await chromium.launch({ headless: true, channel: "msedge" });
 const page = await browser.newPage({ viewport: { width: 1440, height: 960 } });
 page.setDefaultTimeout(15000);
 const errors = []; page.on("pageerror", (error) => errors.push(String(error)));
-const tool = (name) => page.getByRole("navigation", { name: "工作区工具" }).getByRole("button", { name, exact: true });
+const tool = (name) => workbenchTool(page, name);
 const generate = () => page.getByRole("button", { name: "生成图片", exact: true });
 const prompt = () => page.getByRole("textbox", { name: "提示词 Prompt", exact: true });
 const reference = () => page.locator('input[aria-label="上传图生图参考图"]');

@@ -7,7 +7,7 @@ export function preparePreview(target) {
 	const params = new URLSearchParams(target.location.search);
 	const fixture = params.get("fixture") || "launcher";
 	const storage = target.localStorage;
-	const preservedPreferences = params.get("persist") === "1" ? ["skiff.test.videos.config", "skiff.test.videos.jobs", "skiff.generation.columns.v1", "skiff.test.images.config", "skiff.test.images.jobs", "skiff.workbench.v1", "skiff.git-tree.columns.v1", "skiff.git-tree.files-height.v1", "skiff.sidebar.width", "skiff.voyage.width", "skiff.sidebar.recent-expanded", "skiff.model-favorites.v1", "skiff.theme", "skiff.themeColor", "skiff.darkThemeColor", "skiff.themeStars", "skiff.typography.v1", "skiff.test.metadata.v1", "skiff.settings.providers-view.v1"].map((key) => [key, storage.getItem(key)]).filter((entry) => entry[1] !== null) : [];
+	const preservedPreferences = params.get("persist") === "1" ? ["skiff.workspace.navigation.v1", "skiff.design.collections.v1", "skiff.design.parameters.open", "skiff.design.sidebar.open", "skiff.test.videos.config", "skiff.test.videos.jobs", "skiff.generation.columns.v1", "skiff.test.images.config", "skiff.test.images.jobs", "skiff.workbench.v1", "skiff.git-tree.columns.v1", "skiff.git-tree.files-height.v1", "skiff.sidebar.width", "skiff.voyage.width", "skiff.sidebar.recent-expanded", "skiff.model-favorites.v1", "skiff.theme", "skiff.themeColor", "skiff.darkThemeColor", "skiff.themeStars", "skiff.typography.v1", "skiff.test.metadata.v1", "skiff.settings.providers-view.v1"].map((key) => [key, storage.getItem(key)]).filter((entry) => entry[1] !== null) : [];
 	for (let index = storage.length - 1; index >= 0; index--) {
 		const key = storage.key(index);
 		if (key?.startsWith("skiff.")) storage.removeItem(key);

@@ -17,6 +17,7 @@ mod project_workbench;
 mod browser;
 mod generation;
 mod video_generation;
+mod design_assets;
 
 /// One spawned `pi --mode rpc` session. `child` is kept only so we can kill it
 /// on stop; `stdin` is shared with the reader threads so we can write lines.
@@ -574,6 +575,7 @@ pub fn run() {
 			video_generation::get_video_generation_config, video_generation::save_video_generation_service, video_generation::delete_video_generation_service,
 			video_generation::list_video_generation_jobs, video_generation::start_video_generation, video_generation::control_video_generation,
 			video_generation::reveal_video_generation_asset, video_generation::export_video_generation_asset,
+			design_assets::save_design_asset_to_project,
 			get_pi_auth_status,
 			validate_project_directory,
 			get_workspace_directory,

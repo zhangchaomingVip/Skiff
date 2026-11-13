@@ -30,6 +30,8 @@ import { createBrowserToolScenario, verifyBrowserTools } from "./browser-tools.c
 import { createLifecycleScenario, verifyBrowserLifecycle } from "./browser-lifecycle.cdp.mjs";
 import { createImageGenerationScenario, verifyImageGeneration } from "./image-generation.cdp.mjs";
 import { createVideoGenerationScenario, verifyVideoGeneration } from "./video-generation.cdp.mjs";
+import { verifyWorkspaceModes } from "./workspace-modes.cdp.mjs";
+import { testImage } from "./imageFixture.mjs";
 
 const CDP_PORT = 9222;
 const modelPickerOnly = process.argv.includes("--model-picker");
@@ -95,6 +97,13 @@ const server = createServer((request, response) => {
 				}
 				if (parsed.model === "test-empty") return send(200, JSON.stringify({ choices: [{ message: { role: "assistant", content: "" }, finish_reason: "stop" }] }));
 				if (parsed.model === "test-error") return send(200, JSON.stringify({ error: { message: "upstream failed" } }));
+				const designPrompt = (parsed.messages ?? []).some((message) => message.role === "user" && JSON.stringify(message.content).includes("CDP Code 图片归档"));
+				if (imagesOnly && designPrompt && !(parsed.messages ?? []).some((message) => message.role === "tool" && message.tool_call_id === "design-image-write")) {
+					const command = `node -e "const fs=require('fs');fs.mkdirSync('assets',{recursive:true});fs.writeFileSync('assets/code-generated.png',Buffer.from('${testImage().toString("base64")}','base64'))"`;
+					response.writeHead(200, { "Content-Type": "text/event-stream" });
+					for (const choice of [{ index: 0, delta: { tool_calls: [{ index: 0, id: "design-image-write", type: "function", function: { name: "bash", arguments: JSON.stringify({ command }) } }] }, finish_reason: null }, { index: 0, delta: {}, finish_reason: "tool_calls" }]) response.write(`data: ${JSON.stringify({ id: "design-image", object: "chat.completion.chunk", model: MODEL_ID, choices: [choice] })}\n\n`);
+					response.end("data: [DONE]\n\n"); return;
+				}
 				if (!parsed.stream) return send(200, JSON.stringify({ choices: [{ message: { role: "assistant", content: parsed.model === MODEL_ID ? REPLY : "OK" }, finish_reason: "stop" }], usage: { prompt_tokens: 12, completion_tokens: 20, total_tokens: 32 } }));
 				response.writeHead(200, { "Content-Type": "text/event-stream" });
 				const base = { id: "cdp-verify", object: "chat.completion.chunk", created: 0, model: MODEL_ID };
@@ -277,7 +286,7 @@ try {
 			page.on("pageerror", (error) => pageErrors.push(String(error)));
 			return page;
 		});
-		if (imagesOnly) await verifyImageGeneration(page, imageScenario, `http://127.0.0.1:${mockPort}/v1`, join(root, "generation"), artifacts);
+		if (imagesOnly) { await verifyImageGeneration(page, imageScenario, `http://127.0.0.1:${mockPort}/v1`, join(root, "generation"), artifacts); await verifyWorkspaceModes(page, join(root, "generation"), artifacts, MODEL_ID); }
 		// Reloading an empty conversation returns to the launcher. Enter the chat
 		// through its real start control before checking the independent pi flow.
 		if (await page.locator(".launcher-row").count()) await page.locator(".launcher-row", { hasText: MODEL_ID }).getByRole("button", { name: "开始聊天" }).click();
@@ -384,7 +393,7 @@ try {
 } catch (error) {
 	if (page) await page.screenshot({ path: join(artifacts, "cdp-failure.png") }).catch(() => {});
 	await writeArtifacts();
-	console.error(`\n验证失败：${error.message}`);
+	console.error(`\n验证失败：${error.stack ?? error.message}`);
 	console.error(`dev 日志尾部：\n${devLog.join("").slice(-2000)}`);
 	process.exitCode = 1;
 } finally {
