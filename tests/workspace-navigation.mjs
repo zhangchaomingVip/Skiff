@@ -1,3 +1,18 @@
+/** Ratio and resolution sit behind one chip in the composer. */
+export function imageSizeMenu(page) {
+	const trigger = page.getByRole("button", { name: /^画面尺寸/ });
+	const menu = page.getByRole("dialog", { name: "选择画面尺寸", exact: true });
+	return {
+		trigger,
+		menu,
+		ratios: menu.getByRole("group", { name: "画面比例", exact: true }),
+		resolutions: menu.getByRole("group", { name: "分辨率", exact: true }),
+		output: page.locator(".generation-size-output"),
+		async open() { if (!await menu.count()) { await trigger.click(); await menu.waitFor(); } },
+		async close() { if (await menu.count()) await page.keyboard.press("Escape"); },
+	};
+}
+
 /** Drive the public mode switch before choosing a mode-specific activity. */
 export function workbenchTool(page, name) {
 	const locator = page.getByRole("navigation", { name: "工作区工具", exact: true }).getByRole("button", { name, exact: true });

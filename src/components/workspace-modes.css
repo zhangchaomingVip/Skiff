@@ -28,10 +28,10 @@
 	.design-task-summary { display: flex; justify-content: space-between; gap: var(--space-1); padding-inline: var(--space-2); color: var(--muted); font-size: var(--font-size-xs); }
 	.design-task-summary strong { display: block; margin-top: var(--space-1); color: var(--text); font-size: var(--font-size-base); font-weight: var(--font-weight-medium); font-variant-numeric: tabular-nums; }
 	.design-main { display: flex; flex: 1; min-width: 0; min-height: 0; }
-	.design-parameters { display: flex; flex: none; min-width: 280px; min-height: 0; border-right: 1px solid var(--sidebar-border); }
-	.design-parameters > .generation-controls { flex: 1; width: 100%; }
-	.design-main > .resize-separator { flex: 0 0 var(--space-2); margin-inline: calc(-1 * var(--space-1)); }
 	.design-results { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; }
+	/* The design home carries its own breadcrumb and parameters toggle in the hero,
+	   so the gallery toolbar would repeat both. */
+	.design-workspace .generation-workspace-header { display: none; }
 	.design-gallery-route { display: flex; flex: 1; min-width: 0; min-height: 0; }
 	.design-gallery-breadcrumb { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--secondary); font-size: var(--font-size-xs); }
 	.design-asset-notice { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); padding: var(--space-2) var(--space-4); border-bottom: 1px solid var(--border); background: var(--surface); color: var(--secondary); font-size: var(--font-size-xs); overflow-wrap: anywhere; }

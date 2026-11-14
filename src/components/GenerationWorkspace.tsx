@@ -1,9 +1,10 @@
-import { useEffect, useId, useRef, useState, type ComponentProps } from "react";
+import { useEffect, useId, useRef, useState, type ComponentProps, type ReactNode } from "react";
 import { VideoControls, VideoGallery } from "./VideoGenerationWorkspace";
 import { createPortal } from "react-dom";
 import type { GenerationAsset, GenerationKind, GenerationStudio } from "../workbench/useGenerationStudio";
 import { Icon } from "./Icon";
-import { Button, Chip, Dialog, IconButton, Input, Popover, SegmentedControl, Select, TextArea, Tooltip } from "./ui";
+import { GenerationPicker } from "./GenerationPicker";
+import { Button, Chip, Dialog, IconButton, Input, Popover, SegmentedControl, TextArea, Tooltip } from "./ui";
 import { isMacPlatform } from "./settingsNavigation";
 import "./generation-workspace.css";
 import { imageJobPending, sizeRatio, type ImageJob } from "../workbench/imageGeneration";
@@ -14,6 +15,7 @@ const imageAccept = "image/png,image/jpeg,image/webp,image/gif";
 type GalleryColumns = "1" | "2" | "3" | "4";
 const galleryColumnsKey = "skiff.generation.columns.v1";
 const imageRatios = ["1:1", "9:16", "16:9", "3:4", "4:3", "3:2", "2:3", "21:9"];
+const qualityOptions = [{ value: "auto", label: "自动" }, { value: "low", label: "低" }, { value: "medium", label: "中" }, { value: "high", label: "高" }];
 
 function readGalleryColumns(): GalleryColumns {
 	try { const value = localStorage.getItem(galleryColumnsKey); return value === "1" || value === "2" || value === "4" ? value : "3"; }
@@ -31,20 +33,42 @@ function RatioBox({ size }: { size: string }) {
 	return <span className="generation-ratio-glyph" aria-hidden="true"><span className="generation-ratio-shape" style={{ width: `${width / longest * 100}%`, height: `${height / longest * 100}%` }} /></span>;
 }
 
-function ImageSizeControls({ size, sizes, onChange, onConfigure }: { size: string; sizes: string[]; onChange: (size: string) => void; onConfigure: () => void }) {
+/** Ratio and resolution share one chip so the composer stays on a single row;
+ *  the panel follows the reference picker instead of two always-open chip rows. */
+function ImageSizeMenu({ size, sizes, onChange, onConfigure }: { size: string; sizes: string[]; onChange: (size: string) => void; onConfigure: () => void }) {
+	const [open, setOpen] = useState(false);
+	const trigger = useRef<HTMLButtonElement>(null);
+	const menu = useRef<HTMLDivElement>(null);
+	const configured = sizes.length > 0;
 	const resolution = imageResolution(size);
 	const ratio = size ? imageRatio(size) : "1:1";
 	const ratios = [...imageRatios, ...new Set(sizes.map(imageRatio).filter((value) => !imageRatios.includes(value)))];
 	const available = sizes.filter((value) => imageResolution(value) === resolution);
+	useEffect(() => {
+		if (!open) return;
+		(menu.current?.querySelector<HTMLElement>('[aria-pressed="true"]') ?? menu.current?.querySelector<HTMLElement>("button"))?.focus();
+	}, [open]);
 	return <>
-		<fieldset className="generation-field generation-resolution"><legend>分辨率</legend><div>{imageResolutions.map((option) => {
-			const matches = sizes.filter((value) => imageResolution(value) === option);
-			return <Button key={option} size="compact" variant="ghost" aria-label={matches.length ? option : `配置 ${option} 尺寸`} aria-pressed={resolution === option && sizes.length > 0} disabled={!sizes.length} title={matches.length ? matches.map((value) => value.replace("x", " × ")).join("、") : `当前未配置 ${option} 尺寸，点击配置；这不代表模型不支持`} onClick={() => { if (matches.length) onChange(matches.find((value) => imageRatio(value) === ratio) ?? matches[0]); else onConfigure(); }}>{option}{!matches.length && <small>待配置</small>}</Button>;
-		})}</div><p className="generation-field-hint">{imageResolutions.some((value) => !sizes.some((item) => imageResolution(item) === value)) ? "待配置表示未填写对应尺寸，点击进入设置，可添加 2K / 4K 尺寸。" : "分辨率按已配置的尺寸分组；实际支持范围以服务商为准。"}</p></fieldset>
-		<fieldset className="generation-field generation-ratios generation-image-ratios"><legend>比例</legend><div role="group" aria-label="画面比例">{ratios.map((option) => {
-			const match = available.find((value) => imageRatio(value) === option);
-			return <Button key={option} size="compact" variant="ghost" aria-pressed={!!match && ratio === option} disabled={!match} title={match ? `${option} · ${match.replace("x", " × ")}` : `${resolution} 暂无此比例，请检查模型支持的尺寸`} onClick={() => { if (match) onChange(match); }}><RatioBox size={option} /><span>{option}</span></Button>;
-		})}</div><p className="generation-field-hint">{size ? `输出尺寸：${size.replace("x", " × ")}` : "配置生成服务后，选择模型支持的分辨率与比例。"}</p></fieldset>
+		<button type="button" ref={trigger} className="generation-picker-trigger generation-size-trigger" disabled={!configured} aria-haspopup="dialog" aria-expanded={open} aria-label={configured ? `画面尺寸：${ratio} ${resolution}` : "画面尺寸"} title={size ? `${ratio} · ${size.replace("x", " × ")}` : undefined} onClick={() => setOpen((value) => !value)}>
+			{configured && size ? <RatioBox size={size} /> : <Icon name="image" size={13} />}
+			<span className="generation-picker-value">{configured ? `${ratio} · ${resolution}` : "选择尺寸"}</span>
+			<span className="chev-caret" aria-hidden="true"><Icon name="chevron" size={11} /></span>
+		</button>
+		{open && createPortal(<Popover anchor={trigger} className="generation-size-menu" aria-label="选择画面尺寸" onClose={() => setOpen(false)}>
+			<div ref={menu}>
+				<p className="generation-picker-title">画面比例</p>
+				<div className="generation-size-ratios" role="group" aria-label="画面比例">{ratios.map((option) => {
+					const match = available.find((value) => imageRatio(value) === option);
+					return <Button key={option} size="compact" variant="ghost" className="generation-size-option" aria-pressed={!!match && ratio === option} disabled={!match} title={match ? `${option} · ${match.replace("x", " × ")}` : `${resolution} 暂无此比例，请检查模型支持的尺寸`} onClick={() => { if (match) onChange(match); }}><RatioBox size={option} /><span>{option}</span></Button>;
+				})}</div>
+				<p className="generation-picker-title">分辨率</p>
+				<div className="generation-size-resolutions" role="group" aria-label="分辨率">{imageResolutions.map((option) => {
+					const matches = sizes.filter((value) => imageResolution(value) === option);
+					return <Button key={option} size="compact" variant="ghost" className="generation-size-option" aria-label={matches.length ? option : `配置 ${option} 尺寸`} aria-pressed={resolution === option && sizes.length > 0} title={matches.length ? matches.map((value) => value.replace("x", " × ")).join("、") : `当前未配置 ${option} 尺寸，点击配置；这不代表模型不支持`} onClick={() => { if (matches.length) onChange(matches.find((value) => imageRatio(value) === ratio) ?? matches[0]); else { setOpen(false); onConfigure(); } }}>{option}{!matches.length && <small>待配置</small>}</Button>;
+				})}</div>
+				<p className="generation-size-output">{size ? `输出尺寸：${size.replace("x", " × ")}` : "配置生成服务后，选择模型支持的分辨率与比例。"}</p>
+			</div>
+		</Popover>, trigger.current?.closest("dialog") ?? document.body)}
 	</>;
 }
 
@@ -92,9 +116,9 @@ function ImageGenerationControls({ studio, onConfigure }: { studio: GenerationSt
 		<header className="generation-controls-header"><span className="generation-mode-icon"><Icon name="imageSpark" size={20} /></span><div><h1>生图</h1><p>让想象，慢慢成形</p></div></header>
 		<form className="generation-form" onSubmit={(event) => { event.preventDefault(); if (canGenerate) void images.generate({ serviceId: draft.serviceId, modelId: draft.modelId, prompt: draft.prompt, size: draft.size, quality: draft.quality, projectRoot: studio.project?.path }, studio.imageReference); }}>
 			<div className="generation-fields">
-				<div className="generation-field">
+				<div className="generation-field generation-field-prompt">
 					<div className="generation-field-heading"><label htmlFor={`${id}-prompt`}>提示词 <span>Prompt</span></label>{draft.prompt && <Tooltip text="清空提示词"><IconButton size="compact" variant="ghost" aria-label="清空提示词" onClick={() => { update({ prompt: "" }); promptInput.current?.focus(); }}><Icon name="close" size={14} /></IconButton></Tooltip>}</div>
-					<TextArea ref={promptInput} id={`${id}-prompt`} rows={8} maxLength={32000} value={draft.prompt} aria-keyshortcuts="Control+Enter Meta+Enter" placeholder="描述你想看到的画面：窗边的一束花、午后的柔光、温暖的胶片质感…" onChange={(event) => update({ prompt: event.target.value })} onKeyDown={(event) => {
+					<TextArea ref={promptInput} id={`${id}-prompt`} rows={4} maxLength={32000} value={draft.prompt} aria-keyshortcuts="Control+Enter Meta+Enter" placeholder="描述你想看到的画面：窗边的一束花、午后的柔光、温暖的胶片质感…" onChange={(event) => update({ prompt: event.target.value })} onKeyDown={(event) => {
 						if (event.key === "Enter" && (event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && !event.nativeEvent.isComposing && event.nativeEvent.keyCode !== 229) {
 							event.preventDefault(); event.stopPropagation();
 							if (canGenerate && !event.repeat) event.currentTarget.form?.requestSubmit();
@@ -102,18 +126,20 @@ function ImageGenerationControls({ studio, onConfigure }: { studio: GenerationSt
 					}} />
 					<p className="generation-field-hint">试着写下主体、光线、色彩和你喜欢的风格。</p>
 				</div>
-				<div className="generation-field">
+				<div className="generation-field generation-field-reference">
 					<span className="generation-field-label">参考图 <small>{studio.imageReference ? "图生图" : "可选 · 图生图"}</small></span>
 					<Input ref={referenceInput} className="generation-file-input" type="file" accept={imageAccept} aria-label="上传图生图参考图" onChange={(event) => { const file = event.target.files?.[0]; if (file) studio.uploadImageReference(file); event.target.value = ""; }} />
 					<div className={`generation-reference ${draggingReference ? "is-dragging" : ""}`} onDragOver={(event) => { event.preventDefault(); setDraggingReference(true); }} onDragLeave={() => setDraggingReference(false)} onDrop={(event) => { event.preventDefault(); setDraggingReference(false); const file = event.dataTransfer.files[0]; if (file) studio.uploadImageReference(file); }}>
-						{studio.imageReference ? <><div className="generation-reference-image"><MediaView key={studio.imageReference.url} asset={{ ...studio.imageReference, kind: "image" }} /></div><div className="generation-reference-caption"><span title={studio.imageReference.name}>{studio.imageReference.name}</span><IconButton size="compact" variant="ghost" aria-label="移除图生图参考图" onClick={studio.removeImageReference}><Icon name="close" /></IconButton></div><Button size="compact" variant="ghost" onClick={() => referenceInput.current?.click()}>替换参考图</Button></> : <button type="button" className="generation-reference-upload" onClick={() => referenceInput.current?.click()}><Icon name="image" size={24} /><strong>添加参考图</strong><span>上传或拖入图片，按提示词修改画面</span></button>}
+						{studio.imageReference ? <><button type="button" className="generation-reference-image" aria-label={`替换参考图：${studio.imageReference.name}`} onClick={() => referenceInput.current?.click()}><MediaView key={studio.imageReference.url} asset={{ ...studio.imageReference, kind: "image" }} /></button><div className="generation-reference-caption"><span title={studio.imageReference.name}>{studio.imageReference.name}</span><IconButton size="compact" variant="ghost" aria-label="移除图生图参考图" onClick={studio.removeImageReference}><Icon name="close" /></IconButton></div><Button size="compact" variant="ghost" onClick={() => referenceInput.current?.click()}>替换参考图</Button></> : <button type="button" className="generation-reference-upload" aria-label="添加参考图" onClick={() => referenceInput.current?.click()}><Icon name="image" size={24} /><strong>添加参考图</strong><span>上传或拖入图片，按提示词修改画面</span></button>}
 					</div><p className="generation-field-hint">{studio.imageReference ? "描述想保留和修改的内容。参考图将在生成时发送给服务，原图保留。" : "不添加参考图时使用文生图。PNG、JPG、WebP、GIF · 最大 20 MB；动画仅取静态首帧。"}</p>
 					{studio.imageReferenceError && <div className="generation-error" role="alert"><span>{studio.imageReferenceError}</span><IconButton size="compact" variant="ghost" aria-label="关闭参考图提示" onClick={studio.clearImageReferenceError}><Icon name="close" /></IconButton></div>}
 				</div>
-				<div className="generation-field"><label htmlFor={`${id}-provider`}>生成服务</label><div className="generation-service-control"><Select id={`${id}-provider`} value={draft.serviceId} disabled={!images.config?.services.length} onChange={(event) => { const next = images.config?.services.find((item) => item.id === event.target.value); const first = next?.models.find((item) => item.id === next.defaultModel) ?? next?.models[0]; update({ serviceId: next?.id ?? "", modelId: first?.id ?? "", size: first?.sizes[0] ?? "" }); }}>{images.config?.services.length ? images.config.services.map((item) => <option key={item.id} value={item.id}>{item.name}</option>) : <option value="">先配置一个生成服务</option>}</Select><Tooltip text={configured ? "管理生成服务" : "配置生成服务"}><IconButton variant="ghost" aria-label={configured ? "管理生成服务" : "配置生成服务"} onClick={onConfigure}><Icon name="settings" size={16} /></IconButton></Tooltip></div></div>
-				<div className="generation-field"><label htmlFor={`${id}-model`}>模型</label><Select id={`${id}-model`} value={draft.modelId} disabled={!configured} aria-describedby={`${id}-service`} onChange={(event) => { const next = service?.models.find((item) => item.id === event.target.value); update({ modelId: next?.id ?? "", size: next?.sizes[0] ?? "" }); }}>{configured ? service.models.map((item) => <option key={item.id} value={item.id}>{item.id}</option>) : <option value="">连接生成服务后选择模型</option>}</Select></div>
-				<ImageSizeControls size={draft.size} sizes={model?.sizes ?? []} onChange={(size) => update({ size })} onConfigure={onConfigure} />
-				{configured && <div className="generation-field"><label htmlFor={`${id}-quality`}>质量</label><Select id={`${id}-quality`} value={draft.quality} onChange={(event) => update({ quality: event.target.value })}><option value="auto">自动</option><option value="low">低</option><option value="medium">中</option><option value="high">高</option></Select><p className="generation-field-hint">更大的尺寸和更高的质量可能增加耗时与费用。</p></div>}
+				<div className="generation-settings">
+					<div className="generation-field generation-field-service"><label htmlFor={`${id}-provider`}>生成服务</label><div className="generation-service-control"><GenerationPicker id={`${id}-provider`} label="生成服务" icon="layers" value={draft.serviceId} disabled={!images.config?.services.length} placeholder={images.config?.services.length ? "选择一个服务" : "先配置一个生成服务"} options={(images.config?.services ?? []).map((item) => ({ value: item.id, label: item.name, hint: `${item.models.length} 个模型${item.configured ? "" : " · 未配置密钥"}` }))} onChange={(serviceId) => { const next = images.config?.services.find((item) => item.id === serviceId); const first = next?.models.find((item) => item.id === next.defaultModel) ?? next?.models[0]; update({ serviceId, modelId: first?.id ?? "", size: first?.sizes[0] ?? "" }); }} /><Tooltip text={configured ? "管理生成服务" : "配置生成服务"}><IconButton variant="ghost" aria-label={configured ? "管理生成服务" : "配置生成服务"} onClick={onConfigure}><Icon name="settings" size={16} /></IconButton></Tooltip></div></div>
+					<div className="generation-field generation-field-model"><label htmlFor={`${id}-model`}>模型</label><GenerationPicker id={`${id}-model`} label="模型" icon="spark" value={configured ? draft.modelId : ""} disabled={!configured} placeholder={configured ? "选择模型" : "连接生成服务后选择模型"} options={configured ? (service?.models ?? []).map((item) => ({ value: item.id, label: item.id, hint: `${item.sizes.length} 种尺寸` })) : []} onChange={(modelId) => { const next = service?.models.find((item) => item.id === modelId); update({ modelId, size: next?.sizes[0] ?? "" }); }} /></div>
+					{configured && <div className="generation-field generation-field-quality"><label htmlFor={`${id}-quality`}>质量</label><GenerationPicker id={`${id}-quality`} label="质量" icon="sliders" value={draft.quality} placeholder="自动" options={qualityOptions} onChange={(quality) => update({ quality: quality as typeof draft.quality })} /><p className="generation-field-hint">更大的尺寸和更高的质量可能增加耗时与费用。</p></div>}
+					<ImageSizeMenu size={draft.size} sizes={model?.sizes ?? []} onChange={(size) => update({ size })} onConfigure={onConfigure} />
+				</div>
 			</div>
 			<footer className="generation-submit"><p id={`${id}-service`}><span className="generation-connection-dot" />{images.loading ? "正在读取图片生成服务" : images.running ? `进行中 ${images.runningCount} / ${images.concurrencyLimit || "不限"}${images.atCapacity ? " · 已达上限，可在生图设置中调整" : " · 可继续生成"}` : configured ? `${studio.imageReference ? "图生图 · " : ""}使用 ${service.name}` : "尚未配置图片生成服务"}</p><Button type="submit" variant="primary" size="primary" disabled={!canGenerate} aria-describedby={`${id}-service`} loading={images.submitting}><Icon name="spark" />生成图片</Button><span className="generation-shortcut">快速生成 <kbd>{isMacPlatform() ? "⌘" : "Ctrl"} ↵</kbd></span><small>每次生成一张，按服务商计费；作品自动保存。</small></footer>
 		</form>
@@ -222,8 +248,10 @@ export interface GenerationGalleryProps {
 	onImageToVideo: (asset: GenerationAsset) => void; onImageToImage: (asset: GenerationAsset) => void;
 	collection: DesignCollection; onCollectionChange: (collection: DesignCollection) => void; active: boolean;
 	onSaveToProject: (asset: GenerationAsset) => void; saving: boolean;
+	/** Design home greeting and composer, rendered above the works. */
+	hero?: ReactNode;
 }
-function ImageGenerationGallery({ kind, studio, onParameters, onImageToVideo, onImageToImage, collection, onCollectionChange, active, onSaveToProject, saving }: GenerationGalleryProps) {
+function ImageGenerationGallery({ kind, studio, onParameters, onImageToVideo, onImageToImage, collection, onCollectionChange, active, onSaveToProject, saving, hero }: GenerationGalleryProps) {
 	const fileInput = useRef<HTMLInputElement>(null);
 	const galleryScroll = useRef<HTMLDivElement>(null);
 	const views = useRef<HTMLDivElement>(null);
@@ -263,6 +291,7 @@ function ImageGenerationGallery({ kind, studio, onParameters, onImageToVideo, on
 	return <section className="generation-gallery" data-columns={columns} aria-label="图片画廊">
 		<header className="generation-workspace-header"><span className="design-gallery-breadcrumb"><Icon name="imageSpark" size={16} />Design / 图片</span><span /><Button size="compact" variant="ghost" onClick={onParameters}><Icon name="sliders" />创作参数</Button></header>
 		<div ref={galleryScroll} className="generation-gallery-scroll">
+			{hero}
 			<div className="generation-gallery-heading"><div><span className="generation-eyebrow">IMAGE STUDIO</span><h2>{view === "failures" ? "失败记录" : view === "removed" ? "已移除的作品" : collection === "tasks" ? "进行中的任务" : "灵感画廊"}<span>{(view === "failures" ? settled.length : assets.length).toString().padStart(2, "0")}</span></h2><p>{view === "failures" ? "查看失败原因，保留提示词继续创作。" : view === "removed" ? "原文件保留，可随时恢复到画廊。" : "把脑海里的风景，留在这里。"}</p></div><div className="generation-gallery-heading-actions">{view !== "failures" && <SegmentedControl label="画廊列数" value={columns} onChange={setColumns} options={[{ value: "1", label: "1 列" }, { value: "2", label: "2 列" }, { value: "3", label: "3 列" }, { value: "4", label: "4 列" }]} />}{view === "gallery" && <Button className="generation-import" variant="ghost" size="compact" onClick={importMedia}><Icon name="plus" size={14} />导入作品</Button>}</div></div>
 			<div ref={views} className="generation-gallery-views"><SegmentedControl label="画廊视图" value={view} onChange={changeView} options={[{ value: "gallery", label: `作品 ${visible.length}` }, { value: "failures", label: `失败记录 ${settled.length}` }, { value: "removed", label: `已移除 ${removed.length}` }]} /></div>
 			<Input ref={fileInput} className="generation-file-input" type="file" multiple accept={imageAccept} aria-label="导入图片作品" onChange={(event) => { studio.importAssets("image", Array.from(event.target.files ?? [])); event.target.value = ""; }} />

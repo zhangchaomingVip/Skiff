@@ -1,4 +1,4 @@
-import { workbenchTool } from "./workspace-navigation.mjs";
+import { imageSizeMenu, workbenchTool } from "./workspace-navigation.mjs";
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { chromium } from "../.playwright-cli/node_modules/playwright-core/index.mjs";
@@ -46,7 +46,10 @@ try {
 		assert.equal(await prompt().inputValue(), "");
 		assert.equal(await prompt().evaluate((input) => input === document.activeElement), true);
 		await prompt().fill("午后窗边的一束花，温暖的胶片质感");
-		await page.getByRole("group", { name: "画面比例", exact: true }).getByRole("button", { name: /16:9/ }).click();
+		const sizes = imageSizeMenu(page);
+		await sizes.open();
+		await sizes.ratios.getByRole("button", { name: "16:9", exact: true }).click();
+		await sizes.close();
 		await page.evaluate(() => window.skiffPreview.generation.setMode("pending"));
 		await prompt().press("Control+Enter");
 		await page.getByText("正在生成图片…", { exact: true }).waitFor();

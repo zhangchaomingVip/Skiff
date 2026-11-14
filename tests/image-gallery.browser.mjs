@@ -23,7 +23,8 @@ try {
 			localStorage.removeItem("skiff.workspace.navigation.v1"); localStorage.setItem("skiff.workbench.v1", JSON.stringify({ version: 1, tool: "image-generation" }));
 			const url = new URL(location.href); url.searchParams.set("persist", "1"); history.replaceState(null, "", url);
 		}, `data:image/png;base64,${testImage().toString("base64")}`);
-		await page.reload(); await view("作品").waitFor();
+		// The previous theme leaves the stored collection on its last view.
+		await page.reload(); await view("作品").click();
 		// Jobs load asynchronously, so wait for the persisted work instead of sampling the list.
 		await page.locator(".generation-card").first().waitFor();
 		assert.equal(await page.locator(".generation-card").count(), 1);

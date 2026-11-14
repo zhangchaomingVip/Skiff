@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { chromium } from "../.playwright-cli/node_modules/playwright-core/index.mjs";
 import { testImage } from "./imageFixture.mjs";
+import { imageSizeMenu } from "./workspace-navigation.mjs";
 
 const origin = process.argv[2] ?? "http://localhost:1421";
 const output = "dist/generation-redesign";
@@ -59,30 +60,36 @@ try {
 		assert.match(titles[0], /^窗边的花/); assert.ok(titles.every((title) => !title.startsWith("skiff-")));
 		assert.equal(await page.locator(".generation-card .generation-saved-actions").count(), 0);
 		assert.deepEqual(await page.locator(".generation-card-preview img").evaluateAll((images) => images.map((image) => getComputedStyle(image).objectFit)), ["contain", "contain", "contain"]);
-		const ratios = page.getByRole("group", { name: "画面比例", exact: true });
+		assert.ok(await page.locator(".generation-controls").evaluate((element) => element.scrollWidth <= element.clientWidth));
+		await page.screenshot({ path: `${output}/${theme}-gallery.png`, animations: "disabled" });
+		const sizes = imageSizeMenu(page);
+		await sizes.open();
+		const ratios = sizes.ratios;
 		for (const [ratio, direction] of [["1:1", "square"], ["16:9", "wide"], ["9:16", "tall"]]) {
 			const shape = await ratios.getByRole("button", { name: new RegExp(`^${ratio}$`) }).locator(".generation-ratio-shape").boundingBox();
 			assert.ok(direction === "square" ? Math.abs(shape.width - shape.height) < 1 : direction === "wide" ? shape.width > shape.height : shape.height > shape.width);
 		}
-		assert.ok(await page.locator(".generation-controls").evaluate((element) => element.scrollWidth <= element.clientWidth));
-		await page.screenshot({ path: `${output}/${theme}-gallery.png`, animations: "disabled" });
 		assert.equal(await ratios.getByRole("button").count(), 8);
-		const resolution = page.getByRole("group", { name: "分辨率", exact: true });
+		const resolution = sizes.resolutions;
 		await ratios.getByRole("button", { name: "16:9", exact: true }).click();
 		await resolution.getByRole("button", { name: "2K", exact: true }).click();
 		assert.equal(await ratios.getByRole("button", { name: "16:9", exact: true }).getAttribute("aria-pressed"), "true");
-		assert.match(await page.locator(".generation-image-ratios").innerText(), /2560 × 1440/);
+		assert.match(await sizes.output.innerText(), /2560 × 1440/);
 		assert.equal(await ratios.getByRole("button", { name: "4:3", exact: true }).isDisabled(), true);
 		await resolution.getByRole("button", { name: "1K", exact: true }).click();
 		await ratios.getByRole("button", { name: "21:9", exact: true }).click();
-		assert.match(await page.locator(".generation-image-ratios").innerText(), /1792 × 768/);
+		assert.match(await sizes.output.innerText(), /1792 × 768/);
 		await ratios.getByRole("button", { name: "3:4", exact: true }).click();
-		assert.match(await page.locator(".generation-image-ratios").innerText(), /864 × 1152/);
+		assert.match(await sizes.output.innerText(), /864 × 1152/);
+		await sizes.close();
 		await density.getByRole("button", { name: "2 列", exact: true }).click();
 		for (const viewport of [{ width: 2560, height: 1440 }, { width: 1920, height: 1080 }]) {
 			await page.setViewportSize(viewport);
 			assert.equal(await gridColumns(), 2);
 			assert.ok((await page.locator(".generation-card-preview").first().boundingBox()).height <= 540);
+			// The design home keeps the greeting and composer above the works, so the
+			// card itself is brought into view before measuring it.
+			await page.locator(".generation-card").first().scrollIntoViewIfNeeded();
 			assert.ok(await page.locator(".generation-card").first().evaluate((element) => element.getBoundingClientRect().bottom <= innerHeight), "The whole first card fits on a wide-screen viewport");
 			await page.screenshot({ path: `${output}/${theme}-wide-${viewport.width}.png`, animations: "disabled" });
 		}
@@ -101,7 +108,9 @@ try {
 		await page.waitForFunction(() => getComputedStyle(document.querySelector(".generation-hover-actions")).opacity === "1");
 		await hover.getByRole("button", { name: "使用提示词", exact: true }).click();
 		assert.match(await page.getByRole("textbox", { name: "提示词 Prompt" }).inputValue(), /^窗边的花/);
+		await sizes.open();
 		assert.equal(await ratios.getByRole("button", { name: "16:9", exact: true }).getAttribute("aria-pressed"), "true");
+		await sizes.close();
 		await page.locator(".generation-card-media").first().hover();
 		await hover.getByRole("button", { name: "复制提示词", exact: true }).click();
 		await hover.getByRole("status").filter({ hasText: "已复制提示词" }).waitFor();
@@ -110,7 +119,9 @@ try {
 		assert.equal(await page.getByRole("dialog", { name: "图片预览", exact: true }).count(), 0, "Quick actions never open the image preview");
 		assert.equal(await page.evaluate(() => window.skiffPreview.generation.calls.filter((call) => call.command === "export_image_generation_asset").length), 1);
 		await page.screenshot({ path: `${output}/${theme}-four-columns-hover.png`, animations: "disabled" });
-		for (const [width, expected] of [[1200, 2], [900, 2], [1440, 4]]) {
+		// The composer now lives in the gallery column instead of a fixed parameters
+		// panel, so four columns remain comfortable down to a 1200px window.
+		for (const [width, expected] of [[1200, 4], [900, 2], [1440, 4]]) {
 			await page.setViewportSize({ width, height: 1040 });
 			await page.waitForFunction((columns) => Number(getComputedStyle(document.querySelector(".generation-gallery-grid")).columnCount) === columns, expected);
 			assert.equal(await gridColumns(), expected, `Preferred four columns adapt at ${width}px`);
@@ -132,9 +143,11 @@ try {
 		await prompt.evaluate((element) => element.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", ctrlKey: true, isComposing: true, bubbles: true })));
 		await prompt.evaluate((element) => element.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", ctrlKey: true, repeat: true, bubbles: true })));
 		assert.equal(await page.evaluate(() => window.skiffPreview.generation.calls.filter((call) => call.prompt).length), 0, "IME confirmation and repeated keydown never submit");
-		await page.locator(".generation-gallery-scroll").evaluate((element) => { element.scrollTop = element.scrollHeight; });
+		await sizes.open();
 		await resolution.getByRole("button", { name: "2K", exact: true }).click();
 		await ratios.getByRole("button", { name: "9:16", exact: true }).click();
+		await sizes.close();
+		await page.locator(".generation-gallery-scroll").evaluate((element) => { element.scrollTop = element.scrollHeight; });
 		await prompt.press("Control+Enter");
 		assert.equal(await page.evaluate(() => window.skiffPreview.generation.calls.find((call) => call.prompt)?.size), "1440x2560");
 		await page.getByText("正在生成图片…", { exact: true }).waitFor();

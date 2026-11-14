@@ -8,6 +8,9 @@
 	.generation-controls-header p { margin: var(--space-1) 0 0; color: var(--muted); font-size: var(--font-size-xs); }
 	.generation-form { display: flex; flex: 1; flex-direction: column; min-height: 0; }
 	.generation-fields { display: flex; flex: 1; flex-direction: column; gap: var(--space-5); min-height: 0; overflow: auto; padding: var(--space-5) var(--space-4); }
+	/* Service, model, size and quality travel together; the design composer lays the
+	   same group out as one chip row. */
+	.generation-settings { display: flex; flex-direction: column; gap: var(--space-5); min-width: 0; }
 	.generation-field { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
 	.generation-field-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); min-height: var(--control-compact); }
 	.generation-field-heading > label { display: flex; align-items: center; gap: var(--space-2); color: var(--text); font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); }
@@ -16,9 +19,31 @@
 	.generation-controls[data-kind=image] .generation-fields { gap: var(--space-6); }
 	.generation-controls[data-kind=image] .ui-textarea { min-height: 192px; line-height: var(--line-height-relaxed); }
 	.generation-service-control { display: flex; align-items: center; gap: var(--space-1); }
-	.generation-service-control > select { min-width: 0; flex: 1; }
+	.generation-service-control > select, .generation-service-control > .generation-picker { min-width: 0; flex: 1; }
 	.generation-service-control > .ui-tooltip-wrap { flex: none; }
 	.generation-service-control .ui-icon-button { color: var(--secondary); }
+	/* Service, model and quality pickers share one chip + popover skeleton so no
+	   generator setting falls back to the operating system's select popup. */
+	.generation-picker { display: flex; min-width: 0; }
+	.generation-picker-trigger { display: flex; align-items: center; gap: var(--space-1-5); width: 100%; min-width: 0; height: var(--control-regular); padding: 0 var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-full); background: var(--surface); color: var(--secondary); font-size: var(--font-size-sm); text-align: left; transition: border-color var(--transition-fast), background-color var(--transition-fast), color var(--transition-fast); }
+	.generation-picker-trigger > svg:first-child { flex: none; color: var(--muted); }
+	.generation-picker-value { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+	.generation-picker-trigger:hover:not(:disabled) { border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); color: var(--text); }
+	.generation-picker-trigger[aria-expanded=true] { border-color: color-mix(in srgb, var(--accent) 48%, var(--border)); background: color-mix(in srgb, var(--accent) 10%, var(--surface)); color: var(--accent); }
+	.generation-picker-trigger[aria-expanded=true] > svg:first-child { color: var(--accent); }
+	.generation-picker-trigger[aria-expanded=true] .chev-caret { transform: rotate(-90deg); }
+	.generation-picker-trigger:disabled { border-color: var(--border); background: transparent; color: var(--muted); cursor: default; }
+	.ui-popover.generation-picker-menu { width: max-content; min-width: 208px; max-width: min(320px, calc(100vw - 24px)); padding: var(--space-1); border-color: var(--border); border-radius: var(--radius-xl); box-shadow: var(--shadow-elevation-3); }
+	.generation-picker-title { margin: 0; padding: var(--space-2) var(--space-2-5) var(--space-1); color: var(--muted); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); }
+	.generation-picker-options { display: flex; flex-direction: column; gap: var(--space-0-5); max-height: 280px; overflow: auto; }
+	.generation-picker-option { display: flex; align-items: center; gap: var(--space-2); width: 100%; padding: var(--space-2) var(--space-3); border: 0; border-radius: var(--radius-md); background: transparent; color: var(--text); text-align: left; }
+	.generation-picker-option:hover, .generation-picker-option:focus-visible { background: var(--hover); }
+	.generation-picker-option[aria-selected=true] { background: color-mix(in srgb, var(--selected) 60%, var(--surface)); color: var(--accent); }
+	.generation-picker-check { display: grid; place-items: center; flex: none; width: var(--space-4); height: var(--space-4); color: var(--accent); }
+	.generation-picker-copy { display: flex; flex: 1; flex-direction: column; gap: var(--space-0-5); min-width: 0; }
+	.generation-picker-copy strong { font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); overflow-wrap: anywhere; }
+	.generation-picker-copy small { color: var(--muted); font-size: var(--font-size-xs); }
+	.generation-picker-option[aria-selected=true] .generation-picker-copy small { color: color-mix(in srgb, var(--accent) 62%, var(--muted)); }
 	.generation-field > label, .generation-field-label { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); color: var(--text); font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); }
 	.generation-field > label > span, .generation-field-label > small { color: var(--muted); font-size: var(--font-size-xs); font-weight: var(--font-weight-regular); }
 	.generation-field > label > output { color: var(--secondary); font-size: var(--font-size-xs); font-weight: var(--font-weight-regular); font-variant-numeric: tabular-nums; }
@@ -34,18 +59,22 @@
 	.generation-ratios .ui-button-content { gap: var(--space-1); font-size: var(--font-size-xs); }
 	.generation-ratios .ui-button[aria-pressed=true] { border-color: color-mix(in srgb, var(--accent) 48%, var(--border)); background: color-mix(in srgb, var(--accent) 7%, var(--surface)); color: var(--accent); }
 	.generation-ratio-shape { display: block; flex: none; height: var(--space-2); max-width: var(--space-3); border: 1px solid currentColor; border-radius: var(--radius-xs); }
-	.generation-resolution { margin: 0; padding: 0; border: 0; }
-	.generation-resolution legend { margin-bottom: var(--space-2); padding: 0; color: var(--text); font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); }
-	.generation-resolution > div { display: flex; gap: var(--space-2); }
-	.generation-resolution .ui-button { flex: 1; height: var(--control-primary); border: 1px solid var(--border); border-radius: var(--radius-lg); background: transparent; color: var(--secondary); }
-	.generation-resolution .ui-button[aria-pressed=true] { border-color: color-mix(in srgb, var(--accent) 48%, var(--border)); background: color-mix(in srgb, var(--accent) 5%, var(--surface)); color: var(--accent); }
-	.generation-resolution .ui-button small { color: var(--muted); font-size: var(--font-size-xs); }
-	.generation-image-ratios > div { grid-template-columns: repeat(auto-fit, minmax(52px, 1fr)); gap: var(--space-2); }
-	.generation-image-ratios .ui-button { height: auto; min-height: 76px; border-radius: var(--radius-lg); padding: var(--space-2) var(--space-1); }
-	.generation-image-ratios .ui-button-content { flex-direction: column; justify-content: center; gap: var(--space-2); width: 100%; }
-	.generation-image-ratios .ui-button:disabled { border-color: var(--border); background: transparent; }
 	.generation-ratio-glyph { display: grid; place-items: center; width: var(--space-6); height: var(--space-6); flex: none; color: currentColor; }
 	.generation-ratio-glyph > .generation-ratio-shape { min-width: 0; max-width: none; background: color-mix(in srgb, currentColor 4%, transparent); }
+	/* Ratio and resolution live in one chip that opens this panel, so the composer
+	   never carries two always-visible rows of size options. */
+	.generation-size-trigger .generation-ratio-glyph { width: var(--space-3); height: var(--space-3); }
+	.ui-popover.generation-size-menu { width: min(320px, calc(100vw - 24px)); padding: var(--space-3); border-color: var(--border); border-radius: var(--radius-xl); box-shadow: var(--shadow-elevation-3); }
+	.generation-size-ratios { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-1); margin-bottom: var(--space-3); }
+	.generation-size-resolutions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-1); }
+	.generation-size-ratios .generation-size-option .ui-button-content { flex-direction: column; gap: var(--space-1); }
+	.generation-size-resolutions .generation-size-option .ui-button-content { flex-direction: column; gap: var(--space-0-5); }
+	.generation-size-option.ui-button { height: auto; min-height: 60px; padding: var(--space-2) var(--space-1); border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--subtle); color: var(--secondary); }
+	.generation-size-option .generation-ratio-glyph { width: var(--space-6); height: var(--space-6); }
+	.generation-size-option.ui-button[aria-pressed=true] { border-color: color-mix(in srgb, var(--accent) 48%, var(--border)); background: color-mix(in srgb, var(--accent) 10%, var(--surface)); color: var(--accent); }
+	.generation-size-option.ui-button:disabled { border-color: var(--border); background: transparent; color: var(--muted); }
+	.generation-size-option small { color: var(--muted); font-size: var(--font-size-xs); }
+	.generation-size-output { margin: 0; padding-top: var(--space-2); border-top: 1px solid var(--border); color: var(--muted); font-size: var(--font-size-xs); font-variant-numeric: tabular-nums; }
 	.image-settings-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); padding-block: var(--space-3); }
 	.image-generation-settings .settings-row-hint { overflow-wrap: anywhere; }
 	.image-generation-settings .settings-row > .ui-input:not([type=checkbox]) { width: 100%; }
@@ -96,8 +125,8 @@
 	.generation-reference-upload > svg { margin-bottom: var(--space-1); color: var(--secondary); }
 	.generation-reference-upload strong { color: var(--secondary); font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); }
 	.generation-reference-upload > span { font-size: var(--font-size-xs); }
-	.generation-reference-image { height: 112px; min-height: 0; background: var(--subtle); }
-	.generation-reference-image > img { width: 100%; height: 100%; object-fit: contain; }
+	.generation-reference-image { display: block; width: 100%; height: 112px; min-height: 0; padding: 0; border: 0; background: var(--subtle); overflow: hidden; }
+	.generation-reference-image > img { display: block; width: 100%; height: 100%; object-fit: contain; }
 	.generation-reference-caption { display: flex; align-items: center; gap: var(--space-2); padding-left: var(--space-2); }
 	.generation-reference-caption > span { flex: 1; min-width: 0; overflow: hidden; color: var(--secondary); font-size: var(--font-size-xs); text-overflow: ellipsis; white-space: nowrap; }
 	.generation-reference > .ui-button { align-self: flex-start; margin: 0 var(--space-1) var(--space-1); }
@@ -198,5 +227,77 @@
 		.generation-gallery-heading h2 { font-size: var(--font-size-lg); }
 		.generation-gallery-heading p { max-width: 160px; }
 		.generation-workspace-header { padding-inline: var(--space-2); }
+	}
+	/* Design home: a greeting, the composer card and quick starts above the works,
+	   following the reference creation pages rather than a split form panel. */
+	.design-hero { position: relative; display: flex; flex-direction: column; gap: var(--space-4); width: 100%; max-width: 980px; margin: 0 auto; padding-bottom: var(--space-5); }
+	.design-hero::before { content: ""; position: absolute; inset: calc(-1 * var(--space-8)) 0 auto; height: 320px; background: radial-gradient(ellipse at 50% 0%, color-mix(in srgb, var(--accent) 13%, transparent), transparent 68%); pointer-events: none; }
+	.design-hero > * { position: relative; }
+	.design-hero-bar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+	.design-hero-breadcrumb { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--muted); font-size: var(--font-size-xs); }
+	.design-hero-parameters { color: var(--secondary); }
+	.design-hero-intro { display: flex; flex-direction: column; align-items: center; gap: var(--space-2); padding-top: var(--space-4); text-align: center; }
+	.design-hero-kicker { margin: 0; color: var(--muted); font-size: var(--font-size-xs); letter-spacing: .18em; }
+	.design-hero-title { margin: 0; color: var(--text); font-size: var(--font-size-page); font-weight: var(--font-weight-title); line-height: var(--line-height-tight); }
+	.design-hero-description { max-width: 540px; margin: 0; color: var(--secondary); font-size: var(--font-size-sm); line-height: var(--line-height-relaxed); }
+	.design-hero-intro > .ui-segmented { margin-top: var(--space-1); border-radius: var(--radius-full); }
+	.design-hero-intro > .ui-segmented .ui-button { height: var(--control-regular); padding-inline: var(--space-5); border-radius: var(--radius-full); }
+	.design-hero-start { display: flex; align-items: center; gap: var(--space-3); width: 100%; padding: var(--space-4); border: 1px dashed var(--boundary); border-radius: var(--radius-2xl); background: color-mix(in srgb, var(--surface) 60%, transparent); color: var(--muted); text-align: left; transition: border-color var(--transition-fast), background-color var(--transition-fast); }
+	.design-hero-start:hover { border-color: var(--accent); background: var(--surface); }
+	.design-hero-start-icon { display: grid; place-items: center; flex: none; width: var(--space-8); height: var(--space-8); border-radius: var(--radius-full); background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
+	.design-hero-start-copy { display: flex; flex: 1; flex-direction: column; gap: var(--space-0-5); min-width: 0; }
+	.design-hero-start-copy strong { color: var(--text); font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); }
+	.design-hero-start-copy small { overflow: hidden; color: var(--muted); font-size: var(--font-size-xs); text-overflow: ellipsis; white-space: nowrap; }
+	.design-composer { padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-2xl); background: var(--surface); box-shadow: var(--shadow-elevation-2); }
+	.design-composer > .generation-controls { flex: none; width: 100%; height: auto; min-width: 0; min-height: 0; background: transparent; }
+	.design-composer .generation-controls-header { display: none; }
+	.design-composer .generation-form { gap: var(--space-3); }
+	.design-composer .generation-fields { display: grid; flex: none; grid-template-columns: 104px minmax(0, 1fr); grid-template-areas: "reference prompt"; gap: var(--space-3); padding: 0; overflow: visible; }
+	.design-composer .generation-field-prompt { grid-area: prompt; gap: var(--space-1); }
+	.design-composer .generation-field-prompt .generation-field-heading { min-height: var(--space-5); }
+	.design-composer .generation-field-prompt .generation-field-heading > label { color: var(--muted); font-size: var(--font-size-xs); font-weight: var(--font-weight-regular); }
+
+	.design-composer .generation-controls .generation-field-prompt .ui-textarea { min-height: 76px; max-height: 220px; padding: 0; border: 0; background: transparent; box-shadow: none; color: var(--text); font-size: var(--font-size-base); }
+	.design-composer:focus-within { border-color: color-mix(in srgb, var(--accent) 42%, var(--border)); box-shadow: var(--shadow-elevation-2), 0 0 0 1px color-mix(in srgb, var(--accent) 32%, transparent); }
+	.design-composer .generation-field-prompt .ui-textarea:focus-visible { outline: none; }
+	.design-composer .generation-field-prompt .generation-field-hint { display: none; }
+	.design-composer .generation-field-reference { grid-area: reference; gap: var(--space-1); }
+	.design-composer .generation-field-reference .generation-field-label { display: none; }
+	.design-composer .generation-field-reference .generation-field-hint { display: none; }
+	.design-composer .generation-field-reference .generation-reference { position: relative; flex: 1; width: 100%; min-height: 104px; overflow: hidden; }
+	.design-composer .generation-field-reference .generation-reference-image { flex: 1; height: auto; min-height: 0; }
+	.design-composer .generation-field-reference .generation-reference-image > img { object-fit: cover; }
+	.design-composer .generation-field-reference .generation-reference-upload { justify-content: center; gap: var(--space-1); height: 100%; min-height: 0; padding: var(--space-2); }
+	.design-composer .generation-field-reference .generation-reference-upload strong { display: none; }
+	.design-composer .generation-field-reference .generation-reference-upload > span { display: none; }
+	.design-composer .generation-field-reference .generation-reference-caption { position: absolute; top: var(--space-1); right: var(--space-1); padding: 0; }
+	.design-composer .generation-field-reference .generation-reference-caption > span { display: none; }
+	.design-composer .generation-field-reference .generation-reference > .ui-button { display: none; }
+	.design-composer .generation-field-reference .generation-reference-caption .ui-icon-button { color: var(--action-foreground); background: color-mix(in srgb, var(--overlay-image) 72%, transparent); }
+	.design-composer .generation-settings { grid-column: 1 / -1; flex-direction: row; flex-wrap: wrap; align-items: flex-end; gap: var(--space-2); padding-top: var(--space-3); border-top: 1px solid var(--border); }
+	.design-composer .generation-settings > .generation-field { flex: 0 1 auto; width: auto; gap: var(--space-1); }
+	.design-composer .generation-settings > .generation-field > label { position: absolute; width: 1px; height: 1px; margin: 0; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+	.design-composer .generation-settings legend { position: absolute; width: 1px; height: 1px; margin: 0; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+	.design-composer .generation-settings select { height: var(--control-compact); padding: 0 var(--space-6) 0 var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-full); background: var(--subtle); color: var(--secondary); font-size: var(--font-size-xs); }
+	.design-composer .generation-settings .generation-picker { flex: 0 1 auto; max-width: 220px; }
+	.design-composer .generation-settings .generation-picker-trigger { width: auto; gap: var(--space-1); height: var(--control-compact); padding: 0 var(--space-2-5); background: var(--subtle); font-size: var(--font-size-xs); }
+	.design-composer .generation-settings .generation-service-control .ui-icon-button { width: var(--control-compact); height: var(--control-compact); color: var(--muted); }
+	.design-composer .generation-settings .generation-field-hint { display: none; }
+	.design-composer .generation-ratios .ui-button { height: var(--control-compact); padding: 0 var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-full); background: var(--subtle); color: var(--secondary); }
+	.design-composer .generation-ratios .ui-button[aria-pressed=true] { border-color: color-mix(in srgb, var(--accent) 48%, var(--border)); background: color-mix(in srgb, var(--accent) 10%, var(--surface)); color: var(--accent); }
+	.design-composer .generation-submit { display: flex; flex-direction: row; align-items: center; gap: var(--space-3); padding: 0; border-top: 0; }
+	.design-composer .generation-submit > p { flex: 1; justify-content: flex-start; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+	.design-composer .generation-submit > .ui-button { flex: none; height: var(--control-primary); padding-inline: var(--space-5); border-radius: var(--radius-full); }
+	.design-composer .generation-shortcut { display: none; }
+	.design-composer .generation-submit > small { display: none; }
+	.design-workspace .generation-gallery-heading { margin-top: var(--space-2); }
+	@container generation-gallery (max-width: 860px) {
+		.design-hero-title { font-size: var(--font-size-2xl); }
+	}
+	@container generation-gallery (max-width: 560px) {
+		.design-quickstart { grid-template-columns: minmax(0, 1fr); }
+		.design-composer .generation-fields { grid-template-columns: minmax(0, 1fr); grid-template-areas: "prompt" "reference"; }
+		.design-composer .generation-field-reference .generation-reference { min-height: 88px; }
+		.design-composer .generation-submit > p { display: none; }
 	}
 }
