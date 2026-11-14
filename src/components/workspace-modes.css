@@ -23,6 +23,26 @@
 	.design-collections > button:hover { background: var(--hover); }
 	.design-collections > button[aria-current=page] { color: var(--accent); background: var(--selected); }
 	.design-collections > button:focus-visible { outline: 2px solid var(--accent); outline-offset: var(--space-px); }
+	.design-collections h2 { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); }
+	.design-collections h2 > small { min-width: 0; overflow: hidden; color: var(--muted); font-size: var(--font-size-xs); font-weight: var(--font-weight-regular); text-overflow: ellipsis; white-space: nowrap; }
+	/* Canvases read like the collection rows: one quiet list, no nested trees. */
+	.design-canvases { display: flex; flex-direction: column; gap: var(--space-1); }
+	.design-canvas-row { display: flex; align-items: center; gap: var(--space-2); width: 100%; min-height: var(--control-primary); padding: var(--space-2); border: 0; border-radius: var(--radius-md); background: transparent; color: var(--secondary); text-align: left; font-size: var(--font-size-sm); }
+	.design-canvas-row > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+	.design-canvas-row > small { color: var(--muted); font-variant-numeric: tabular-nums; }
+	.design-canvas-row:hover { background: var(--hover); }
+	.design-canvas-row[aria-current=page] { color: var(--accent); background: var(--selected); }
+	.design-canvas-row:focus-visible { outline: 2px solid var(--accent); outline-offset: var(--space-px); }
+	.design-canvas-new { align-self: flex-start; justify-content: flex-start; padding-inline: var(--space-2); color: var(--muted); }
+	.canvas-name-dialog .canvas-name-field { display: flex; flex-direction: column; gap: var(--space-2); margin: var(--space-3) 0; color: var(--secondary); font-size: var(--font-size-sm); }
+	.canvas-name-dialog .canvas-name-field .ui-input { width: 100%; }
+	.move-asset-dialog .move-asset-options { display: flex; flex-direction: column; gap: var(--space-1); max-height: 280px; margin: var(--space-3) 0; overflow: auto; }
+	.move-asset-option { display: flex; align-items: center; gap: var(--space-2); width: 100%; min-height: var(--control-primary); padding: var(--space-2) var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-md); background: transparent; color: var(--secondary); text-align: left; font-size: var(--font-size-sm); }
+	.move-asset-option > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+	.move-asset-option > svg:last-child { color: var(--accent); }
+	.move-asset-option:hover { background: var(--hover); }
+	.move-asset-option[aria-checked=true] { border-color: color-mix(in srgb, var(--accent) 48%, var(--border)); background: color-mix(in srgb, var(--accent) 8%, var(--surface)); color: var(--accent); }
+	.move-asset-option:focus-visible { outline: 2px solid var(--accent); outline-offset: var(--space-px); }
 	.design-sidebar-footer { display: flex; flex-direction: column; gap: var(--space-2); margin-top: auto; padding-top: var(--space-4); border-top: 1px solid var(--sidebar-border); }
 	.design-sidebar-footer > small { padding-inline: var(--space-2); color: var(--muted); font-size: var(--font-size-xs); line-height: var(--line-height-relaxed); }
 	.design-task-summary { display: flex; justify-content: space-between; gap: var(--space-1); padding-inline: var(--space-2); color: var(--muted); font-size: var(--font-size-xs); }

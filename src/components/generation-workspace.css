@@ -291,6 +291,10 @@
 	.design-composer .generation-shortcut { display: none; }
 	.design-composer .generation-submit > small { display: none; }
 	.design-workspace .generation-gallery-heading { margin-top: var(--space-2); }
+	/* Canvas page: the same gallery grammar, scoped to one group of mixed works. */
+	.design-canvas-note { margin: var(--space-3) 0 0; color: var(--muted); font-size: var(--font-size-xs); }
+	.design-canvas .generation-gallery-grid { margin-top: var(--space-5); }
+	.design-canvas .generation-empty { min-height: 320px; }
 	@container generation-gallery (max-width: 860px) {
 		.design-hero-title { font-size: var(--font-size-2xl); }
 	}

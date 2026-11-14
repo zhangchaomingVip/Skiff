@@ -31,6 +31,7 @@ export interface ImageJob {
 	reference?: { name: string; mime: string; width: number; height: number };
 	removed?: boolean;
 	projectRoot?: string;
+	canvasId?: string;
 }
 export const defaultImageModel: ImageModel = { id: "gpt-image-2.5-flare", sizes: ["1024x1024", "1536x864", "864x1536", "1152x864", "1536x1024", "1024x1536"] };
 export const imageJobPending = (job: ImageJob) => job.status === "generating" || job.status === "saving";
@@ -48,9 +49,10 @@ export const imageGenerationNative = {
 	remove: (id: string) => invoke<ImageGenerationConfig>("delete_image_generation_service", { id }),
 	setConcurrency: (limit: ImageConcurrencyLimit) => invoke<ImageGenerationConfig>("set_image_generation_concurrency", { limit }),
 	jobs: () => invoke<ImageJob[]>("list_image_generation_jobs"),
-	start: (input: { id: string; serviceId: string; modelId: string; prompt: string; size: string; quality: string; reference?: { name: string; dataUrl: string }; projectRoot?: string }) => invoke<ImageJob>("start_image_generation", { input }),
+	start: (input: { id: string; serviceId: string; modelId: string; prompt: string; size: string; quality: string; reference?: { name: string; dataUrl: string }; projectRoot?: string; canvasId?: string }) => invoke<ImageJob>("start_image_generation", { input }),
 	cancel: (id: string) => invoke<void>("cancel_image_generation", { id }),
 	setRemoved: (id: string, removed: boolean) => invoke<ImageJob>("set_image_generation_asset_removed", { id, removed }),
+	setCanvas: (id: string, canvasId?: string) => invoke<ImageJob>("set_image_generation_canvas", { id, canvasId }),
 	export: (id: string) => invoke<boolean>("export_image_generation_asset", { id }),
 	reveal: (id: string) => invoke<void>("reveal_image_generation_asset", { id }),
 };

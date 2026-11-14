@@ -1,9 +1,11 @@
 import { memo, useEffect, useRef, useState, type ReactNode } from "react";
 import type { Project } from "../chat/workspace";
-import type { GenerationKind, GenerationStudio } from "../workbench/useGenerationStudio";
+import type { GenerationAsset, GenerationKind, GenerationStudio } from "../workbench/useGenerationStudio";
 import { designCollections, type DesignCollection } from "../workbench/designWorkspace";
+import { DesignAssetLibrary, DesignCanvasView } from "./DesignCanvasView";
 import { DesignHero } from "./DesignHero";
 import { DesignSidebar } from "./DesignSidebar";
+import { assetCanvasId } from "../workbench/designCanvases";
 import { GenerationControls, GenerationGallery } from "./GenerationWorkspace";
 import { SidebarPresentation } from "./SidebarPresentation";
 import { Button, Dialog } from "./ui";
@@ -44,9 +46,9 @@ export const DesignWorkspace = memo(function DesignWorkspace({ active, kind, stu
 	// The composer opens at the top of the works, so bring it back into view when
 	// the user reveals it from deep inside the gallery.
 	useEffect(() => { if (parametersOpen && !compact) host.current?.querySelector(".design-gallery-route:not([hidden]) .generation-gallery-scroll")?.scrollTo({ top: 0 }); }, [parametersOpen, compact]);
-	const changeCollection = (collection: DesignCollection) => { setCollections((current) => ({ ...current, [kind]: collection })); if (window.innerWidth <= 760) onCloseSidebar(); };
+	const changeCollection = (collection: DesignCollection) => { studio.openGallery(); setCollections((current) => ({ ...current, [kind]: collection })); if (window.innerWidth <= 760) onCloseSidebar(); };
 	const create = (next: GenerationKind, reference = false) => {
-		onKind(next); setCollections((current) => ({ ...current, [next]: "all" }));
+		studio.openGallery(); onKind(next); setCollections((current) => ({ ...current, [next]: "all" }));
 		if (next === "image" && !reference) studio.removeImageReference();
 		setParametersOpen(true); if (compact) { onCloseSidebar(); setDrawer(true); }
 		requestAnimationFrame(() => {
@@ -64,7 +66,7 @@ export const DesignWorkspace = memo(function DesignWorkspace({ active, kind, stu
 	};
 	// Switching the kind keeps an existing reference; the quick starts clear it on
 	// purpose when they begin a fresh text-to-image draft.
-	const switchKind = (next: GenerationKind) => { onKind(next); setParametersOpen(true); if (compact) setDrawer(true); };
+	const switchKind = (next: GenerationKind) => { studio.openGallery(); onKind(next); setParametersOpen(true); if (compact) setDrawer(true); };
 	const parameters = <GenerationControls key={kind} kind={kind} studio={studio} onConfigure={() => { setRestoreDrawer(drawer); setDrawer(false); onConfigure(kind); }} />;
 	const toggleParameters = () => { if (compact) setDrawer((value) => !value); else setParametersOpen((value) => !value); };
 	const heroFor = (item: GenerationKind) => <DesignHero
@@ -74,13 +76,20 @@ export const DesignWorkspace = memo(function DesignWorkspace({ active, kind, stu
 		onKind={switchKind}
 		onOpenParameters={toggleParameters}
 	/>;
+	const activeCanvas = studio.canvases.find((canvas) => canvas.id === studio.canvasId);
+	const canvasAssets = studio.assets.filter((asset) => assetCanvasId(asset, studio.canvases) === studio.canvasId);
+	const imageToImage = (asset: GenerationAsset) => { studio.openGallery(); studio.useImageForImage(asset); onKind("image"); setParametersOpen(true); if (compact) setDrawer(true); };
+	const imageToVideo = (asset: GenerationAsset) => { studio.openGallery(); studio.useImageForVideo(asset); onKind("video"); setParametersOpen(true); if (compact) setDrawer(true); };
+	const boardOpen = studio.canvasView || studio.assetView;
 	return <div className="workbench-shell design-workspace" hidden={!active} aria-label="Design 工作区">
-		{sidebarOpen && (active || window.innerWidth > 760) && <SidebarPresentation active={active} label="Design 导航" activityBar={activityBar} onClose={onCloseSidebar}><DesignSidebar studio={studio} kind={kind} collection={collections[kind]} onCollection={changeCollection} onCreate={create} /></SidebarPresentation>}
+		{sidebarOpen && (active || window.innerWidth > 760) && <SidebarPresentation active={active} label="Design 导航" activityBar={activityBar} onClose={onCloseSidebar}><DesignSidebar studio={studio} kind={kind} collection={collections[kind]} onCollection={changeCollection} onCreate={create} onOpenCanvas={(id) => { studio.openCanvas(id); if (window.innerWidth <= 760) onCloseSidebar(); }} /></SidebarPresentation>}
 		{sidebarResize}
 		<main className="design-main" ref={host}>
 			<div className="design-results">
 				{(saved || saveError) && <div className="design-asset-notice" role={saveError ? "alert" : "status"}>{saveError ?? `已保存到 ${saved?.project.name}：${saved?.path}`}{saved && <Button size="compact" variant="ghost" onClick={() => onOpenCodeFile(saved.project, saved.path)}>在 Code 中查看</Button>}</div>}
-				{(["image", "video"] as const).filter((item) => visited.has(item) || item === kind).map((item) => <div key={item} className="design-gallery-route" hidden={item !== kind}><GenerationGallery kind={item} studio={studio} collection={collections[item]} hero={heroFor(item)} onCollectionChange={(collection) => setCollections((current) => ({ ...current, [item]: collection }))} active={active && item === kind} onParameters={toggleParameters} onImageToImage={(asset) => { studio.useImageForImage(asset); onKind("image"); setParametersOpen(true); if (compact) setDrawer(true); }} onImageToVideo={(asset) => { studio.useImageForVideo(asset); onKind("video"); setParametersOpen(true); if (compact) setDrawer(true); }} onSaveToProject={(asset) => void saveToProject(asset)} saving={saving} /></div>)}
+				{studio.canvasView && <DesignCanvasView studio={studio} canvas={activeCanvas} assets={canvasAssets} onCreate={() => create(kind)} onImageToImage={imageToImage} onImageToVideo={imageToVideo} />}
+				{studio.assetView && <DesignAssetLibrary studio={studio} assets={studio.assets.filter((asset) => !(asset.job?.removed ?? asset.removed))} onCreate={() => create(kind)} onImageToImage={imageToImage} onImageToVideo={imageToVideo} />}
+				{(["image", "video"] as const).filter((item) => visited.has(item) || item === kind).map((item) => <div key={item} className="design-gallery-route" hidden={boardOpen || item !== kind}><GenerationGallery kind={item} studio={studio} collection={collections[item]} hero={heroFor(item)} onCollectionChange={(collection) => setCollections((current) => ({ ...current, [item]: collection }))} active={active && item === kind && !boardOpen} onParameters={toggleParameters} onImageToImage={imageToImage} onImageToVideo={imageToVideo} onSaveToProject={(asset) => void saveToProject(asset)} saving={saving} /></div>)}
 			</div>
 		</main>
 		{active && drawer && compact && <Dialog variant="drawer" aria-label="创作参数" returnFocusSelector=".design-gallery-route:not([hidden]) .design-hero-parameters" onClose={() => setDrawer(false)}>{parameters}</Dialog>}

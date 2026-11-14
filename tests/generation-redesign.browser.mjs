@@ -37,6 +37,7 @@ async function seed(theme, target = page) {
 			{ prompt: "今天也有温柔的小事发生", size: "1024x1024", path: makeImage(480, 480, "#cdb8a7") },
 		];
 		localStorage.setItem("skiff.test.images.jobs", JSON.stringify(examples.map((example, index) => ({ ...example, id: crypto.randomUUID(), serviceId, serviceName: "灵感工作室", modelId: "image-studio", actualSize: example.size, quality: "auto", createdAt: Date.now() - index * 1000, status: "completed" }))));
+		localStorage.setItem("skiff.test.design-assets", "[]");
 		localStorage.removeItem("skiff.workspace.navigation.v1"); localStorage.setItem("skiff.workbench.v1", JSON.stringify({ version: 1, tool: "image-generation" }));
 	});
 	await target.goto(`${origin}/tests/preview.html?fixture=sidebar&persist=1&theme=${theme}`);
@@ -162,6 +163,8 @@ try {
 		await page.getByText("已停止等待", { exact: true }).waitFor();
 		await page.getByRole("group", { name: "画廊视图", exact: true }).getByRole("button", { name: /^作品 / }).click();
 		await page.locator('input[aria-label="导入图片作品"]').setInputFiles(["my_sketch.png", "ceea955e-cda1-4249-aeda-a87197123456.png", "a".repeat(64) + ".png"].map((name) => ({ name, mimeType: "image/png", buffer: testImage() })));
+		// Imports now round-trip through the shell, so wait for the persisted cards.
+		await page.getByRole("button", { name: "预览图片：my_sketch.png", exact: true }).waitFor();
 		const importedTitles = await page.locator(".generation-card-caption > strong").allTextContents();
 		assert.ok(importedTitles.includes("my_sketch.png"));
 		assert.ok(importedTitles.includes("本地导入作品 02")); assert.ok(importedTitles.includes("本地导入作品 03"));

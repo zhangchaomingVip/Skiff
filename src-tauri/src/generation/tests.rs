@@ -56,7 +56,7 @@ fn input() -> ServiceInput {
 }
 
 fn job() -> ImageJob {
-	ImageJob { id: uuid::Uuid::new_v4().to_string(), status: "generating".into(), prompt: "A paper boat".into(), service_id: "test".into(), service_name: "Test Images".into(), model_id: "test-image".into(), size: "1024x1024".into(), quality: "auto".into(), created_at: 42, message: None, path: None, usage: None, revised_prompt: None, actual_size: None, reference: None, removed: false, project_root: None }
+	ImageJob { id: uuid::Uuid::new_v4().to_string(), status: "generating".into(), prompt: "A paper boat".into(), service_id: "test".into(), service_name: "Test Images".into(), model_id: "test-image".into(), size: "1024x1024".into(), quality: "auto".into(), created_at: 42, message: None, path: None, usage: None, revised_prompt: None, actual_size: None, reference: None, removed: false, project_root: None, canvas_id: None }
 }
 
 #[test]

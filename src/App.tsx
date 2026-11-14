@@ -390,9 +390,11 @@ export default function App() {
 	const browserActions = useBrowserActions(activeChat?.id, browserPanel, actions, session.isCurrent, send);
 	const selectTool = useCallback((tool: WorkbenchTool) => {
 		if (tool === "files") tool = lastFileTab.current;
+		// Picking a generation tool leaves the canvas page and returns to its gallery.
+		if (tool === "image-generation" || tool === "video-generation") generationStudio.openGallery();
 		if (activeTool === tool && sidebarOpen) { setSidebarOpen(false); return; }
 		setActiveTool(tool); setSidebarOpen(true);
-	}, [activeTool, sidebarOpen]);
+	}, [activeTool, sidebarOpen, generationStudio.openGallery]);
 	const openProjectChanges = useCallback(() => {
 		setManualBrowseProjectId(undefined);
 		setActiveTool(projectHasGit ? "git" : "files");

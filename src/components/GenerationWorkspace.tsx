@@ -3,7 +3,10 @@ import { VideoControls, VideoGallery } from "./VideoGenerationWorkspace";
 import { createPortal } from "react-dom";
 import type { GenerationAsset, GenerationKind, GenerationStudio } from "../workbench/useGenerationStudio";
 import { Icon } from "./Icon";
+import { CanvasPicker } from "./CanvasPicker";
 import { GenerationPicker } from "./GenerationPicker";
+import { MoveAssetDialog } from "./MoveAssetDialog";
+import { assetCanvasId } from "../workbench/designCanvases";
 import { Button, Chip, Dialog, IconButton, Input, Popover, SegmentedControl, TextArea, Tooltip } from "./ui";
 import { isMacPlatform } from "./settingsNavigation";
 import "./generation-workspace.css";
@@ -85,7 +88,7 @@ function artworkTitle(asset: GenerationAsset, importedIndex = 1) {
 	return letters.length > 20 ? `${letters.slice(0, 20).join("")}…` : prompt;
 }
 
-function MediaView({ asset, playing = false }: { asset: Pick<GenerationAsset, "kind" | "url" | "name">; playing?: boolean }) {
+export function MediaView({ asset, playing = false }: { asset: Pick<GenerationAsset, "kind" | "url" | "name">; playing?: boolean }) {
 	const [failed, setFailed] = useState(false);
 	const videoRef = useRef<HTMLVideoElement>(null);
 	useEffect(() => {
@@ -114,7 +117,7 @@ function ImageGenerationControls({ studio, onConfigure }: { studio: GenerationSt
 	const canGenerate = configured && !images.loading && !images.atCapacity && !images.submitting && !!draft.prompt.trim() && !!model?.sizes.includes(draft.size);
 	return <aside className="generation-controls" data-kind="image" aria-label="生图参数">
 		<header className="generation-controls-header"><span className="generation-mode-icon"><Icon name="imageSpark" size={20} /></span><div><h1>生图</h1><p>让想象，慢慢成形</p></div></header>
-		<form className="generation-form" onSubmit={(event) => { event.preventDefault(); if (canGenerate) void images.generate({ serviceId: draft.serviceId, modelId: draft.modelId, prompt: draft.prompt, size: draft.size, quality: draft.quality, projectRoot: studio.project?.path }, studio.imageReference); }}>
+		<form className="generation-form" onSubmit={(event) => { event.preventDefault(); if (canGenerate) void images.generate({ serviceId: draft.serviceId, modelId: draft.modelId, prompt: draft.prompt, size: draft.size, quality: draft.quality, projectRoot: studio.project?.path, canvasId: studio.canvasId || undefined }, studio.imageReference); }}>
 			<div className="generation-fields">
 				<div className="generation-field generation-field-prompt">
 					<div className="generation-field-heading"><label htmlFor={`${id}-prompt`}>提示词 <span>Prompt</span></label>{draft.prompt && <Tooltip text="清空提示词"><IconButton size="compact" variant="ghost" aria-label="清空提示词" onClick={() => { update({ prompt: "" }); promptInput.current?.focus(); }}><Icon name="close" size={14} /></IconButton></Tooltip>}</div>
@@ -135,6 +138,7 @@ function ImageGenerationControls({ studio, onConfigure }: { studio: GenerationSt
 					{studio.imageReferenceError && <div className="generation-error" role="alert"><span>{studio.imageReferenceError}</span><IconButton size="compact" variant="ghost" aria-label="关闭参考图提示" onClick={studio.clearImageReferenceError}><Icon name="close" /></IconButton></div>}
 				</div>
 				<div className="generation-settings">
+					<CanvasPicker studio={studio} id={`${id}-canvas`} />
 					<div className="generation-field generation-field-service"><label htmlFor={`${id}-provider`}>生成服务</label><div className="generation-service-control"><GenerationPicker id={`${id}-provider`} label="生成服务" icon="layers" value={draft.serviceId} disabled={!images.config?.services.length} placeholder={images.config?.services.length ? "选择一个服务" : "先配置一个生成服务"} options={(images.config?.services ?? []).map((item) => ({ value: item.id, label: item.name, hint: `${item.models.length} 个模型${item.configured ? "" : " · 未配置密钥"}` }))} onChange={(serviceId) => { const next = images.config?.services.find((item) => item.id === serviceId); const first = next?.models.find((item) => item.id === next.defaultModel) ?? next?.models[0]; update({ serviceId, modelId: first?.id ?? "", size: first?.sizes[0] ?? "" }); }} /><Tooltip text={configured ? "管理生成服务" : "配置生成服务"}><IconButton variant="ghost" aria-label={configured ? "管理生成服务" : "配置生成服务"} onClick={onConfigure}><Icon name="settings" size={16} /></IconButton></Tooltip></div></div>
 					<div className="generation-field generation-field-model"><label htmlFor={`${id}-model`}>模型</label><GenerationPicker id={`${id}-model`} label="模型" icon="spark" value={configured ? draft.modelId : ""} disabled={!configured} placeholder={configured ? "选择模型" : "连接生成服务后选择模型"} options={configured ? (service?.models ?? []).map((item) => ({ value: item.id, label: item.id, hint: `${item.sizes.length} 种尺寸` })) : []} onChange={(modelId) => { const next = service?.models.find((item) => item.id === modelId); update({ modelId, size: next?.sizes[0] ?? "" }); }} /></div>
 					{configured && <div className="generation-field generation-field-quality"><label htmlFor={`${id}-quality`}>质量</label><GenerationPicker id={`${id}-quality`} label="质量" icon="sliders" value={draft.quality} placeholder="自动" options={qualityOptions} onChange={(quality) => update({ quality: quality as typeof draft.quality })} /><p className="generation-field-hint">更大的尺寸和更高的质量可能增加耗时与费用。</p></div>}
@@ -194,6 +198,7 @@ function ImageActionsMenu({ studio, asset, onImageToVideo, onImageToImage, onRem
 	const trigger = useRef<HTMLButtonElement>(null);
 	const id = useId();
 	const [open, setOpen] = useState(false);
+	const [moving, setMoving] = useState(false);
 	const { copyStatus, copyPrompt } = usePromptCopy(asset.prompt ?? "");
 	const focusLast = useRef(false);
 	useEffect(() => {
@@ -217,6 +222,7 @@ function ImageActionsMenu({ studio, asset, onImageToVideo, onImageToImage, onRem
 			{asset.job && <Button role="menuitem" tabIndex={-1} variant="ghost" onClick={() => action(() => reuseJob(studio, asset.job!))}><Icon name="edit" size={16} />使用提示词</Button>}
 			{asset.prompt && <Button role="menuitem" tabIndex={-1} variant="ghost" onClick={() => void copyPrompt()}><Icon name={copyStatus === "已复制提示词" ? "check" : "copy"} size={16} />复制提示词</Button>}
 			<Button role="menuitem" tabIndex={-1} variant="ghost" disabled={!studio.project || !(asset.path || asset.job?.path) || saving} onClick={() => action(onSaveToProject)}><Icon name="folderPlus" size={16} />保存至当前项目</Button>
+			<Button role="menuitem" tabIndex={-1} variant="ghost" onClick={() => action(() => setMoving(true))}><Icon name="layers" size={16} />移到画布…</Button>
 			{copyStatus && <span className="generation-copy-status" role="status">{copyStatus}</span>}
 			{asset.job && <Button role="menuitem" tabIndex={-1} variant="ghost" onClick={() => action(() => void studio.images.assetAction("export", asset.id))}><Icon name="down" size={16} />另存为</Button>}
 			{asset.job && <Button role="menuitem" tabIndex={-1} variant="ghost" onClick={() => action(() => void studio.images.assetAction("reveal", asset.id))}><Icon name="folderOpen" size={16} />打开所在文件夹</Button>}
@@ -224,6 +230,7 @@ function ImageActionsMenu({ studio, asset, onImageToVideo, onImageToImage, onRem
 			<Button role="menuitem" tabIndex={-1} variant="ghost" onClick={() => action(onImageToVideo)}><Icon name="video" size={16} />以此图生成视频</Button>
 			<Button role="menuitem" tabIndex={-1} variant="ghost" disabled={!!studio.images.mutatingId} onClick={() => action(onRemove)}><Icon name="archive" size={16} />从画廊移除</Button>
 		</Popover>, trigger.current?.closest("dialog") ?? document.body)}
+		{moving && <MoveAssetDialog asset={asset} canvases={studio.canvases} onMove={(target) => void studio.moveAsset(asset, target)} onClose={() => setMoving(false)} />}
 	</>;
 }
 
@@ -261,15 +268,17 @@ function ImageGenerationGallery({ kind, studio, onParameters, onImageToVideo, on
 	const setView = (next: "gallery" | "failures" | "removed") => onCollectionChange(next === "gallery" ? "all" : next);
 	const [notice, setNotice] = useState<{ message: string; target: "gallery" | "failures" | "removed" }>();
 	useEffect(() => { try { localStorage.setItem(galleryColumnsKey, columns); } catch { /* Density still works when storage is unavailable. */ } }, [columns]);
-	const allAssets = studio.assets.filter((asset) => asset.kind === kind);
+	const inCanvas = (asset: { canvasId?: string }) => assetCanvasId(asset, studio.canvases) === studio.canvasId;
+	const allAssets = studio.assets.filter((asset) => asset.kind === kind && inCanvas(asset));
 	const isRemoved = (asset: GenerationAsset) => !!(asset.job?.removed ?? asset.removed);
 	const visible = allAssets.filter((asset) => !isRemoved(asset));
 	const removed = allAssets.filter(isRemoved);
 	const assets = assetsInCollection(view === "removed" ? removed : visible, collection);
 	const importedIndices = new Map(allAssets.filter((asset) => !asset.job).map((asset, index) => [asset.id, index + 1]));
 	const titleOf = (asset: GenerationAsset) => artworkTitle(asset, importedIndices.get(asset.id));
-	const pending = studio.images.jobs.filter(imageJobPending);
-	const settled = studio.images.jobs.filter((job) => job.status !== "completed" && !imageJobPending(job));
+	const canvasJobs = studio.images.jobs.filter(inCanvas);
+	const pending = canvasJobs.filter(imageJobPending);
+	const settled = canvasJobs.filter((job) => job.status !== "completed" && !imageJobPending(job));
 	const hasPending = pending.length > 0 || studio.images.submitting;
 	const previousJobs = useRef(studio.images.jobs);
 	useEffect(() => {
@@ -294,7 +303,7 @@ function ImageGenerationGallery({ kind, studio, onParameters, onImageToVideo, on
 			{hero}
 			<div className="generation-gallery-heading"><div><span className="generation-eyebrow">IMAGE STUDIO</span><h2>{view === "failures" ? "失败记录" : view === "removed" ? "已移除的作品" : collection === "tasks" ? "进行中的任务" : "灵感画廊"}<span>{(view === "failures" ? settled.length : assets.length).toString().padStart(2, "0")}</span></h2><p>{view === "failures" ? "查看失败原因，保留提示词继续创作。" : view === "removed" ? "原文件保留，可随时恢复到画廊。" : "把脑海里的风景，留在这里。"}</p></div><div className="generation-gallery-heading-actions">{view !== "failures" && <SegmentedControl label="画廊列数" value={columns} onChange={setColumns} options={[{ value: "1", label: "1 列" }, { value: "2", label: "2 列" }, { value: "3", label: "3 列" }, { value: "4", label: "4 列" }]} />}{view === "gallery" && <Button className="generation-import" variant="ghost" size="compact" onClick={importMedia}><Icon name="plus" size={14} />导入作品</Button>}</div></div>
 			<div ref={views} className="generation-gallery-views"><SegmentedControl label="画廊视图" value={view} onChange={changeView} options={[{ value: "gallery", label: `作品 ${visible.length}` }, { value: "failures", label: `失败记录 ${settled.length}` }, { value: "removed", label: `已移除 ${removed.length}` }]} /></div>
-			<Input ref={fileInput} className="generation-file-input" type="file" multiple accept={imageAccept} aria-label="导入图片作品" onChange={(event) => { studio.importAssets("image", Array.from(event.target.files ?? [])); event.target.value = ""; }} />
+			<Input ref={fileInput} className="generation-file-input" type="file" multiple accept={imageAccept} aria-label="导入图片作品" onChange={(event) => { void studio.importAssets("image", Array.from(event.target.files ?? [])); event.target.value = ""; }} />
 			{studio.errors.image && <p className="generation-gallery-error" role="alert">{studio.errors.image}</p>}
 			{studio.images.error && <div className="generation-gallery-error" role="alert">{studio.images.error}<Button size="compact" onClick={() => void studio.images.refresh()}>重新读取状态</Button></div>}
 			{notice && <div className="generation-gallery-notice" role="status"><span>{notice.message}</span>{view !== notice.target && <Button size="compact" variant="ghost" onClick={() => changeView(notice.target)}>{notice.target === "failures" ? "查看失败记录" : notice.target === "removed" ? "查看已移除" : "查看作品"}</Button>}<IconButton size="compact" variant="ghost" aria-label="关闭画廊提示" onClick={() => setNotice(undefined)}><Icon name="close" size={14} /></IconButton></div>}
@@ -310,7 +319,7 @@ function ImageGenerationGallery({ kind, studio, onParameters, onImageToVideo, on
 						{!asset.job && view === "gallery" && <div className="generation-card-actions"><Button size="compact" onClick={() => onImageToVideo(asset)}><Icon name="video" />以此图生成视频</Button></div>}
 					</article>)}
 				</div>}
-				{assets.length > 0 && <p className="generation-session-note">{view === "removed" ? "生成作品的移除状态已保存 · 本机原文件保留" : "生成作品已保存在本机"} · 本地导入内容仅在当前会话中保留</p>}
+				{assets.length > 0 && <p className="generation-session-note">{view === "removed" ? "生成作品的移除状态已保存 · 本机原文件保留" : "生成与导入的作品都已保存在本机"} · 可在资产库中跨画布复用</p>}
 				{!assets.length && view === "removed" && <div className="generation-empty"><Icon name="archive" size={28} /><h2>没有已移除的作品</h2><p>从画廊移除的图片会收在这里，可随时恢复。</p></div>}
 				{!assets.length && view === "gallery" && !hasPending && (collection === "all" ? <GenerationEmpty kind="image" onImport={importMedia} /> : <div className="generation-empty"><Icon name="check" size={28} /><h2>没有进行中的任务</h2><p>提交生成后会在这里显示等待中的作品。</p></div>)}
 			</>}

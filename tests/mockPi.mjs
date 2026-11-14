@@ -5,7 +5,7 @@ import { installMockGeneration } from "./mockGeneration.mjs";
 import { installMockVideoGeneration } from "./mockVideoGeneration.mjs";
 import { installMockDesignAssets } from "./mockDesignAssets.mjs";
 export function installMockPi(target, storage, fixture, sessionOverrides) {
-	const designAssets = installMockDesignAssets();
+	const designAssets = installMockDesignAssets(storage);
 	const browser = installMockBrowser(target);
 	const generation = installMockGeneration(target, storage);
 	const videos = installMockVideoGeneration(target, storage);

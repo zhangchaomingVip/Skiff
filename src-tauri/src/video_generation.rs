@@ -116,6 +116,8 @@ pub struct VideoJob {
 	message: Option<String>, path: Option<String>, usage: Option<Value>, has_reference: bool,
 	actual_width: Option<u32>, actual_height: Option<u32>, actual_duration: Option<f64>, actual_fps: Option<f64>,
 	#[serde(default)] project_root: Option<String>,
+	/// Design canvas that owns the video; older jobs simply have no canvas.
+	#[serde(default)] canvas_id: Option<String>,
 }
 impl VideoJob {
 	fn active(&self) -> bool { matches!(self.status.as_str(), "submitting" | "queued" | "in_progress" | "downloading") }
@@ -165,7 +167,7 @@ pub fn list_video_generation_jobs(app: AppHandle, state: State<'_, VideoState>) 
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GenerateInput { id: String, service_id: String, model_id: String, prompt: String, duration: u32, ratio: String, reference: Option<String>, project_root: Option<String> }
+pub struct GenerateInput { id: String, service_id: String, model_id: String, prompt: String, duration: u32, ratio: String, reference: Option<String>, project_root: Option<String>, canvas_id: Option<String> }
 fn reference_bytes(raw: &str) -> Result<Vec<u8>, String> {
 	let encoded = raw.strip_prefix("data:image/jpeg;base64,").ok_or("参考图须为预处理后的 JPEG")?;
 	if encoded.len() > MAX_REFERENCE * 4 / 3 + 4 { return Err("压缩后的参考图超过 2 MB，请使用较小图片".into()); }
@@ -191,7 +193,7 @@ fn prepare(dir: &Path, input: GenerateInput) -> Result<(VideoJob, String, bool),
 	if key.is_empty() { return Err("请重新配置视频 Key".into()); }
 	if input.reference.is_some() && !model.reference_enabled { return Err("此模型尚未启用实验性单图参考，请先移除参考图或在视频设置中启用".into()); }
 	let reference = input.reference.as_deref().map(reference_bytes).transpose()?;
-	let job = VideoJob { id: input.id, status: "submitting".into(), prompt, service_id: service.id.clone(), service_name: service.name.clone(), base_url: service.base_url.clone(), model_id: input.model_id, duration: input.duration, ratio: input.ratio, resolution: "1080p".into(), created_at: SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() as u64, completed_at: None, remote_id: None, remote_status: None, progress: None, message: None, path: None, usage: None, has_reference: reference.is_some(), actual_width: None, actual_height: None, actual_duration: None, actual_fps: None, project_root: input.project_root };
+	let job = VideoJob { id: input.id, status: "submitting".into(), prompt, service_id: service.id.clone(), service_name: service.name.clone(), base_url: service.base_url.clone(), model_id: input.model_id, duration: input.duration, ratio: input.ratio, resolution: "1080p".into(), created_at: SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() as u64, completed_at: None, remote_id: None, remote_status: None, progress: None, message: None, path: None, usage: None, has_reference: reference.is_some(), actual_width: None, actual_height: None, actual_duration: None, actual_fps: None, project_root: input.project_root, canvas_id: input.canvas_id };
 	if let Some(bytes) = reference {
 		std::fs::create_dir_all(dir.join("video-inputs")).map_err(|_| "无法创建参考图目录")?;
 		std::fs::write(dir.join("video-inputs").join(format!("{}.jpg", job.id)), bytes).map_err(|_| "无法保存参考图快照")?;
@@ -377,6 +379,16 @@ pub fn reveal_video_generation_asset(app: AppHandle, id: String) -> Result<(), S
 	#[cfg(windows)] { use std::os::windows::process::CommandExt; std::process::Command::new("explorer.exe").arg(format!("/select,{}", path.display())).creation_flags(0x08000000).spawn().map_err(|_| "无法打开视频所在目录")?; }
 	#[cfg(not(windows))] { open::that(path.parent().unwrap()).map_err(|_| "无法打开视频所在目录")?; }
 	Ok(())
+}
+/// Moves a finished video to another design canvas; an empty id means ungrouped.
+#[tauri::command]
+pub fn set_video_generation_canvas(app: AppHandle, state: State<'_, VideoState>, id: String, canvas_id: Option<String>) -> Result<VideoJob, String> {
+	let _guard = state.active.lock().map_err(|_| "视频状态不可用")?;
+	let dir = super::generation::data_dir(&app)?;
+	let mut job = read_job(&dir, &id)?;
+	job.canvas_id = canvas_id.filter(|value| !value.trim().is_empty());
+	job.save(&dir)?;
+	Ok(job)
 }
 #[tauri::command]
 pub async fn export_video_generation_asset(app: AppHandle, id: String) -> Result<bool, String> {

@@ -60,6 +60,11 @@ export function installMockGeneration(target, storage) {
 				return structuredClone(job);
 			}
 			if (command === "cancel_image_generation") { const job = jobs.find((item) => item.id === args.id); if (job?.status === "generating") { job.status = "cancelled"; job.message = "已停止等待；服务端可能仍在生成并计费。"; persist(); } return; }
+			if (command === "set_image_generation_canvas") {
+				const job = jobs.find((item) => item.id === args.id);
+				if (!job) throw new Error("作品不存在");
+				job.canvasId = args.canvasId || undefined; persist(); return structuredClone(job);
+			}
 			if (command === "set_image_generation_asset_removed") {
 				const job = jobs.find((item) => item.id === args.id);
 				if (!job || job.status !== "completed") throw new Error("只能移除或恢复已完成的图片作品");

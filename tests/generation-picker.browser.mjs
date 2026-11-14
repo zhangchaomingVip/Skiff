@@ -66,7 +66,7 @@ try {
 		await page.getByRole("group", { name: "创作类型", exact: true }).getByRole("button", { name: "视频", exact: true }).click();
 		await page.locator(".design-gallery-route:not([hidden]) .design-composer").waitFor();
 		assert.equal(await page.locator(".design-gallery-route:not([hidden])").getByRole("button", { name: "模型", exact: true }).isDisabled(), true);
-		assert.equal(await page.locator(".design-gallery-route:not([hidden]) .generation-picker-trigger").count(), 2);
+		assert.equal(await page.locator(".design-gallery-route:not([hidden]) .generation-picker-trigger").count(), 3, "Canvas, service and model share the chip");
 
 		assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
 		assert.equal(await page.evaluate(() => window.skiffPreview.generation.calls.length), 0, "Choosing settings never generates");

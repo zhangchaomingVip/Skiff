@@ -53,6 +53,11 @@ export function installMockVideoGeneration(target, storage) {
 				if (args.action === "abandon") job.status = "abandoned";
 				persist(); return;
 			}
+			if (command === "set_video_generation_canvas") {
+				const job = jobs.find((j) => j.id === args.id);
+				if (!job) throw new Error("视频不存在");
+				job.canvasId = args.canvasId || undefined; persist(); return structuredClone(job);
+			}
 			if (["export_video_generation_asset", "reveal_video_generation_asset"].includes(command)) { calls.push({ command, id: args.id }); return true; }
 			throw new Error(`Unknown video command: ${command}`);
 		},
