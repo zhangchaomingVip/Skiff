@@ -105,7 +105,7 @@ export default function App() {
 	useEffect(() => { try { localStorage.setItem("skiff.sidebar.open", String(codeSidebarOpen)); localStorage.setItem("skiff.design.sidebar.open", String(designSidebarOpen)); } catch { /* Layout remains usable without storage. */ } }, [codeSidebarOpen, designSidebarOpen]);
 	useEffect(() => { try { localStorage.setItem("skiff.workbench.v1", JSON.stringify({ version: 1, tool: activeTool })); } catch { /* Tool selection remains available for this run. */ } }, [activeTool]);
 	const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth);
-	const [codeSidebarWidth, setCodeSidebarWidth] = useState(() => readPreferredWidth("skiff.sidebar.width", 232, 200, 420));
+	const [codeSidebarWidth, setCodeSidebarWidth] = useState(() => readPreferredWidth("skiff.sidebar.width", 272, 200, 420));
 	const [designSidebarWidth, setDesignSidebarWidth] = useState(() => readPreferredWidth("skiff.design.sidebar.width", 216, 200, 320));
 	const sidebarWidth = workspaceMode === "code" ? codeSidebarWidth : designSidebarWidth;
 	const [voyageWidth, setVoyageWidth] = useState(() => readPreferredWidth("skiff.voyage.width", 260, 240, 480));

@@ -34,7 +34,7 @@ try {
 	await page.getByRole("button", { name: "航行台", exact: true }).click();
 	await waitUntil(() => document.querySelector(".voyage-rail.expanded"), "Title bar toggle did not open the voyage rail");
 	assert.match((await title())?.trim(), /^当前会话/);
-	assert.equal(await page.getByRole("separator", { name: "调整左侧导航宽度" }).getAttribute("aria-valuenow"), "232", "Invalid left width should use its default");
+	assert.equal(await page.getByRole("separator", { name: "调整左侧导航宽度" }).getAttribute("aria-valuenow"), "272", "Invalid left width should use its default");
 	assert.equal(await page.getByRole("separator", { name: "调整右侧航行台宽度" }).getAttribute("aria-valuenow"), "260", "Invalid right width should use its default");
 	assert.equal(await page.locator(".project-chats .chat-row").count(), 3, "Unarchived chats appear exactly once");
 	assert.equal(await page.locator(".project-count, .header-model").count(), 0, "Project counts and header route details stay hidden");
