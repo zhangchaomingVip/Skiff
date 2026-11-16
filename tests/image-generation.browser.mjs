@@ -1,4 +1,4 @@
-import { imageSizeMenu, workbenchTool } from "./workspace-navigation.mjs";
+import { imageSizeMenu, openDesignCanvas, workbenchTool } from "./workspace-navigation.mjs";
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { chromium } from "../.playwright-cli/node_modules/playwright-core/index.mjs";
@@ -95,16 +95,15 @@ try {
 		assert.equal(await prompt().inputValue(), "失败用例");
 		await page.evaluate(() => { const url = new URL(location.href); url.searchParams.set("persist", "1"); history.replaceState(null, "", url); });
 		await page.reload();
+		await openDesignCanvas(page);
 		await page.getByRole("group", { name: "画廊视图", exact: true }).getByRole("button", { name: /^作品 / }).click();
 		await page.getByText("生成作品", { exact: true }).waitFor();
 		await page.waitForFunction(() => document.querySelector(".generation-card img")?.naturalWidth > 0);
 		assert.equal(await page.locator(".generation-card").count(), 1);
 		await page.setViewportSize({ width: 600, height: 800 });
 		assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
-		await page.getByRole("button", { name: "创作参数", exact: true }).click();
-		await page.getByRole("dialog", { name: "创作参数", exact: true }).waitFor();
+		assert.equal(await page.locator(".design-composer[data-variant=canvas] textarea").isVisible(), true, "The redraw bar stays inline at 600px");
 		await page.screenshot({ path: `dist/image-generation/${theme}-narrow.png`, animations: "disabled" });
-		await page.keyboard.press("Escape");
 		await page.setViewportSize({ width: 1440, height: 960 });
 		await page.evaluate(() => { localStorage.removeItem("skiff.test.images.config"); localStorage.removeItem("skiff.test.images.jobs"); });
 		console.log(`PASS ${theme}: service/key configuration, sizes, task switching/cancellation, generation, actions, errors, persistence and narrow layout`);

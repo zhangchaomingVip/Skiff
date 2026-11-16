@@ -390,11 +390,11 @@ export default function App() {
 	const browserActions = useBrowserActions(activeChat?.id, browserPanel, actions, session.isCurrent, send);
 	const selectTool = useCallback((tool: WorkbenchTool) => {
 		if (tool === "files") tool = lastFileTab.current;
-		// Picking a generation tool leaves the canvas page and returns to its gallery.
-		if (tool === "image-generation" || tool === "video-generation") generationStudio.openGallery();
+		// The studio owns its route now: picking a generation tool only selects the
+		// mode, it never pulls the user out of the canvas they are looking at.
 		if (activeTool === tool && sidebarOpen) { setSidebarOpen(false); return; }
 		setActiveTool(tool); setSidebarOpen(true);
-	}, [activeTool, sidebarOpen, generationStudio.openGallery]);
+	}, [activeTool, sidebarOpen]);
 	const openProjectChanges = useCallback(() => {
 		setManualBrowseProjectId(undefined);
 		setActiveTool(projectHasGit ? "git" : "files");
@@ -482,7 +482,7 @@ export default function App() {
 			</main>
 			</ProjectChangesNavigationContext.Provider>
 			</WorkspaceRoute>
-			<DesignWorkspace settingsOpen={!!settingsCategory} active={workspaceMode === "design"} kind={generationKind} studio={generationStudio} onKind={(kind) => setActiveTool(kind === "image" ? "image-generation" : "video-generation")} onConfigure={(kind) => openSettings(kind === "image" ? "images" : "videos")} sidebarOpen={designSidebarOpen && !(narrowViewport && !!settingsCategory)} onCloseSidebar={() => setDesignSidebarOpen(false)} sidebarResize={workspaceMode === "design" && desktopSidebarOpen && <ResizeSeparator label="调整设计导航宽度" value={shownSidebarWidth} bounds={sidebarBounds} onResize={setSidebarWidthFromDrag} onCommit={commitSidebarWidth} />} activityBar={<ActivityBar mode="design" active={designTool} panelOpen={designSidebarOpen} onSelect={selectTool} onOpenSettings={() => openSettings()} />} project={activeProject} onOpenCodeFile={(project, path) => { if (activeProject?.id !== project.id) library.selectProject(project.id); setActiveTool("files"); openProjectPreview(project, path, "file"); setCodeSidebarOpen(true); }} />
+			<DesignWorkspace active={workspaceMode === "design"} kind={generationKind} studio={generationStudio} onKind={(kind) => setActiveTool(kind === "image" ? "image-generation" : "video-generation")} onConfigure={(kind) => openSettings(kind === "image" ? "images" : "videos")} sidebarOpen={designSidebarOpen && !(narrowViewport && !!settingsCategory)} onCloseSidebar={() => setDesignSidebarOpen(false)} sidebarResize={workspaceMode === "design" && desktopSidebarOpen && <ResizeSeparator label="调整设计导航宽度" value={shownSidebarWidth} bounds={sidebarBounds} onResize={setSidebarWidthFromDrag} onCommit={commitSidebarWidth} />} activityBar={<ActivityBar mode="design" active={designTool} panelOpen={designSidebarOpen} onSelect={selectTool} onOpenSettings={() => openSettings()} />} project={activeProject} onOpenCodeFile={(project, path) => { if (activeProject?.id !== project.id) library.selectProject(project.id); setActiveTool("files"); openProjectPreview(project, path, "file"); setCodeSidebarOpen(true); }} />
 			</div>
 			{retrieval.historyView && <HistorySearchDialog {...retrieval.historyView} onClose={retrieval.closeHistory} />}
 			{shownProjects.length > MAX_PROJECTS ? <ProjectListLimit projects={shownProjects} onRemove={(ids) => { for (const id of ids) library.hideProject(id); }} /> : projectDialogOpen && <ProjectDialog projects={shownProjects} onAdd={library.addProject} onClose={() => setProjectDialogOpen(false)} />}

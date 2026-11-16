@@ -50,7 +50,7 @@ try {
 		await page.screenshot({ path: `dist/image-resolution/${theme}-configured.png` });
 		await sizes.close();
 		await page.setViewportSize({ width: 390, height: 780 });
-		await page.getByRole("button", { name: "创作参数", exact: true }).click();
+		await page.locator(".design-composer[data-variant=hero]").waitFor();
 		assert.equal(await page.locator(".generation-controls").evaluate((element) => element.scrollWidth > element.clientWidth), false);
 		await sizes.open();
 		assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, "The size panel fits a narrow window");

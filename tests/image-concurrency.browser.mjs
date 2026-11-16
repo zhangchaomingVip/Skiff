@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { chromium } from "../.playwright-cli/node_modules/playwright-core/index.mjs";
+import { openDesignCanvas } from "./workspace-navigation.mjs";
 
 const origin = process.argv[2] ?? "http://localhost:1421";
 await mkdir("dist/image-concurrency", { recursive: true });
@@ -84,6 +85,7 @@ try {
 		assert.equal(await generate().isEnabled(), true);
 		assert.match(await page.locator(".generation-submit").innerText(), /进行中 12 \/ 不限/);
 		await page.reload();
+		await openDesignCanvas(page);
 		await page.waitForFunction(() => document.querySelectorAll(".generation-pending-card").length === 12);
 		await page.getByRole("button", { name: "管理生成服务", exact: true }).click();
 		assert.equal(await limit().inputValue(), "0", "Preference survives reload");

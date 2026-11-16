@@ -1,4 +1,4 @@
-import { workbenchTool } from "./workspace-navigation.mjs";
+import { openDesignCanvas, workbenchTool } from "./workspace-navigation.mjs";
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { chromium } from "../.playwright-cli/node_modules/playwright-core/index.mjs";
@@ -61,7 +61,8 @@ try {
 		await page.screenshot({ path: `dist/image-edit/${theme}-reference.png` });
 		await page.getByRole("button", { name: "移除图生图参考图", exact: true }).click();
 		assert.equal(await page.evaluate((url) => window.revoked.includes(url), sharedUrl), false, "Removing a shared reference keeps its original alive");
-		await page.locator(".generation-card-preview").click();
+		await openDesignCanvas(page);
+		await page.locator(".generation-card-preview").first().click();
 		await page.getByRole("dialog", { name: "图片预览", exact: true }).getByRole("button", { name: "以此图生成图片", exact: true }).click();
 		await page.evaluate(() => window.skiffPreview.generation.setMode("failure")); await generate().click();
 		await page.getByRole("group", { name: "画廊视图", exact: true }).getByRole("button", { name: /^失败记录/ }).click();

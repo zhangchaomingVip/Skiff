@@ -1,4 +1,4 @@
-import { workbenchTool } from "./workspace-navigation.mjs";
+import { openDesignCanvas, workbenchTool } from "./workspace-navigation.mjs";
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { chromium } from "../.playwright-cli/node_modules/playwright-core/index.mjs";
@@ -73,7 +73,7 @@ try {
 		await page.getByRole("dialog", { name: "结束本地任务跟踪？", exact: true }).getByRole("button", { name: "已核对，结束跟踪", exact: true }).click();
 		await page.getByRole("status").filter({ hasText: "已结束本地跟踪" }).waitFor();
 		await page.evaluate(() => { const url = new URL(location.href); url.searchParams.set("persist", "1"); history.replaceState(null, "", url); });
-		await page.reload(); await page.waitForFunction(() => document.querySelectorAll(".generation-card").length === 2);
+		await page.reload(); await openDesignCanvas(page); await page.waitForFunction(() => document.querySelectorAll(".generation-card").length === 2);
 		await page.screenshot({ path: `dist/video-generation/${theme}-gallery.png` });
 		await page.setViewportSize({ width: 600, height: 400 });
 		assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);

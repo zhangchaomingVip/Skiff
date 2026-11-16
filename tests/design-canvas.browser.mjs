@@ -3,7 +3,7 @@ import { mkdir } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import { chromium } from "../.playwright-cli/node_modules/playwright-core/index.mjs";
 import { testImage } from "./imageFixture.mjs";
-import { workbenchTool } from "./workspace-navigation.mjs";
+import { openDesignCanvas } from "./workspace-navigation.mjs";
 
 const origin = process.argv[2] ?? "http://localhost:1421";
 await mkdir("dist/design-canvas", { recursive: true });
@@ -13,9 +13,9 @@ page.setDefaultTimeout(15000);
 const errors = []; page.on("pageerror", (error) => errors.push(String(error)));
 const video = `data:video/mp4;base64,${readFileSync("tests/fixtures/video.mp4.b64", "utf8").trim()}`;
 const canvases = () => page.getByRole("navigation", { name: "画布", exact: true });
-const canvasView = () => page.getByRole("region", { name: "画布", exact: true });
-const galleryHeading = () => page.locator(".design-gallery-route:not([hidden]) .generation-gallery-heading h2");
-const canvasTitle = () => page.locator(".design-canvas .generation-gallery-heading h2");
+const scene = () => page.locator(".design-canvas-scene");
+const crumb = () => page.locator(".canvas-crumb");
+const kindSwitch = () => page.getByRole("group", { name: "创作类型", exact: true });
 
 try {
 	for (const theme of ["light", "dark"]) {
@@ -40,81 +40,91 @@ try {
 			localStorage.removeItem("skiff.workspace.navigation.v1"); localStorage.setItem("skiff.workbench.v1", JSON.stringify({ version: 1, tool: "image-generation" }));
 		}, { image: `data:image/png;base64,${testImage().toString("base64")}`, video });
 		await page.goto(`${origin}/tests/preview.html?fixture=sidebar&persist=1&theme=${theme}`);
-		await page.locator(".design-gallery-route:not([hidden]) .design-composer").waitFor();
 
-		// The canvas list scopes every gallery: ungrouped only holds the draft work.
+		// The launcher owns creation and shows no history.
+		await page.locator(".studio-home").waitFor();
+		assert.equal(await page.locator(".generation-card").count(), 0, "The launcher holds no works");
+		assert.equal(await page.getByRole("button", { name: "画布：未分组", exact: true }).count(), 1, "The launcher still targets a canvas");
 		assert.equal(await canvases().getByRole("button").count(), 4, "Two canvases, ungrouped and the create action");
-		assert.equal(await page.getByRole("button", { name: "画布：未分组", exact: true }).count(), 1);
-		assert.match(await galleryHeading().innerText(), /01$/, "Ungrouped hides works that belong to a canvas");
+		await page.screenshot({ path: `dist/design-canvas/${theme}-home.png`, animations: "disabled" });
+
+		// The sidebar scopes every canvas scene.
+		await openDesignCanvas(page);
+		assert.match(await crumb().innerText(), /未分组/);
+		assert.match(await crumb().innerText(), /1$/, "Ungrouped hides works that belong to a canvas");
+		assert.equal(await scene().locator(".generation-card").count(), 1);
+		assert.equal(await page.locator(".design-composer[data-variant=canvas] .generation-field-canvas").isVisible(), false, "The redraw bar never re-targets another canvas");
 
 		await canvases().getByRole("button", { name: /^夏日短片/ }).click();
-		await canvasView().waitFor();
-		assert.match(await canvasTitle().innerText(), /夏日短片/);
-		assert.match(await canvasTitle().innerText(), /03/, "Mixed images and videos share one canvas count");
-		assert.equal(await canvasView().locator(".generation-card").count(), 3);
+		await scene().waitFor();
+		assert.match(await crumb().innerText(), /夏日短片/);
+		assert.match(await crumb().innerText(), /3$/, "The canvas keeps a mixed count");
+		assert.equal(await scene().locator(".generation-card").count(), 2, "The image gallery shows the two images of this canvas");
 		await page.screenshot({ path: `dist/design-canvas/${theme}-canvas.png`, animations: "disabled" });
 
-		const filters = canvasView().getByRole("group", { name: "画布筛选", exact: true });
-		await filters.getByRole("button", { name: "视频 1", exact: true }).click();
-		assert.equal(await canvasView().locator(".generation-card").count(), 1);
-		assert.equal(await canvasView().locator(".generation-card[data-kind=video]").count(), 1);
-		await filters.getByRole("button", { name: "图片 2", exact: true }).click();
-		assert.equal(await canvasView().locator(".generation-card").count(), 2);
-
-		await canvasView().getByRole("button", { name: /^预览作品/ }).first().click();
-		const preview = page.getByRole("dialog", { name: "作品预览", exact: true });
+		await kindSwitch().getByRole("button", { name: "视频", exact: true }).click();
+		await page.locator(".generation-card[data-kind=video]").first().waitFor();
+		assert.equal(await page.locator(".generation-card[data-kind=video]").count(), 1, "The video gallery keeps its own scope");
+		await page.getByRole("button", { name: /^预览视频/ }).click();
+		const preview = page.getByRole("dialog", { name: "视频预览", exact: true });
 		await preview.waitFor();
-		assert.match(await preview.innerText(), /画布：夏日短片/);
 		await page.keyboard.press("Escape");
 		await preview.waitFor({ state: "detached" });
+		await kindSwitch().getByRole("button", { name: "图片", exact: true }).click();
+		await page.locator(".generation-card[data-kind=image]").first().waitFor();
 
-		// Create keeps the canvas as the submit target instead of leaving the context.
-		await canvasView().getByRole("button", { name: "在此画布创作", exact: true }).click();
-		await page.locator(".design-composer").waitFor();
-		assert.equal(await page.getByRole("button", { name: "画布：夏日短片", exact: true }).count(), 1);
+		await scene().getByRole("button", { name: /^预览图片/ }).first().click();
+		const imagePreview = page.getByRole("dialog", { name: "图片预览", exact: true });
+		await imagePreview.waitFor();
+		await page.keyboard.press("Escape");
+		await imagePreview.waitFor({ state: "detached" });
 
-		await page.getByRole("button", { name: "画布：夏日短片", exact: true }).click();
-		const picker = page.getByRole("listbox", { name: "画布", exact: true });
-		await picker.waitFor();
-		await picker.getByRole("option", { name: /^未分组/ }).click();
-		assert.match(await galleryHeading().innerText(), /01$/, "Switching the composer target re-scopes the gallery");
+		// Redrawing stays inside the canvas instead of jumping back to the launcher.
+		await page.evaluate(() => window.skiffPreview.generation.setMode("pending"));
+		await page.getByRole("textbox", { name: "提示词 Prompt", exact: true }).fill("夏日午后的第二张");
+		await page.getByRole("button", { name: "生成图片", exact: true }).click();
+		await page.getByText("正在生成图片…", { exact: true }).waitFor();
+		assert.equal(await page.locator(".design-canvas-scene").count(), 1, "Submitting keeps the canvas scene");
+		await page.getByRole("button", { name: "停止等待", exact: true }).click();
+		await page.getByRole("group", { name: "画廊视图", exact: true }).getByRole("button", { name: /^失败记录/ }).click();
+		await page.getByText("已停止等待", { exact: true }).waitFor();
+		await page.getByRole("group", { name: "画廊视图", exact: true }).getByRole("button", { name: /^作品/ }).click();
 
-		// Creating from the sidebar opens the empty canvas page.
+		// Creating from the sidebar opens the new, empty canvas scene.
 		await canvases().getByRole("button", { name: "新建画布", exact: true }).click();
 		const createDialog = page.getByRole("dialog", { name: "新建画布", exact: true });
 		await createDialog.getByRole("textbox", { name: "画布名称", exact: true }).fill("第三画布");
 		await createDialog.getByRole("button", { name: "创建画布", exact: true }).click();
-		await canvasView().waitFor();
-		assert.match(await canvasTitle().innerText(), /第三画布/);
-		assert.equal(await canvasView().locator(".generation-card").count(), 0);
-		assert.equal(await canvasView().getByText("这个画布还没有作品", { exact: true }).count(), 1);
+		await scene().waitFor();
+		assert.match(await crumb().innerText(), /第三画布/);
+		assert.equal(await scene().locator(".generation-card").count(), 0);
+		assert.equal(await scene().getByText("这个画布还没有作品", { exact: true }).count(), 1);
 
-		await canvasView().getByRole("button", { name: "重命名画布", exact: true }).click();
+		await scene().getByRole("button", { name: "重命名画布", exact: true }).click();
 		const renameDialog = page.getByRole("dialog", { name: "重命名画布", exact: true });
 		await renameDialog.getByRole("textbox", { name: "画布名称", exact: true }).fill("第三画布改");
 		await renameDialog.getByRole("button", { name: "保存名称", exact: true }).click();
-		assert.match(await canvasTitle().innerText(), /第三画布改/);
+		assert.match(await crumb().innerText(), /第三画布改/);
 		assert.equal(await canvases().getByRole("button", { name: /^第三画布改/ }).count(), 1);
 		await page.screenshot({ path: `dist/design-canvas/${theme}-empty.png`, animations: "disabled" });
 
-		// Deleting only removes the grouping; the app returns to the gallery.
-		await canvasView().getByRole("button", { name: "删除画布", exact: true }).click();
+		// Deleting only removes the grouping; the app returns to the launcher.
+		await scene().getByRole("button", { name: "删除画布", exact: true }).click();
 		const confirm = page.getByRole("dialog", { name: "删除画布", exact: true });
 		await confirm.getByRole("button", { name: "删除画布", exact: true }).click();
-		await page.locator(".design-canvas").waitFor({ state: "detached" });
+		await page.locator(".studio-home").waitFor();
 		assert.equal(await canvases().getByRole("button", { name: /^第三画布改/ }).count(), 0);
 		assert.equal(await canvases().getByRole("button").count(), 4);
 
 		// Works and the index survive a reload with their canvas intact.
-		await page.goto(`${origin}/tests/preview.html?fixture=sidebar&persist=1&theme=${theme}`);
-		await page.locator(".design-gallery-route:not([hidden]) .design-composer").waitFor();
+		await page.reload();
+		await page.locator(".studio-home").waitFor();
 		assert.equal(await canvases().getByRole("button").count(), 4);
-		await canvases().getByRole("button", { name: /^夏日短片/ }).click();
-		await canvasView().waitFor();
-		assert.equal(await canvasView().locator(".generation-card").count(), 3);
+		await openDesignCanvas(page, "夏日短片");
+		assert.equal(await scene().locator(".generation-card").count(), 2);
 
 		assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
-		console.log(`PASS ${theme}: canvas list, scoped galleries, mixed filter, target picker, create/rename/delete and reload`);
+		console.log(`PASS ${theme}: launcher first, scoped canvas scenes, mixed count, kind switch, redraw in place, create/rename/delete and reload`);
 	}
 	assert.deepEqual(errors, []);
 } finally { await browser.close(); }

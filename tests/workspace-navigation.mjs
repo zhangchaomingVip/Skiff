@@ -13,6 +13,16 @@ export function imageSizeMenu(page) {
 	};
 }
 
+/** The launcher keeps no history: the works live in the canvas scene, so every
+ *  test that inspects a gallery first opens the canvas that owns it. */
+export async function openDesignCanvas(page, name = "未分组") {
+	await page.locator(".studio-home").waitFor();
+	const nav = page.getByRole("navigation", { name: "画布", exact: true });
+	if (!await nav.isVisible()) await page.getByRole("navigation", { name: "工作区工具", exact: true }).getByRole("button", { name: "生图", exact: true }).click();
+	await nav.getByRole("button", { name: new RegExp(`^${name}`) }).click();
+	await page.locator(".design-canvas-scene").waitFor();
+}
+
 /** Drive the public mode switch before choosing a mode-specific activity. */
 export function workbenchTool(page, name) {
 	const locator = page.getByRole("navigation", { name: "工作区工具", exact: true }).getByRole("button", { name, exact: true });
@@ -27,7 +37,6 @@ export function workbenchTool(page, name) {
 		}
 		if (!switched || await locator.getAttribute("aria-pressed") !== "true") await click(options);
 		if (design && await page.getByRole("dialog", { name: "Design 导航", exact: true }).count()) await page.keyboard.press("Escape");
-		if (design && !await page.locator(".generation-controls:visible").count()) await page.getByRole("button", { name: "创作参数", exact: true }).click();
 	};
 	return locator;
 }

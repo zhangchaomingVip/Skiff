@@ -27,7 +27,7 @@ try {
 		await page.goto(`${origin}/tests/preview.html?fixture=sidebar&persist=1&theme=${theme}`);
 		// The previous theme leaves the stored kind on the video tab; start on images.
 		await page.getByRole("group", { name: "创作类型", exact: true }).getByRole("button", { name: "图片", exact: true }).click();
-		await page.locator(".design-gallery-route:not([hidden]) .design-composer").waitFor();
+		await page.locator(".design-composer[data-variant=hero]").waitFor();
 
 		// Service, model and quality are popover chips, never native selects.
 		assert.equal(await page.locator(".design-composer .generation-settings select").count(), 0, "The design composer has no native select");
@@ -64,9 +64,9 @@ try {
 
 		// The video tab reuses the same chip and stays disabled until a service exists.
 		await page.getByRole("group", { name: "创作类型", exact: true }).getByRole("button", { name: "视频", exact: true }).click();
-		await page.locator(".design-gallery-route:not([hidden]) .design-composer").waitFor();
-		assert.equal(await page.locator(".design-gallery-route:not([hidden])").getByRole("button", { name: "模型", exact: true }).isDisabled(), true);
-		assert.equal(await page.locator(".design-gallery-route:not([hidden]) .generation-picker-trigger").count(), 3, "Canvas, service and model share the chip");
+		await page.locator(".design-composer[data-variant=hero] .generation-controls[data-kind=video]").waitFor();
+		assert.equal(await page.locator(".design-composer[data-variant=hero]").getByRole("button", { name: "模型", exact: true }).isDisabled(), true);
+		assert.equal(await page.locator(".design-composer[data-variant=hero] .generation-picker-trigger").count(), 3, "Canvas, service and model share the chip");
 
 		assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
 		assert.equal(await page.evaluate(() => window.skiffPreview.generation.calls.length), 0, "Choosing settings never generates");

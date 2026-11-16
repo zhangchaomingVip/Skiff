@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { chromium } from "../.playwright-cli/node_modules/playwright-core/index.mjs";
 import { testImage } from "./imageFixture.mjs";
-import { imageSizeMenu } from "./workspace-navigation.mjs";
+import { imageSizeMenu, openDesignCanvas } from "./workspace-navigation.mjs";
 
 const origin = process.argv[2] ?? "http://localhost:1421";
 const output = "dist/generation-redesign";
@@ -41,6 +41,7 @@ async function seed(theme, target = page) {
 		localStorage.removeItem("skiff.workspace.navigation.v1"); localStorage.setItem("skiff.workbench.v1", JSON.stringify({ version: 1, tool: "image-generation" }));
 	});
 	await target.goto(`${origin}/tests/preview.html?fixture=sidebar&persist=1&theme=${theme}`);
+	await openDesignCanvas(target);
 	await target.waitForFunction(() => [...document.querySelectorAll(".generation-card-preview img")].length === 3 && [...document.querySelectorAll(".generation-card-preview img")].every((img) => img.naturalWidth > 0));
 }
 
@@ -53,6 +54,7 @@ try {
 		await density.getByRole("button", { name: "1 列", exact: true }).click();
 		assert.equal(await gridColumns(), 1, "One column shows one image per row");
 		await page.reload();
+		await openDesignCanvas(page);
 		await page.locator(".generation-card-preview img").first().waitFor();
 		assert.equal(await density.getByRole("button", { name: "1 列", exact: true }).getAttribute("aria-pressed"), "true");
 		assert.equal(await gridColumns(), 1, "One-column preference survives reload");
@@ -99,6 +101,7 @@ try {
 		assert.equal(await gridColumns(), 4);
 		assert.equal(await page.evaluate(() => localStorage.getItem("skiff.generation.columns.v1")), "4");
 		await page.reload();
+		await openDesignCanvas(page);
 		await page.locator(".generation-card-preview img").first().waitFor();
 		assert.equal(await density.getByRole("button", { name: "4 列", exact: true }).getAttribute("aria-pressed"), "true");
 		assert.equal(await gridColumns(), 4, "Density preference survives a full reload");
@@ -136,7 +139,7 @@ try {
 		await page.keyboard.press("End");
 		assert.equal(await page.getByRole("menuitem", { name: "从画廊移除" }).evaluate((element) => element === document.activeElement), true);
 		await page.keyboard.press("Home"); await page.keyboard.press("Escape");
-		await more.click(); await page.getByRole("heading", { name: /灵感画廊/ }).click();
+		await more.click(); await page.locator(".canvas-crumb").click();
 		assert.equal(await page.getByRole("menu").count(), 0, "Outside click closes the menu");
 		const prompt = page.getByRole("textbox", { name: "提示词 Prompt" });
 		await prompt.fill("窗边的花与午后的光，让想象慢慢成形");
@@ -184,7 +187,6 @@ try {
 	assert.ok((await touch.getByRole("menuitem", { name: "另存为", exact: true }).boundingBox()).height >= 44);
 	await touch.screenshot({ path: `${output}/touch-actions.png`, animations: "disabled" });
 	await touch.getByRole("menuitem", { name: "使用提示词", exact: true }).tap();
-	await touch.getByRole("button", { name: "创作参数", exact: true }).tap();
 	assert.match(await touch.getByRole("textbox", { name: "提示词 Prompt" }).inputValue(), /^窗边的花/);
 	assert.equal(await touch.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
 	await touch.screenshot({ path: `${output}/touch-controls.png`, animations: "disabled" });

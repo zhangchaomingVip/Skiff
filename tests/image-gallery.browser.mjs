@@ -1,4 +1,4 @@
-import { workbenchTool } from "./workspace-navigation.mjs";
+import { openDesignCanvas, workbenchTool } from "./workspace-navigation.mjs";
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { chromium } from "../.playwright-cli/node_modules/playwright-core/index.mjs";
@@ -25,7 +25,7 @@ try {
 			const url = new URL(location.href); url.searchParams.set("persist", "1"); history.replaceState(null, "", url);
 		}, `data:image/png;base64,${testImage().toString("base64")}`);
 		// The previous theme leaves the stored collection on its last view.
-		await page.reload(); await view("作品").click();
+		await page.reload(); await openDesignCanvas(page); await view("作品").click();
 		// Jobs load asynchronously, so wait for the persisted work instead of sampling the list.
 		await page.locator(".generation-card").first().waitFor();
 		assert.equal(await page.locator(".generation-card").count(), 1);
@@ -46,11 +46,17 @@ try {
 		assert.equal(await page.locator(".generation-task-list").count(), 0);
 		const card = page.locator(".generation-card");
 		await card.getByRole("button", { name: /^更多作品操作/ }).click(); await page.getByRole("menuitem", { name: "以此图生成图片", exact: true }).click();
+		await page.locator(".studio-home").waitFor();
 		const referenceUrl = await page.locator(".generation-reference-image img").getAttribute("src");
-		await card.getByRole("button", { name: /^更多作品操作/ }).click(); await page.getByRole("menuitem", { name: "从画廊移除", exact: true }).click();
+		await openDesignCanvas(page);
+		await page.locator(".generation-card").getByRole("button", { name: /^更多作品操作/ }).click(); await page.getByRole("menuitem", { name: "从画廊移除", exact: true }).click();
 		await page.waitForFunction(() => document.querySelectorAll(".generation-card").length === 0);
+		await page.getByRole("button", { name: "首页", exact: true }).first().click();
+		await page.locator(".studio-home").waitFor();
 		assert.equal(await page.locator(".generation-reference-image img").getAttribute("src"), referenceUrl, "Removing from gallery preserves current reference");
-		await page.reload(); assert.equal(await page.locator(".generation-card").count(), 0);
+		await page.reload();
+		await openDesignCanvas(page);
+		assert.equal(await page.locator(".generation-card").count(), 0);
 		await view("已移除").click(); await page.locator(".generation-card").waitFor();
 		await page.screenshot({ path: `dist/image-gallery/${theme}-removed.png` });
 		await page.getByRole("button", { name: "恢复到画廊", exact: true }).click();

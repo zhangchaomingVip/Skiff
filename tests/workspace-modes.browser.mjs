@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { chromium } from "../.playwright-cli/node_modules/playwright-core/index.mjs";
+import { openDesignCanvas } from "./workspace-navigation.mjs";
 
 const origin = process.argv[2] ?? "http://localhost:1421";
 await mkdir("dist/workspace-modes", { recursive: true });
@@ -11,7 +12,7 @@ const errors = []; page.on("pageerror", (error) => errors.push(String(error)));
 const mode = (name) => page.getByRole("group", { name: "工作模式", exact: true }).getByRole("button", { name: name === "code" ? "Code 工作区" : "Design 设计室", exact: true });
 const gallery = () => page.locator(".design-gallery-route:not([hidden])");
 const prompt = () => page.getByRole("textbox", { name: "提示词 Prompt", exact: true });
-const group = (label) => page.getByRole("navigation", { name: "设计资产分组", exact: true }).getByRole("button", { name: new RegExp(`^${label}`) });
+const view = (label) => page.getByRole("group", { name: "画廊视图", exact: true }).getByRole("button", { name: new RegExp(`^${label}`) });
 
 try {
 	for (const theme of ["light", "dark"]) {
@@ -40,18 +41,30 @@ try {
 		assert.equal(await page.locator(".code-workspace").isVisible(), false);
 		assert.equal(await page.getByRole("navigation", { name: "工作区工具", exact: true }).getByRole("button", { name: "对话", exact: true }).count(), 0);
 		assert.equal(await page.getByRole("button", { name: "返回对话", exact: true }).count(), 0);
+
+		// The launcher is always open: one large card, quick tags and the style shelf.
+		assert.equal(await page.getByRole("button", { name: "创作参数", exact: true }).count(), 0, "The collapse entry is gone");
+		assert.equal(await page.locator(".design-composer[data-variant=hero]").isVisible(), true, "The launcher card is expanded on arrival");
+		assert.equal(await page.getByRole("group", { name: "快捷灵感", exact: true }).getByRole("button").count(), 6);
+		assert.equal(await page.locator(".studio-inspiration-card").count(), 6);
+		assert.equal(await page.locator(".generation-card").count(), 0, "The launcher keeps no history");
+		await page.getByRole("group", { name: "快捷灵感", exact: true }).getByRole("button", { name: "/暖色调" }).click();
+		assert.match(await prompt().inputValue(), /暖色调$/);
 		await prompt().fill("Design 草稿：暖色海报");
+		await page.screenshot({ path: `dist/workspace-modes/${theme}-home.png`, animations: "disabled" });
+
+		// Works live in the canvas scene, which keeps the masonry density picker.
+		await openDesignCanvas(page);
 		await page.waitForFunction(() => [...document.querySelectorAll(".generation-card img")].every((image) => image.complete && image.naturalWidth > 0));
 		assert.equal(await gallery().locator(".generation-card").evaluateAll((cards) => new Set(cards.map((card) => Math.round(card.getBoundingClientRect().left))).size), 3, "Three differently sized works occupy the three selected masonry columns");
 		await page.screenshot({ path: `dist/workspace-modes/${theme}-studio.png`, animations: "disabled" });
-		await page.locator(".generation-fields").evaluate((element) => { element.scrollTop = 160; });
-		const scroll = await page.locator(".generation-fields").evaluate((element) => element.scrollTop);
 		assert.ok(Number(await gallery().locator(".generation-gallery-grid").evaluate((element) => getComputedStyle(element).columnCount)) > 1, "Studio uses responsive masonry columns");
+		await page.getByRole("button", { name: "首页", exact: true }).first().click();
+		await page.locator(".studio-home").waitFor();
 		await mode("code").click();
 		assert.equal(await page.locator(".composer-input").inputValue(), "Code 草稿：保留工程上下文");
 		await mode("design").click();
 		assert.equal(await prompt().inputValue(), "Design 草稿：暖色海报");
-		assert.equal(await page.locator(".generation-fields").evaluate((element) => element.scrollTop), scroll);
 		assert.deepEqual(await page.evaluate(() => [...window.skiffPreview.processes.keys()]), processes, "Switching workspaces must not restart pi");
 		await page.getByRole("navigation", { name: "工作区工具", exact: true }).getByRole("button", { name: "生成视频", exact: true }).click();
 		await prompt().fill("视频草稿：镜头缓缓推进");
@@ -61,17 +74,18 @@ try {
 		assert.equal(await prompt().inputValue(), "视频草稿：镜头缓缓推进");
 		await page.getByRole("navigation", { name: "工作区工具", exact: true }).getByRole("button", { name: "生图", exact: true }).click();
 		assert.equal(await prompt().inputValue(), "Design 草稿：暖色海报");
+
+		// Submitting hands the launcher over to the canvas that owns the new work.
 		await page.evaluate(() => window.skiffPreview.generation.setMode("pending"));
 		await page.getByRole("button", { name: "生成图片", exact: true }).click();
 		await gallery().getByText("正在生成图片…", { exact: true }).waitFor();
+		assert.equal(await page.locator(".studio-home").count(), 0, "The launcher steps aside for the canvas scene");
 		await mode("code").click(); await mode("design").click();
-		assert.equal(await gallery().locator(".generation-pending-card").count(), 1);
-		await group("进行中").click();
-		assert.equal(await gallery().locator(".generation-card:not(.generation-pending-card)").count(), 0);
+		assert.equal(await gallery().locator(".generation-pending-card").count(), 1, "Pending work stays inside the works view");
 		await gallery().getByRole("button", { name: "停止等待", exact: true }).click();
-		await group("失败记录").click();
+		await view("失败记录").click();
 		await gallery().getByText("已停止等待", { exact: true }).waitFor();
-		await group("全部作品").click();
+		await view("作品").click();
 		const card = gallery().locator(".generation-card").filter({ hasText: "Studio 作品 1" });
 		await card.getByRole("button", { name: /^更多作品操作/ }).click();
 		await page.getByRole("menuitem", { name: "保存至当前项目", exact: true }).click();
@@ -86,23 +100,27 @@ try {
 		const sidebar = page.getByRole("complementary", { name: "Design 导航", exact: true });
 		assert.equal(await sidebar.getByRole("combobox").count(), 0, "Design does not bind a Code project");
 		assert.equal(await page.getByRole("button", { name: "同步项目图片", exact: true }).count(), 0, "No project image sync entry");
-		assert.deepEqual(await page.getByRole("navigation", { name: "设计资产分组", exact: true }).getByRole("button").evaluateAll((buttons) => buttons.map((button) => button.querySelector("span").textContent)), ["全部作品", "进行中", "失败记录", "已移除"], "Only studio status groups remain");
+		assert.deepEqual(await sidebar.getByRole("navigation").evaluateAll((navs) => navs.map((nav) => nav.getAttribute("aria-label"))), ["创作", "画布", "素材"], "The sidebar keeps the launcher, canvases and assets only");
+		assert.deepEqual(await page.getByRole("group", { name: "画廊视图", exact: true }).getByRole("button").evaluateAll((buttons) => buttons.map((button) => button.textContent.replace(/ \d+$/, ""))), ["作品", "失败记录", "已移除"], "One status filter lives next to the works");
 		assert.equal(await gallery().getByText("Code", { exact: true }).count(), 0, "Code assets never appear in the studio");
+
+		// The launcher resets on reload; the canvas scene is one click away.
 		await page.reload();
 		assert.equal(await mode("design").getAttribute("aria-pressed"), "true");
+		await openDesignCanvas(page);
 		await gallery().getByText("Studio 作品 1", { exact: false }).first().waitFor();
+
 		await page.setViewportSize({ width: 600, height: 800 });
-		await page.getByRole("button", { name: "创作参数", exact: true }).click();
-		await page.getByRole("dialog", { name: "创作参数", exact: true }).getByRole("textbox", { name: "提示词 Prompt" }).waitFor();
+		assert.equal(await page.locator(".design-composer[data-variant=canvas]").isVisible(), true, "The redraw bar stays in the canvas scene");
 		await page.screenshot({ path: `dist/workspace-modes/${theme}-narrow.png`, animations: "disabled" });
-		await page.keyboard.press("Escape");
 		assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
 		await page.setViewportSize({ width: 390, height: 800 });
 		await mode("code").click();
 		if (await page.locator("dialog[open][data-variant=drawer]").count()) await page.keyboard.press("Escape");
 		await mode("design").click();
 		assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
-		console.log(`PASS ${theme}: modes, independent routes/drafts/scroll, live tasks, filters, project saves, decoupled studio, persistence and 390/600px layouts`);
+		assert.equal(await page.locator(".design-composer textarea").isVisible(), true, "The narrow canvas keeps its prompt entry");
+		console.log(`PASS ${theme}: launcher, independent routes/drafts, live tasks, filters, project saves, decoupled studio, persistence and 390/600px layouts`);
 	}
 	assert.deepEqual(errors, []);
 } finally { await browser.close(); }

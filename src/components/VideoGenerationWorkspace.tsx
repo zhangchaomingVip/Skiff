@@ -7,31 +7,34 @@ import { CanvasPicker } from "./CanvasPicker";
 import { GenerationPicker } from "./GenerationPicker";
 import { MoveAssetDialog } from "./MoveAssetDialog";
 import { assetCanvasId } from "../workbench/designCanvases";
-import { Button, Chip, Dialog, IconButton, Input, Select, TextArea, Tooltip } from "./ui";
-import type { GenerationGalleryProps } from "./GenerationWorkspace";
+import { Button, Chip, Dialog, IconButton, Input, SegmentedControl, Select, TextArea, Tooltip } from "./ui";
+import type { ComposerProps, GenerationGalleryProps } from "./GenerationWorkspace";
+import { useReferenceDrop } from "./useReferenceDrop";
 import { assetsInCollection } from "../workbench/designWorkspace";
 
-export function VideoControls({ studio, onConfigure }: { studio: GenerationStudio; onConfigure: () => void }) {
+export function VideoControls({ studio, onConfigure, onSubmitted, variant, modeSwitch }: ComposerProps) {
 	const id = useId();
 	const input = useRef<HTMLInputElement>(null);
-	const [dragging, setDragging] = useState(false);
+	const drop = useReferenceDrop(studio.uploadReference);
 	const { videos, drafts: { video: draft } } = studio;
 	const service = videos.config?.services.find((item) => item.id === draft.serviceId);
 	const model = service?.models.find((item) => item.id === draft.modelId);
 	const configured = !!service?.configured && !!model;
 	const update = (patch: Partial<typeof draft>) => studio.updateDraft("video", patch);
 	const canGenerate = configured && !videos.loading && !videos.submitting && !videos.running && !!draft.prompt.trim() && model.durations.includes(draft.duration) && model.ratios.includes(draft.ratio) && (!studio.reference || model.referenceEnabled);
-	return <aside className="generation-controls" data-kind="video" aria-label="生成视频参数">
+	const status = videos.loading ? "正在读取视频服务" : videos.running ? "已有视频任务，可在作品区查看或继续查询" : configured ? "" : "尚未配置视频生成服务";
+	return <aside className="generation-controls" data-kind="video" data-variant={variant} aria-label="生成视频参数">
 		<header className="generation-controls-header"><span className="generation-mode-icon"><Icon name="video" size={20} /></span><div><h1>生成视频</h1><p>让画面，多一点故事</p></div></header>
-		<form className="generation-form" onSubmit={(event) => { event.preventDefault(); if (canGenerate) void videos.generate({ serviceId: draft.serviceId, modelId: draft.modelId, prompt: draft.prompt, duration: draft.duration, ratio: draft.ratio, projectRoot: studio.project?.path, canvasId: studio.canvasId || undefined }, studio.reference?.url); }}>
+		<form className="generation-form" onSubmit={(event) => { event.preventDefault(); if (!canGenerate) return; void videos.generate({ serviceId: draft.serviceId, modelId: draft.modelId, prompt: draft.prompt, duration: draft.duration, ratio: draft.ratio, projectRoot: studio.project?.path, canvasId: studio.canvasId || undefined }, studio.reference?.url); onSubmitted?.(); }} {...drop.handlers}>
 			<div className="generation-fields">
 				<div className="generation-field generation-field-prompt"><div className="generation-field-heading"><label htmlFor={`${id}-prompt`}>提示词 <span>Prompt</span></label></div><TextArea id={`${id}-prompt`} rows={4} maxLength={32000} value={draft.prompt} placeholder="描述画面如何动起来：镜头缓缓推进，微风拂过窗边的花…" onChange={(event) => update({ prompt: event.target.value })} /><p className="generation-field-hint">试着写下主体动作、镜头运动和氛围。</p></div>
-				<div className="generation-field generation-field-reference"><span className="generation-field-label">首帧参考图 <small>可选</small></span><Input ref={input} className="generation-file-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif" aria-label="上传首帧参考图" onChange={(event) => { const file = event.target.files?.[0]; if (file) studio.uploadReference(file); event.target.value = ""; }} />
-					<div className={`generation-reference ${dragging ? "is-dragging" : ""}`} onDragOver={(event) => { event.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={(event) => { event.preventDefault(); setDragging(false); const file = event.dataTransfer.files[0]; if (file) studio.uploadReference(file); }}>
-						{studio.reference ? <><button type="button" className="generation-reference-image" aria-label={`替换首帧参考图：${studio.reference.name}`} onClick={() => input.current?.click()}><img src={studio.reference.url} alt={studio.reference.name} /></button><div className="generation-reference-caption"><span title={studio.reference.name}>{studio.reference.name}</span><IconButton size="compact" variant="ghost" aria-label="移除首帧参考图" onClick={studio.removeReference}><Icon name="close" /></IconButton></div><Button size="compact" variant="ghost" onClick={() => input.current?.click()}>替换图片</Button></> : <button type="button" className="generation-reference-upload" aria-label="添加一张起始画面" onClick={() => input.current?.click()}><Icon name="image" size={24} /><strong>添加一张起始画面</strong><span>点击上传，或将图片拖到这里</span></button>}
+				<div className="generation-field generation-field-reference" data-filled={!!studio.reference}><span className="generation-field-label">首帧参考图 <small>可选</small></span><Input ref={input} className="generation-file-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif" aria-label="上传首帧参考图" onChange={(event) => { const file = event.target.files?.[0]; if (file) studio.uploadReference(file); event.target.value = ""; }} />
+					<div className={`generation-reference ${studio.reference ? "has-image" : "is-empty"} ${drop.dragging ? "is-dragging" : ""}`}>
+						{studio.reference ? <><button type="button" className="generation-reference-image" aria-label={`替换首帧参考图：${studio.reference.name}`} onClick={() => input.current?.click()}><img src={studio.reference.url} alt={studio.reference.name} /></button><div className="generation-reference-caption"><span title={studio.reference.name}>{studio.reference.name}</span><IconButton size="compact" variant="ghost" aria-label="移除首帧参考图" onClick={studio.removeReference}><Icon name="close" size={13} /></IconButton></div></> : <button type="button" className="generation-reference-upload" aria-label="添加一张起始画面" onClick={() => input.current?.click()}><Icon name="plus" size={15} /><strong>首帧</strong><span>点击上传，或将图片拖到这里</span></button>}
 					</div><p className="generation-field-hint">PNG、JPG、WebP、GIF · 最大 20 MB。上传后压缩为静态首帧，生成时发送给视频服务。</p>
 				</div>
 				<div className="generation-settings">
+					{modeSwitch && <div className="generation-field generation-field-mode">{modeSwitch}</div>}
 					<CanvasPicker studio={studio} id={`${id}-canvas`} />
 					<div className="generation-field generation-field-service"><label htmlFor={`${id}-service`}>生成服务</label><div className="generation-service-control"><GenerationPicker id={`${id}-service`} label="生成服务" icon="layers" value={draft.serviceId} disabled={!videos.config?.services.length} placeholder={videos.config?.services.length ? "选择一个服务" : "先配置一个视频服务"} options={(videos.config?.services ?? []).map((item) => ({ value: item.id, label: item.name, hint: `${item.models.length} 个模型${item.configured ? "" : " · 未配置密钥"}` }))} onChange={(serviceId) => { const next = videos.config?.services.find((item) => item.id === serviceId); const first = next?.models.find((item) => item.id === next.defaultModel) ?? next?.models[0]; update({ serviceId, modelId: first?.id ?? "", duration: first?.durations[0] ?? 5, ratio: "9:16" }); }} /><Tooltip text={configured ? "管理视频服务" : "配置视频服务"}><IconButton variant="ghost" aria-label={configured ? "管理视频服务" : "配置视频服务"} onClick={onConfigure}><Icon name="settings" size={16} /></IconButton></Tooltip></div></div>
 					<div className="generation-field generation-field-model"><label htmlFor={`${id}-model`}>模型</label><GenerationPicker id={`${id}-model`} label="模型" icon="spark" value={configured ? draft.modelId : ""} disabled={!configured} placeholder={configured ? "选择模型" : "连接生成服务后选择模型"} options={configured ? (service?.models ?? []).map((item) => ({ value: item.id, label: item.id, hint: `${item.durations.join(" / ")} 秒${item.referenceEnabled ? " · 支持首帧" : ""}` })) : []} onChange={(modelId) => update({ modelId })} /></div>
@@ -41,8 +44,9 @@ export function VideoControls({ studio, onConfigure }: { studio: GenerationStudi
 				{studio.reference && !model?.referenceEnabled && <p className="generation-field-hint" role="status">当前模型未启用单图参考。请移除参考图使用文生视频，或在视频设置中启用实验性单图参考。</p>}
 				{studio.referenceError && <p className="generation-error" role="alert">{studio.referenceError}<IconButton size="compact" variant="ghost" aria-label="关闭文件提示" onClick={studio.clearReferenceError}><Icon name="close" /></IconButton></p>}
 			</div>
-			<footer className="generation-submit"><p id={`${id}-connection`}><span className="generation-connection-dot" />{videos.loading ? "正在读取视频服务" : videos.running ? "已有视频任务，可在作品区查看或继续查询" : configured ? `使用 ${service.name}` : "尚未配置视频生成服务"}</p><Button type="submit" variant="primary" size="primary" disabled={!canGenerate} loading={videos.submitting} aria-describedby={`${id}-connection`}><Icon name="video" />生成视频</Button><small>按服务商计费；作品自动保存。暂停查询不会停止服务端计费。</small></footer>
+			<footer className="generation-submit">{status ? <p id={`${id}-connection`}><span className="generation-connection-dot" />{status}</p> : variant === "hero" && <p className="generation-submit-hint">每次 1 段 · 按服务商计费</p>}<Button type="submit" variant="primary" size="primary" disabled={!canGenerate} loading={videos.submitting} aria-describedby={status ? `${id}-connection` : undefined}><Icon name="video" />生成视频</Button><small>按服务商计费；作品自动保存。暂停查询不会停止服务端计费。</small></footer>
 		</form>
+		{drop.dragging && <div className="generation-dropzone" aria-hidden="true"><Icon name="image" size={22} /><span>松开图片，作为首帧参考</span></div>}
 	</aside>;
 }
 
@@ -71,7 +75,7 @@ function VideoPlayer({ asset, playing = false }: { asset: GenerationAsset; playi
 	if (failed) return <div className="generation-media-failed" role="status"><Icon name="video" size={24} /><span>暂时无法预览这个文件</span></div>;
 	return <video ref={videoRef} src={asset.url} aria-label={asset.name} controls={playing} autoPlay={playing} muted loop playsInline preload="metadata" onError={() => setFailed(true)} />;
 }
-export function VideoGallery({ studio, onParameters, collection, active, onSaveToProject, saving, hero }: GenerationGalleryProps) {
+export function VideoGallery({ studio, onKind, collection, onCollectionChange, active, onSaveToProject, saving, header, hero, showHeadingTitle, empty }: GenerationGalleryProps) {
 	const input = useRef<HTMLInputElement>(null);
 	const [selected, setSelected] = useState<GenerationAsset>();
 	const [abandoning, setAbandoning] = useState<VideoJob>();
@@ -79,13 +83,14 @@ export function VideoGallery({ studio, onParameters, collection, active, onSaveT
 	const { videos } = studio;
 	const inCanvas = (asset: { canvasId?: string }) => assetCanvasId(asset, studio.canvases) === studio.canvasId;
 	const assets = assetsInCollection(studio.assets.filter((asset) => asset.kind === "video" && inCanvas(asset)), collection);
+	const failed = videos.jobs.filter((job) => inCanvas(job) && ["failed", "abandoned", "submission_unknown", "download_failed"].includes(job.status)).length;
 	const tasks = videos.jobs.filter((job) => inCanvas(job)).filter((job) => collection === "failures" ? ["failed", "abandoned", "submission_unknown", "download_failed"].includes(job.status) : collection === "tasks" ? videoJobActive(job) : job.status !== "completed");
 	useEffect(() => { if (!active) { setSelected(undefined); setAbandoning(undefined); } }, [active]);
 	return <section className="generation-gallery" aria-label="视频画廊">
-		<header className="generation-workspace-header"><span className="design-gallery-breadcrumb"><Icon name="video" size={16} />Design / 视频</span><span /><Button size="compact" variant="ghost" onClick={onParameters}><Icon name="sliders" />创作参数</Button></header>
+		{header ?? <header className="generation-workspace-header"><span className="design-gallery-breadcrumb"><Icon name="video" size={15} />Design</span><div className="generation-workspace-tools"><SegmentedControl label="创作类型" value="video" onChange={onKind} options={[{ value: "image", label: "图片" }, { value: "video", label: "视频" }]} /></div></header>}
 		<div className="generation-gallery-scroll">
 			{hero}
-			<div className="generation-gallery-heading"><div><span className="generation-eyebrow">MOTION STUDIO</span><h2>光影成片<span>{assets.length.toString().padStart(2, "0")}</span></h2><p>把静止的瞬间，接成流动的故事。</p></div><Button className="generation-import" variant="ghost" size="compact" onClick={() => input.current?.click()}><Icon name="plus" size={14} />导入作品</Button></div>
+			<div className="generation-gallery-heading">{showHeadingTitle !== false && <h2>{collection === "failures" ? "失败记录" : "光影成片"}<span>{(collection === "failures" ? failed : assets.length).toString().padStart(2, "0")}</span></h2>}<div className="generation-gallery-heading-actions"><div className="generation-gallery-views"><SegmentedControl label="画廊视图" value={collection === "failures" ? "failures" : "all"} onChange={(next) => onCollectionChange(next)} options={[{ value: "all", label: `作品 ${assets.length}` }, { value: "failures", label: `失败记录 ${failed}` }]} /></div><Button className="generation-import" variant="ghost" size="compact" onClick={() => input.current?.click()}><Icon name="plus" size={14} />导入作品</Button></div></div>
 			<Input ref={input} className="generation-file-input" type="file" multiple accept="video/mp4,video/webm,video/ogg,video/quicktime" aria-label="导入视频作品" onChange={(event) => { void studio.importAssets("video", Array.from(event.target.files ?? [])); event.target.value = ""; }} />
 			{studio.errors.video && <p className="generation-gallery-error" role="alert">{studio.errors.video}</p>}
 			{videos.error && <div className="generation-gallery-error" role="alert">{videos.error}<Button size="compact" onClick={() => void videos.refresh()}>重新读取状态</Button></div>}
@@ -97,7 +102,7 @@ export function VideoGallery({ studio, onParameters, collection, active, onSaveT
 				<Button size="compact" variant="ghost" onClick={() => reuseVideo(studio, job)}>使用提示词</Button>
 			</div>{videoJobActive(job) && <small>暂停仅停止本地等待，服务端可能继续生成并计费。</small>}</div></article>)}</div>}
 			{!!assets.length && <div className="generation-gallery-grid">{assets.map((asset) => <article className="generation-card" data-kind="video" key={asset.id}><div className="generation-card-media"><button className="generation-card-preview" aria-label={`预览视频：${asset.name}`} onClick={() => setSelected(asset)}><VideoPlayer asset={asset} /><span className="generation-card-play"><Icon name="video" size={24} /></span></button></div><div className="generation-card-caption"><strong title={asset.prompt ?? asset.name}>{asset.prompt?.slice(0, 24) || asset.name}</strong><Chip>{asset.videoJob ? "生成作品" : "本地导入"}</Chip></div>{asset.videoJob && <><div className="generation-asset-info"><span>{asset.videoJob.modelId}</span><span>{asset.videoJob.actualWidth} × {asset.videoJob.actualHeight}</span></div><div className="generation-card-actions"><VideoActions studio={studio} job={asset.videoJob} /><Button size="compact" variant="ghost" onClick={() => setMoving(asset)}><Icon name="layers" size={14} />移到画布</Button><Button size="compact" disabled={!studio.project || saving} onClick={() => onSaveToProject(asset)}><Icon name="folderPlus" />保存至当前项目</Button></div></>}</article>)}</div>}
-			{!assets.length && !tasks.length && !videos.submitting && <div className="generation-empty"><div className="generation-empty-art" aria-hidden="true"><span className="generation-empty-back" /><span className="generation-empty-frame"><Icon name="video" size={24} /></span><span className="generation-empty-spark"><Icon name="spark" size={16} /></span></div><h2>让灵感动起来</h2><p>一阵风、一个回眸、一段光影。<br />把想象写下来，留给下一段故事。</p><Button variant="ghost" size="compact" onClick={() => input.current?.click()}><Icon name="plus" />导入一段视频</Button><small>生成的作品会出现在这里，也可以先看看已有的作品。</small></div>}
+			{!assets.length && !tasks.length && !videos.submitting && (empty ?? <div className="generation-empty"><div className="generation-empty-art" aria-hidden="true"><span className="generation-empty-back" /><span className="generation-empty-frame"><Icon name="video" size={24} /></span><span className="generation-empty-spark"><Icon name="spark" size={16} /></span></div><h2>让灵感动起来</h2><p>一阵风、一个回眸、一段光影。<br />把想象写下来，留给下一段故事。</p><Button variant="ghost" size="compact" onClick={() => input.current?.click()}><Icon name="plus" />导入一段视频</Button><small>生成的作品会出现在这里，也可以先看看已有的作品。</small></div>)}
 			{!!assets.length && <p className="generation-session-note">生成与导入的作品都已保存在本机 · 可在资产库中跨画布复用</p>}
 		</div>
 		{selected && <Dialog className="generation-preview-dialog" aria-label="视频预览" onClose={() => setSelected(undefined)}><header><div><strong>{selected.prompt?.slice(0, 24) || selected.name}</strong><small>循环播放 · 可切换声音</small></div><IconButton size="compact" variant="ghost" aria-label="关闭作品预览" onClick={() => setSelected(undefined)}><Icon name="close" /></IconButton></header><div className="generation-preview-media"><VideoPlayer key={selected.id} asset={selected} playing /></div>{selected.videoJob && <div className="generation-preview-info"><p>{selected.prompt}</p><small>{selected.videoJob.serviceName} · {selected.videoJob.modelId} · {new Date(selected.videoJob.completedAt ?? selected.createdAt).toLocaleString()}</small><small>实际成片：{actualSpecs(selected.videoJob)}</small><small>请求：{selected.videoJob.duration} 秒 · {selected.videoJob.ratio} · {selected.videoJob.resolution}（不保证输出分辨率）</small>{selected.videoJob.usage && <small>服务返回用量：{usageText(selected.videoJob.usage)}</small>}<VideoActions studio={studio} job={selected.videoJob} /><Button size="compact" disabled={!studio.project || saving} onClick={() => { setSelected(undefined); onSaveToProject(selected); }}><Icon name="folderPlus" />保存至当前项目</Button></div>}</Dialog>}

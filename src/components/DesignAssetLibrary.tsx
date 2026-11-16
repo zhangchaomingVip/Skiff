@@ -1,21 +1,18 @@
 import { useState, type ReactNode } from "react";
-import { assetCanvasId, canvasLabel, type DesignCanvas } from "../workbench/designCanvases";
+import { assetCanvasId, canvasLabel } from "../workbench/designCanvases";
 import type { GenerationAsset, GenerationKind, GenerationStudio } from "../workbench/useGenerationStudio";
-import { CanvasNameDialog } from "./CanvasNameDialog";
-import { ConfirmDialog } from "./ConfirmDialog";
 import { MediaView } from "./GenerationWorkspace";
 import { Icon } from "./Icon";
 import { MoveAssetDialog } from "./MoveAssetDialog";
-import { Button, Chip, Dialog, IconButton, SegmentedControl, Tooltip } from "./ui";
+import { Button, Chip, Dialog, IconButton, SegmentedControl } from "./ui";
 
 type BoardFilter = "all" | GenerationKind;
 
 const assetTitle = (asset: GenerationAsset) => asset.prompt?.trim().replace(/\s+/g, " ") || asset.name;
 
-/** Shared mixed-media board: canvases and the asset library only differ in the
- *  header and whether a work shows its canvas. It stays a gallery, never a
- *  freeform board with panning or zooming. */
-function AssetBoard({ eyebrow, title, ariaLabel, description, note, emptyTitle, emptyText, assets, actions, onCreate, createLabel, showCanvas, studio, onImageToImage, onImageToVideo }: {
+/** Cross-canvas reuse: every generated or imported work in one place. The board
+ *  stays a gallery, never a freeform board with panning or zooming. */
+function AssetBoard({ eyebrow, title, ariaLabel, description, note, emptyTitle, emptyText, assets, actions, onCreate, onBack, createLabel, showCanvas, studio, onImageToImage, onImageToVideo }: {
 	eyebrow: string;
 	title: string;
 	ariaLabel: string;
@@ -26,6 +23,7 @@ function AssetBoard({ eyebrow, title, ariaLabel, description, note, emptyTitle, 
 	assets: GenerationAsset[];
 	actions?: ReactNode;
 	onCreate: () => void;
+	onBack: () => void;
 	createLabel: string;
 	showCanvas?: boolean;
 	studio: GenerationStudio;
@@ -47,6 +45,7 @@ function AssetBoard({ eyebrow, title, ariaLabel, description, note, emptyTitle, 
 					<p>{description}</p>
 				</div>
 				<div className="generation-gallery-heading-actions">
+					<Button className="generation-back" size="compact" variant="ghost" onClick={onBack}><Icon name="arrowLeft" size={14} />返回首页</Button>
 					<SegmentedControl label="画布筛选" value={filter} onChange={setFilter} options={[{ value: "all", label: `全部 ${assets.length}` }, { value: "image", label: `图片 ${images}` }, { value: "video", label: `视频 ${videos}` }]} />
 					<Button size="compact" onClick={onCreate}><Icon name="spark" size={14} />{createLabel}</Button>
 					{actions}
@@ -89,44 +88,7 @@ function AssetBoard({ eyebrow, title, ariaLabel, description, note, emptyTitle, 
 	</section>;
 }
 
-export function DesignCanvasView({ studio, canvas, assets, onCreate, onImageToImage, onImageToVideo }: {
-	studio: GenerationStudio;
-	canvas?: DesignCanvas;
-	assets: GenerationAsset[];
-	onCreate: () => void;
-	onImageToImage: (asset: GenerationAsset) => void;
-	onImageToVideo: (asset: GenerationAsset) => void;
-}) {
-	const [renaming, setRenaming] = useState(false);
-	const [confirming, setConfirming] = useState(false);
-	const images = assets.filter((asset) => asset.kind === "image").length;
-	const name = canvas?.name ?? "未分组";
-	return <>
-		<AssetBoard
-			ariaLabel="画布"
-			eyebrow={canvas ? "CANVAS" : "UNGROUPED"}
-			title={name}
-			description={`${images} 张图片 · ${assets.length - images} 段视频${canvas ? "" : " · 尚未归入任何画布"}`}
-			note={canvas ? "画布只做分组：删除画布不会删除作品，它们会回到未分组。" : "这些作品还没有画布。选一个画布作为提交目标，或在这里新建。"}
-			emptyTitle="这个画布还没有作品"
-			emptyText={canvas ? "在这个画布下生成的作品会自动收进来。\n也可以切换画布查看其他作品。" : "选择一个画布作为提交目标，新作品就会归入其中。"}
-			assets={assets}
-			onCreate={onCreate}
-			createLabel="在此画布创作"
-			studio={studio}
-			onImageToImage={onImageToImage}
-			onImageToVideo={onImageToVideo}
-			actions={canvas && <>
-				<Tooltip text="重命名画布"><IconButton size="compact" variant="ghost" aria-label="重命名画布" onClick={() => setRenaming(true)}><Icon name="edit" size={15} /></IconButton></Tooltip>
-				<Tooltip text="删除画布"><IconButton size="compact" variant="ghost" aria-label="删除画布" onClick={() => setConfirming(true)}><Icon name="close" size={15} /></IconButton></Tooltip>
-			</>}
-		/>
-		{renaming && canvas && <CanvasNameDialog title="重命名画布" initial={canvas.name} confirmText="保存名称" onConfirm={(next) => studio.renameCanvas(canvas.id, next)} onClose={() => setRenaming(false)} />}
-		{confirming && canvas && <ConfirmDialog title="删除画布" description={`“${canvas.name}”只会被删除分组，里面的 ${assets.length} 件作品会回到未分组，原文件不受影响。`} confirmText="删除画布" onConfirm={() => { studio.deleteCanvas(canvas.id); studio.openGallery(); }} onClose={() => setConfirming(false)} />}
-	</>;
-}
-
-/** Cross-canvas reuse: every generated or imported work in one place. */
+/** Every generated or imported work, across canvases. */
 export function DesignAssetLibrary({ studio, assets, onCreate, onImageToImage, onImageToVideo }: {
 	studio: GenerationStudio;
 	assets: GenerationAsset[];
@@ -145,6 +107,7 @@ export function DesignAssetLibrary({ studio, assets, onCreate, onImageToImage, o
 		emptyText="生成或导入作品后，会在这里集中展示，方便跨画布复用。"
 		assets={assets}
 		onCreate={onCreate}
+		onBack={studio.openGallery}
 		createLabel="去创作"
 		showCanvas
 		studio={studio}
