@@ -1,4 +1,6 @@
-//! Human input uses acknowledged CDP commands; a stream ping only acknowledges receipt.
+//! Human input goes to the managed page over CDP. Presses, releases, keys and
+//! flushes wait for Chrome's acknowledgement; pointer moves only rely on the
+//! socket's ordering, so a drag never queues behind page latency.
 use super::*;
 use futures_util::{SinkExt, StreamExt};
 use tokio::net::TcpStream;
@@ -10,18 +12,22 @@ pub(super) struct Driver {
 	session: String,
 }
 impl Driver {
-	async fn request(&mut self, method: &str, params: Value, attached: bool) -> Result<Value> {
+	async fn send(&mut self, method: &str, params: Value, attached: bool) -> Result<u64> {
 		self.id += 1;
 		let id = self.id;
 		let mut message = json!({"id":id,"method":method,"params":params});
 		if attached {
 			message["sessionId"] = json!(self.session);
 		}
+		self.socket
+			.send(Message::Text(message.to_string().into()))
+			.await
+			.map_err(|_| "浏览器输入连接已断开")?;
+		Ok(id)
+	}
+	async fn request(&mut self, method: &str, params: Value, attached: bool) -> Result<Value> {
+		let id = self.send(method, params, attached).await?;
 		tokio::time::timeout(Duration::from_secs(3), async {
-			self.socket
-				.send(Message::Text(message.to_string().into()))
-				.await
-				.map_err(|_| "浏览器输入连接已断开")?;
 			while let Some(Ok(message)) = self.socket.next().await {
 				if let Message::Text(text) = message {
 					if let Ok(value) = serde_json::from_str::<Value>(&text) {
@@ -93,26 +99,44 @@ impl Driver {
 			.into();
 		Ok(driver)
 	}
-	pub(super) async fn dispatch(&mut self, value: &Value) -> Result<()> {
-		let mut params = value.clone();
-		let object = params.as_object_mut().ok_or("无效输入")?;
-		let mouse = value["type"] == "input_mouse";
-		let kind = object.remove("eventType").ok_or("无效输入事件")?;
-		object.remove("type");
-		object.remove("controlVersion");
-		object.remove("inputId");
-		object.retain(|_, value| !value.is_null());
-		object.insert("type".into(), kind);
-		let method = if mouse {
+	/// CDP method and parameters for one whitelisted input message.
+	pub(super) fn describe(value: &Value) -> Result<(&'static str, Value)> {
+		let kind = value["eventType"].as_str().ok_or("无效输入事件")?;
+		let method = if value["type"] == "input_mouse" {
 			"Input.dispatchMouseEvent"
-		} else if value["eventType"] == "char" {
-			params = json!({"text":value["text"]});
+		} else if kind == "char" {
 			"Input.insertText"
 		} else {
 			"Input.dispatchKeyEvent"
 		};
-		self.request(method, params, true).await?;
-		Ok(())
+		if method == "Input.insertText" {
+			return Ok((method, json!({"text":value["text"]})));
+		}
+		let mut params = value.clone();
+		let object = params.as_object_mut().ok_or("无效输入")?;
+		object.remove("type");
+		object.remove("eventType");
+		object.remove("controlVersion");
+		object.remove("inputId");
+		object.retain(|_, item| !item.is_null());
+		object.insert("type".into(), json!(kind));
+		Ok((method, params))
+	}
+	pub(super) async fn dispatch(&mut self, value: &Value) -> Result<()> {
+		let (method, params) = Self::describe(value)?;
+		self.request(method, params, true).await.map(|_| ())
+	}
+	/// Pointer moves need order, not confirmation. The CDP socket preserves order,
+	/// and waiting for every acknowledgement would let a drag queue behind page
+	/// latency until the handle visibly stops following the cursor.
+	pub(super) async fn dispatch_move(&mut self, value: &Value) -> Result<()> {
+		let (method, params) = Self::describe(value)?;
+		self.send(method, params, true).await.map(|_| ())
+	}
+	pub(super) async fn reload(&mut self) -> Result<()> {
+		self.request("Page.reload", json!({"ignoreCache":false}), true)
+			.await
+			.map(|_| ())
 	}
 }
 

@@ -37,8 +37,6 @@
 	.move-asset-option:hover { background: var(--hover); }
 	.move-asset-option[aria-checked=true] { border-color: color-mix(in srgb, var(--accent) 48%, var(--border)); background: color-mix(in srgb, var(--accent) 8%, var(--surface)); color: var(--accent); }
 	.move-asset-option:focus-visible { outline: 2px solid var(--accent); outline-offset: var(--space-px); }
-	.design-sidebar-footer { display: flex; flex-direction: column; gap: var(--space-2); margin-top: auto; padding-top: var(--space-4); border-top: 1px solid var(--sidebar-border); }
-	.design-sidebar-footer > small { padding-inline: var(--space-2); color: var(--muted); font-size: var(--font-size-xs); line-height: var(--line-height-relaxed); }
 	.design-main { display: flex; flex: 1; min-width: 0; min-height: 0; }
 	.design-results { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; }
 	.design-gallery-route { display: flex; flex: 1; min-width: 0; min-height: 0; }

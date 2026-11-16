@@ -1,4 +1,4 @@
-import { openDesignCanvas, workbenchTool } from "./workspace-navigation.mjs";
+import { openCanvasComposer, openDesignCanvas, workbenchTool } from "./workspace-navigation.mjs";
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { chromium } from "../.playwright-cli/node_modules/playwright-core/index.mjs";
@@ -41,13 +41,16 @@ try {
 		await tool("生图").click(); assert.equal(await page.locator(".generation-reference-image img").getAttribute("src"), imageUrl);
 		await page.evaluate(() => window.skiffPreview.generation.setMode("pending"));
 		await generate().click(); await page.getByText("正在生成图片…", { exact: true }).waitFor();
+		await openCanvasComposer(page);
 		assert.equal(await generate().isEnabled(), true, "An accepted edit leaves capacity for another task");
 		const first = await page.evaluate(() => window.skiffPreview.generation.calls);
 		assert.equal(first.length, 1); assert.equal(first[0].reference.name, original.name); assert.equal(first[0].reference.dataPrefix, "data:image/png;base64,");
 		await page.getByRole("button", { name: "移除图生图参考图", exact: true }).click();
 		assert.equal(await page.evaluate((url) => window.revoked.includes(url), imageUrl), true);
 		assert.equal(await page.evaluate((url) => window.revoked.includes(url), videoUrl), false);
-		await page.getByRole("button", { name: "停止等待", exact: true }).click(); await page.getByRole("group", { name: "画廊视图", exact: true }).getByRole("button", { name: /^失败记录/ }).click();
+		await page.getByRole("button", { name: "停止等待", exact: true }).click();
+		await openDesignCanvas(page);
+		await page.getByRole("group", { name: "画廊视图", exact: true }).getByRole("button", { name: /^失败记录/ }).click();
 		await page.getByText("已停止等待", { exact: true }).waitFor();
 		await page.evaluate(() => window.skiffPreview.generation.setMode("success"));
 		await reference().setInputFiles(original); await generate().click();
@@ -61,13 +64,13 @@ try {
 		await page.screenshot({ path: `dist/image-edit/${theme}-reference.png` });
 		await page.getByRole("button", { name: "移除图生图参考图", exact: true }).click();
 		assert.equal(await page.evaluate((url) => window.revoked.includes(url), sharedUrl), false, "Removing a shared reference keeps its original alive");
-		await openDesignCanvas(page);
 		await page.locator(".generation-card-preview").first().click();
 		await page.getByRole("dialog", { name: "图片预览", exact: true }).getByRole("button", { name: "以此图生成图片", exact: true }).click();
 		await page.evaluate(() => window.skiffPreview.generation.setMode("failure")); await generate().click();
 		await page.getByRole("group", { name: "画廊视图", exact: true }).getByRole("button", { name: /^失败记录/ }).click();
 		await page.getByText(/图生图失败：.*未自动改为文生图/).first().waitFor();
 		assert.equal(await page.evaluate(() => window.skiffPreview.generation.calls.length), 3);
+		await openCanvasComposer(page);
 		await page.getByRole("button", { name: "移除图生图参考图", exact: true }).click();
 		await page.evaluate(() => window.skiffPreview.generation.setMode("success")); await generate().click();
 		await page.waitForFunction(() => document.querySelectorAll(".generation-card:not(.generation-pending-card)").length === 2);

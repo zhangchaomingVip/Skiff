@@ -3,7 +3,7 @@ import { mkdir } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import { chromium } from "../.playwright-cli/node_modules/playwright-core/index.mjs";
 import { testImage } from "./imageFixture.mjs";
-import { openDesignCanvas } from "./workspace-navigation.mjs";
+import { openCanvasComposer, openDesignCanvas } from "./workspace-navigation.mjs";
 
 const origin = process.argv[2] ?? "http://localhost:1421";
 await mkdir("dist/design-canvas", { recursive: true });
@@ -16,6 +16,8 @@ const canvases = () => page.getByRole("navigation", { name: "画布", exact: tru
 const scene = () => page.locator(".design-canvas-scene");
 const crumb = () => page.locator(".canvas-crumb");
 const kindSwitch = () => page.getByRole("group", { name: "创作类型", exact: true });
+const prompt = () => page.getByRole("textbox", { name: "提示词 Prompt", exact: true });
+const currentRows = () => page.locator(".design-canvas-row[aria-current=page]").evaluateAll((rows) => rows.map((row) => row.innerText.replace(/\s+/g, " ").trim()));
 
 try {
 	for (const theme of ["light", "dark"]) {
@@ -41,37 +43,67 @@ try {
 		}, { image: `data:image/png;base64,${testImage().toString("base64")}`, video });
 		await page.goto(`${origin}/tests/preview.html?fixture=sidebar&persist=1&theme=${theme}`);
 
-		// The launcher owns creation and shows no history.
+		// The home is a feed: one composer above every recent image and video.
 		await page.locator(".studio-home").waitFor();
-		assert.equal(await page.locator(".generation-card").count(), 0, "The launcher holds no works");
-		assert.equal(await page.getByRole("button", { name: "画布：未分组", exact: true }).count(), 1, "The launcher still targets a canvas");
+		await page.locator(".studio-gallery").waitFor();
+		await page.waitForFunction(() => document.querySelectorAll(".studio-gallery .generation-card").length === 5);
+		assert.match(await page.locator(".studio-gallery-head").innerText(), /最近创作[\s\S]*全部作品[\s\S]*05/, "The home gallery files every work under one recent-works heading");
+		assert.equal(await page.getByRole("button", { name: "画布：未分组", exact: true }).count(), 1, "The composer still targets a canvas");
 		assert.equal(await canvases().getByRole("button").count(), 4, "Two canvases, ungrouped and the create action");
+		assert.deepEqual(await currentRows(), ["首页 5"], "The launcher owns the only highlight and counts every work");
 		await page.screenshot({ path: `dist/design-canvas/${theme}-home.png`, animations: "disabled" });
 
-		// The sidebar scopes every canvas scene.
+		// Gallery actions refill the composer without leaving home.
+		const sourceCard = page.locator(".studio-gallery .generation-card").filter({ hasText: "窗边的花与午后的光" });
+		await sourceCard.hover();
+		await sourceCard.getByRole("button", { name: "复用提示词", exact: true }).click();
+		assert.equal(await prompt().inputValue(), "窗边的花与午后的光", "Reusing a work seeds the composer prompt");
+		await sourceCard.getByRole("button", { name: "作为参考图", exact: true }).click();
+		await page.locator(".design-composer .generation-reference.has-image").waitFor();
+		assert.equal(await page.locator(".design-canvas-scene").count(), 0, "Gallery actions keep the home feed in place");
+		await page.getByRole("button", { name: "移除图生图参考图", exact: true }).click();
+		await page.getByRole("button", { name: "清空提示词", exact: true }).click();
+
+		// Submitting inserts the task at the head of the feed; no route change.
+		await prompt().fill("首页生成留在这里");
+		await page.evaluate(() => window.skiffPreview.generation.setMode("pending"));
+		await page.getByRole("button", { name: "生成图片", exact: true }).click();
+		const pending = page.locator(".studio-gallery .studio-pending-card");
+		await pending.waitFor();
+		assert.equal(await page.locator(".design-canvas-scene").count(), 0, "Submitting stays on the home feed");
+		assert.equal(await page.locator(".studio-gallery .generation-card").first().evaluate((element) => element.classList.contains("studio-pending-card")), true, "The pending task owns the first slot");
+		await page.screenshot({ path: `dist/design-canvas/${theme}-pending-home.png`, animations: "disabled" });
+		const pendingId = await page.evaluate(async () => (await window.skiffPreview.generation.calls).at(-1).id);
+		await page.evaluate((id) => window.skiffPreview.generation.finishJob(id, "failed"), pendingId);
+		await pending.waitFor({ state: "detached" });
+
+		// The sidebar scopes the same feed to a canvas.
 		await openDesignCanvas(page);
+		assert.deepEqual(await currentRows(), ["未分组 1"], "The canvas scene hands the highlight to its canvas");
 		assert.match(await crumb().innerText(), /未分组/);
-		assert.match(await crumb().innerText(), /1$/, "Ungrouped hides works that belong to a canvas");
+		assert.match(await crumb().innerText(), /1 件图片/, "Ungrouped names the active work type and count");
 		assert.equal(await scene().locator(".generation-card").count(), 1);
-		assert.equal(await page.locator(".design-composer[data-variant=canvas] .generation-field-canvas").isVisible(), false, "The redraw bar never re-targets another canvas");
+		const composer = await openCanvasComposer(page);
+		assert.equal(await composer.isVisible(), true, "The composer stays above every canvas gallery");
+		assert.equal(await prompt().count(), 1, "One composer owns the whole studio");
 
 		await canvases().getByRole("button", { name: /^夏日短片/ }).click();
 		await scene().waitFor();
 		assert.match(await crumb().innerText(), /夏日短片/);
-		assert.match(await crumb().innerText(), /3$/, "The canvas keeps a mixed count");
+		assert.match(await crumb().innerText(), /2 件图片/, "The canvas count follows the active work type");
 		assert.equal(await scene().locator(".generation-card").count(), 2, "The image gallery shows the two images of this canvas");
 		await page.screenshot({ path: `dist/design-canvas/${theme}-canvas.png`, animations: "disabled" });
 
 		await kindSwitch().getByRole("button", { name: "视频", exact: true }).click();
-		await page.locator(".generation-card[data-kind=video]").first().waitFor();
-		assert.equal(await page.locator(".generation-card[data-kind=video]").count(), 1, "The video gallery keeps its own scope");
-		await page.getByRole("button", { name: /^预览视频/ }).click();
+		await scene().locator(".generation-card[data-kind=video]").first().waitFor();
+		assert.match(await crumb().innerText(), /1 件视频/);
+		await scene().getByRole("button", { name: /^预览视频/ }).click();
 		const preview = page.getByRole("dialog", { name: "视频预览", exact: true });
 		await preview.waitFor();
 		await page.keyboard.press("Escape");
 		await preview.waitFor({ state: "detached" });
 		await kindSwitch().getByRole("button", { name: "图片", exact: true }).click();
-		await page.locator(".generation-card[data-kind=image]").first().waitFor();
+		await scene().locator(".generation-card[data-kind=image]").first().waitFor();
 
 		await scene().getByRole("button", { name: /^预览图片/ }).first().click();
 		const imagePreview = page.getByRole("dialog", { name: "图片预览", exact: true });
@@ -79,12 +111,14 @@ try {
 		await page.keyboard.press("Escape");
 		await imagePreview.waitFor({ state: "detached" });
 
-		// Redrawing stays inside the canvas instead of jumping back to the launcher.
+		// Redrawing stays inside the canvas; the composer never collapses.
 		await page.evaluate(() => window.skiffPreview.generation.setMode("pending"));
-		await page.getByRole("textbox", { name: "提示词 Prompt", exact: true }).fill("夏日午后的第二张");
+		await prompt().fill("夏日午后的第二张");
 		await page.getByRole("button", { name: "生成图片", exact: true }).click();
 		await page.getByText("正在生成图片…", { exact: true }).waitFor();
-		assert.equal(await page.locator(".design-canvas-scene").count(), 1, "Submitting keeps the canvas scene");
+		assert.equal(await scene().count(), 1, "Submitting keeps the canvas feed");
+		assert.equal(await page.locator(".design-composer[data-variant=hero]").count(), 1, "Submitting keeps the composer mounted");
+		assert.equal(await scene().locator(".generation-pending-card").count(), 1, "The new task lands in the gallery");
 		await page.getByRole("button", { name: "停止等待", exact: true }).click();
 		await page.getByRole("group", { name: "画廊视图", exact: true }).getByRole("button", { name: /^失败记录/ }).click();
 		await page.getByText("已停止等待", { exact: true }).waitFor();
@@ -98,7 +132,9 @@ try {
 		await scene().waitFor();
 		assert.match(await crumb().innerText(), /第三画布/);
 		assert.equal(await scene().locator(".generation-card").count(), 0);
-		assert.equal(await scene().getByText("这个画布还没有作品", { exact: true }).count(), 1);
+		assert.match(await page.locator(".studio-feed-empty").innerText(), /还没有作品/);
+		assert.equal(await prompt().isVisible(), true, "The empty canvas keeps the composer, not a second CTA");
+		await page.screenshot({ path: `dist/design-canvas/${theme}-empty.png`, animations: "disabled" });
 
 		await scene().getByRole("button", { name: "重命名画布", exact: true }).click();
 		const renameDialog = page.getByRole("dialog", { name: "重命名画布", exact: true });
@@ -106,25 +142,25 @@ try {
 		await renameDialog.getByRole("button", { name: "保存名称", exact: true }).click();
 		assert.match(await crumb().innerText(), /第三画布改/);
 		assert.equal(await canvases().getByRole("button", { name: /^第三画布改/ }).count(), 1);
-		await page.screenshot({ path: `dist/design-canvas/${theme}-empty.png`, animations: "disabled" });
 
-		// Deleting only removes the grouping; the app returns to the launcher.
+		// Deleting only removes the grouping; the feed returns to every work.
 		await scene().getByRole("button", { name: "删除画布", exact: true }).click();
 		const confirm = page.getByRole("dialog", { name: "删除画布", exact: true });
 		await confirm.getByRole("button", { name: "删除画布", exact: true }).click();
-		await page.locator(".studio-home").waitFor();
+		await page.locator(".studio-gallery").waitFor();
 		assert.equal(await canvases().getByRole("button", { name: /^第三画布改/ }).count(), 0);
 		assert.equal(await canvases().getByRole("button").count(), 4);
+		assert.deepEqual(await currentRows(), ["首页 5"], "Deleting a canvas returns the highlight and the full feed");
 
 		// Works and the index survive a reload with their canvas intact.
 		await page.reload();
-		await page.locator(".studio-home").waitFor();
+		await page.locator(".studio-gallery").waitFor();
 		assert.equal(await canvases().getByRole("button").count(), 4);
 		await openDesignCanvas(page, "夏日短片");
 		assert.equal(await scene().locator(".generation-card").count(), 2);
 
 		assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
-		console.log(`PASS ${theme}: launcher first, scoped canvas scenes, mixed count, kind switch, redraw in place, create/rename/delete and reload`);
+		console.log(`PASS ${theme}: mixed home feed, composer actions, in-place pending, scoped canvases, redraw, create/rename/delete and reload`);
 	}
 	assert.deepEqual(errors, []);
 } finally { await browser.close(); }

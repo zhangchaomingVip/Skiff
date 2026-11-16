@@ -32,7 +32,29 @@ try {
 		assert.equal(await reply.locator('input[type="checkbox"]').isChecked(), true);
 		assert.equal(await reply.locator("br").count(), 1, "Soft line breaks remain supported");
 		assert.deepEqual(errors, []);
-		console.log(`PASS ${theme}: literal ranges, double-tilde deletion, bold, code, GFM table/task list and line breaks`);
+
+		// A typed address keeps its own words and leaves the app through the system browser.
+		await page.evaluate(() => { window.__TAURI_INTERNALS__ = { invoke: (command, args) => { window.__openedLink = { command, args }; return Promise.resolve(); } }; });
+		const address = "https://medoc.bjdataxxq.cn/";
+		await page.evaluate((url) => window.turnUsageHarness.render({ messages: [{ role: "user", content: `${url} 你登录这个，用15652121099 密码 Password@123` }] }), address);
+		const bubble = page.locator(".msg.user .md");
+		const link = bubble.locator("a.message-link");
+		await link.waitFor();
+		assert.equal(await link.textContent(), address, "The typed URL stays visible instead of a 来源 chip");
+		assert.equal(await bubble.locator("a.citation-chip").count(), 0);
+		assert.equal(await link.evaluate((element) => getComputedStyle(element).fontWeight), "600");
+		await link.click();
+		assert.deepEqual(await page.evaluate(() => window.__openedLink), { command: "open_url", args: { url: address } });
+		assert.ok(page.url().endsWith("/tests/turn-usage.html"), "Clicking a message link never navigates the app");
+
+		// Replies keep the citation chip, which must also reach the system browser.
+		await page.evaluate(() => window.turnUsageHarness.render({ messages: [{ role: "user", content: "找一下文档" }, { role: "assistant", content: "参考链接：\nhttps://example.com/docs\n以上。" }] }));
+		const chip = page.locator(".msg.assistant a.citation-chip");
+		await chip.waitFor();
+		assert.equal(await chip.textContent(), "来源 · example.com/docs");
+		await chip.click();
+		assert.deepEqual(await page.evaluate(() => window.__openedLink), { command: "open_url", args: { url: "https://example.com/docs" } });
+		console.log(`PASS ${theme}: literal ranges, double-tilde deletion, bold, code, GFM table/task list, line breaks, typed address and citation links`);
 		await page.close();
 	}
 } finally {

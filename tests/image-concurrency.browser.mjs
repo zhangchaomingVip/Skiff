@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { chromium } from "../.playwright-cli/node_modules/playwright-core/index.mjs";
-import { openDesignCanvas } from "./workspace-navigation.mjs";
+import { openCanvasComposer, openDesignCanvas } from "./workspace-navigation.mjs";
 
 const origin = process.argv[2] ?? "http://localhost:1421";
 await mkdir("dist/image-concurrency", { recursive: true });
@@ -22,10 +22,13 @@ async function setLimit(value) {
 	await settings().getByRole("button", { name: "关闭设置", exact: true }).click();
 }
 async function submit(text) {
+	await openCanvasComposer(page);
 	await prompt().fill(text);
 	await generate().click();
 	await page.waitForFunction((expected) => window.skiffPreview.generation.calls.some((call) => call.prompt === expected), text);
 	await page.waitForFunction(() => !document.querySelector(".generation-submit button[type=submit]")?.getAttribute("aria-busy"));
+	// A valid submit collapses the canvas composer; later steps read its status.
+	await openCanvasComposer(page);
 }
 
 try {
@@ -87,6 +90,7 @@ try {
 		await page.reload();
 		await openDesignCanvas(page);
 		await page.waitForFunction(() => document.querySelectorAll(".generation-pending-card").length === 12);
+		await openCanvasComposer(page);
 		await page.getByRole("button", { name: "管理生成服务", exact: true }).click();
 		assert.equal(await limit().inputValue(), "0", "Preference survives reload");
 		await page.setViewportSize({ width: 600, height: 800 });

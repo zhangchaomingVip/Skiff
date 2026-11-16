@@ -365,6 +365,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .md a { color: var(--accent); }
 .md a.citation-chip { display: inline-flex; max-width: min(100%, 420px); align-items: center; vertical-align: baseline; overflow: hidden; padding: 1px 8px; border: 1px solid var(--border); border-radius: var(--radius-full); background: var(--panel-2); color: var(--secondary); font-size: .88em; text-decoration: none; text-overflow: ellipsis; white-space: nowrap; }
 .md a.citation-chip:hover { border-color: var(--accent); color: var(--accent); }
+/* A URL someone typed reads as their own words: the address itself, not a citation chip. */
+.md a.message-link { color: inherit; font-weight: var(--font-weight-semibold); text-decoration: none; }
+.md a.message-link:hover, .md a.message-link:focus-visible { color: var(--accent); text-decoration: underline; }
 .inline-code { background: color-mix(in srgb, var(--panel) 75%, transparent); border-radius: var(--radius-base); padding: 1px 5px; font-family: var(--font-family-mono); font-size: .875em; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
 .md .inline-code { margin-inline: var(--space-0-5); border: 1px solid color-mix(in srgb, var(--border) 50%, transparent); }
 .code-block code { font-family: var(--font-family-mono); font-size: var(--font-size-sm); }

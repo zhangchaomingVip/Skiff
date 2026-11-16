@@ -9,7 +9,7 @@ import type { BrowserPanelControls } from "../browser/useBrowserPanel";
 import { Button, IconButton } from "./ui";
 import { Icon } from "./Icon";
 
-function BrowserScreen({ status, controls, actions, inputHandle }: { status: BrowserStatus; controls: BrowserPanelControls; actions: BrowserActions; inputHandle: React.MutableRefObject<{ flush: () => Promise<void> } | undefined> }) {
+function BrowserScreen({ status, controls, actions, inputHandle, reloadHandle, onReload }: { status: BrowserStatus; controls: BrowserPanelControls; actions: BrowserActions; inputHandle: React.MutableRefObject<{ flush: () => Promise<void> } | undefined>; reloadHandle: React.MutableRefObject<(() => boolean) | undefined>; onReload: (ok: boolean, error?: string) => void }) {
 	const canvas = useRef<HTMLCanvasElement>(null);
 	const screen = useRef<HTMLDivElement>(null);
 	const keyboard = useRef<HTMLTextAreaElement>(null);
@@ -43,8 +43,13 @@ function BrowserScreen({ status, controls, actions, inputHandle }: { status: Bro
 			phase: setPhase,
 			status: (value) => current.current.updateStatus(value),
 			url: (url) => current.current.updateUrl(status, url),
+			reload: onReload,
 		});
 		return () => { viewer.current?.dispose(); viewer.current = undefined; };
+	}, [status.chatId, status.generation, attempt]);
+	useEffect(() => {
+		reloadHandle.current = () => { const target = current.current.status; return !!viewer.current && !!target && viewer.current.reload(target); };
+		return () => { reloadHandle.current = undefined; };
 	}, [status.chatId, status.generation, attempt]);
 	const interactive = phase === "live" && status.control === "human" && !actions.pending;
 	useEffect(() => {
@@ -74,6 +79,7 @@ export function BrowserPanel({ chatId, controls, browserActions, compact, focusR
 }) {
 	const { status, error } = controls;
 	const inputHandle = useRef<{ flush: () => Promise<void> }>();
+	const reloadHandle = useRef<() => boolean>();
 	const heading = useRef<HTMLHeadingElement>(null);
 	const [dependencies, setDependencies] = useState<BrowserDependencies>();
 	const [dependencyError, setDependencyError] = useState<string>();
@@ -98,8 +104,17 @@ export function BrowserPanel({ chatId, controls, browserActions, compact, focusR
 	};
 	const watch = canWatchBrowser(status) && !error;
 	const failed = status && ["disconnected", "faulted"].includes(status.control);
+	const reloadable = !!status && ["human", "stopped"].includes(status.control) && !browserActions.pending;
+	const reloadPage = () => {
+		setActionError(undefined);
+		if (!reloadHandle.current?.()) setActionError("画面尚未连接，暂时无法刷新网页");
+	};
+	const reloadResult = (ok: boolean, failure?: string) => { if (!ok) setActionError(failure ?? "刷新网页失败，请重新连接画面"); };
 	return <section className="browser-panel" aria-label="浏览器画面" data-chat-id={chatId} data-generation={status?.generation ?? ""} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); collapse(); } }}>
-		<header className="browser-panel-header"><div className="browser-panel-heading"><Icon name="monitor" size={17} /><h2 ref={heading} tabIndex={-1}>浏览器</h2></div><IconButton size="compact" aria-label={compact ? "返回聊天" : "收起浏览器"} title={compact ? "返回聊天" : "收起浏览器"} onClick={collapse}><Icon name={compact ? "arrowLeft" : "panel"} size={16} /></IconButton></header>
+		<header className="browser-panel-header"><div className="browser-panel-heading"><Icon name="monitor" size={17} /><h2 ref={heading} tabIndex={-1}>浏览器</h2></div><div className="browser-panel-header-actions">
+			<IconButton size="compact" aria-label="刷新网页" title={reloadable ? "重新加载当前网页" : "接管浏览器或停止任务后可刷新网页"} disabled={!reloadable} onClick={reloadPage}><Icon name="refresh" size={16} /></IconButton>
+			<IconButton size="compact" aria-label={compact ? "返回聊天" : "收起浏览器"} title={compact ? "返回聊天" : "收起浏览器"} onClick={collapse}><Icon name={compact ? "arrowLeft" : "panel"} size={16} /></IconButton>
+		</div></header>
 		<div className="browser-address"><Icon name="link" size={14} /><span title={status?.url ?? undefined}>{status?.url ?? "尚未打开网页"}</span></div>
 		<div className="browser-control-status" role="status"><span>{browserActions.pending === "takeOver" ? "正在接管，请等待在途操作结束…" : browserActions.pending === "stop" ? "正在停止任务…" : browserActions.pending === "close" ? "正在关闭浏览器…" : error ? "无法读取状态" : status ? browserControlLabels[status.control] : "等待浏览任务"}</span><span>{status?.control === "human" && !browserActions.pending ? "可操作" : "仅观看"}</span></div>
 		{status && !["closed", "closing", "disconnected", "faulted"].includes(status.control) && <div className="browser-actions">
@@ -112,7 +127,7 @@ export function BrowserPanel({ chatId, controls, browserActions, compact, focusR
 		{browserActions.error && <p className="browser-panel-error" role="alert">{browserActions.error}</p>}
 		{status?.control === "human" && <p className="browser-input-hint">点击画面后可输入、滚动或粘贴文本。当前 AI 轮次已中断，交还后可继续原任务。</p>}
 		{status?.control === "ai" && status.requiresSnapshot && <p className="browser-input-hint">已交还。点击“继续浏览任务”后，AI 会先读取最新页面。</p>}
-		{watch && status ? controls.visible ? <BrowserScreen key={`${status.chatId}:${status.generation}`} status={status} controls={controls} actions={browserActions} inputHandle={inputHandle} /> : <div className="browser-empty"><Icon name="monitor" size={28} /><strong>画面已暂停</strong><p>返回此聊天后显示最新画面，浏览器任务继续运行。</p></div> : <div className="browser-empty" role="status">
+		{watch && status ? controls.visible ? <BrowserScreen key={`${status.chatId}:${status.generation}`} status={status} controls={controls} actions={browserActions} inputHandle={inputHandle} reloadHandle={reloadHandle} onReload={reloadResult} /> : <div className="browser-empty"><Icon name="monitor" size={28} /><strong>画面已暂停</strong><p>返回此聊天后显示最新画面，浏览器任务继续运行。</p></div> : <div className="browser-empty" role="status">
 			<Icon name={error || dependencyError || failed ? "wifi" : status?.control === "starting" ? "clock" : "monitor"} size={28} />
 			<strong>{error ? "浏览器服务暂不可用" : status?.control === "starting" ? "正在启动浏览器…" : failed ? browserControlLabels[status.control] : status?.control === "closing" ? "正在关闭浏览器…" : status?.control === "closed" ? "浏览器已关闭" : !dependencies ? "正在检查浏览器…" : !dependencies.ready ? "浏览器尚未就绪" : !dependencies.enabled ? "AI 浏览器尚未启用" : "让 AI 帮你浏览网页"}</strong>
 			<p>{error ?? dependencyError ?? status?.error ?? (failed ? "重新准备后，向 AI 描述要打开的网页。" : status?.control === "starting" ? "首次启动可能需要几秒，画面就绪后会自动显示。" : status?.control === "closed" ? "当前页面已关闭。在聊天中让 AI 再次打开网页即可开始新任务，无需重连；此聊天的登录状态会保留。" : dependencies && !dependencies.ready ? dependencies.message : dependencies && !dependencies.enabled ? "在设置中开启后，向 AI 描述浏览任务。" : "在聊天中发送网址或描述任务，AI 操作时可以在这里观看。")}</p>

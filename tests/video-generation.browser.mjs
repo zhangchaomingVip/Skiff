@@ -1,4 +1,4 @@
-import { openDesignCanvas, workbenchTool } from "./workspace-navigation.mjs";
+import { openCanvasComposer, openDesignCanvas, workbenchTool } from "./workspace-navigation.mjs";
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { chromium } from "../.playwright-cli/node_modules/playwright-core/index.mjs";
@@ -38,7 +38,8 @@ try {
 		await prompt().fill("蓝色纸船，海面波光，缓慢推进");
 		await page.locator('input[aria-label="上传首帧参考图"]').setInputFiles({ name: "boat.png", mimeType: "image/png", buffer: testImage() });
 		await setMode("pending"); await generate().click();
-		await page.getByRole("status").filter({ hasText: "正在生成视频…" }).waitFor();
+		await page.locator(".studio-gallery .studio-pending-card").waitFor();
+		await openDesignCanvas(page);
 		assert.equal(await generate().isDisabled(), true);
 		await tool("对话").click(); assert.equal(await page.locator(".composer-input").inputValue(), "视频任务不会丢失聊天草稿"); await tool("生成视频").click();
 		assert.equal(await prompt().inputValue(), "蓝色纸船，海面波光，缓慢推进");
@@ -66,8 +67,9 @@ try {
 		await setMode("success"); await page.getByRole("button", { name: "重新下载", exact: true }).click();
 		await page.waitForFunction(() => document.querySelectorAll(".generation-card").length === 2);
 		assert.equal(await page.evaluate(() => window.skiffPreview.videos.calls.filter((call) => !call.command).length), 2);
-		await setMode("unknown"); await prompt().fill("提交结果未知"); await generate().click();
+		await setMode("unknown"); await openCanvasComposer(page); await prompt().fill("提交结果未知"); await generate().click();
 		await page.getByRole("status").filter({ hasText: "提交结果待核对" }).waitFor();
+		await openCanvasComposer(page);
 		assert.equal(await generate().isDisabled(), true);
 		await page.getByRole("button", { name: "核对后结束跟踪", exact: true }).click();
 		await page.getByRole("dialog", { name: "结束本地任务跟踪？", exact: true }).getByRole("button", { name: "已核对，结束跟踪", exact: true }).click();

@@ -67,8 +67,10 @@ try {
 
 		await library().getByRole("button", { name: "预览作品：本地导入.png", exact: true }).click();
 		await page.getByRole("dialog", { name: "作品预览", exact: true }).getByRole("button", { name: "用作参考图", exact: true }).click();
-		await page.locator(".studio-home .generation-reference-image").waitFor();
-		assert.equal(await page.getByRole("button", { name: "画布：夏日短片", exact: true }).count(), 1, "Reusing a work returns to the composer with its canvas");
+		const composer = page.locator(".design-composer[data-variant=hero]");
+		await composer.waitFor();
+		await composer.locator(".generation-reference-image").waitFor();
+		assert.match(await composer.innerText(), /夏日短片/, "Reusing a work opens the composer on the work's own canvas");
 
 		// Moving an import out of a canvas is persisted as well.
 		await assetsNav().getByRole("button", { name: /^资产库/ }).click();

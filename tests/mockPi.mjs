@@ -160,6 +160,7 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 			if (command === "plugin:event|listen") { const id = ++sequence; listeners.set(id, args); return id; }
 			if (command === "plugin:event|unlisten") return;
 			if (command === "plugin:dialog|open") return dialogPath;
+			if (command === "open_url") return;
 			if (command === "set_history_workspace") { historyTargets = args.targets; return; }
 			if (command === "read_session_history") {
 				if (!historyTargets.some((item) => item.chatId === args.chatId && item.sessionFile === args.sessionFile)) throw new Error("Not indexed");

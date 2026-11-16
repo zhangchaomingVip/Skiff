@@ -42,25 +42,22 @@ try {
 		assert.equal(await page.getByRole("navigation", { name: "工作区工具", exact: true }).getByRole("button", { name: "对话", exact: true }).count(), 0);
 		assert.equal(await page.getByRole("button", { name: "返回对话", exact: true }).count(), 0);
 
-		// The launcher is always open: one large card, quick tags and the style shelf.
+		// The home is a mixed feed: one composer above every recent work.
 		assert.equal(await page.getByRole("button", { name: "创作参数", exact: true }).count(), 0, "The collapse entry is gone");
-		assert.equal(await page.locator(".design-composer[data-variant=hero]").isVisible(), true, "The launcher card is expanded on arrival");
-		assert.equal(await page.getByRole("group", { name: "快捷灵感", exact: true }).getByRole("button").count(), 6);
-		assert.equal(await page.locator(".studio-inspiration-card").count(), 6);
-		assert.equal(await page.locator(".generation-card").count(), 0, "The launcher keeps no history");
-		await page.getByRole("group", { name: "快捷灵感", exact: true }).getByRole("button", { name: "/暖色调" }).click();
-		assert.match(await prompt().inputValue(), /暖色调$/);
+		assert.equal(await page.locator(".design-composer[data-variant=hero]").isVisible(), true, "The composer is always open");
+		assert.equal(await page.locator(".studio-gallery").isVisible(), true, "Recent works sit directly under the composer");
+		assert.equal(await page.locator(".studio-gallery .generation-card").count(), 3, "Every seeded work appears in the home feed");
 		await prompt().fill("Design 草稿：暖色海报");
 		await page.screenshot({ path: `dist/workspace-modes/${theme}-home.png`, animations: "disabled" });
 
-		// Works live in the canvas scene, which keeps the masonry density picker.
+		// The same layout scopes to one canvas and keeps the masonry density picker.
 		await openDesignCanvas(page);
 		await page.waitForFunction(() => [...document.querySelectorAll(".generation-card img")].every((image) => image.complete && image.naturalWidth > 0));
 		assert.equal(await gallery().locator(".generation-card").evaluateAll((cards) => new Set(cards.map((card) => Math.round(card.getBoundingClientRect().left))).size), 3, "Three differently sized works occupy the three selected masonry columns");
 		await page.screenshot({ path: `dist/workspace-modes/${theme}-studio.png`, animations: "disabled" });
 		assert.ok(Number(await gallery().locator(".generation-gallery-grid").evaluate((element) => getComputedStyle(element).columnCount)) > 1, "Studio uses responsive masonry columns");
-		await page.getByRole("button", { name: "首页", exact: true }).first().click();
-		await page.locator(".studio-home").waitFor();
+		await page.getByRole("navigation", { name: "创作", exact: true }).getByRole("button", { name: /^首页/ }).click();
+		await page.locator(".studio-gallery").waitFor();
 		await mode("code").click();
 		assert.equal(await page.locator(".composer-input").inputValue(), "Code 草稿：保留工程上下文");
 		await mode("design").click();
@@ -75,14 +72,17 @@ try {
 		await page.getByRole("navigation", { name: "工作区工具", exact: true }).getByRole("button", { name: "生图", exact: true }).click();
 		assert.equal(await prompt().inputValue(), "Design 草稿：暖色海报");
 
-		// Submitting hands the launcher over to the canvas that owns the new work.
+		// Submitting inserts the task into the feed without leaving the page.
 		await page.evaluate(() => window.skiffPreview.generation.setMode("pending"));
 		await page.getByRole("button", { name: "生成图片", exact: true }).click();
 		await gallery().getByText("正在生成图片…", { exact: true }).waitFor();
-		assert.equal(await page.locator(".studio-home").count(), 0, "The launcher steps aside for the canvas scene");
+		assert.equal(await page.locator(".studio-gallery").isVisible(), true, "The home feed stays in place");
+		assert.equal(await page.locator(".design-composer[data-variant=hero]").count(), 1, "The composer stays mounted");
 		await mode("code").click(); await mode("design").click();
-		assert.equal(await gallery().locator(".generation-pending-card").count(), 1, "Pending work stays inside the works view");
+		assert.equal(await gallery().locator(".generation-pending-card").count(), 1, "Pending work stays at the head of the feed");
 		await gallery().getByRole("button", { name: "停止等待", exact: true }).click();
+		// Failure history still lives in the scoped canvas gallery.
+		await openDesignCanvas(page);
 		await view("失败记录").click();
 		await gallery().getByText("已停止等待", { exact: true }).waitFor();
 		await view("作品").click();
@@ -111,7 +111,7 @@ try {
 		await gallery().getByText("Studio 作品 1", { exact: false }).first().waitFor();
 
 		await page.setViewportSize({ width: 600, height: 800 });
-		assert.equal(await page.locator(".design-composer[data-variant=canvas]").isVisible(), true, "The redraw bar stays in the canvas scene");
+		assert.equal(await page.locator(".design-composer[data-variant=hero]").isVisible(), true, "The narrow studio keeps the composer above the feed");
 		await page.screenshot({ path: `dist/workspace-modes/${theme}-narrow.png`, animations: "disabled" });
 		assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
 		await page.setViewportSize({ width: 390, height: 800 });
@@ -119,7 +119,7 @@ try {
 		if (await page.locator("dialog[open][data-variant=drawer]").count()) await page.keyboard.press("Escape");
 		await mode("design").click();
 		assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
-		assert.equal(await page.locator(".design-composer textarea").isVisible(), true, "The narrow canvas keeps its prompt entry");
+		assert.equal(await page.locator(".design-composer textarea").isVisible(), true, "The narrow studio keeps its prompt entry");
 		console.log(`PASS ${theme}: launcher, independent routes/drafts, live tasks, filters, project saves, decoupled studio, persistence and 390/600px layouts`);
 	}
 	assert.deepEqual(errors, []);

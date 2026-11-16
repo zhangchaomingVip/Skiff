@@ -50,6 +50,7 @@ export function installMockBrowser(target) {
 			const message = JSON.parse(data); sent.push({ chatId: this.chatId, ...message });
 			if (message.type === "ack") { target.clearTimeout(this.timer); this.timer = target.setTimeout(() => this.frame(), 100); }
 			if (message.type === "input_flush") this.emit({ type: "input_ack", inputId: message.inputId });
+			if (message.type === "reload") this.emit({ type: "reload", ok: true });
 		}
 		close() { if (this.readyState === 3) return; this.readyState = 3; target.clearTimeout(this.timer); sockets.delete(this); this.onclose?.({}); }
 	}

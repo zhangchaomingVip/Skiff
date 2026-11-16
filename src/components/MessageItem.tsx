@@ -63,8 +63,8 @@ export const MessageItem = memo(function MessageItem({ runStartedAt, onEdit, onC
 		} else if (block.kind === "text") {
 			if (!block.text.trim()) continue;
 			const parsed = isUser ? splitAttachments(block.text) : undefined;
-			if (parsed?.attachments.length) nodes.push(<div key={entry.key} className="text-with-attachments" data-reply-text={`${message.id}:${entry.key}`}>{parsed.text && <Markdown text={parsed.text} />}{parsed.attachments.map((attachment, i) => <TextAttachmentBlock key={i} attachment={attachment} />)}</div>);
-			else nodes.push(<Markdown key={entry.key} replyKey={`${message.id}:${entry.key}`} text={block.text} streaming={message.streaming} />);
+			if (parsed?.attachments.length) nodes.push(<div key={entry.key} className="text-with-attachments" data-reply-text={`${message.id}:${entry.key}`}>{parsed.text && <Markdown text={parsed.text} variant={isUser ? "user" : undefined} />}{parsed.attachments.map((attachment, i) => <TextAttachmentBlock key={i} attachment={attachment} />)}</div>);
+			else nodes.push(<Markdown key={entry.key} replyKey={`${message.id}:${entry.key}`} text={block.text} streaming={message.streaming} variant={isUser ? "user" : undefined} />);
 		}
 		// Sent images read as attachments: small thumbnails above the text, click to zoom.
 		else if (block.kind === "image") (isUser ? attachments : nodes).push(<ImagePreview key={entry.key} src={`data:${block.mimeType};base64,${block.data}`} />);

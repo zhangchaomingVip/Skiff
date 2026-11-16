@@ -16,6 +16,7 @@ try {
 		await page.waitForFunction(() => document.querySelector(".sidebar")?.dataset.connected === "true");
 		await page.evaluate(() => { window.skiffPreview.browser.setEnabled(true); window.skiffPreview.browser.set("browser-a"); window.releaseControl = window.skiffPreview.browser.deferControl(); });
 		await page.locator('.browser-screen[data-phase="live"]').waitFor();
+		assert.equal(await page.getByRole("button", { name: "刷新网页", exact: true }).isDisabled(), true, "Refresh waits for human control");
 		await page.evaluate(() => window.skiffPreview.browser.failControl("模拟控制权确认失败"));
 		await page.getByRole("button", { name: "接管浏览器", exact: true }).click();
 		await page.getByRole("alert").filter({ hasText: "模拟控制权确认失败" }).waitFor();
@@ -31,6 +32,19 @@ try {
 		const left = rect.x + (rect.width - 1000 * scale) / 2;
 		const top = rect.y + (rect.height - 700 * scale) / 2;
 		await page.mouse.click(left + 200 * scale, top + 320 * scale);
+		await page.mouse.move(left + 300 * scale, top + 340 * scale);
+		await page.mouse.down();
+		for (let step = 1; step <= 4; step += 1) {
+			await page.mouse.move(left + (300 + step * 20) * scale, top + 340 * scale);
+			await page.waitForTimeout(60);
+		}
+		await page.mouse.up();
+		assert.equal(await page.getByRole("button", { name: "刷新网页", exact: true }).isDisabled(), false, "Human control may reload the page");
+		const reloads = await page.evaluate(() => window.skiffPreview.browser.sent.filter((message) => message.type === "reload").length);
+		await page.getByRole("button", { name: "刷新网页", exact: true }).click();
+		await page.waitForFunction((count) => window.skiffPreview.browser.sent.filter((message) => message.type === "reload").length > count, reloads);
+		// The panel button holds focus now; one click back on the screen restores input.
+		await page.mouse.click(left + 220 * scale, top + 320 * scale);
 		await page.mouse.wheel(0, 180);
 		await page.keyboard.type("hello");
 		await input.evaluate((element) => {
@@ -43,6 +57,12 @@ try {
 		await page.getByRole("button", { name: "交还 AI", exact: true }).focus();
 		const messages = await page.evaluate(() => window.skiffPreview.browser.sent.filter((message) => message.type.startsWith("input_")));
 		assert.ok(messages.some((message) => message.eventType === "mousePressed" && Math.abs(message.x - 200) < 2 && Math.abs(message.y - 320) < 2), "Coordinates remove contain padding");
+		const drags = messages.filter((message) => message.eventType === "mouseMoved" && message.buttons === 1);
+		assert.ok(drags.length >= 2, "A dragged slider keeps receiving move events with the held button");
+		assert.ok(drags.every((message) => message.button === "none"), "Drag moves never claim a fresh button press");
+		const dragPath = drags.map((message) => message.x);
+		assert.ok(drags.every((message) => message.x >= 298 && message.x <= 382), `Drag moves follow the cursor: ${dragPath.join(",")}`);
+		assert.ok(drags.at(-1).x > 340, "The newest drag position is never dropped");
 		assert.ok(messages.some((message) => message.eventType === "char" && message.text === "中文输入"));
 		assert.ok(messages.some((message) => message.eventType === "char" && message.text === "粘贴文本"));
 		assert.ok(messages.some((message) => message.eventType === "mouseWheel" && message.deltaY === 180));
@@ -77,5 +97,5 @@ try {
 		assert.deepEqual(errors, []);
 		await page.close();
 	}
-	console.log("PASS browser control: two-phase takeover, coordinates, keyboard/IME/paste, key release, flush/return/continue, stop/close and themes/narrow");
+	console.log("PASS browser control: two-phase takeover, coordinates, pointer drag, page reload, keyboard/IME/paste, key release, flush/return/continue, stop/close and themes/narrow");
 } finally { await browser.close(); }

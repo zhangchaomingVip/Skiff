@@ -1,4 +1,4 @@
-import { imageSizeMenu, openDesignCanvas, workbenchTool } from "./workspace-navigation.mjs";
+import { imageSizeMenu, openCanvasComposer, openDesignCanvas, workbenchTool } from "./workspace-navigation.mjs";
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { chromium } from "../.playwright-cli/node_modules/playwright-core/index.mjs";
@@ -56,6 +56,7 @@ try {
 		assert.equal(await page.locator(".generation-gallery-grid > :first-child").getAttribute("aria-busy"), "true");
 		assert.equal(await page.locator(".generation-pending-glow").count(), 1);
 		assert.equal(await page.evaluate(() => window.skiffPreview.generation.calls.length), 1);
+		await openCanvasComposer(page);
 		assert.equal(await generate().isEnabled(), true, "An accepted task does not block the next submission");
 		const call = await page.evaluate(() => window.skiffPreview.generation.calls[0]);
 		assert.equal(call.modelId, "test-image"); assert.equal(call.size, "1536x864");
@@ -64,9 +65,11 @@ try {
 		await page.getByText("正在生成图片…", { exact: true }).waitFor();
 		await page.screenshot({ path: `dist/image-generation/${theme}-generating.png`, animations: "disabled" });
 		await page.getByRole("button", { name: "停止等待", exact: true }).click();
+		await openDesignCanvas(page);
 		await page.getByRole("group", { name: "画廊视图", exact: true }).getByRole("button", { name: /^失败记录/ }).click();
 		await page.getByText("已停止等待", { exact: true }).waitFor();
 		await page.evaluate(() => window.skiffPreview.generation.setMode("success"));
+		await openCanvasComposer(page);
 		await prompt().press("Meta+Enter");
 		await page.getByText("生成作品", { exact: true }).waitFor();
 		await page.waitForFunction(() => document.querySelector(".generation-card img")?.naturalWidth > 0);
@@ -86,12 +89,14 @@ try {
 		assert.match(await preview.innerText(), /42 tokens/);
 		await page.keyboard.press("Escape");
 		await page.evaluate(() => window.skiffPreview.generation.setMode("failure"));
+		await openCanvasComposer(page);
 		await prompt().fill("失败用例"); await generate().click();
 		await page.getByRole("group", { name: "画廊视图", exact: true }).getByRole("button", { name: /^失败记录/ }).click();
 		await page.getByText("生成失败", { exact: true }).waitFor();
 		assert.match(await page.locator(".generation-task-list").innerText(), /429/);
 		assert.equal(await page.evaluate(() => window.skiffPreview.generation.calls.filter((call) => call.prompt === "失败用例").length), 1);
 		await page.locator('.generation-task[data-status="failed"]').getByRole("button", { name: "使用提示词", exact: true }).click();
+		await openCanvasComposer(page);
 		assert.equal(await prompt().inputValue(), "失败用例");
 		await page.evaluate(() => { const url = new URL(location.href); url.searchParams.set("persist", "1"); history.replaceState(null, "", url); });
 		await page.reload();
@@ -102,7 +107,9 @@ try {
 		assert.equal(await page.locator(".generation-card").count(), 1);
 		await page.setViewportSize({ width: 600, height: 800 });
 		assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
-		assert.equal(await page.locator(".design-composer[data-variant=canvas] textarea").isVisible(), true, "The redraw bar stays inline at 600px");
+		await openCanvasComposer(page);
+		assert.equal(await page.locator(".design-composer textarea").isVisible(), true, "The composer stays above the feed at 600px");
+		assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
 		await page.screenshot({ path: `dist/image-generation/${theme}-narrow.png`, animations: "disabled" });
 		await page.setViewportSize({ width: 1440, height: 960 });
 		await page.evaluate(() => { localStorage.removeItem("skiff.test.images.config"); localStorage.removeItem("skiff.test.images.jobs"); });

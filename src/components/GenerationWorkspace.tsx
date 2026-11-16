@@ -76,7 +76,7 @@ function ImageSizeMenu({ size, sizes, onChange, onConfigure }: { size: string; s
 	</>;
 }
 
-function artworkTitle(asset: GenerationAsset, importedIndex = 1) {
+export function artworkTitle(asset: GenerationAsset, importedIndex = 1) {
 	const prompt = asset.prompt?.trim().replace(/\s+/g, " ");
 	if (!prompt) {
 		if (asset.job) return "一瞬灵感";
@@ -107,8 +107,9 @@ export interface ComposerProps {
 	/** Fired after a valid submit, so the home can hand the new work over to the
 	 *  canvas that the draft targets. */
 	onSubmitted?: () => void;
-	/** hero: the always-open launcher card. canvas: the compact redraw bar. */
-	variant?: "hero" | "canvas";
+	/** hero: the always-open launcher card. panel: the canvas composer the user
+	 *  expands on demand. */
+	variant?: "hero" | "panel";
 	/** Image/video switch, rendered as the first chip of the launcher toolbar. */
 	modeSwitch?: ReactNode;
 }
@@ -130,13 +131,21 @@ function ImageGenerationControls({ studio, onConfigure, onSubmitted, variant, mo
 	// The model chip already names the service, so the footer only speaks up when
 	// it has something to say: loading, queueing or a missing configuration.
 	const status = images.loading ? "正在读取图片生成服务" : images.running ? `进行中 ${images.runningCount} / ${images.concurrencyLimit || "不限"}${images.atCapacity ? " · 已达上限，可在生图设置中调整" : " · 可继续生成"}` : configured ? "" : "尚未配置图片生成服务";
+	// The expanded canvas panel starts at three lines and grows with the text,
+	// then scrolls inside the same box instead of pushing the works away.
+	useEffect(() => {
+		const input = promptInput.current;
+		if (variant !== "panel" || !input) return;
+		input.style.height = "auto";
+		input.style.height = `${Math.min(200, input.scrollHeight)}px`;
+	}, [draft.prompt, variant]);
 	return <aside className="generation-controls" data-kind="image" data-variant={variant} aria-label="生图参数">
 		<header className="generation-controls-header"><span className="generation-mode-icon"><Icon name="imageSpark" size={20} /></span><div><h1>生图</h1><p>让想象，慢慢成形</p></div></header>
 		<form className="generation-form" onSubmit={(event) => { event.preventDefault(); if (!canGenerate) return; void images.generate({ serviceId: draft.serviceId, modelId: draft.modelId, prompt: draft.prompt, size: draft.size, quality: draft.quality, projectRoot: studio.project?.path, canvasId: studio.canvasId || undefined }, studio.imageReference); onSubmitted?.(); }} {...drop.handlers}>
 			<div className="generation-fields">
 				<div className="generation-field generation-field-prompt">
 					<div className="generation-field-heading"><label htmlFor={`${id}-prompt`}>提示词 <span>Prompt</span></label>{draft.prompt && <Tooltip text="清空提示词"><IconButton size="compact" variant="ghost" aria-label="清空提示词" onClick={() => { update({ prompt: "" }); promptInput.current?.focus(); }}><Icon name="close" size={14} /></IconButton></Tooltip>}</div>
-					<TextArea ref={promptInput} id={`${id}-prompt`} rows={4} maxLength={32000} value={draft.prompt} aria-keyshortcuts="Control+Enter Meta+Enter" placeholder="描述你想看到的画面：窗边的一束花、午后的柔光、温暖的胶片质感…" onChange={(event) => update({ prompt: event.target.value })} onKeyDown={(event) => {
+					<TextArea ref={promptInput} id={`${id}-prompt`} rows={variant === "panel" ? 2 : 4} maxLength={32000} value={draft.prompt} aria-keyshortcuts="Control+Enter Meta+Enter" placeholder="描述你想看到的画面：窗边的一束花、午后的柔光、温暖的胶片质感…" onChange={(event) => update({ prompt: event.target.value })} onKeyDown={(event) => {
 						if (event.key === "Enter" && (event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && !event.nativeEvent.isComposing && event.nativeEvent.keyCode !== 229) {
 							event.preventDefault(); event.stopPropagation();
 							if (canGenerate && !event.repeat) event.currentTarget.form?.requestSubmit();
@@ -151,7 +160,7 @@ function ImageGenerationControls({ studio, onConfigure, onSubmitted, variant, mo
 						{studio.imageReference ? <>
 							<button type="button" className="generation-reference-image" aria-label={`替换参考图：${studio.imageReference.name}`} onClick={() => referenceInput.current?.click()}><MediaView key={studio.imageReference.url} asset={{ ...studio.imageReference, kind: "image" }} /></button>
 							<div className="generation-reference-caption"><span title={studio.imageReference.name}>{studio.imageReference.name}</span><IconButton size="compact" variant="ghost" aria-label="移除图生图参考图" onClick={studio.removeImageReference}><Icon name="close" size={13} /></IconButton></div>
-						</> : <button type="button" className="generation-reference-upload" aria-label="添加参考图" onClick={() => referenceInput.current?.click()}><Icon name="plus" size={15} /><strong>参考图</strong><span>拖入或点击上传，按提示词修改画面</span></button>}
+						</> : <button type="button" className="generation-reference-upload" aria-label="添加参考图" onClick={() => referenceInput.current?.click()}><Icon name="image" size={15} /><strong>添加参考图</strong><span>拖入或点击上传，按提示词修改画面</span></button>}
 					</div>
 					<p className="generation-field-hint">{studio.imageReference ? "描述想保留和修改的内容。参考图将在生成时发送给服务，原图保留。" : "不添加参考图时使用文生图。PNG、JPG、WebP、GIF · 最大 20 MB；动画仅取静态首帧。"}</p>
 					{studio.imageReferenceError && <div className="generation-error" role="alert"><span>{studio.imageReferenceError}</span><IconButton size="compact" variant="ghost" aria-label="关闭参考图提示" onClick={studio.clearImageReferenceError}><Icon name="close" /></IconButton></div>}
@@ -159,6 +168,7 @@ function ImageGenerationControls({ studio, onConfigure, onSubmitted, variant, mo
 				<div className="generation-settings">
 					{modeSwitch && <div className="generation-field generation-field-mode">{modeSwitch}</div>}
 					<CanvasPicker studio={studio} id={`${id}-canvas`} />
+					{variant === "hero" && <span className="design-composer-divider" aria-hidden="true" />}
 					<div className="generation-field generation-field-service"><label htmlFor={`${id}-provider`}>生成服务</label><div className="generation-service-control"><GenerationPicker id={`${id}-provider`} label="生成服务" icon="layers" value={draft.serviceId} disabled={!images.config?.services.length} placeholder={images.config?.services.length ? "选择一个服务" : "先配置一个生成服务"} options={(images.config?.services ?? []).map((item) => ({ value: item.id, label: item.name, hint: `${item.models.length} 个模型${item.configured ? "" : " · 未配置密钥"}` }))} onChange={(serviceId) => { const next = images.config?.services.find((item) => item.id === serviceId); const first = next?.models.find((item) => item.id === next.defaultModel) ?? next?.models[0]; update({ serviceId, modelId: first?.id ?? "", size: first?.sizes[0] ?? "" }); }} /><Tooltip text={configured ? "管理生成服务" : "配置生成服务"}><IconButton variant="ghost" aria-label={configured ? "管理生成服务" : "配置生成服务"} onClick={onConfigure}><Icon name="settings" size={16} /></IconButton></Tooltip></div></div>
 					<div className="generation-field generation-field-model"><label htmlFor={`${id}-model`}>模型</label><GenerationPicker id={`${id}-model`} label="模型" icon="spark" value={configured ? draft.modelId : ""} disabled={!configured} placeholder={configured ? "选择模型" : "连接生成服务后选择模型"} options={configured ? (service?.models ?? []).map((item) => ({ value: item.id, label: item.id, hint: `${item.sizes.length} 种尺寸` })) : []} onChange={(modelId) => { const next = service?.models.find((item) => item.id === modelId); update({ modelId, size: next?.sizes[0] ?? "" }); }} /></div>
 					{configured && <div className="generation-field generation-field-quality"><label htmlFor={`${id}-quality`}>质量</label><GenerationPicker id={`${id}-quality`} label="质量" icon="sliders" value={draft.quality} placeholder="自动" options={qualityOptions} onChange={(quality) => update({ quality: quality as typeof draft.quality })} /><p className="generation-field-hint">更大的尺寸和更高的质量可能增加耗时与费用。</p></div>}
@@ -167,7 +177,7 @@ function ImageGenerationControls({ studio, onConfigure, onSubmitted, variant, mo
 			</div>
 			<footer className="generation-submit">{status ? <p id={`${id}-service`}><span className="generation-connection-dot" />{status}</p> : variant === "hero" && <p className="generation-submit-hint">每次 1 张 · 按服务商计费</p>}<Button type="submit" variant="primary" size="primary" disabled={!canGenerate} aria-describedby={status ? `${id}-service` : undefined} loading={images.submitting}><Icon name="spark" />生成图片</Button><span className="generation-shortcut">快速生成 <kbd>{isMacPlatform() ? "⌘" : "Ctrl"} ↵</kbd></span><small>每次生成一张，按服务商计费；作品自动保存。</small></footer>
 		</form>
-		{drop.dragging && <div className="generation-dropzone" aria-hidden="true"><Icon name="image" size={22} /><span>松开图片，作为参考图</span></div>}
+		{drop.dragging && <div className="generation-dropzone" aria-hidden="true"><span className="generation-dropzone-icon"><Icon name="image" size={20} /></span><strong>松开图片，作为参考图</strong><small>PNG、JPG、WebP、GIF · 最大 20 MB</small></div>}
 	</aside>;
 }
 
@@ -282,13 +292,15 @@ export interface GenerationGalleryProps {
 	onSaveToProject: (asset: GenerationAsset) => void; saving: boolean;
 	/** Canvas scene chrome: back to the launcher, canvas name and its actions. */
 	header?: ReactNode;
-	/** Compact redraw bar, rendered above the works. */
+	/** Composer rendered above the works; the canvas keeps it collapsed by default. */
 	hero?: ReactNode;
+	/** Extra entry rendered on the left of the work views, beside the filters. */
+	toolbar?: ReactNode;
 	/** The canvas header already names the works, so the scroll title can go. */
 	showHeadingTitle?: boolean;
 	empty?: ReactNode;
 }
-function ImageGenerationGallery({ kind, studio, onKind, onImageToVideo, onImageToImage, collection, onCollectionChange, active, onSaveToProject, saving, header, hero, showHeadingTitle, empty }: GenerationGalleryProps) {
+function ImageGenerationGallery({ kind, studio, onKind, onImageToVideo, onImageToImage, collection, onCollectionChange, active, onSaveToProject, saving, header, hero, toolbar, showHeadingTitle, empty }: GenerationGalleryProps) {
 	const fileInput = useRef<HTMLInputElement>(null);
 	const galleryScroll = useRef<HTMLDivElement>(null);
 	const views = useRef<HTMLDivElement>(null);
@@ -331,7 +343,7 @@ function ImageGenerationGallery({ kind, studio, onKind, onImageToVideo, onImageT
 		{header ?? <header className="generation-workspace-header"><span className="design-gallery-breadcrumb"><Icon name="imageSpark" size={15} />Design</span><div className="generation-workspace-tools"><SegmentedControl label="创作类型" value={kind} onChange={onKind} options={[{ value: "image", label: "图片" }, { value: "video", label: "视频" }]} /></div></header>}
 		<div ref={galleryScroll} className="generation-gallery-scroll">
 			{hero}
-			<div className="generation-gallery-heading">{showHeadingTitle !== false && <h2>{view === "failures" ? "失败记录" : view === "removed" ? "已移除的作品" : "灵感画廊"}<span>{(view === "failures" ? settled.length : assets.length).toString().padStart(2, "0")}</span></h2>}<div className="generation-gallery-heading-actions"><div ref={views} className="generation-gallery-views"><SegmentedControl label="画廊视图" value={view} onChange={changeView} options={[{ value: "gallery", label: `作品 ${visible.length}` }, { value: "failures", label: `失败记录 ${settled.length}` }, { value: "removed", label: `已移除 ${removed.length}` }]} /></div>{view !== "failures" && <div className="generation-columns"><SegmentedControl label="画廊列数" value={columns} onChange={setColumns} options={[{ value: "1", label: "1 列" }, { value: "2", label: "2 列" }, { value: "3", label: "3 列" }, { value: "4", label: "4 列" }]} /></div>}{view === "gallery" && <Button className="generation-import" variant="ghost" size="compact" onClick={importMedia}><Icon name="plus" size={14} />导入作品</Button>}</div></div>
+			<div className="generation-gallery-heading">{showHeadingTitle !== false && <h2>{view === "failures" ? "失败记录" : view === "removed" ? "已移除的作品" : "灵感画廊"}<span>{(view === "failures" ? settled.length : assets.length).toString().padStart(2, "0")}</span></h2>}{toolbar}<div className="generation-gallery-heading-actions"><div ref={views} className="generation-gallery-views"><SegmentedControl label="画廊视图" value={view} onChange={changeView} options={[{ value: "gallery", label: `作品 ${visible.length}` }, { value: "failures", label: `失败记录 ${settled.length}` }, { value: "removed", label: `已移除 ${removed.length}` }]} /></div>{view !== "failures" && <div className="generation-columns"><SegmentedControl label="画廊列数" value={columns} onChange={setColumns} options={[{ value: "1", label: "1 列" }, { value: "2", label: "2 列" }, { value: "3", label: "3 列" }, { value: "4", label: "4 列" }]} /></div>}{view === "gallery" && <Button className="generation-import" variant="ghost" size="compact" onClick={importMedia}><Icon name="plus" size={14} />导入作品</Button>}</div></div>
 			<Input ref={fileInput} className="generation-file-input" type="file" multiple accept={imageAccept} aria-label="导入图片作品" onChange={(event) => { void studio.importAssets("image", Array.from(event.target.files ?? [])); event.target.value = ""; }} />
 			{studio.errors.image && <p className="generation-gallery-error" role="alert">{studio.errors.image}</p>}
 			{studio.images.error && <div className="generation-gallery-error" role="alert">{studio.images.error}<Button size="compact" onClick={() => void studio.images.refresh()}>重新读取状态</Button></div>}

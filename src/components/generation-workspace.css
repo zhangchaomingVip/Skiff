@@ -147,7 +147,6 @@
 	.generation-workspace-header > .design-gallery-breadcrumb { flex: 1; min-width: 0; }
 	.generation-workspace-tools { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
 	.generation-workspace-tools > .ui-segmented { flex: none; }
-	.generation-gallery-scroll > .design-composer { flex: none; }
 	.generation-gallery-scroll { display: flex; flex: 1; flex-direction: column; min-height: 0; overflow: auto; padding: var(--space-4) var(--space-6) var(--space-6); }
 	.generation-gallery-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-2) var(--space-4); }
 	.generation-gallery-heading-actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); margin-left: auto; }
@@ -245,45 +244,38 @@
 		.generation-gallery-heading h2 { font-size: var(--font-size-lg); }
 		.generation-gallery-heading p { max-width: 160px; }
 		.generation-workspace-header { padding-inline: var(--space-2); }
-		.design-home { padding: var(--space-4); }
-		.design-home-inner { gap: var(--space-5); }
-		.studio-greeting h1 { font-size: var(--font-size-2xl); }
-		.design-composer[data-variant=hero] .generation-reference { flex-basis: 56px; width: 56px; height: 56px; }
+		.design-home-inner { padding: var(--space-3) var(--space-3) 0; }
+		.design-feed .generation-gallery-scroll { padding: var(--space-2) 0 var(--space-4); }
+		.studio-gallery-head { padding-top: var(--space-1); }
+		.studio-gallery-head > p { text-align: left; }
+		.design-composer[data-variant=hero] .generation-shortcut { display: none; }
 	}
-	/* Launcher: greeting, one always-open card, then the style shelf. The card is
-	   the only creation entry, so there is no collapse state to remember. */
-	.design-home { display: flex; flex: 1; flex-direction: column; min-height: 0; overflow: auto; padding: var(--space-5) var(--space-6) var(--space-8); }
-	/* Centering the group keeps a short launcher balanced on tall screens; auto
-	   margins collapse to zero as soon as the content outgrows the viewport. */
-	.design-home-inner { display: flex; flex-direction: column; gap: var(--space-6); width: 100%; margin-block: auto; }
-	.studio-home { display: flex; flex-direction: column; gap: var(--space-4); width: 100%; max-width: 860px; margin: 0 auto; }
-	.studio-greeting { display: flex; flex-direction: column; align-items: center; gap: var(--space-2); text-align: center; }
-	.studio-greeting h1 { margin: 0; color: var(--text); font-size: var(--font-size-page); font-weight: var(--font-weight-semibold); line-height: var(--line-height-tight); text-wrap: balance; }
-	.studio-greeting p { margin: 0; max-width: 560px; color: var(--muted); font-size: var(--font-size-sm); line-height: var(--line-height-relaxed); }
-	.studio-prompt-tags { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: var(--space-2); }
-	.studio-prompt-tag { padding: var(--space-1) var(--space-2-5); border: 1px solid var(--border); border-radius: var(--radius-full); background: var(--surface); color: var(--secondary); font-size: var(--font-size-xs); transition: border-color var(--transition-fast), color var(--transition-fast), background-color var(--transition-fast); }
-	.studio-prompt-tag:hover { border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); background: color-mix(in srgb, var(--accent) 8%, var(--surface)); color: var(--accent); }
-	.studio-inspiration { display: flex; flex-direction: column; gap: var(--space-3); width: 100%; max-width: 860px; margin: 0 auto; padding-bottom: var(--space-6); }
-	.studio-inspiration-heading { display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--space-1) var(--space-3); }
-	.studio-inspiration-heading h2 { margin: 0; color: var(--text); font-size: var(--font-size-base); font-weight: var(--font-weight-medium); }
-	.studio-inspiration-heading p { margin: 0; color: var(--muted); font-size: var(--font-size-xs); }
-	.studio-inspiration-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: var(--space-3); }
-	.studio-inspiration-card { display: flex; align-items: center; gap: var(--space-3); min-width: 0; padding: var(--space-2); border: 1px solid var(--border); border-radius: var(--radius-xl); background: var(--surface); text-align: left; transition: border-color var(--transition-fast), box-shadow var(--transition-fast); }
-	/* First starter leads the shelf: a wider tile with a taller cover, so the
-	   section has a clear entry point instead of six identical chips. */
-	.studio-inspiration-card:first-child { grid-column: span 2; padding: var(--space-3); }
-	.studio-inspiration-card:first-child .studio-inspiration-cover { width: var(--space-16); height: var(--space-16); }
-	.studio-inspiration-card:first-child .studio-inspiration-copy small { white-space: normal; }
-	.studio-inspiration-card:hover { border-color: color-mix(in srgb, var(--accent) 42%, var(--border)); box-shadow: var(--shadow-elevation-1); }
-	.studio-inspiration-card:focus-visible { outline: 2px solid var(--accent); outline-offset: var(--space-px); }
-	.studio-inspiration-cover { display: grid; place-items: center; flex: none; width: var(--space-10); height: var(--space-10); border-radius: var(--radius-lg); background: linear-gradient(150deg, color-mix(in srgb, var(--accent) var(--studio-tone, 20%), var(--surface)), var(--subtle)); color: color-mix(in srgb, var(--accent) 76%, var(--muted)); }
-	.studio-inspiration-copy { display: flex; flex-direction: column; gap: var(--space-0-5); min-width: 0; }
-	.studio-inspiration-copy strong { color: var(--text); font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); }
-	.studio-inspiration-copy small { overflow: hidden; color: var(--muted); font-size: var(--font-size-xs); text-overflow: ellipsis; white-space: nowrap; }
-	@media (max-width: 760px) {
-		.studio-inspiration-grid { grid-template-columns: minmax(0, 1fr); }
-		.studio-inspiration-grid .studio-inspiration-card:first-child { grid-column: auto; }
-	}
+	/* Studio: one creation card pinned above a scrolling feed. The card never
+	   travels with the gallery, so generating keeps the prompt in view. */
+	.design-home { display: flex; flex: 1; flex-direction: column; min-height: 0; overflow: hidden; padding: 0; }
+	.design-home-inner { display: flex; flex: 1; flex-direction: column; width: 100%; min-width: 0; min-height: 0; max-width: 1180px; margin: 0 auto; padding: var(--space-4) var(--space-6) 0; }
+	.studio-home { flex: none; width: 100%; padding-bottom: var(--space-3); }
+	.design-feed { display: flex; flex: 1; min-width: 0; min-height: 0; }
+	.design-feed > .generation-gallery { flex: 1; min-width: 0; }
+	.design-feed .generation-gallery-scroll { padding: var(--space-2) 0 var(--space-6); }
+	/* Home feed: a mixed recent-works header, then the shared masonry grid. */
+	.studio-gallery-head { display: flex; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; gap: var(--space-2) var(--space-4); padding: var(--space-3) 0 var(--space-1); }
+	.studio-gallery-head .generation-eyebrow { display: block; margin-bottom: var(--space-1); }
+	.studio-gallery-head h2 { display: flex; align-items: baseline; gap: var(--space-2); margin: 0; color: var(--text); font-size: var(--font-size-lg); font-weight: var(--font-weight-title); }
+	.studio-gallery-head h2 > span { color: var(--muted); font-family: var(--font-family-mono); font-size: var(--font-size-xs); font-weight: var(--font-weight-regular); }
+	.studio-gallery-head > p { margin: 0; color: var(--muted); font-size: var(--font-size-xs); text-align: right; }
+	.studio-gallery-grid { margin-top: var(--space-3); }
+	/* The hover bar spans the card so text actions fit narrow masonry columns. */
+	.studio-card-actions { left: var(--space-2); right: var(--space-2); flex-wrap: wrap; justify-content: flex-end; }
+	.studio-card-actions .ui-button { height: var(--control-compact); padding-inline: var(--space-2); color: var(--action-foreground); font-size: var(--font-size-xs); }
+	.studio-card-actions .ui-button:hover:not(:disabled), .studio-card-actions .ui-button:focus-visible { background: color-mix(in srgb, var(--action-foreground) 16%, transparent); color: var(--action-foreground); }
+	.studio-card-actions .ui-button .ui-button-content { gap: var(--space-1); }
+	.studio-pending-progress { display: block; width: 100%; height: calc(2 * var(--space-px)); margin-top: var(--space-1); border-radius: var(--radius-full); background: var(--subtle); overflow: hidden; }
+	.studio-pending-progress > span { display: block; height: 100%; border-radius: inherit; background: var(--accent); transition: width 400ms ease; }
+	.studio-gallery-empty { display: flex; align-items: center; justify-content: center; gap: var(--space-2); min-height: 140px; margin-top: var(--space-4); padding: var(--space-4); border: 1px dashed var(--boundary); border-radius: var(--radius-xl); color: var(--muted); font-size: var(--font-size-sm); text-align: center; }
+	.studio-gallery-empty > p { margin: 0; }
+	.studio-feed-empty { display: flex; align-items: center; gap: var(--space-2); margin: var(--space-3) 0 var(--space-5); padding: var(--space-3) var(--space-4); border: 1px dashed var(--boundary); border-radius: var(--radius-lg); color: var(--muted); font-size: var(--font-size-sm); }
+	.studio-feed-empty > p { margin: 0; }
 	/* The card is the input: one surface, one focus ring, no inner boxed fields. */
 	.design-composer { padding: var(--space-1) var(--space-2) var(--space-2); border: 1px solid var(--border); border-radius: var(--radius-xl); background: var(--surface); box-shadow: var(--shadow-elevation-1); transition: border-color var(--transition-fast), box-shadow var(--transition-fast); }
 	.design-composer:focus-within { border-color: color-mix(in srgb, var(--accent) 46%, var(--border)); box-shadow: var(--shadow-elevation-1), 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent); }
@@ -303,15 +295,16 @@
 	.design-composer .generation-field-prompt .generation-field-hint { display: none; }
 	.design-composer .generation-field-reference .generation-field-label, .design-composer .generation-field-reference .generation-field-hint { display: none; }
 	.design-composer .generation-error { order: 9; flex: 1 1 100%; }
-	/* Reference: a compact pill that flips between "+ 参考图" and a thumbnail tag. */
-	.design-composer .generation-reference { order: 1; }
+	/* Reference: a compact media slot that flips between a dashed upload chip
+	   and a thumbnail tag, so it never reads as an avatar placeholder. */
+	.design-composer .generation-reference { order: 3; }
 	.design-composer .generation-reference.is-empty { border: 0; background: transparent; overflow: visible; }
-	.design-composer .generation-reference.is-empty .generation-reference-upload { flex-direction: row; align-items: center; justify-content: flex-start; gap: var(--space-1); height: var(--control-compact); min-height: 0; padding: 0 var(--space-2-5); border: 1px solid var(--border); border-radius: var(--radius-full); background: var(--subtle); color: var(--secondary); }
-	.design-composer .generation-reference.is-empty .generation-reference-upload > svg { margin: 0; color: var(--secondary); }
+	.design-composer .generation-reference.is-empty .generation-reference-upload { flex-direction: row; align-items: center; justify-content: flex-start; gap: var(--space-1); height: var(--control-compact); min-height: 0; padding: 0 var(--space-2-5); border: 1px dashed var(--boundary); border-radius: var(--radius-full); background: transparent; color: var(--secondary); }
+	.design-composer .generation-reference.is-empty .generation-reference-upload > svg { margin: 0; color: var(--muted); }
 	.design-composer .generation-reference.is-empty .generation-reference-upload strong { color: var(--secondary); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); }
 	.design-composer .generation-reference.is-empty .generation-reference-upload > span { display: none; }
-	.design-composer .generation-reference.is-empty .generation-reference-upload:hover { border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); color: var(--text); }
-	.design-composer .generation-reference.is-empty .generation-reference-upload:hover strong { color: var(--text); }
+	.design-composer .generation-reference.is-empty .generation-reference-upload:hover { border-color: color-mix(in srgb, var(--accent) 48%, var(--border)); background: color-mix(in srgb, var(--accent) 7%, transparent); color: var(--text); }
+	.design-composer .generation-reference.is-empty .generation-reference-upload:hover strong, .design-composer .generation-reference.is-empty .generation-reference-upload:hover > svg { color: var(--text); }
 	.design-composer .generation-reference.has-image { flex-direction: row; align-items: center; gap: var(--space-1); height: var(--control-compact); padding: 0 var(--space-1); border: 1px solid var(--border); border-radius: var(--radius-full); background: var(--subtle); overflow: visible; }
 	.design-composer .generation-reference.has-image .generation-reference-image { flex: none; width: 22px; height: 22px; min-height: 0; border-radius: var(--radius-md); overflow: hidden; }
 	.design-composer .generation-reference.has-image .generation-reference-image > img { object-fit: cover; }
@@ -320,12 +313,16 @@
 	.design-composer .generation-reference.has-image .ui-icon-button { flex: none; width: 22px; height: 22px; color: var(--muted); }
 	.design-composer .generation-reference.has-image .ui-icon-button:hover { color: var(--text); background: var(--hover); }
 	.design-composer:has(.generation-reference.is-dragging) { border-color: var(--accent); box-shadow: var(--shadow-elevation-1), 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent); }
-	.design-composer .generation-settings > .generation-field { order: 2; flex: 0 1 auto; width: auto; min-width: 0; gap: 0; }
-	/* The size trigger is a bare child of the flattened settings row; it still has
-	   to join the toolbar line instead of the prompt line. */
-	.design-composer .generation-size-trigger { order: 2; flex: 0 1 auto; }
-	.design-composer .generation-field-mode .ui-segmented { padding: 0; border-color: var(--border); }
-	.design-composer .generation-field-mode .ui-segmented .ui-button { padding-inline: var(--space-2); font-size: var(--font-size-xs); }
+	/* The toolbar reads left to right: mode and canvas scope the draft, the
+	   media slot adds an image, parameters follow, and the submit closes the row. */
+	.design-composer .generation-settings > .generation-field { order: 5; flex: 0 1 auto; width: auto; min-width: 0; gap: 0; }
+	.design-composer .generation-settings > .generation-field-mode { order: 1; }
+	.design-composer .generation-settings > .generation-field-canvas { order: 2; }
+	.design-composer .generation-size-trigger { order: 5; flex: 0 1 auto; }
+	.design-composer .design-composer-divider { order: 4; align-self: center; flex: none; width: 1px; height: var(--space-4); background: var(--border); }
+	/* One segmented height for the mode switch, so it lines up with the chips. */
+	.design-composer .generation-field-mode .ui-segmented { height: var(--control-compact); padding: 0; border-color: var(--border); }
+	.design-composer .generation-field-mode .ui-segmented .ui-button { height: calc(var(--control-compact) - 2 * var(--space-0-5)); padding-inline: var(--space-2); font-size: var(--font-size-xs); }
 	.design-composer .generation-field-mode .ui-segmented .ui-button[aria-pressed=true] { background: color-mix(in srgb, var(--accent) 14%, var(--surface)); color: var(--accent); box-shadow: none; }
 	.design-composer .generation-settings > .generation-field > label { position: absolute; width: 1px; height: 1px; margin: 0; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 	.design-composer .generation-settings legend { position: absolute; width: 1px; height: 1px; margin: 0; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
@@ -335,49 +332,62 @@
 	.design-composer .generation-settings .generation-service-control { gap: var(--space-0-5); }
 	.design-composer .generation-settings .generation-service-control .ui-icon-button { width: var(--control-compact); height: var(--control-compact); color: var(--muted); }
 	.design-composer .generation-settings .generation-field-hint { display: none; }
+	/* The panel's four-column ratio grid is sized for many options; in the flat
+	   toolbar a single ratio would still claim three empty tracks and push the
+	   following chips away, so the group shrinks to its buttons here. */
+	.design-composer .generation-ratios > div { display: flex; flex-wrap: wrap; gap: var(--space-1); }
 	.design-composer .generation-ratios .ui-button { height: var(--control-compact); padding: 0 var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-full); background: var(--subtle); color: var(--secondary); }
 	.design-composer .generation-ratios .ui-button[aria-pressed=true] { border-color: color-mix(in srgb, var(--accent) 48%, var(--border)); background: color-mix(in srgb, var(--accent) 10%, var(--surface)); color: var(--accent); }
-	.design-composer .generation-submit { order: 3; display: flex; flex-direction: row; align-items: center; gap: var(--space-2); margin-left: auto; padding: 0; border-top: 0; }
-	.design-composer .generation-submit > p { flex: 0 1 auto; min-width: 0; max-width: 220px; overflow: hidden; color: var(--secondary); text-overflow: ellipsis; white-space: nowrap; }
+	.design-composer .generation-submit { order: 6; display: flex; flex: 0 1 auto; flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-2); min-width: 0; max-width: 100%; margin-left: auto; padding: 0; border-top: 0; }
+	.design-composer .generation-submit > p { flex: 0 1 auto; min-width: 0; max-width: 220px; overflow: hidden; margin: 0; color: var(--muted); text-overflow: ellipsis; white-space: nowrap; }
 	.design-composer .generation-submit > .generation-submit-hint { color: var(--muted); font-size: var(--font-size-xs); }
-	.design-composer .generation-submit > .ui-button { flex: none; height: var(--control-regular); padding-inline: var(--space-4); border-radius: var(--radius-full); }
+	/* The cardinal action: a filled, elevated pill that owns the bottom-right
+	   corner instead of blending into the white card as a ghost button. */
+	.design-composer .generation-submit > .ui-button { order: 3; flex: none; height: var(--control-primary); padding-inline: var(--space-4); border-radius: var(--radius-full); }
+	.design-composer .generation-submit > .ui-button[data-variant=primary] { border-color: var(--action); background: var(--action); color: var(--action-foreground); font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); box-shadow: 0 3px 12px color-mix(in srgb, var(--action) 34%, transparent); transition: background-color var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast); }
+	.design-composer .generation-submit > .ui-button[data-variant=primary]:hover:not(:disabled) { border-color: var(--action-hover); background: var(--action-hover); box-shadow: 0 6px 18px color-mix(in srgb, var(--action) 42%, transparent); transform: translateY(-1px); }
+	.design-composer .generation-submit > .ui-button[data-variant=primary]:active:not(:disabled) { border-color: var(--action-active); background: var(--action-active); box-shadow: 0 1px 4px color-mix(in srgb, var(--action) 30%, transparent); transform: translateY(0); }
+	.design-composer .generation-submit > .ui-button .ui-button-content { gap: var(--space-1-5); }
 	.design-composer .generation-shortcut { display: none; }
+	.design-composer[data-variant=hero] .generation-shortcut { display: inline-flex; order: 2; align-items: center; gap: var(--space-1); height: var(--control-compact); padding-inline: var(--space-1); color: var(--muted); font-size: var(--font-size-xs); white-space: nowrap; }
+	.design-composer[data-variant=hero] .generation-shortcut > kbd { padding: 0 var(--space-1); border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--subtle); color: var(--secondary); font: inherit; line-height: var(--line-height-base); }
 	.design-composer .generation-submit > small { display: none; }
-	/* Hero variant: the reference becomes a square tile left of the prompt, the
-	   prompt grows to three lines and the toolbar keeps its single row. */
-	.design-composer[data-variant=hero] { padding: var(--space-3); border-radius: var(--radius-2xl); box-shadow: var(--shadow-elevation-2); }
-	.design-composer[data-variant=hero] .generation-field-prompt { order: 1; flex: 1 1 calc(100% - 76px); }
+	/* Hero variant: the prompt owns the full first row, so the card keeps one
+	   wide input and pushes every control into a grouped bottom toolbar. */
+	.design-composer[data-variant=hero] { padding: var(--space-2) var(--space-3) var(--space-3); border-radius: var(--radius-2xl); box-shadow: var(--shadow-elevation-2); }
+	.design-composer[data-variant=hero] .generation-field-prompt { padding-bottom: var(--space-1); border-bottom: 1px solid color-mix(in srgb, var(--border) 64%, transparent); }
 	.design-composer[data-variant=hero] .generation-controls .generation-field-prompt .ui-textarea { height: 96px; min-height: 96px; padding: var(--space-2) var(--space-6) var(--space-2) var(--space-2); font-size: var(--font-size-md); }
-	.design-composer[data-variant=hero] .generation-reference { position: relative; order: 0; align-self: flex-start; flex: 0 0 64px; width: 64px; height: 64px; padding: 0; border-radius: var(--radius-lg); }
-	.design-composer[data-variant=hero] .generation-reference.is-empty .generation-reference-upload { width: 100%; height: 100%; flex-direction: column; justify-content: center; gap: var(--space-1); padding: 0; border-style: dashed; }
-	.design-composer[data-variant=hero] .generation-reference.is-empty .generation-reference-upload > svg { margin: 0; }
-	.design-composer[data-variant=hero] .generation-reference.has-image { display: block; border-radius: var(--radius-lg); }
-	.design-composer[data-variant=hero] .generation-reference.has-image .generation-reference-image { width: 100%; height: 100%; border-radius: inherit; }
-	.design-composer[data-variant=hero] .generation-reference.has-image .generation-reference-caption { position: absolute; top: calc(-1 * var(--space-1)); right: calc(-1 * var(--space-1)); padding: 0; }
-	.design-composer[data-variant=hero] .generation-reference.has-image .generation-reference-caption > span { display: none; }
-	.design-composer[data-variant=hero] .generation-reference.has-image .ui-icon-button { width: 20px; height: 20px; border-radius: var(--radius-full); background: var(--surface); box-shadow: var(--shadow-xs); }
-	/* Canvas variant: the same controls as the launcher, squeezed into a redraw
-	   bar so the works stay the subject of the canvas scene. */
-	.design-composer[data-variant=canvas] { margin-bottom: var(--space-4); padding: var(--space-1) var(--space-2) var(--space-2); box-shadow: none; }
-	/* The open canvas already decides the target, so the picker would only
-	   teleport the redraw bar somewhere else. */
-	.design-composer[data-variant=canvas] .generation-field-canvas { display: none; }
-	.design-composer[data-variant=canvas] .generation-controls .generation-field-prompt .ui-textarea { height: 44px; min-height: 44px; }
-	/* Canvas scene chrome: back to the launcher, the canvas name, then the tools. */
-	.canvas-header .canvas-home { flex: none; padding-inline: var(--space-2); color: var(--muted); }
+	.design-composer[data-variant=hero] .generation-settings > .generation-field.generation-ratios { display: none; }
+	.design-composer[data-variant=hero] .generation-submit > .ui-button { height: calc(var(--control-primary) + var(--space-1)); padding-inline: var(--space-5); }
+	.design-composer[data-variant=hero] .generation-dropzone { border-radius: var(--radius-2xl); }
+	.design-composer:has(.generation-dropzone) { border-color: var(--accent); box-shadow: var(--shadow-elevation-2), 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent); }
+	/* The video duration folds ratio and seconds into the one chip that is left. */
+	.design-composer[data-variant=hero] .generation-field-duration { position: relative; }
+	.design-composer[data-variant=hero] .generation-field-duration select { appearance: none; padding-right: var(--space-6); cursor: pointer; }
+	.design-composer[data-variant=hero] .generation-field-duration::after { content: ""; position: absolute; top: 50%; right: var(--space-2-5); width: 5px; height: 5px; border: solid var(--muted); border-width: 0 1.5px 1.5px 0; transform: translateY(-1px) rotate(45deg); pointer-events: none; }
+	/* Canvas scene chrome: the selected canvas and its management actions. */
 	.canvas-crumb { display: inline-flex; align-items: center; gap: var(--space-2); flex: 1; min-width: 0; color: var(--secondary); font-size: var(--font-size-sm); }
 	.canvas-crumb strong { overflow: hidden; color: var(--text); font-weight: var(--font-weight-medium); text-overflow: ellipsis; white-space: nowrap; }
 	.canvas-crumb > small { color: var(--muted); font-variant-numeric: tabular-nums; }
 	.design-workspace .generation-gallery-heading { margin-top: 0; }
 	/* Drop overlay: the whole card is a target, not a small dashed box. */
-	.generation-dropzone { position: absolute; inset: 0; z-index: 4; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-2); border: 1px dashed var(--accent); border-radius: var(--radius-lg); background: color-mix(in srgb, var(--surface) 92%, transparent); color: var(--accent); font-size: var(--font-size-xs); backdrop-filter: blur(3px); pointer-events: none; }
+	.generation-dropzone { position: absolute; inset: 0; z-index: 4; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-1-5); border: 1px dashed var(--accent); border-radius: var(--radius-lg); background: color-mix(in srgb, var(--accent) 8%, var(--surface)); color: var(--accent); font-size: var(--font-size-xs); text-align: center; backdrop-filter: blur(3px); pointer-events: none; }
+	.generation-dropzone-icon { display: grid; place-items: center; width: var(--space-12); height: var(--space-12); margin-bottom: var(--space-1); border: 1px dashed color-mix(in srgb, var(--accent) 55%, transparent); border-radius: var(--radius-full); background: color-mix(in srgb, var(--accent) 10%, var(--surface)); }
+	.generation-dropzone > strong { color: var(--text); font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); }
+	.generation-dropzone > small { color: var(--secondary); font-size: var(--font-size-xs); }
 	/* Canvas page: the same gallery grammar, scoped to one group of mixed works. */
 	.design-canvas-note { margin: var(--space-3) 0 0; color: var(--muted); font-size: var(--font-size-xs); }
 	.design-canvas .generation-gallery-grid { margin-top: var(--space-4); }
 	.design-canvas .generation-empty { min-height: 320px; }
-	@container generation-gallery (max-width: 560px) {
-		.design-composer .generation-submit { margin-left: 0; flex: 1 1 100%; }
-		.design-composer .generation-submit > .ui-button { flex: 1; justify-content: center; }
-		.design-composer .generation-submit > p { display: none; }
+}
+/* The generic disabled rule flattens every button onto the same surface. The
+   launcher's primary keeps its action tint so it still reads as the card's
+   action while it waits for a prompt, without inviting a click. */
+@layer accessibility {
+	.design-composer .generation-submit > .ui-button[data-variant=primary]:disabled {
+		border-color: color-mix(in srgb, var(--action) 30%, var(--border));
+		background: color-mix(in srgb, var(--action) 20%, var(--subtle));
+		color: var(--secondary);
+		box-shadow: none;
 	}
 }

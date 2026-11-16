@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { chromium } from "../.playwright-cli/node_modules/playwright-core/index.mjs";
 import { testImage } from "./imageFixture.mjs";
-import { imageSizeMenu, openDesignCanvas } from "./workspace-navigation.mjs";
+import { imageSizeMenu, openCanvasComposer, openDesignCanvas } from "./workspace-navigation.mjs";
 
 const origin = process.argv[2] ?? "http://localhost:1421";
 const output = "dist/generation-redesign";
@@ -63,6 +63,7 @@ try {
 		assert.match(titles[0], /^窗边的花/); assert.ok(titles.every((title) => !title.startsWith("skiff-")));
 		assert.equal(await page.locator(".generation-card .generation-saved-actions").count(), 0);
 		assert.deepEqual(await page.locator(".generation-card-preview img").evaluateAll((images) => images.map((image) => getComputedStyle(image).objectFit)), ["contain", "contain", "contain"]);
+		await openCanvasComposer(page);
 		assert.ok(await page.locator(".generation-controls").evaluate((element) => element.scrollWidth <= element.clientWidth));
 		await page.screenshot({ path: `${output}/${theme}-gallery.png`, animations: "disabled" });
 		const sizes = imageSizeMenu(page);
@@ -90,8 +91,8 @@ try {
 			await page.setViewportSize(viewport);
 			assert.equal(await gridColumns(), 2);
 			assert.ok((await page.locator(".generation-card-preview").first().boundingBox()).height <= 540);
-			// The design home keeps the greeting and composer above the works, so the
-			// card itself is brought into view before measuring it.
+			// The expanded composer sits above the works, so the card itself is
+			// brought into view before measuring it.
 			await page.locator(".generation-card").first().scrollIntoViewIfNeeded();
 			assert.ok(await page.locator(".generation-card").first().evaluate((element) => element.getBoundingClientRect().bottom <= innerHeight), "The whole first card fits on a wide-screen viewport");
 			await page.screenshot({ path: `${output}/${theme}-wide-${viewport.width}.png`, animations: "disabled" });
@@ -105,6 +106,7 @@ try {
 		await page.locator(".generation-card-preview img").first().waitFor();
 		assert.equal(await density.getByRole("button", { name: "4 列", exact: true }).getAttribute("aria-pressed"), "true");
 		assert.equal(await gridColumns(), 4, "Density preference survives a full reload");
+		await openCanvasComposer(page);
 		await page.mouse.move(1350, 100);
 		const hover = page.getByRole("group", { name: "作品快捷操作", exact: true }).first();
 		await page.waitForFunction(() => getComputedStyle(document.querySelector(".generation-hover-actions")).opacity === "0");
@@ -187,6 +189,7 @@ try {
 	assert.ok((await touch.getByRole("menuitem", { name: "另存为", exact: true }).boundingBox()).height >= 44);
 	await touch.screenshot({ path: `${output}/touch-actions.png`, animations: "disabled" });
 	await touch.getByRole("menuitem", { name: "使用提示词", exact: true }).tap();
+	await openCanvasComposer(touch);
 	assert.match(await touch.getByRole("textbox", { name: "提示词 Prompt" }).inputValue(), /^窗边的花/);
 	assert.equal(await touch.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
 	await touch.screenshot({ path: `${output}/touch-controls.png`, animations: "disabled" });

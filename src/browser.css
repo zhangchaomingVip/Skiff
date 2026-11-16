@@ -9,6 +9,7 @@
 .browser-panel-heading { display: flex; align-items: center; min-width: 0; gap: var(--space-2); color: var(--secondary); }
 .browser-panel-heading h2 { margin: 0; color: var(--text); font-size: var(--font-size-base); font-weight: var(--font-weight-medium); }
 .browser-panel-heading h2:focus-visible { outline: 2px solid var(--accent); outline-offset: var(--space-1); }
+.browser-panel-header-actions { display: flex; align-items: center; flex: none; gap: var(--space-1); }
 .browser-address { display: flex; align-items: center; flex: none; gap: var(--space-2); min-width: 0; margin-inline: var(--space-3); padding: var(--space-2) var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-base); background: var(--panel); color: var(--secondary); font-size: var(--font-size-sm); }
 .browser-address svg { flex: none; }
 .browser-address span { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

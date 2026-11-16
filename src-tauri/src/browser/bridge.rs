@@ -215,8 +215,17 @@ async fn relay(socket: WebSocket, entry: Arc<Entry>) {
 			let Ok(mut value) = serde_json::from_str::<Value>(&text) else {
 				break;
 			};
+			let reload = value["type"] == "reload";
 			let _gate = reader_entry.input.lock().await;
 			if !allowed_message(&mut value, &reader_entry.status()) {
+				if reload
+					&& input_ack
+						.send(json!({"type":"reload","ok":false,"error":"当前无法刷新网页，请稍后重试"}))
+						.await
+						.is_err()
+				{
+					break;
+				}
 				continue;
 			}
 			let is_input = value["type"]
@@ -231,7 +240,13 @@ async fn relay(socket: WebSocket, entry: Arc<Entry>) {
 						driver = Some(super::input::Driver::connect(&reader_entry).await?);
 					}
 					super::input::remember(&reader_entry, &value);
-					driver.as_mut().unwrap().dispatch(&value).await
+					let moving =
+						value["type"] == "input_mouse" && value["eventType"] == "mouseMoved";
+					if moving {
+						driver.as_mut().unwrap().dispatch_move(&value).await
+					} else {
+						driver.as_mut().unwrap().dispatch(&value).await
+					}
 				}
 				.await;
 				if let Err(error) = result {
@@ -251,6 +266,24 @@ async fn relay(socket: WebSocket, entry: Arc<Entry>) {
 					{
 						break;
 					}
+				}
+			} else if reload {
+				let result = async {
+					if driver.is_none() {
+						driver = Some(super::input::Driver::connect(&reader_entry).await?);
+					}
+					driver.as_mut().unwrap().reload().await
+				}
+				.await;
+				let report = match result {
+					Ok(()) => json!({"type":"reload","ok":true}),
+					Err(error) => {
+						eprintln!("[skiff] browser reload: {error}");
+						json!({"type":"reload","ok":false,"error":error})
+					}
+				};
+				if input_ack.send(report).await.is_err() {
+					break;
 				}
 			} else if reader_upstream
 				.lock()
@@ -308,6 +341,12 @@ fn allowed_message(value: &mut Value, status: &BrowserStatus) -> bool {
 		// Viewer controls rate only; force bounded latest-frame delivery.
 		*value = json!({"type":"config","pacing":"ack","maxFps":value["maxFps"].as_u64().unwrap_or(10).clamp(1, 15)});
 		return true;
+	}
+	if kind == "reload" {
+		// A page reload never mutates a form, so it does not need a live snapshot;
+		// it stays unavailable while the AI owns the page.
+		*value = json!({"type":"reload"});
+		return matches!(status.control, Control::Human | Control::Stopped);
 	}
 	if status.control != Control::Human
 		|| value["controlVersion"].as_u64() != Some(status.control_version)
@@ -423,5 +462,32 @@ mod tests {
 			&mut json!({"type":"input_mouse","eventType":"mousePressed","x":-1,"y":20,"controlVersion":4}),
 			&status
 		));
+	}
+
+	#[test]
+	fn reload_is_a_page_action_the_human_may_request() {
+		let mut status = BrowserStatus {
+			target: Target {
+				chat_id: "a".into(),
+				generation: "b".into(),
+			},
+			control: Control::Ai,
+			control_version: 3,
+			requires_snapshot: false,
+			url: None,
+			error: None,
+		};
+		assert!(!allowed_message(
+			&mut json!({"type":"reload","controlVersion":3}),
+			&status
+		));
+		status.control = Control::Human;
+		let mut reload = json!({"type":"reload","controlVersion":3,"extra":"drop"});
+		assert!(allowed_message(&mut reload, &status));
+		assert_eq!(reload, json!({"type":"reload"}));
+		status.control = Control::Stopped;
+		assert!(allowed_message(&mut json!({"type":"reload"}), &status));
+		status.control = Control::Returning;
+		assert!(!allowed_message(&mut json!({"type":"reload"}), &status));
 	}
 }

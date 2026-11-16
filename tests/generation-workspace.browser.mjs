@@ -1,4 +1,4 @@
-import { openDesignCanvas, workbenchTool } from "./workspace-navigation.mjs";
+import { openCanvasComposer, openDesignCanvas, workbenchTool } from "./workspace-navigation.mjs";
 import assert from "node:assert/strict";
 import { mkdir, readFile } from "node:fs/promises";
 import { chromium } from "../.playwright-cli/node_modules/playwright-core/index.mjs";
@@ -45,10 +45,9 @@ try {
 		await page.getByRole("complementary", { name: "生图参数", exact: true }).waitFor();
 		assert.deepEqual(await selectedAppearance(tool("生图")), appearance);
 		assert.equal(await page.locator(".primary-view").isVisible(), false);
-		// The launcher is the landing view: no collapsed strip, no works below.
-		assert.equal(await page.getByRole("heading", { name: "你好，今天想创作什么？", exact: true }).isVisible(), true);
+		// The launcher is the creation feed: one card, then the works grid.
 		assert.equal(await page.locator(".design-composer[data-variant=hero]").isVisible(), true);
-		assert.equal(await page.locator(".generation-card").count(), 0);
+		assert.equal(await page.locator(".studio-gallery").isVisible(), true);
 		assert.equal(await page.getByRole("button", { name: "生成图片", exact: true }).isDisabled(), true);
 		assert.equal(await page.getByRole("button", { name: "模型", exact: true }).isDisabled(), true);
 		await screenshot(`${theme}-image-empty`);
@@ -88,13 +87,14 @@ try {
 		await firstCard.hover();
 		await screenshot(`${theme}-gallery`);
 		const assetUrl = await firstCard.locator("img").getAttribute("src");
-		// "以此图生成视频" hands the reference back to the launcher card.
+		// "以此图生成视频" hands the reference back to the canvas composer, not the launcher.
 		await firstCard.getByRole("button", { name: "以此图生成视频", exact: true }).click();
-		await page.locator(".studio-home").waitFor();
+		const panel = await openCanvasComposer(page);
+		assert.equal(await page.locator(".design-canvas-scene").isVisible(), true, "Reusing a work as a reference stays on the canvas");
 		assert.equal(await tool("生成视频").getAttribute("aria-pressed"), "true");
 		assert.equal(await prompt().inputValue(), "镜头缓缓推进，微风轻拂花瓣");
 		assert.equal(await page.getByRole("combobox", { name: "时长", exact: true }).inputValue(), "5");
-		assert.equal(await page.locator(".generation-reference-image img").getAttribute("src"), assetUrl);
+		assert.equal(await panel.locator(".generation-reference-image img").getAttribute("src"), assetUrl);
 		await page.getByRole("button", { name: "移除首帧参考图", exact: true }).click();
 		assert.equal(await page.evaluate((url) => window.revokedMedia.includes(url), assetUrl), false, "Removing a shared reference must keep its gallery image alive");
 		await page.locator('input[aria-label="上传首帧参考图"]').setInputFiles(image);
@@ -107,7 +107,7 @@ try {
 		await page.locator(".generation-reference").scrollIntoViewIfNeeded();
 		await screenshot(`${theme}-video-reference`);
 		// Import an actual decodable local clip; no network or model generation is involved.
-		await openDesignCanvas(page);
+		await page.locator(".design-canvas-scene").waitFor();
 		const clip = Buffer.from(await readFile("tests/fixtures/video.mp4.b64", "utf8"), "base64");
 		await importInput("视频").setInputFiles({ name: "光影.mp4", mimeType: "video/mp4", buffer: clip });
 		await page.getByRole("button", { name: "预览视频：光影.mp4", exact: true }).click();
@@ -124,11 +124,11 @@ try {
 		await tool("生图").click();
 		await page.getByRole("region", { name: "图片画廊", exact: true }).waitFor();
 		await page.locator(".design-gallery-route:not([hidden]) .generation-card").first().waitFor();
-		// The redraw bar keeps the canvas scene editable without a collapse toggle.
-		assert.equal(await page.locator(".design-composer[data-variant=canvas]").isVisible(), true);
+		// The composer stays mounted above the work grid and keeps its draft.
 		assert.equal(await page.locator(".design-gallery-route:not([hidden]) .generation-card").count(), 2);
 		assert.equal(await page.getByRole("region", { name: "图片画廊", exact: true }).isVisible(), true);
-		assert.match(await prompt().inputValue(), /奶油色/);
+		assert.equal(await page.locator(".design-composer[data-variant=hero]").isVisible(), true);
+		assert.match(await prompt().inputValue(), /奶油色/, "Returning to Design keeps the draft");
 		assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
 		console.log(`PASS ${theme}: navigation style parity, independent drafts, launcher, import validation, image/video previews, loop playback, image-to-video reference, URL cleanup, chat/Commit restoration and canvas redraw bar`);
 	}

@@ -13,14 +13,21 @@ export function imageSizeMenu(page) {
 	};
 }
 
-/** The launcher keeps no history: the works live in the canvas scene, so every
- *  test that inspects a gallery first opens the canvas that owns it. */
+/** Every route shares one composer, so a gallery test only has to pick the
+ *  canvas that scopes the feed. */
 export async function openDesignCanvas(page, name = "未分组") {
 	await page.locator(".studio-home").waitFor();
 	const nav = page.getByRole("navigation", { name: "画布", exact: true });
 	if (!await nav.isVisible()) await page.getByRole("navigation", { name: "工作区工具", exact: true }).getByRole("button", { name: "生图", exact: true }).click();
 	await nav.getByRole("button", { name: new RegExp(`^${name}`) }).click();
 	await page.locator(".design-canvas-scene").waitFor();
+}
+
+/** The composer is part of every studio route; return the one at the top. */
+export async function openCanvasComposer(page) {
+	const composer = page.locator(".design-composer[data-variant=hero]");
+	await composer.waitFor();
+	return composer;
 }
 
 /** Drive the public mode switch before choosing a mode-specific activity. */

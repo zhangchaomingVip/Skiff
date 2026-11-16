@@ -17,12 +17,32 @@ export function attachBrowserInput(element: HTMLTextAreaElement, canvas: HTMLCan
 	let lastComposition = "";
 	const keys = new Map<string, Record<string, unknown>>();
 	const buttons = new Map<string, { x: number; y: number }>();
-	let lastMove = 0;
+	let pressed = 0;
+	let moveFrame: number | undefined;
+	let pendingMove: { x: number; y: number; buttons: number; modifiers: number } | undefined;
 	let lastWheel = 0;
 	const send = (value: Record<string, unknown>) => active && viewer.send(value, status);
 	const modifiers = (event: MouseEvent | KeyboardEvent) => (event.altKey ? 1 : 0) | (event.ctrlKey ? 2 : 0) | (event.metaKey ? 4 : 0) | (event.shiftKey ? 8 : 0);
 	const point = (event: MouseEvent) => browserPoint(canvas.getBoundingClientRect(), canvas, event.clientX, event.clientY);
+	const mask = (button: string) => button === "left" ? 1 : button === "right" ? 2 : button === "middle" ? 4 : 0;
+	const sendMove = (move: { x: number; y: number; buttons: number; modifiers: number }) => send({ type: "input_mouse", eventType: "mouseMoved", x: move.x, y: move.y, button: "none", buttons: move.buttons, clickCount: 0, modifiers: move.modifiers });
+	// Pointer moves are paced by animation frames and always carry the newest
+	// position. A fixed time throttle drops the tail of a fast drag, and a slider
+	// handle then stops short of the cursor instead of following it.
+	const flushMove = () => {
+		if (moveFrame !== undefined) cancelAnimationFrame(moveFrame);
+		moveFrame = undefined;
+		const move = pendingMove; pendingMove = undefined;
+		if (move) sendMove(move);
+	};
+	const queueMove = (move: { x: number; y: number; buttons: number; modifiers: number }) => {
+		pendingMove = move;
+		if (moveFrame !== undefined) return;
+		moveFrame = requestAnimationFrame(() => { moveFrame = undefined; const next = pendingMove; pendingMove = undefined; if (next) sendMove(next); });
+	};
 	const release = () => {
+		if (moveFrame !== undefined) cancelAnimationFrame(moveFrame);
+		moveFrame = undefined; pendingMove = undefined; pressed = 0;
 		for (const key of keys.values()) send({ ...key, eventType: "keyUp", modifiers: 0 }); keys.clear();
 		for (const [button, point] of buttons) send({ type: "input_mouse", eventType: "mouseReleased", ...point, button, buttons: 0, clickCount: 1 }); buttons.clear();
 		element.value = ""; composing = false;
@@ -33,15 +53,22 @@ export function attachBrowserInput(element: HTMLTextAreaElement, canvas: HTMLCan
 		if (!location) { if (event.type === "pointerup") release(); return; }
 		event.preventDefault(); event.stopPropagation();
 		const button = ["left", "middle", "right"][event.button];
+		if (event.type === "pointermove") {
+			// Some WebView2 combinations report no held buttons on captured moves;
+			// the tracked mask keeps a drag a drag for the page.
+			queueMove({ ...location, buttons: event.buttons || pressed, modifiers: modifiers(event) });
+			return;
+		}
+		// Press and release must follow the move they happened after.
+		flushMove();
 		if (event.type === "pointerdown") {
 			element.focus();
 			if (!button) return;
 			element.setPointerCapture(event.pointerId);
+			pressed |= mask(button);
 			buttons.set(button, location);
-		} else if (event.type === "pointermove") {
-			if (performance.now() - lastMove < 35) return; lastMove = performance.now();
-		} else { if (button) buttons.delete(button); }
-		send({ type: "input_mouse", eventType: event.type === "pointerdown" ? "mousePressed" : event.type === "pointerup" ? "mouseReleased" : "mouseMoved", ...location, button: button ?? "none", buttons: event.buttons, clickCount: event.type === "pointermove" ? 0 : Math.min(event.detail || 1, 3), modifiers: modifiers(event) });
+		} else if (button) { pressed &= ~mask(button); buttons.delete(button); }
+		send({ type: "input_mouse", eventType: event.type === "pointerdown" ? "mousePressed" : "mouseReleased", ...location, button: button ?? "none", buttons: pressed, clickCount: Math.min(event.detail || 1, 3), modifiers: modifiers(event) });
 	};
 	const wheel = (event: WheelEvent) => {
 		const location = point(event); if (!location) return;

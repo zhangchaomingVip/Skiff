@@ -1,4 +1,4 @@
-import { openDesignCanvas, workbenchTool } from "./workspace-navigation.mjs";
+import { openCanvasComposer, openDesignCanvas, workbenchTool } from "./workspace-navigation.mjs";
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { chromium } from "../.playwright-cli/node_modules/playwright-core/index.mjs";
@@ -35,6 +35,7 @@ try {
 		const failed = page.locator('.generation-task[data-status="failed"]');
 		await failed.getByText("查看完整记录", { exact: true }).click(); assert.equal(await failed.locator("details").evaluate((details) => details.open), true);
 		await failed.getByRole("button", { name: "使用提示词", exact: true }).click();
+		await openCanvasComposer(page);
 		assert.match(await page.getByRole("textbox", { name: "提示词 Prompt" }).inputValue(), /^失败提示词 0/);
 		assert.equal(await page.evaluate(() => window.skiffPreview.generation.calls.length), 0);
 		await page.screenshot({ path: `dist/image-gallery/${theme}-failures.png` });
@@ -46,13 +47,13 @@ try {
 		assert.equal(await page.locator(".generation-task-list").count(), 0);
 		const card = page.locator(".generation-card");
 		await card.getByRole("button", { name: /^更多作品操作/ }).click(); await page.getByRole("menuitem", { name: "以此图生成图片", exact: true }).click();
-		await page.locator(".studio-home").waitFor();
+		await page.locator(".design-composer[data-variant=hero]").waitFor();
 		const referenceUrl = await page.locator(".generation-reference-image img").getAttribute("src");
-		await openDesignCanvas(page);
+		await page.locator(".design-canvas-scene").waitFor();
 		await page.locator(".generation-card").getByRole("button", { name: /^更多作品操作/ }).click(); await page.getByRole("menuitem", { name: "从画廊移除", exact: true }).click();
 		await page.waitForFunction(() => document.querySelectorAll(".generation-card").length === 0);
-		await page.getByRole("button", { name: "首页", exact: true }).first().click();
-		await page.locator(".studio-home").waitFor();
+		await page.getByRole("navigation", { name: "创作", exact: true }).getByRole("button", { name: /^首页/ }).click();
+		await page.locator(".studio-gallery").waitFor();
 		assert.equal(await page.locator(".generation-reference-image img").getAttribute("src"), referenceUrl, "Removing from gallery preserves current reference");
 		await page.reload();
 		await openDesignCanvas(page);

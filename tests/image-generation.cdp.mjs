@@ -1,4 +1,4 @@
-import { imageSizeMenu, workbenchTool } from "./workspace-navigation.mjs";
+import { imageSizeMenu, openCanvasComposer, workbenchTool } from "./workspace-navigation.mjs";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -99,6 +99,7 @@ export async function verifyImageGeneration(page, scenario, baseUrl, dir, artifa
 	await page.evaluate(async (input) => window.__TAURI_INTERNALS__.invoke("start_image_generation", { input }), { id: completedId, serviceId: config.services[0].id, modelId: "test-image", prompt: "duplicate", size: "1024x1024", quality: "auto" });
 	assert.equal(scenario.requests.length, 1);
 	scenario.setMode("pending");
+	await openCanvasComposer(page);
 	await page.getByRole("textbox", { name: "提示词 Prompt" }).fill("CDP 取消测试");
 	await generate().click();
 	await page.getByText("正在生成图片…", { exact: true }).waitFor();
@@ -112,6 +113,7 @@ export async function verifyImageGeneration(page, scenario, baseUrl, dir, artifa
 	await page.getByRole("group", { name: "画廊视图", exact: true }).getByRole("button", { name: /^失败记录/ }).click();
 		await page.getByText("已停止等待", { exact: true }).waitFor();
 	scenario.setMode("failure");
+	await openCanvasComposer(page);
 	await page.getByRole("textbox", { name: "提示词 Prompt" }).fill("CDP 额度不足测试");
 	await generate().click();
 	await page.getByRole("group", { name: "画廊视图", exact: true }).getByRole("button", { name: /^失败记录/ }).click();
@@ -125,6 +127,7 @@ export async function verifyImageGeneration(page, scenario, baseUrl, dir, artifa
 	// Upload a real PNG reference, keep the old text-to-image flow intact, and
 	// inspect the bytes received by the Rust multipart request.
 	scenario.setMode("success");
+	await openCanvasComposer(page);
 	await page.getByRole("textbox", { name: "提示词 Prompt" }).fill("保留纸船形状，把背景改成星空");
 	await page.locator('input[aria-label="上传图生图参考图"]').setInputFiles({ name: "纸船参考.png", mimeType: "image/png", buffer: testImage() });
 	const beforeEdit = scenario.requests.length;
@@ -148,16 +151,19 @@ export async function verifyImageGeneration(page, scenario, baseUrl, dir, artifa
 	const card = page.locator(".generation-card").filter({ hasText: "图生图 · 纸船参考.png" });
 	await card.getByRole("button", { name: /^更多作品操作/ }).click();
 	await page.getByRole("menuitem", { name: "以此图生成图片", exact: true }).click();
+	await openCanvasComposer(page);
 	await page.getByRole("textbox", { name: "提示词 Prompt" }).fill("基于这张作品增加一颗星星");
 	await generate().click();
 	await page.waitForFunction(() => document.querySelectorAll(".generation-card:not(.generation-pending-card)").length === 3);
 	assert.equal(scenario.requests.at(-1).endpoint, "/v1/images/edits"); assert.deepEqual(scenario.requests.at(-1).image.bytes, testImage());
 	await page.screenshot({ path: join(artifacts, "image-edit-cdp.png") });
 	scenario.setMode("failure"); const beforeFailure = scenario.requests.length;
+	await openCanvasComposer(page);
 	await generate().click();
 	await page.getByRole("group", { name: "画廊视图", exact: true }).getByRole("button", { name: /^失败记录/ }).click();
 		await page.getByText(/图生图失败：.*未自动改为文生图/).first().waitFor();
 	assert.equal(scenario.requests.length, beforeFailure + 1); assert.equal(scenario.requests.at(-1).endpoint, "/v1/images/edits");
+	await openCanvasComposer(page);
 	await page.getByRole("button", { name: "移除图生图参考图", exact: true }).click();
 	// Gallery removal persists only metadata; its original remains usable.
 	const view = (name) => page.getByRole("group", { name: "画廊视图", exact: true }).getByRole("button", { name: new RegExp(`^${name} `) });

@@ -78,6 +78,22 @@ async fn takeover_drains_after_cli_client_exit() {
 }
 
 #[test]
+fn human_input_maps_to_bounded_cdp_methods() {
+	let moved = json!({"type":"input_mouse","eventType":"mouseMoved","x":12.0,"y":20.0,"button":"none","buttons":1,"clickCount":0,"controlVersion":2,"inputId":"probe"});
+	let (method, params) = super::input::Driver::describe(&moved).unwrap();
+	assert_eq!(method, "Input.dispatchMouseEvent");
+	assert_eq!(params["type"], "mouseMoved");
+	assert_eq!(params["buttons"], 1);
+	assert!(params.get("controlVersion").is_none() && params.get("inputId").is_none());
+	let (method, params) =
+		super::input::Driver::describe(&json!({"type":"input_keyboard","eventType":"char","text":"中文","controlVersion":2}))
+			.unwrap();
+	assert_eq!(method, "Input.insertText");
+	assert_eq!(params, json!({"text":"中文"}));
+	assert!(super::input::Driver::describe(&json!({"type":"input_keyboard"})).is_err());
+}
+
+#[test]
 fn actions_are_arguments_not_shell_programs() {
 	assert!(Action::Open {
 		url: "file:///C:/secret".into()
