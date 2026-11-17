@@ -57,6 +57,7 @@ try {
 		assert.equal(await page.locator(".generation-pending-glow").count(), 1);
 		assert.equal(await page.evaluate(() => window.skiffPreview.generation.calls.length), 1);
 		await openCanvasComposer(page);
+		await prompt().fill("第二张");
 		assert.equal(await generate().isEnabled(), true, "An accepted task does not block the next submission");
 		const call = await page.evaluate(() => window.skiffPreview.generation.calls[0]);
 		assert.equal(call.modelId, "test-image"); assert.equal(call.size, "1536x864");

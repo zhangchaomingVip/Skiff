@@ -45,6 +45,29 @@ export function useImageGeneration() {
 		timer = setTimeout(() => void poll(), 600);
 		return () => { stopped = true; clearTimeout(timer); };
 	}, [running]);
+	// A successful generation retires the failures it replaces: once the same
+	// prompt has a finished work, its older failed attempts leave the flow on
+	// their own. History loaded on mount never triggers the cleanup.
+	const completedSeen = useRef(new Set<string>());
+	const jobsHydrated = useRef(false);
+	useEffect(() => {
+		const completed = jobs.filter((job) => job.status === "completed" && job.path);
+		if (!jobsHydrated.current) { completedSeen.current = new Set(completed.map((job) => job.id)); jobsHydrated.current = true; return; }
+		const fresh = completed.filter((job) => !completedSeen.current.has(job.id));
+		if (!fresh.length) return;
+		for (const job of fresh) completedSeen.current.add(job.id);
+		const superseded = new Set(["failed", "cancelled", "interrupted"]);
+		const stale = jobs.filter((item) => superseded.has(item.status) && !item.removed && fresh.some((done) => done.prompt === item.prompt && done.createdAt > item.createdAt));
+		if (!stale.length) return;
+		void (async () => {
+			try {
+				const updated = await Promise.all(stale.map((item) => imageGenerationNative.setRemoved(item.id, true).catch(() => undefined)));
+				if (!mounted.current) return;
+				const byId = new Map(updated.filter(Boolean).map((job) => [job!.id, job!]));
+				if (byId.size) setJobs((current) => current.map((item) => byId.get(item.id) ?? item));
+			} catch { /* Cleanup is best-effort; the flow already hides removed jobs. */ }
+		})();
+	}, [jobs]);
 	const generate = async (input: Omit<Parameters<typeof imageGenerationNative.start>[0], "id" | "reference">, source?: { url: string; name: string }) => {
 		if (requestPending.current || atCapacity || loading) return;
 		// Polls taken before or during submission may omit the new task. Invalidate

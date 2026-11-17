@@ -229,10 +229,20 @@
 	.design-result-meta > strong { color: var(--text); font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); }
 	.design-result-meta > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 	.design-result-meta > .ui-button { margin-left: auto; color: var(--secondary); }
-	.design-failure { display: flex; align-items: flex-start; gap: var(--space-2); width: min(520px, 100%); padding: var(--space-3) var(--space-4); border: 1px solid color-mix(in srgb, var(--danger) 32%, var(--border)); border-radius: var(--radius-xl); background: color-mix(in srgb, var(--danger) 6%, var(--surface)); color: var(--danger); }
+	/* A failed turn reads as a draft to resume, not an alarm: neutral card, a
+	   quiet accent for real errors, and the retry action owns the right edge. */
+	.design-failure { display: flex; align-items: flex-start; gap: var(--space-3); width: min(520px, 100%); padding: var(--space-3) var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-xl); background: var(--surface); color: var(--text); box-shadow: var(--shadow-xs); }
+	.design-failure[data-prominent] { border-color: color-mix(in srgb, var(--accent) 30%, var(--border)); background: color-mix(in srgb, var(--accent) 4%, var(--surface)); }
+	.design-failure > svg { flex: none; margin-top: 1px; color: var(--muted); }
+	.design-failure[data-prominent] > svg { color: var(--accent); }
 	.design-failure > div { flex: 1; min-width: 0; }
 	.design-failure strong { font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); }
-	.design-failure p { margin: var(--space-1) 0 0; color: var(--secondary); font-size: var(--font-size-xs); overflow-wrap: anywhere; }
+	.design-failure p { margin: var(--space-1) 0 0; color: var(--muted); font-size: var(--font-size-xs); overflow-wrap: anywhere; }
+	.design-failure > .ui-button { flex: none; }
+	.design-failure-toggle { display: inline-flex; align-items: center; gap: var(--space-1); margin-top: var(--space-1); padding: 0; border: 0; background: transparent; color: var(--muted); font-size: var(--font-size-xs); cursor: pointer; }
+	.design-failure-toggle:hover, .design-failure-toggle:focus-visible { color: var(--text); }
+	.design-failure-toggle[aria-expanded=true] .chev-caret { transform: rotate(-90deg); }
+	.design-failure-reason { margin: var(--space-1-5) 0 0; padding: var(--space-2) var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--subtle); color: var(--secondary); font-size: var(--font-size-xs); overflow-wrap: anywhere; white-space: pre-wrap; }
 	.design-thread-error { display: flex; align-items: center; gap: var(--space-2); margin: var(--space-1) var(--space-6) 0; padding: var(--space-2) var(--space-3); border: 1px solid color-mix(in srgb, var(--danger) 32%, var(--border)); border-radius: var(--radius-lg); background: color-mix(in srgb, var(--danger) 6%, var(--surface)); color: var(--danger); font-size: var(--font-size-xs); }
 	.design-thread-error > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 	.design-thread-empty { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-2); padding: var(--space-8) var(--space-4); color: var(--muted); text-align: center; }
@@ -336,6 +346,34 @@
 	.design-canvas-note { margin: var(--space-3) 0 0; color: var(--muted); font-size: var(--font-size-xs); }
 	.design-canvas .generation-gallery-grid { margin-top: var(--space-4); }
 	.design-canvas .generation-empty { min-height: 320px; }
+	/* Asset library: a quiet visual timeline grouped by day. Thumbnails carry no
+	   metadata; prompt and parameters surface only in the preview dialog. */
+	.asset-library { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; background: var(--workspace-backdrop); }
+	.asset-library-scroll { flex: 1; min-height: 0; overflow: auto; padding: var(--space-4) var(--space-6) var(--space-6); }
+	.asset-timeline { display: flex; flex-direction: column; gap: var(--space-7); margin-top: var(--space-4); }
+	.asset-timeline-group { min-width: 0; }
+	.asset-timeline-date { display: flex; align-items: baseline; gap: var(--space-2); margin: 0 0 var(--space-3); color: var(--text); font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); }
+	.asset-timeline-date > span { color: var(--muted); font-size: var(--font-size-xs); font-variant-numeric: tabular-nums; }
+	.asset-timeline-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(168px, 100%), 1fr)); gap: var(--space-3); }
+	.asset-thumb { position: relative; aspect-ratio: 1; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--subtle); transition: border-color var(--transition-fast), box-shadow var(--transition-fast); }
+	.asset-thumb:hover { border-color: color-mix(in srgb, var(--accent) 30%, var(--border)); }
+	.asset-thumb[data-selected] { border-color: color-mix(in srgb, var(--accent) 62%, var(--border)); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent); }
+	.asset-thumb-main { display: block; width: 100%; height: 100%; padding: 0; border: 0; background: transparent; cursor: pointer; }
+	.asset-thumb-main > img, .asset-thumb-main > video { display: block; width: 100%; height: 100%; object-fit: cover; }
+	.asset-thumb-main .generation-media-failed { position: absolute; inset: 0; }
+	.asset-thumb-duration { position: absolute; left: var(--space-2); bottom: var(--space-2); padding: 1px var(--space-1-5); border-radius: var(--radius-full); background: color-mix(in srgb, var(--overlay-image) 72%, transparent); color: var(--action-foreground); font-size: var(--font-size-xs); font-variant-numeric: tabular-nums; pointer-events: none; }
+	.asset-thumb-preview { position: absolute; top: var(--space-2); right: var(--space-2); display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: var(--radius-full); background: color-mix(in srgb, var(--overlay-image) 72%, transparent); color: var(--action-foreground); opacity: 0; transition: opacity var(--transition-fast); }
+	.asset-thumb:hover .asset-thumb-preview, .asset-thumb:focus-within .asset-thumb-preview { opacity: 1; }
+	.asset-thumb-preview:hover { background: var(--overlay-image); }
+	/* The history drawer floats over the flow and never rewrites the route. */
+	.design-history-trigger { position: absolute; top: var(--space-2); right: var(--space-2); z-index: 3; color: var(--secondary); }
+	.design-history-drawer { position: absolute; top: 0; right: 0; bottom: 0; z-index: 5; display: flex; flex-direction: column; width: min(380px, calc(100vw - 48px)); border-left: 1px solid var(--sidebar-border); background: var(--sidebar-backdrop); box-shadow: var(--shadow-elevation-3); animation: design-history-reveal var(--transition-base) var(--easing-default) both; }
+	.design-history-drawer > header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-2); padding: var(--space-4); border-bottom: 1px solid var(--sidebar-border); }
+	.design-history-drawer > header h2 { margin: var(--space-1) 0 0; color: var(--text); font-size: var(--font-size-md); font-weight: var(--font-weight-semibold); }
+	.design-history-drawer > header p { margin: var(--space-1) 0 0; color: var(--muted); font-size: var(--font-size-xs); }
+	.design-history-body { flex: 1; min-height: 0; overflow: auto; padding: var(--space-3) var(--space-4) var(--space-5); }
+	.design-history-body .asset-timeline { margin-top: 0; }
+	@keyframes design-history-reveal { from { opacity: 0; transform: translateX(var(--space-4)); } to { opacity: 1; transform: none; } }
 }
 /* The generic disabled rule flattens every button onto the same surface. The
    launcher's primary keeps its action tint so it still reads as the card's

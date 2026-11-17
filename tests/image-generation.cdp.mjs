@@ -184,7 +184,7 @@ export async function verifyImageGeneration(page, scenario, baseUrl, dir, artifa
 	await page.waitForFunction(() => document.querySelectorAll(".design-result-card").length === 3);
 	assert.deepEqual(await readFile(completedPath), testImage());
 	const failedId = jobs.find((job) => job.status === "failed").id;
-	assert.match(await page.evaluate(async (id) => { try { await window.__TAURI_INTERNALS__.invoke("set_image_generation_asset_removed", { id, removed: true }); return "unexpected"; } catch (error) { return String(error); } }, failedId), /只能移除/);
+	assert.equal(await page.evaluate(async (id) => { try { return (await window.__TAURI_INTERNALS__.invoke("set_image_generation_asset_removed", { id, removed: true })).removed; } catch (error) { return String(error); } }, failedId), true, "Settled failures can retire once a retry supersedes them");
 	assert.equal(scenario.requests.length, beforeFailure + 1, "Removing/restoring does not create image requests");
 	await page.screenshot({ path: join(artifacts, "image-gallery-cdp.png") });
 	await verifyImageConcurrency(page, scenario, config.services[0].id, dir, artifacts);

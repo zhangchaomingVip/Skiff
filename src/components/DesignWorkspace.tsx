@@ -1,7 +1,7 @@
 import { memo, useRef, useState, type ReactNode } from "react";
 import type { Project } from "../chat/workspace";
 import type { GenerationAsset, GenerationKind, GenerationStudio } from "../workbench/useGenerationStudio";
-import { DesignAssetLibrary } from "./DesignAssetLibrary";
+import { DesignAssetLibrary, HistoryDrawer } from "./DesignAssetLibrary";
 import { DesignSidebar } from "./DesignSidebar";
 import { assetCanvasId } from "../workbench/designCanvases";
 import { GenerationThread } from "./GenerationWorkspace";
@@ -20,6 +20,7 @@ export const DesignWorkspace = memo(function DesignWorkspace({ active, kind, stu
 	const [saved, setSaved] = useState<{ project: Project; path: string }>();
 	const [saveError, setSaveError] = useState<string>();
 	const [saving, setSaving] = useState(false);
+	const [historyOpen, setHistoryOpen] = useState(false);
 	const host = useRef<HTMLDivElement>(null);
 	const saveLock = useRef(false);
 	const home = !studio.canvasView && !studio.assetView;
@@ -39,6 +40,10 @@ export const DesignWorkspace = memo(function DesignWorkspace({ active, kind, stu
 		textarea?.focus();
 		if (textarea) textarea.setSelectionRange(textarea.value.length, textarea.value.length);
 	});
+	/** Filling a reference from the history drawer never leaves the flow: the
+	 *  media lands in the composer slot and the mode follows the chosen slot. */
+	const fillImage = (asset: GenerationAsset) => { studio.useImageForImage(asset); onKind("image"); focusPrompt(); };
+	const fillVideo = (asset: GenerationAsset) => { studio.useImageForVideo(asset); onKind("video"); focusPrompt(); };
 	/** Every "去创作" entry point lands on the launcher with a clean reference,
 	 *  so the dock stays the single place where a draft begins. */
 	const create = (next: GenerationKind) => {
@@ -66,6 +71,7 @@ export const DesignWorkspace = memo(function DesignWorkspace({ active, kind, stu
 					? <DesignAssetLibrary studio={studio} assets={studio.assets} onCreate={() => create(kind)} onImageToImage={imageToImage} onImageToVideo={imageToVideo} />
 					: <section className={`design-stage${studio.canvasView ? " design-canvas-scene" : ""}`} aria-label="生图工作台">
 						{!sidebarOpen && <div className="design-stage-expand"><Tooltip text="展开导航"><IconButton size="compact" variant="ghost" aria-label="展开导航" onClick={onOpenSidebar}><Icon name="panel" size={16} /></IconButton></Tooltip></div>}
+						<Tooltip text="历史垫图"><IconButton size="compact" variant="ghost" className="design-history-trigger" aria-label="历史垫图" aria-expanded={historyOpen} onClick={() => setHistoryOpen((value) => !value)}><Icon name="layers" size={16} /></IconButton></Tooltip>
 						<GenerationThread
 							studio={studio}
 							kind={kind}
@@ -80,6 +86,7 @@ export const DesignWorkspace = memo(function DesignWorkspace({ active, kind, stu
 						<div className="design-dock"><StudioPromptHero kind={kind} studio={studio} onKind={onKind} onConfigure={() => onConfigure(kind)} /></div>
 					</section>}
 			</div>
+			{historyOpen && !studio.assetView && <HistoryDrawer studio={studio} assets={studio.assets} kind={kind} onFillImage={fillImage} onFillVideo={fillVideo} onClose={() => setHistoryOpen(false)} />}
 		</main>
 	</div>;
 }, (before, after) => !before.active && !after.active);

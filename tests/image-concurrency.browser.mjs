@@ -87,6 +87,7 @@ try {
 		await setLimit(0);
 		for (let i = 7; i <= 15; i++) await submit(`任务 ${i}`);
 		assert.equal(await cards().count(), 12, "Unlimited permits more than ten active jobs");
+		await prompt().fill("再来一张");
 		assert.equal(await generate().isEnabled(), true);
 		assert.equal(await page.locator(".generation-service-status").count(), 0);
 		await page.reload();

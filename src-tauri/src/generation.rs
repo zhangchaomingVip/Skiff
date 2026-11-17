@@ -281,7 +281,12 @@ pub fn list_image_generation_jobs(app: AppHandle, state: State<'_, GenerationSta
 
 fn set_asset_removed(dir: &Path, id: &str, removed: bool) -> Result<ImageJob, String> {
 	let mut job = read_job(dir, id)?;
-	if job.status != "completed" { return Err("只能移除或恢复已完成的图片作品".into()); }
+	// Finished works leave the flow through removal; settled failures (and
+	// user-stopped attempts) retire once a retry of the same prompt succeeds.
+	// In-flight tasks still belong to their poll loop and stay untouchable.
+	if job.status != "completed" && job.status != "failed" && job.status != "cancelled" && job.status != "interrupted" {
+		return Err("只能移除已结束的图片任务".into());
+	}
 	job.removed = removed;
 	job.save(dir)?;
 	Ok(job)

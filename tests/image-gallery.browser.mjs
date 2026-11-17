@@ -37,8 +37,9 @@ try {
 		assert.equal(await page.locator(".design-failure").count(), 3, "Historical failures sit next to their prompts");
 		assert.equal(await page.getByRole("group", { name: "画廊视图", exact: true }).count(), 0, "No status tabs survive");
 		const failed = page.locator(".design-turn").filter({ hasText: "失败提示词 0" }).locator(".design-failure");
-		assert.match(await failed.innerText(), /HTTP 400/);
-		await failed.getByRole("button", { name: "使用提示词", exact: true }).click();
+		assert.match(await failed.innerText(), /生成失败，请调整后重试/);
+		assert.equal(await failed.innerText().then((text) => text.includes("HTTP 400")), false, "The error log never leaks into the flow");
+		await failed.getByRole("button", { name: "修改后重新生成", exact: true }).click();
 		await openCanvasComposer(page);
 		assert.match(await prompt().inputValue(), /^失败提示词 0/);
 		assert.equal(await page.evaluate(() => window.skiffPreview.generation.calls.length), 0);

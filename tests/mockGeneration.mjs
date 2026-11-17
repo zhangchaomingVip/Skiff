@@ -67,7 +67,7 @@ export function installMockGeneration(target, storage) {
 			}
 			if (command === "set_image_generation_asset_removed") {
 				const job = jobs.find((item) => item.id === args.id);
-				if (!job || job.status !== "completed") throw new Error("只能移除或恢复已完成的图片作品");
+				if (!job || !["completed", "failed", "cancelled", "interrupted"].includes(job.status)) throw new Error("只能移除已结束的图片任务");
 				job.removed = args.removed; persist(); return structuredClone(job);
 			}
 			if (command === "export_image_generation_asset" || command === "reveal_image_generation_asset") { calls.push({ command, id: args.id }); return true; }

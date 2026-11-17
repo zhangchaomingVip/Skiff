@@ -289,10 +289,22 @@ function PendingVideoCard({ job, studio, onAbandon }: { job?: VideoJob; studio: 
 	</article>;
 }
 
-/** A settled job that produced nothing still belongs to the conversation: the
- *  flow keeps the failure next to its prompt instead of hiding it in a tab. */
-function FailedTurn({ label, message, onReuse }: { label: string; message?: string; onReuse: () => void }) {
-	return <article className="design-failure" role="alert"><Icon name="alert" size={16} /><div><strong>{label}</strong>{message && <p>{message}</p>}</div><Button size="compact" variant="ghost" onClick={onReuse}><Icon name="edit" size={14} />使用提示词</Button></article>;
+/** A settled job that produced nothing still belongs to the conversation. Real
+ *  errors become a gentle draft card that leads the user straight back into
+ *  editing; their technical reason stays one click away for debugging. */
+function FailedTurn({ label, message, actionLabel, prominent, onAction }: { label: string; message?: string; actionLabel: string; prominent: boolean; onAction: () => void }) {
+	const [expanded, setExpanded] = useState(false);
+	const collapsible = prominent && !!message;
+	return <article className="design-failure" data-prominent={prominent || undefined} role="status">
+		<Icon name={prominent ? "alert" : "info"} size={16} />
+		<div>
+			<strong>{label}</strong>
+			{!prominent && message && <p>{message}</p>}
+			{collapsible && <button type="button" className="design-failure-toggle" aria-expanded={expanded} onClick={() => setExpanded((value) => !value)}>{expanded ? "收起原因" : "查看原因"}<span className="chev-caret" aria-hidden="true"><Icon name="chevron" size={11} /></span></button>}
+			{collapsible && expanded && <p className="design-failure-reason">{message}</p>}
+		</div>
+		<Button size="compact" variant={prominent ? "primary" : "ghost"} onClick={onAction}><Icon name="edit" size={14} />{actionLabel}</Button>
+	</article>;
 }
 
 type ThreadStatus = "done" | "pending" | "submitting" | "failed";
@@ -353,7 +365,7 @@ export function GenerationThread({ studio, kind, canvasId, active, onKind, onIma
 			const draft = studio.drafts.image;
 			turns.push({ key: "image-submitting", kind, status: "submitting", prompt: draft.prompt, createdAt: Date.now() });
 		}
-		for (const job of jobs.filter((item) => !imageJobPending(item) && item.status !== "completed").sort((before, after) => after.createdAt - before.createdAt).slice(0, 6)) {
+		for (const job of jobs.filter((item) => !imageJobPending(item) && item.status !== "completed" && !item.removed).sort((before, after) => after.createdAt - before.createdAt).slice(0, 6)) {
 			turns.push({ key: job.id, kind, status: "failed", imageJob: job, prompt: job.prompt, createdAt: job.createdAt, label: job.status === "cancelled" ? "已停止等待" : job.status === "interrupted" ? "生成已中断" : "生成失败", message: job.message });
 		}
 	} else {
@@ -394,6 +406,23 @@ export function GenerationThread({ studio, kind, canvasId, active, onKind, onIma
 			if (input) input.setSelectionRange(input.value.length, input.value.length);
 		});
 	};
+	// A freshly settled error drops its prompt back into the composer so the user
+	// lands in an edit state instead of staring at a red log. Historical failures
+	// loaded on mount never steal focus.
+	const errorKeys = turns.filter((turn) => turn.status === "failed" && (turn.imageJob?.status === "failed" || turn.videoJob?.status === "failed")).map((turn) => turn.key).sort().join(",");
+	const seenErrors = useRef(new Set<string>());
+	const hydratedErrors = useRef(false);
+	useEffect(() => {
+		if (!errorKeys) return;
+		if (!hydratedErrors.current) { for (const key of errorKeys.split(",")) seenErrors.current.add(key); hydratedErrors.current = true; return; }
+		for (const key of errorKeys.split(",")) {
+			if (seenErrors.current.has(key)) continue;
+			seenErrors.current.add(key);
+			const turn = turns.find((item) => item.key === key);
+			if (turn) reuse(turn);
+			break;
+		}
+	}, [errorKeys]);
 	// A dead service or an exhausted concurrency cap has no turn of its own, so
 	// the flow keeps the one banner that explains why nothing is moving.
 	const failure = kind === "image" ? studio.images.error : studio.videos.error;
@@ -410,7 +439,13 @@ export function GenerationThread({ studio, kind, canvasId, active, onKind, onIma
 					</div>
 				</div>
 				<div className="design-result">
-					{turn.status === "failed" ? <FailedTurn label={turn.label ?? "生成失败"} message={turn.message} onReuse={() => reuse(turn)} />
+					{turn.status === "failed" ? <FailedTurn
+						label={turn.imageJob?.status === "failed" || turn.videoJob?.status === "failed" ? "生成失败，请调整后重试" : turn.label ?? "生成失败"}
+						message={turn.message}
+						actionLabel={turn.imageJob?.status === "failed" || turn.videoJob?.status === "failed" ? "修改后重新生成" : "使用提示词"}
+						prominent={turn.imageJob?.status === "failed" || turn.videoJob?.status === "failed"}
+						onAction={() => reuse(turn)}
+					/>
 						: !turn.asset ? (turn.kind === "image" ? <PendingImageCard job={turn.imageJob} studio={studio} /> : <PendingVideoCard job={turn.videoJob} studio={studio} onAbandon={setAbandoning} />)
 							: turn.asset.kind === "image" ? <ImageResultCard asset={turn.asset} studio={studio} active={active} onPreview={() => setSelected(turn.asset)} onUseReference={() => kind === "video" ? onImageToVideo(turn.asset!) : onImageToImage(turn.asset!)} />
 							: <article className="generation-card design-result-card" data-kind={turn.asset.kind}>

@@ -42,6 +42,7 @@ try {
 		await page.evaluate(() => window.skiffPreview.generation.setMode("pending"));
 		await generate().click(); await page.getByText("正在生成图片…", { exact: true }).waitFor();
 		await openCanvasComposer(page);
+		await prompt().fill("第二张");
 		assert.equal(await generate().isEnabled(), true, "An accepted edit leaves capacity for another task");
 		const first = await page.evaluate(() => window.skiffPreview.generation.calls);
 		assert.equal(first.length, 1); assert.equal(first[0].reference.name, original.name); assert.equal(first[0].reference.dataPrefix, "data:image/png;base64,");
