@@ -9,24 +9,36 @@
 	.workspace-mode-switcher > button:hover { background: var(--hover); color: var(--text); }
 	.workspace-mode-switcher > button[aria-pressed="true"] { background: var(--surface); color: var(--accent); box-shadow: var(--shadow-xs); }
 	.workspace-mode-switcher > button:focus-visible { outline: 2px solid var(--accent); outline-offset: var(--space-px); }
-	.design-sidebar { display: flex; flex-direction: column; gap: var(--space-5); flex: 0 0 var(--sidebar-width); width: var(--sidebar-width); min-height: 0; overflow: auto; padding: var(--space-5) var(--space-3); border-right: 1px solid var(--sidebar-border); background: var(--sidebar-backdrop); }
+	.design-sidebar { display: flex; flex-direction: column; gap: var(--space-5); flex: 0 0 var(--sidebar-width); width: var(--sidebar-width); min-height: 0; overflow: auto; padding: var(--space-5) var(--space-3); border-right: 1px solid var(--sidebar-border); background: var(--sidebar-backdrop); animation: design-sidebar-reveal var(--transition-base) var(--easing-default) both; }
 	.design-sidebar > header { padding-inline: var(--space-2); }
 	.design-sidebar h1 { margin: var(--space-1) 0; color: var(--text); font-size: var(--font-size-xl); font-weight: var(--font-weight-semibold); }
 	.design-sidebar header p { margin: 0; color: var(--muted); font-size: var(--font-size-xs); }
 	.design-sidebar h2 { display: block; margin: 0 0 var(--space-2); padding-inline: var(--space-2); color: var(--muted); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); }
+	/* The title row owns the collapse affordance so the rail can hand its width
+	   back to the flow without reaching for the title bar. */
+	.design-sidebar-title { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+	.design-sidebar-collapse { flex: none; color: var(--muted); }
+	@keyframes design-sidebar-reveal { from { opacity: 0; transform: translateX(calc(-1 * var(--space-2))); } to { opacity: 1; transform: none; } }
 	/* Section head pairs the label with one quiet icon action, so the sidebar
 	   lists canvases and assets only — no creation modes, no status filters. */
 	.design-sidebar-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); min-height: var(--control-compact); }
 	.design-sidebar-heading h2 { margin: 0; }
 	.design-sidebar-heading .ui-icon-button { color: var(--muted); }
-	/* Canvases read like the collection rows: one quiet list, no nested trees. */
+	/* Canvases read like the collection rows: one quiet list, no nested trees.
+	   Rename and delete only surface on hover, so the list stays a list. */
 	.design-canvases { display: flex; flex-direction: column; gap: var(--space-1); }
-	.design-canvas-row { display: flex; align-items: center; gap: var(--space-2); width: 100%; min-height: var(--control-primary); padding: var(--space-2); border: 0; border-radius: var(--radius-md); background: transparent; color: var(--secondary); text-align: left; font-size: var(--font-size-sm); }
-	.design-canvas-row > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-	.design-canvas-row > small { color: var(--muted); font-variant-numeric: tabular-nums; }
+	.design-canvas-row { position: relative; display: flex; align-items: center; border-radius: var(--radius-md); background: transparent; transition: background-color var(--transition-fast); }
+	.design-canvas-row-main { display: flex; align-items: center; gap: var(--space-2); width: 100%; min-height: var(--control-primary); padding: var(--space-2); border: 0; border-radius: inherit; background: transparent; color: var(--secondary); text-align: left; font-size: var(--font-size-sm); }
+	.design-canvas-row-main > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+	.design-canvas-row-main > small { color: var(--muted); font-variant-numeric: tabular-nums; }
 	.design-canvas-row:hover { background: var(--hover); }
-	.design-canvas-row[aria-current=page] { color: var(--accent); background: var(--selected); }
-	.design-canvas-row:focus-visible { outline: 2px solid var(--accent); outline-offset: var(--space-px); }
+	.design-canvas-row[data-active] { background: var(--selected); }
+	.design-canvas-row[data-active] .design-canvas-row-main { color: var(--accent); }
+	.design-canvas-row-main:focus-visible { outline: 2px solid var(--accent); outline-offset: var(--space-px); }
+	.design-canvas-row-actions { position: absolute; inset: 0 var(--space-1) 0 auto; display: flex; align-items: center; gap: var(--space-0-5); padding-left: var(--space-4); border-radius: inherit; background: linear-gradient(to right, transparent, var(--hover) 36%); opacity: 0; pointer-events: none; transition: opacity var(--transition-fast); }
+	.design-canvas-row[data-active] .design-canvas-row-actions { background: linear-gradient(to right, transparent, var(--selected) 36%); }
+	.design-canvas-row:hover .design-canvas-row-actions, .design-canvas-row:focus-within .design-canvas-row-actions { opacity: 1; pointer-events: auto; }
+	.design-canvas-row-actions .ui-icon-button { color: var(--secondary); }
 	.design-canvas-new { align-self: flex-start; justify-content: flex-start; padding-inline: var(--space-2); color: var(--muted); }
 	.canvas-name-dialog .canvas-name-field { display: flex; flex-direction: column; gap: var(--space-2); margin: var(--space-3) 0; color: var(--secondary); font-size: var(--font-size-sm); }
 	.canvas-name-dialog .canvas-name-field .ui-input { width: 100%; }
@@ -43,19 +55,15 @@
 	.design-gallery-breadcrumb { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--secondary); font-size: var(--font-size-xs); }
 	.design-asset-notice { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); padding: var(--space-2) var(--space-4); border-bottom: 1px solid var(--border); background: var(--surface); color: var(--secondary); font-size: var(--font-size-xs); overflow-wrap: anywhere; }
 	.design-asset-notice[role=alert] { color: var(--danger); }
-	.design-workspace .generation-gallery { container-type: inline-size; }
-	.design-workspace .generation-gallery-grid { display: block; flex: none; column-count: 3; column-gap: var(--space-4); }
-	.design-workspace .generation-gallery[data-columns="1"] .generation-gallery-grid { column-count: 1; }
-	.design-workspace .generation-gallery[data-columns="2"] .generation-gallery-grid { column-count: 2; }
-	.design-workspace .generation-gallery[data-columns="4"] .generation-gallery-grid { column-count: 4; }
-	.design-workspace .generation-gallery-grid > .generation-card { display: block; width: 100%; margin-bottom: var(--space-4); break-inside: avoid; }
-	.design-workspace .generation-card[data-kind=image] .generation-card-preview { aspect-ratio: auto; }
-	/* Keep the tallest portrait work inside the first screen: the gallery starts
-	   right under the composer, so one complete card row must fit at 800-900px. */
-	.design-workspace .generation-card[data-kind=image] .generation-card-preview > img { height: auto; max-height: min(480px, 50vh); object-fit: contain; }
+	/* The asset library stays the one masonry surface: canvases now scope the
+	   conversation instead of a grid. */
+	.design-canvas .generation-gallery-grid { display: block; flex: none; column-count: 3; column-gap: var(--space-4); }
+	.design-canvas .generation-gallery-grid > .generation-card { display: block; width: 100%; margin-bottom: var(--space-4); break-inside: avoid; }
+	.design-canvas .generation-card[data-kind=image] .generation-card-preview { aspect-ratio: auto; }
+	.design-canvas .generation-card[data-kind=image] .generation-card-preview > img { height: auto; max-height: min(480px, 50vh); object-fit: contain; }
 	.drawer-workbench > .design-sidebar { width: 100%; flex: 1; }
 	.ui-dialog[data-variant=drawer]:has(> .generation-controls) { width: min(420px, calc(100vw - 24px)); }
 	.ui-dialog[data-variant=drawer] > .generation-controls { width: 100%; flex: 1; }
-	@container (max-width: 720px) { .design-workspace .generation-gallery:is([data-columns="3"], [data-columns="4"]) .generation-gallery-grid { column-count: 2; } }
-	@container (max-width: 440px) { .design-workspace .generation-gallery[data-columns] .generation-gallery-grid { column-count: 1; } }
+	@container (max-width: 720px) { .design-canvas .generation-gallery-grid { column-count: 2; } }
+	@container (max-width: 440px) { .design-canvas .generation-gallery-grid { column-count: 1; } }
 }

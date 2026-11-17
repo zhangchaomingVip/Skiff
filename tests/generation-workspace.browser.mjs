@@ -13,7 +13,6 @@ const errors = [];
 page.on("pageerror", (error) => errors.push(String(error)));
 const tool = (name) => workbenchTool(page, name);
 const image = { name: "午后.png", mimeType: "image/png", buffer: testImage() };
-const importInput = (kind) => page.locator(`input[aria-label="导入${kind}作品"]`);
 const screenshot = (name) => page.screenshot({ path: `dist/generation-workspace/${name}.png`, animations: "disabled" });
 const prompt = () => page.getByRole("textbox", { name: "提示词 Prompt" });
 const selectedAppearance = async (button) => {
@@ -47,7 +46,7 @@ try {
 		assert.equal(await page.locator(".primary-view").isVisible(), false);
 		// The launcher is the creation feed: one card, then the works grid.
 		assert.equal(await page.locator(".design-composer[data-variant=hero]").isVisible(), true);
-		assert.equal(await page.locator(".studio-gallery").isVisible(), true);
+		assert.equal(await page.locator(".design-thread").isVisible(), true);
 		assert.equal(await page.getByRole("button", { name: "生成图片", exact: true }).isDisabled(), true);
 		assert.equal(await page.getByRole("button", { name: "模型", exact: true }).isDisabled(), true);
 		await screenshot(`${theme}-image-empty`);
@@ -65,15 +64,36 @@ try {
 		assert.match(await prompt().inputValue(), /奶油色/);
 		assert.equal(await page.getByRole("button", { name: "画面尺寸", exact: true }).isDisabled(), true);
 
-		// Imports, previews and quick actions live in the canvas scene.
+		// Imported media is persisted by the shell, so seed it the way the app stores
+		// it: one image pair and one clip, all ungrouped.
 		await openDesignCanvas(page);
-		await importInput("图片").setInputFiles({ name: "wrong.txt", mimeType: "text/plain", buffer: Buffer.from("invalid") });
-		await page.getByRole("alert").filter({ hasText: "请选择 PNG" }).waitFor();
-		assert.equal(await page.locator(".design-gallery-route:not([hidden]) .generation-card").count(), 0);
-		await importInput("图片").setInputFiles([image, { ...image, name: "另一束光.png" }]);
+		assert.equal(await page.locator(".design-result-card").count(), 0);
+		const clip = Buffer.from(await readFile("tests/fixtures/video.mp4.b64", "utf8"), "base64");
+		await page.evaluate(({ imageUrl, clipUrl }) => {
+			localStorage.setItem("skiff.test.design-assets", JSON.stringify([
+				{ id: "import-image", kind: "image", name: "午后.png", mime: "image/png", path: imageUrl, size: imageUrl.length, removed: false, createdAt: Date.now() },
+				{ id: "import-image-2", kind: "image", name: "另一束光.png", mime: "image/png", path: imageUrl, size: imageUrl.length, removed: false, createdAt: Date.now() - 1000 },
+				{ id: "import-video", kind: "video", name: "光影.mp4", mime: "video/mp4", path: clipUrl, size: clipUrl.length, removed: false, createdAt: Date.now() - 2000 },
+			]));
+			const url = new URL(location.href); url.searchParams.set("persist", "1"); history.replaceState(null, "", url);
+		}, { imageUrl: `data:image/png;base64,${testImage().toString("base64")}`, clipUrl: `data:video/mp4;base64,${clip.toString("base64")}` });
+		await page.reload();
+		await page.evaluate(() => {
+			const original = URL.revokeObjectURL.bind(URL);
+			window.revokedMedia = [];
+			URL.revokeObjectURL = (url) => { window.revokedMedia.push(url); original(url); };
+		});
+		// A reload keeps the persisted drafts, but the Commit field only flushes
+		// after a beat, so the two drafts are written again before navigating.
+		await page.getByRole("button", { name: "Code 工作区", exact: true }).click();
+		await page.getByRole("tab", { name: "Commit", exact: true }).click();
+		await page.getByRole("textbox", { name: "提交信息", exact: true }).fill("创作空间不影响提交草稿");
+		await tool("生图").click();
+		await prompt().fill("午后，窗边的一束花，柔和的奶油色光线");
+		await openDesignCanvas(page);
 		await page.getByRole("button", { name: "预览图片：另一束光.png", exact: true }).waitFor();
 		await page.waitForFunction(() => [...document.querySelectorAll(".generation-card img")].every((image) => image.complete && image.naturalWidth > 0));
-		assert.equal(await page.locator(".design-gallery-route:not([hidden]) .generation-card").count(), 2);
+		assert.equal(await page.locator(".design-result-card").count(), 2, "Both imported images join the flow");
 		assert.equal(await page.getByRole("alert").count(), 0);
 		await page.getByRole("button", { name: "预览图片：午后.png", exact: true }).click();
 		const preview = page.getByRole("dialog", { name: "图片预览", exact: true });
@@ -82,13 +102,17 @@ try {
 		await screenshot(`${theme}-image-preview`);
 		await page.keyboard.press("Escape");
 		await preview.waitFor({ state: "detached" });
-		assert.equal(await page.getByRole("button", { name: "预览图片：午后.png", exact: true }).evaluate((element) => element === document.activeElement), true);
-		const firstCard = page.locator(".design-gallery-route:not([hidden]) .generation-card").filter({ has: page.getByRole("button", { name: "预览图片：午后.png", exact: true }) });
-		await firstCard.hover();
+		assert.equal(await page.locator(".design-result-card .generation-card-preview:focus").count(), 1, "Closing the preview returns focus to the flow");
+		// Reloading clears the session drafts, so the motion draft is typed again.
+		await tool("生成视频").click();
+		await prompt().fill("镜头缓缓推进，微风轻拂花瓣");
+		await tool("生图").click();
+		const firstCard = page.locator(".design-turn").filter({ hasText: "午后.png" }).locator(".design-result-card");
+		await firstCard.locator(".generation-card-media").hover();
 		await screenshot(`${theme}-gallery`);
 		const assetUrl = await firstCard.locator("img").getAttribute("src");
-		// "以此图生成视频" hands the reference back to the canvas composer, not the launcher.
-		await firstCard.getByRole("button", { name: "以此图生成视频", exact: true }).click();
+		// "图生视频" hands the reference back to the dock, not the launcher.
+		await firstCard.getByRole("button", { name: "图生视频", exact: true }).click();
 		const panel = await openCanvasComposer(page);
 		assert.equal(await page.locator(".design-canvas-scene").isVisible(), true, "Reusing a work as a reference stays on the canvas");
 		assert.equal(await tool("生成视频").getAttribute("aria-pressed"), "true");
@@ -106,10 +130,8 @@ try {
 		assert.equal(await page.evaluate((url) => window.revokedMedia.includes(url), uploadedUrl), true, "Replacing a local reference releases the previous blob");
 		await page.locator(".generation-reference").scrollIntoViewIfNeeded();
 		await screenshot(`${theme}-video-reference`);
-		// Import an actual decodable local clip; no network or model generation is involved.
+		// The seeded clip is decodable, so playback needs no network or model call.
 		await page.locator(".design-canvas-scene").waitFor();
-		const clip = Buffer.from(await readFile("tests/fixtures/video.mp4.b64", "utf8"), "base64");
-		await importInput("视频").setInputFiles({ name: "光影.mp4", mimeType: "video/mp4", buffer: clip });
 		await page.getByRole("button", { name: "预览视频：光影.mp4", exact: true }).click();
 		const player = page.getByRole("dialog", { name: "视频预览", exact: true }).locator("video");
 		await page.waitForFunction(() => document.querySelector("dialog video")?.readyState >= 2);
@@ -122,15 +144,15 @@ try {
 		assert.equal(await page.getByRole("tab", { name: "Commit", exact: true }).getAttribute("aria-selected"), "true");
 		assert.equal(await page.getByRole("textbox", { name: "提交信息", exact: true }).inputValue(), "创作空间不影响提交草稿");
 		await tool("生图").click();
-		await page.getByRole("region", { name: "图片画廊", exact: true }).waitFor();
-		await page.locator(".design-gallery-route:not([hidden]) .generation-card").first().waitFor();
-		// The composer stays mounted above the work grid and keeps its draft.
-		assert.equal(await page.locator(".design-gallery-route:not([hidden]) .generation-card").count(), 2);
-		assert.equal(await page.getByRole("region", { name: "图片画廊", exact: true }).isVisible(), true);
+		await page.locator(".design-thread").waitFor();
+		await page.locator(".design-result-card").first().waitFor();
+		// The dock stays pinned below the flow and keeps its draft.
+		assert.equal(await page.locator(".design-result-card").count(), 2);
+		assert.equal(await page.locator(".design-thread").isVisible(), true);
 		assert.equal(await page.locator(".design-composer[data-variant=hero]").isVisible(), true);
 		assert.match(await prompt().inputValue(), /奶油色/, "Returning to Design keeps the draft");
 		assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-		console.log(`PASS ${theme}: navigation style parity, independent drafts, launcher, import validation, image/video previews, loop playback, image-to-video reference, URL cleanup, chat/Commit restoration and canvas redraw bar`);
+		console.log(`PASS ${theme}: navigation style parity, independent drafts, launcher, seeded imports, image/video previews, loop playback, image-to-video reference, URL cleanup, chat/Commit restoration and the pinned composer`);
 	}
 	for (const width of [760, 390]) {
 		await page.setViewportSize({ width, height: 800 });

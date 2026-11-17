@@ -1,17 +1,12 @@
-import { useEffect, useId, useRef, useState } from "react";
-import type { GenerationAsset, GenerationStudio } from "../workbench/useGenerationStudio";
-import { videoJobActive, videoJobLabels, type VideoJob } from "../workbench/videoGeneration";
-import { ConfirmDialog } from "./ConfirmDialog";
+import { useEffect, useId, useRef } from "react";
+import type { GenerationStudio } from "../workbench/useGenerationStudio";
+import type { VideoJob } from "../workbench/videoGeneration";
 import { Icon } from "./Icon";
 import { CanvasPicker } from "./CanvasPicker";
 import { GenerationPicker } from "./GenerationPicker";
-import { MoveAssetDialog } from "./MoveAssetDialog";
-import { assetCanvasId } from "../workbench/designCanvases";
-import { Button, Chip, Dialog, IconButton, Input, SegmentedControl, Select, TextArea, Tooltip } from "./ui";
-import { isMacPlatform } from "./settingsNavigation";
-import type { ComposerProps, GenerationGalleryProps } from "./GenerationWorkspace";
+import { Button, IconButton, Input, Select, TextArea, Tooltip } from "./ui";
+import type { ComposerProps } from "./GenerationWorkspace";
 import { useReferenceDrop } from "./useReferenceDrop";
-import { assetsInCollection } from "../workbench/designWorkspace";
 
 export function VideoControls({ studio, onConfigure, onSubmitted, variant, modeSwitch }: ComposerProps) {
 	const id = useId();
@@ -24,7 +19,7 @@ export function VideoControls({ studio, onConfigure, onSubmitted, variant, modeS
 	const configured = !!service?.configured && !!model;
 	const update = (patch: Partial<typeof draft>) => studio.updateDraft("video", patch);
 	const canGenerate = configured && !videos.loading && !videos.submitting && !videos.running && !!draft.prompt.trim() && model.durations.includes(draft.duration) && model.ratios.includes(draft.ratio) && (!studio.reference || model.referenceEnabled);
-	const status = videos.loading ? "正在读取视频服务" : videos.running ? "已有视频任务，可在作品区查看或继续查询" : configured ? "" : "尚未配置视频生成服务";
+	const status = videos.loading ? "正在读取视频服务" : videos.running ? "已有视频任务，可在对话流中查看或继续查询" : configured ? "" : "尚未配置视频生成服务";
 	// Same growth rule as the image panel: a few lines at rest, capped and scrollable.
 	useEffect(() => {
 		const node = promptInput.current;
@@ -34,7 +29,7 @@ export function VideoControls({ studio, onConfigure, onSubmitted, variant, modeS
 	}, [draft.prompt, variant]);
 	return <aside className="generation-controls" data-kind="video" data-variant={variant} aria-label="生成视频参数">
 		<header className="generation-controls-header"><span className="generation-mode-icon"><Icon name="video" size={20} /></span><div><h1>生成视频</h1><p>让画面，多一点故事</p></div></header>
-		<form className="generation-form" onSubmit={(event) => { event.preventDefault(); if (!canGenerate) return; void videos.generate({ serviceId: draft.serviceId, modelId: draft.modelId, prompt: draft.prompt, duration: draft.duration, ratio: draft.ratio, projectRoot: studio.project?.path, canvasId: studio.canvasId || undefined }, studio.reference?.url); onSubmitted?.(); }} {...drop.handlers}>
+		<form className="generation-form" onSubmit={(event) => { event.preventDefault(); if (!canGenerate) return; void videos.generate({ serviceId: draft.serviceId, modelId: draft.modelId, prompt: draft.prompt, duration: draft.duration, ratio: draft.ratio, projectRoot: studio.project?.path, canvasId: studio.canvasId || undefined }, studio.reference?.url); update({ prompt: "" }); onSubmitted?.(); }} {...drop.handlers}>
 			<div className="generation-fields">
 				<div className="generation-field generation-field-prompt"><div className="generation-field-heading"><label htmlFor={`${id}-prompt`}>提示词 <span>Prompt</span></label></div><TextArea ref={promptInput} id={`${id}-prompt`} rows={variant === "panel" ? 2 : 4} maxLength={32000} value={draft.prompt} aria-keyshortcuts="Control+Enter Meta+Enter" placeholder="描述画面如何动起来：镜头缓缓推进，微风拂过窗边的花…" onChange={(event) => update({ prompt: event.target.value })} onKeyDown={(event) => {
 						if (event.key === "Enter" && (event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && !event.nativeEvent.isComposing && event.nativeEvent.keyCode !== 229) {
@@ -59,69 +54,16 @@ export function VideoControls({ studio, onConfigure, onSubmitted, variant, modeS
 				{studio.reference && !model?.referenceEnabled && <p className="generation-field-hint" role="status">当前模型未启用单图参考。请移除参考图使用文生视频，或在视频设置中启用实验性单图参考。</p>}
 				{studio.referenceError && <p className="generation-error" role="alert">{studio.referenceError}<IconButton size="compact" variant="ghost" aria-label="关闭文件提示" onClick={studio.clearReferenceError}><Icon name="close" /></IconButton></p>}
 			</div>
-			<footer className="generation-submit">{status ? <p id={`${id}-connection`}><span className="generation-connection-dot" />{status}</p> : variant === "hero" && <p className="generation-submit-hint">每次 1 段 · 按服务商计费</p>}<Button type="submit" variant="primary" size="primary" disabled={!canGenerate} loading={videos.submitting} aria-describedby={status ? `${id}-connection` : undefined}><Icon name="video" />生成视频</Button><span className="generation-shortcut">快速生成 <kbd>{isMacPlatform() ? "⌘" : "Ctrl"} ↵</kbd></span><small>按服务商计费；作品自动保存。暂停查询不会停止服务端计费。</small></footer>
+			{status && <p className="generation-service-status" id={`${id}-connection`} role="status">{status}</p>}
+			<footer className="generation-submit"><Button type="submit" variant="primary" size="primary" disabled={!canGenerate} loading={videos.submitting} aria-describedby={status ? `${id}-connection` : undefined}><Icon name="video" />生成视频</Button></footer>
 		</form>
 		{drop.dragging && <div className="generation-dropzone" aria-hidden="true"><span className="generation-dropzone-icon"><Icon name="video" size={20} /></span><strong>松开图片，作为首帧参考</strong><small>PNG、JPG、WebP、GIF · 最大 20 MB</small></div>}
 	</aside>;
 }
 
-function reuseVideo(studio: GenerationStudio, job: VideoJob) {
+/** Restores a settled job's prompt and, when the model still exists, its route. */
+export function reuseVideo(studio: GenerationStudio, job: VideoJob) {
 	const service = studio.videos.config?.services.find((item) => item.id === job.serviceId);
 	const model = service?.models.find((item) => item.id === job.modelId);
 	studio.updateDraft("video", { prompt: job.prompt, ...(model ? { serviceId: service!.id, modelId: model.id, duration: job.duration, ratio: "9:16" } : {}) });
-}
-function actualSpecs(job: VideoJob) {
-	return [job.actualWidth && job.actualHeight ? `${job.actualWidth} × ${job.actualHeight}` : "尺寸未知", job.actualDuration ? `${job.actualDuration.toFixed(2)} 秒` : "时长未知", job.actualFps ? `${Number(job.actualFps.toFixed(2))} fps` : "帧率未知"].join(" · ");
-}
-function usageText(usage: Record<string, unknown>) {
-	const parts = [];
-	if (typeof usage.billing_seconds === "number") parts.push(`计费时长 ${usage.billing_seconds} 秒`);
-	if (typeof usage.videos === "number") parts.push(`${usage.videos} 段视频`);
-	if (typeof usage.cost === "number") parts.push(`费用 ${usage.cost}${typeof usage.currency === "string" ? ` ${usage.currency}` : "（服务未提供币种）"}`);
-	return parts.join(" · ") || "服务用量已记录";
-}
-function VideoActions({ studio, job }: { studio: GenerationStudio; job: VideoJob }) {
-	return <div className="generation-saved-actions"><Button size="compact" variant="ghost" onClick={() => reuseVideo(studio, job)}><Icon name="edit" size={14} />使用提示词</Button><Button size="compact" variant="ghost" onClick={() => void studio.videos.assetAction("export", job.id)}><Icon name="down" size={14} />另存为</Button><Button size="compact" variant="ghost" onClick={() => void studio.videos.assetAction("reveal", job.id)}><Icon name="folderOpen" size={14} />打开所在文件夹</Button></div>;
-}
-function VideoPlayer({ asset, playing = false }: { asset: GenerationAsset; playing?: boolean }) {
-	const [failed, setFailed] = useState(false);
-	const videoRef = useRef<HTMLVideoElement>(null);
-	useEffect(() => { if (playing) void videoRef.current?.play().catch(() => {}); }, [playing, asset.url]);
-	if (failed) return <div className="generation-media-failed" role="status"><Icon name="video" size={24} /><span>暂时无法预览这个文件</span></div>;
-	return <video ref={videoRef} src={asset.url} aria-label={asset.name} controls={playing} autoPlay={playing} muted loop playsInline preload="metadata" onError={() => setFailed(true)} />;
-}
-export function VideoGallery({ studio, onKind, collection, onCollectionChange, active, onSaveToProject, saving, header, hero, toolbar, showHeadingTitle, empty }: GenerationGalleryProps) {
-	const input = useRef<HTMLInputElement>(null);
-	const [selected, setSelected] = useState<GenerationAsset>();
-	const [abandoning, setAbandoning] = useState<VideoJob>();
-	const [moving, setMoving] = useState<GenerationAsset>();
-	const { videos } = studio;
-	const inCanvas = (asset: { canvasId?: string }) => assetCanvasId(asset, studio.canvases) === studio.canvasId;
-	const assets = assetsInCollection(studio.assets.filter((asset) => asset.kind === "video" && inCanvas(asset)), collection);
-	const failed = videos.jobs.filter((job) => inCanvas(job) && ["failed", "abandoned", "submission_unknown", "download_failed"].includes(job.status)).length;
-	const tasks = videos.jobs.filter((job) => inCanvas(job)).filter((job) => collection === "failures" ? ["failed", "abandoned", "submission_unknown", "download_failed"].includes(job.status) : collection === "tasks" ? videoJobActive(job) : job.status !== "completed");
-	useEffect(() => { if (!active) { setSelected(undefined); setAbandoning(undefined); } }, [active]);
-	return <section className="generation-gallery" aria-label="视频画廊">
-		{header ?? <header className="generation-workspace-header"><span className="design-gallery-breadcrumb"><Icon name="video" size={15} />Design</span><div className="generation-workspace-tools"><SegmentedControl label="创作类型" value="video" onChange={onKind} options={[{ value: "image", label: "图片" }, { value: "video", label: "视频" }]} /></div></header>}
-		<div className="generation-gallery-scroll">
-			{hero}
-			<div className="generation-gallery-heading">{showHeadingTitle !== false && <h2>{collection === "failures" ? "失败记录" : "光影成片"}<span>{(collection === "failures" ? failed : assets.length).toString().padStart(2, "0")}</span></h2>}{toolbar}<div className="generation-gallery-heading-actions"><div className="generation-gallery-views"><SegmentedControl label="画廊视图" value={collection === "failures" ? "failures" : "all"} onChange={(next) => onCollectionChange(next)} options={[{ value: "all", label: `作品 ${assets.length}` }, { value: "failures", label: `失败记录 ${failed}` }]} /></div><Button className="generation-import" variant="ghost" size="compact" onClick={() => input.current?.click()}><Icon name="plus" size={14} />导入作品</Button></div></div>
-			<Input ref={input} className="generation-file-input" type="file" multiple accept="video/mp4,video/webm,video/ogg,video/quicktime" aria-label="导入视频作品" onChange={(event) => { void studio.importAssets("video", Array.from(event.target.files ?? [])); event.target.value = ""; }} />
-			{studio.errors.video && <p className="generation-gallery-error" role="alert">{studio.errors.video}</p>}
-			{videos.error && <div className="generation-gallery-error" role="alert">{videos.error}<Button size="compact" onClick={() => void videos.refresh()}>重新读取状态</Button></div>}
-			{videos.submitting && !tasks.some(videoJobActive) && <p role="status">正在准备并提交视频…</p>}
-			{!!tasks.length && <div className="generation-task-list" aria-label="视频生成任务">{tasks.map((job) => <article className="generation-task" data-status={job.status} key={job.id} aria-busy={videoJobActive(job)}><div><strong role="status">{videoJobLabels[job.status]}{job.progress != null && videoJobActive(job) && job.status !== "downloading" ? ` ${job.progress}%` : ""}</strong><p>{job.prompt}</p><small>{job.serviceName} · {job.modelId} · {job.duration} 秒 · {job.ratio}{job.hasReference ? " · 首帧参考" : ""}</small>{job.remoteId && <small>任务：{job.remoteId}</small>}{job.message && <p className="generation-task-message">{job.message}</p>}<div className="generation-saved-actions">
-				{videoJobActive(job) && job.status !== "submitting" && <Button size="compact" variant="ghost" disabled={videos.controlling} onClick={() => void videos.control(job.id, "pause")}>{job.status === "downloading" ? "暂停下载" : "暂停查询"}</Button>}
-				{(job.status === "paused" || job.status === "download_failed") && job.remoteId && <Button size="compact" disabled={videos.controlling} onClick={() => void videos.control(job.id, "resume")}>{job.remoteStatus === "completed" ? "重新下载" : "继续查询"}</Button>}
-				{(job.status === "paused" || job.status === "submission_unknown") && <Button size="compact" variant="ghost" disabled={videos.controlling} onClick={() => setAbandoning(job)}>核对后结束跟踪</Button>}
-				<Button size="compact" variant="ghost" onClick={() => reuseVideo(studio, job)}>使用提示词</Button>
-			</div>{videoJobActive(job) && <small>暂停仅停止本地等待，服务端可能继续生成并计费。</small>}</div></article>)}</div>}
-			{!!assets.length && <div className="generation-gallery-grid">{assets.map((asset) => <article className="generation-card" data-kind="video" key={asset.id}><div className="generation-card-media"><button className="generation-card-preview" aria-label={`预览视频：${asset.name}`} onClick={() => setSelected(asset)}><VideoPlayer asset={asset} /><span className="generation-card-play"><Icon name="video" size={24} /></span></button></div><div className="generation-card-caption"><strong title={asset.prompt ?? asset.name}>{asset.prompt?.slice(0, 24) || asset.name}</strong><Chip>{asset.videoJob ? "生成作品" : "本地导入"}</Chip></div>{asset.videoJob && <><div className="generation-asset-info"><span>{asset.videoJob.modelId}</span><span>{asset.videoJob.actualWidth} × {asset.videoJob.actualHeight}</span></div><div className="generation-card-actions"><VideoActions studio={studio} job={asset.videoJob} /><Button size="compact" variant="ghost" onClick={() => setMoving(asset)}><Icon name="layers" size={14} />移到画布</Button><Button size="compact" disabled={!studio.project || saving} onClick={() => onSaveToProject(asset)}><Icon name="folderPlus" />保存至当前项目</Button></div></>}</article>)}</div>}
-			{!assets.length && !tasks.length && !videos.submitting && (empty ?? <div className="generation-empty"><div className="generation-empty-art" aria-hidden="true"><span className="generation-empty-back" /><span className="generation-empty-frame"><Icon name="video" size={24} /></span><span className="generation-empty-spark"><Icon name="spark" size={16} /></span></div><h2>让灵感动起来</h2><p>一阵风、一个回眸、一段光影。<br />把想象写下来，留给下一段故事。</p><Button variant="ghost" size="compact" onClick={() => input.current?.click()}><Icon name="plus" />导入一段视频</Button><small>生成的作品会出现在这里，也可以先看看已有的作品。</small></div>)}
-			{!!assets.length && <p className="generation-session-note">生成与导入的作品都已保存在本机 · 可在资产库中跨画布复用</p>}
-		</div>
-		{selected && <Dialog className="generation-preview-dialog" aria-label="视频预览" onClose={() => setSelected(undefined)}><header><div><strong>{selected.prompt?.slice(0, 24) || selected.name}</strong><small>循环播放 · 可切换声音</small></div><IconButton size="compact" variant="ghost" aria-label="关闭作品预览" onClick={() => setSelected(undefined)}><Icon name="close" /></IconButton></header><div className="generation-preview-media"><VideoPlayer key={selected.id} asset={selected} playing /></div>{selected.videoJob && <div className="generation-preview-info"><p>{selected.prompt}</p><small>{selected.videoJob.serviceName} · {selected.videoJob.modelId} · {new Date(selected.videoJob.completedAt ?? selected.createdAt).toLocaleString()}</small><small>实际成片：{actualSpecs(selected.videoJob)}</small><small>请求：{selected.videoJob.duration} 秒 · {selected.videoJob.ratio} · {selected.videoJob.resolution}（不保证输出分辨率）</small>{selected.videoJob.usage && <small>服务返回用量：{usageText(selected.videoJob.usage)}</small>}<VideoActions studio={studio} job={selected.videoJob} /><Button size="compact" disabled={!studio.project || saving} onClick={() => { setSelected(undefined); onSaveToProject(selected); }}><Icon name="folderPlus" />保存至当前项目</Button></div>}</Dialog>}
-		{abandoning && <ConfirmDialog title="结束本地任务跟踪？" description="请先核对服务端记录。此操作不会取消远端任务，服务端可能继续生成并计费；结束后可提交新视频。" confirmText="已核对，结束跟踪" onClose={() => setAbandoning(undefined)} onConfirm={() => { void videos.control(abandoning.id, "abandon"); }} />}
-		{moving && <MoveAssetDialog asset={moving} canvases={studio.canvases} onMove={(target) => void studio.moveAsset(moving, target)} onClose={() => setMoving(undefined)} />}
-	</section>;
 }

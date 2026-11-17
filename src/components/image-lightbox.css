@@ -1,0 +1,17 @@
+@layer components {
+	.ui-dialog.image-lightbox { position: fixed; inset: 0; width: 100vw; height: 100dvh; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; border-radius: 0; overflow: hidden; background: transparent; box-shadow: none; color: #fff; animation: none; }
+	.image-lightbox::backdrop { background: var(--overlay-image); backdrop-filter: blur(16px); }
+	.image-lightbox-viewport { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; overflow: hidden; touch-action: none; }
+	.image-lightbox-image { display: block; max-width: calc(100% - 64px); max-height: calc(100% - 144px); width: auto; height: auto; object-fit: contain; user-select: none; cursor: zoom-in; transform-origin: center; }
+	.image-lightbox-image[data-zoomed=true] { cursor: grab; }
+	.image-lightbox-image[data-dragging=true] { cursor: grabbing; }
+	.image-lightbox-close.ui-icon-button { position: absolute; top: var(--space-4); right: var(--space-4); z-index: 2; }
+	.image-lightbox-controls { position: absolute; bottom: var(--space-6); left: 50%; z-index: 2; display: flex; align-items: center; gap: var(--space-1); padding: var(--space-1); border: 1px solid rgb(255 255 255 / .16); border-radius: var(--radius-full); background: rgb(20 22 28 / .68); backdrop-filter: blur(12px); transform: translateX(-50%); }
+	.image-lightbox-controls output { min-width: 56px; color: inherit; font-size: var(--font-size-sm); font-variant-numeric: tabular-nums; text-align: center; }
+	.image-lightbox .ui-icon-button, .image-lightbox .ui-button { flex: none; color: rgb(255 255 255 / .85); border-radius: var(--radius-full); }
+	.image-lightbox-close.ui-icon-button { background: rgb(20 22 28 / .55); backdrop-filter: blur(12px); }
+	.image-lightbox .ui-icon-button:hover:not(:disabled), .image-lightbox .ui-button:hover:not(:disabled) { background: rgb(255 255 255 / .15); color: #fff; }
+	.image-lightbox .ui-icon-button:focus-visible, .image-lightbox .ui-button:focus-visible { outline-color: #fff; }
+	.image-lightbox-controls .ui-button:not(.ui-icon-button) { border-left: 1px solid rgb(255 255 255 / .16); border-radius: 0 var(--radius-full) var(--radius-full) 0; }
+	@media (max-width: 760px) { .image-lightbox-image { max-width: calc(100% - 24px); } }
+}

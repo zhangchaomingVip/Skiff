@@ -77,11 +77,11 @@ export async function verifyVideoGeneration(page, scenario, baseUrl, dir, artifa
 	scenario.setMode("download-failure"); await page.getByRole("textbox", { name: "提示词 Prompt" }).fill("CDP 下载重试"); await generate().click();
 	await page.getByRole("status").filter({ hasText: "视频下载失败" }).waitFor({ timeout: 30000 });
 	scenario.setMode("success"); await page.getByRole("button", { name: "重新下载", exact: true }).click();
-	await page.waitForFunction(() => document.querySelectorAll(".generation-card").length === 2); assert.equal(scenario.requests.length, 2);
+	await page.waitForFunction(() => document.querySelectorAll(".design-result-card").length === 2); assert.equal(scenario.requests.length, 2);
 
 	scenario.setMode("pending"); await page.getByRole("textbox", { name: "提示词 Prompt" }).fill("CDP 首帧与进程重启恢复");
 	await page.locator('input[aria-label="上传首帧参考图"]').setInputFiles({ name: "boat.png", mimeType: "image/png", buffer: testImage() });
-	await generate().click(); await page.waitForFunction(() => document.querySelector('.generation-task[data-status="in_progress"]'));
+	await generate().click(); await page.waitForFunction(() => document.querySelector('.generation-pending-card[data-status="in_progress"]'));
 	assert.ok(scenario.requests[2].image.startsWith("data:image/jpeg;base64,")); assert.equal(scenario.requests.length, 3);
 	jobs = await invoke("list_video_generation_jobs"); const pending = jobs.find((j) => j.status === "in_progress");
 	assert.ok((await readFile(join(dir, "video-inputs", `${pending.id}.jpg`))).length > 0);
@@ -91,20 +91,20 @@ export async function verifyVideoGeneration(page, scenario, baseUrl, dir, artifa
 	await page.getByRole("button", { name: "暂停查询", exact: true }).click();
 	await page.getByRole("status").filter({ hasText: "已暂停查询" }).waitFor();
 	await page.getByRole("button", { name: "继续查询", exact: true }).click();
-	await page.waitForFunction(() => document.querySelector('.generation-task[data-status="in_progress"]'));
+	await page.waitForFunction(() => document.querySelector('.generation-pending-card[data-status="in_progress"]'));
 	const before = scenario.requests.length;
 	scenario.setMode("success"); page = await restartDesktop(); await page.setViewportSize({ width: 1600, height: 1000 });
-	await page.waitForFunction(() => document.querySelectorAll(".generation-card").length === 3, null, { timeout: 30000 });
+	await page.waitForFunction(() => document.querySelectorAll(".design-result-card").length === 3, null, { timeout: 30000 });
 	assert.equal(scenario.requests.length, before, "A fresh Rust process must recover by GET, never POST");
 	jobs = await invoke("list_video_generation_jobs"); assert.equal(jobs.find((j) => j.id === pending.id).status, "completed");
 
 	scenario.setMode("ambiguous"); await page.getByRole("textbox", { name: "提示词 Prompt" }).fill("CDP 提交结果未知"); await generate().click();
 	await page.getByRole("status").filter({ hasText: "提交结果待核对" }).waitFor(); assert.equal(await generate().isDisabled(), true);
-	await page.getByRole("button", { name: "核对后结束跟踪", exact: true }).click();
+	await page.getByRole("button", { name: "结束跟踪", exact: true }).click();
 	await page.getByRole("button", { name: "已核对，结束跟踪", exact: true }).click();
-	await page.getByRole("status").filter({ hasText: "已结束本地跟踪" }).waitFor();
-	scenario.setMode("unauthorized"); await generate().click(); await page.getByRole("status").filter({ hasText: "视频生成失败" }).waitFor();
-	assert.ok(!(await page.locator(".generation-task-list").innerText()).includes("dummy-video-key"));
+	await page.locator(".design-failure").filter({ hasText: "已结束本地跟踪" }).waitFor();
+	scenario.setMode("unauthorized"); await generate().click(); await page.locator(".design-failure").filter({ hasText: "视频生成失败" }).waitFor();
+	assert.ok(!(await page.locator(".design-failure").last().innerText()).includes("dummy-video-key"));
 	await tool("对话").click();
 	console.log("PASS real video chain: encrypted settings → JSON/reference → Rust polling → streamed MP4 → native asset playback/seek; download retry, pause/resume, process restart without POST, unknown submission and 401 verified");
 	return page;

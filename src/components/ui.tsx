@@ -76,14 +76,14 @@ export function Dialog({ onClose, onEscape, pending, initialFocus, returnFocusSe
 const popovers: symbol[] = [];
 const popoverClosers = new Map<symbol, () => void>();
 export const dismissPopovers = () => { for (const close of popoverClosers.values()) close(); };
-export function Popover({ anchor, onClose, className = "", gap = 6, children, ...props }: HTMLAttributes<HTMLDivElement> & { anchor: RefObject<HTMLElement>; onClose: () => void; gap?: number }) {
+export function Popover({ anchor, point, onClose, className = "", gap = 6, children, ...props }: HTMLAttributes<HTMLDivElement> & { anchor: RefObject<HTMLElement>; point?: { x: number; y: number }; onClose: () => void; gap?: number }) {
 	const ref = useRef<HTMLDivElement>(null);
 	const closeRef = useRef(onClose);
 	closeRef.current = onClose;
 	const [position, setPosition] = useState<{ left: number; top: number; maxHeight: number }>();
 	useLayoutEffect(() => {
 		const align = () => {
-			const rect = anchor.current?.getBoundingClientRect();
+			const rect = point ? new DOMRect(point.x, point.y, 0, 0) : anchor.current?.getBoundingClientRect();
 			const panel = ref.current;
 			if (!rect || !panel) return;
 			const width = Math.min(panel.offsetWidth || 360, window.innerWidth - 24);
@@ -97,7 +97,7 @@ export function Popover({ anchor, onClose, className = "", gap = 6, children, ..
 		align(); window.addEventListener("resize", align); window.addEventListener("scroll", align, true);
 		const resize = new ResizeObserver(align); if (ref.current) resize.observe(ref.current);
 		return () => { resize.disconnect(); window.removeEventListener("resize", align); window.removeEventListener("scroll", align, true); };
-	}, [anchor, gap]);
+	}, [anchor, gap, point]);
 	useEffect(() => {
 		const id = Symbol(); popovers.push(id);
 		popoverClosers.set(id, () => closeRef.current());

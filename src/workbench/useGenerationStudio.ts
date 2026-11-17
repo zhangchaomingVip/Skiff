@@ -9,6 +9,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { Project } from "../chat/workspace";
 import { invalidateProjectFiles } from "./projectFiles";
 import { projectGitCache } from "./useProjectGitStatus";
+import { favoriteKey, readDesignFavorites, saveAssetFavorite } from "./designFavorites";
 
 export type GenerationKind = "image" | "video";
 export const generationRatios = ["1:1", "16:9", "9:16", "4:3"] as const;
@@ -35,6 +36,7 @@ export interface GenerationAsset {
 	job?: ImageJob;
 	videoJob?: VideoJob;
 	removed?: boolean;
+	favorite?: boolean;
 	path?: string;
 	/** Owning design canvas; undefined means the ungrouped bucket. */
 	canvasId?: string;
@@ -61,6 +63,8 @@ function validateMedia(file: File, kind: GenerationKind) {
 /** Session-owned local media stays available across tools without persisting blob URLs.
  *  Artwork comes only from this studio; Code project files are never mirrored in. */
 export function useGenerationStudio(project?: Project) {
+	const [favorites, setFavorites] = useState(() => readDesignFavorites(localStorage));
+	const setAssetFavorite = (asset: GenerationAsset, favorite: boolean) => setFavorites(saveAssetFavorite(localStorage, asset, favorite));
 	const images = useImageGeneration();
 	const videos = useVideoGeneration();
 	const [drafts, setDrafts] = useState<Record<GenerationKind, GenerationDraft>>({
@@ -198,7 +202,7 @@ export function useGenerationStudio(project?: Project) {
 		const path = await invoke<string>("save_design_asset_to_project", { root: target.path, source, name: asset.name });
 		invalidateProjectFiles(target.id); void projectGitCache.refreshChanged(target.path); return path;
 	};
-	return { project, drafts, updateDraft, assets: [...generatedVideos, ...generated, ...importedAssets], importAssets, reference, uploadReference, removeReference: () => replaceReference(), useImageForVideo, referenceError, clearReferenceError: () => setReferenceError(undefined), imageReference, uploadImageReference, removeImageReference: () => replaceImageReference(), useImageForImage, imageReferenceError, clearImageReferenceError: () => setImageReferenceError(undefined), errors, clearError, images, videos, setAssetRemoved, moveAsset, saveToProject, canvases, canvasId, canvasView, assetView, selectCanvas, openCanvas, openAssets, openGallery, createCanvas, renameCanvas, deleteCanvas, refreshImported };
+	return { project, drafts, updateDraft, assets: [...generatedVideos, ...generated, ...importedAssets].map((asset) => ({ ...asset, favorite: favorites.has(favoriteKey(asset)) })), importAssets, reference, uploadReference, removeReference: () => replaceReference(), useImageForVideo, referenceError, clearReferenceError: () => setReferenceError(undefined), imageReference, uploadImageReference, removeImageReference: () => replaceImageReference(), useImageForImage, imageReferenceError, clearImageReferenceError: () => setImageReferenceError(undefined), errors, clearError, images, videos, setAssetRemoved, setAssetFavorite, moveAsset, saveToProject, canvases, canvasId, canvasView, assetView, selectCanvas, openCanvas, openAssets, openGallery, createCanvas, renameCanvas, deleteCanvas, refreshImported };
 }
 
 export type GenerationStudio = ReturnType<typeof useGenerationStudio>;

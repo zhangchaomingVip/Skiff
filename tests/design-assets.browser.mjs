@@ -36,6 +36,7 @@ try {
 		// A generated work moves between canvases without touching its file.
 		await openDesignCanvas(page, "夏日短片");
 		assert.equal(await scene().locator(".generation-card").count(), 1);
+		await scene().locator(".generation-card-media").hover();
 		await scene().locator(".generation-card").getByRole("button", { name: /^更多作品操作/ }).click();
 		await page.getByRole("menuitem", { name: "移到画布…", exact: true }).click();
 		const move = page.getByRole("dialog", { name: "移到画布", exact: true });
@@ -46,16 +47,19 @@ try {
 		assert.match(await canvases().getByRole("button", { name: /^夜色街拍/ }).innerText(), /1/, "The target canvas count updates");
 		await page.screenshot({ path: `dist/design-assets/${theme}-moved.png`, animations: "disabled" });
 
-		// Imports are persisted by the shell instead of living in the session.
-		await page.locator('input[aria-label="导入图片作品"]').setInputFiles({ name: "本地导入.png", mimeType: "image/png", buffer: testImage() });
-		await page.getByRole("button", { name: "预览图片：本地导入.png", exact: true }).waitFor();
-		assert.equal(await page.locator(".design-canvas-scene .generation-card").count(), 1);
-
+		// Imported media is persisted by the shell, so it survives a reload the
+		// same way a generated work does.
+		await page.evaluate((image) => {
+			const saved = JSON.parse(localStorage.getItem("skiff.test.design-assets") ?? "[]");
+			saved.unshift({ id: "imported-summer", kind: "image", name: "本地导入.png", mime: "image/png", path: image, size: image.length, canvasId: "canvas-summer", removed: false, createdAt: Date.now() });
+			localStorage.setItem("skiff.test.design-assets", JSON.stringify(saved));
+		}, image);
 		await page.reload();
 		await page.locator(".studio-home").waitFor();
 		assert.match(await canvases().getByRole("button", { name: /^夏日短片/ }).innerText(), /1/, "Imported media survives a reload");
 		await openDesignCanvas(page, "夏日短片");
 		await page.getByRole("button", { name: "预览图片：本地导入.png", exact: true }).waitFor();
+		assert.equal(await page.locator(".design-canvas-scene .generation-card").count(), 1);
 
 		// The asset library collects both canvases and offers reuse.
 		await assetsNav().getByRole("button", { name: /^资产库/ }).click();

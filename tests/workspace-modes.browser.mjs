@@ -10,9 +10,8 @@ const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
 page.setDefaultTimeout(15000);
 const errors = []; page.on("pageerror", (error) => errors.push(String(error)));
 const mode = (name) => page.getByRole("group", { name: "工作模式", exact: true }).getByRole("button", { name: name === "code" ? "Code 工作区" : "Design 设计室", exact: true });
-const gallery = () => page.locator(".design-gallery-route:not([hidden])");
+const gallery = () => page.locator(".design-thread");
 const prompt = () => page.getByRole("textbox", { name: "提示词 Prompt", exact: true });
-const view = (label) => page.getByRole("group", { name: "画廊视图", exact: true }).getByRole("button", { name: new RegExp(`^${label}`) });
 
 try {
 	for (const theme of ["light", "dark"]) {
@@ -42,22 +41,22 @@ try {
 		assert.equal(await page.getByRole("navigation", { name: "工作区工具", exact: true }).getByRole("button", { name: "对话", exact: true }).count(), 0);
 		assert.equal(await page.getByRole("button", { name: "返回对话", exact: true }).count(), 0);
 
-		// The home is a mixed feed: one composer above every recent work.
+		// The home is a conversation: every prompt bubble above its own work.
 		assert.equal(await page.getByRole("button", { name: "创作参数", exact: true }).count(), 0, "The collapse entry is gone");
 		assert.equal(await page.locator(".design-composer[data-variant=hero]").isVisible(), true, "The composer is always open");
-		assert.equal(await page.locator(".studio-gallery").isVisible(), true, "Recent works sit directly under the composer");
-		assert.equal(await page.locator(".studio-gallery .generation-card").count(), 3, "Every seeded work appears in the home feed");
+		assert.equal(await gallery().isVisible(), true, "Recent works sit directly above the composer");
+		assert.equal(await gallery().locator(".generation-card").count(), 3, "Every seeded work appears in the home flow");
 		await prompt().fill("Design 草稿：暖色海报");
 		await page.screenshot({ path: `dist/workspace-modes/${theme}-home.png`, animations: "disabled" });
 
-		// The same layout scopes to one canvas and keeps the masonry density picker.
+		// The same flow scopes to one canvas: works share a single reading column.
 		await openDesignCanvas(page);
 		await page.waitForFunction(() => [...document.querySelectorAll(".generation-card img")].every((image) => image.complete && image.naturalWidth > 0));
-		assert.equal(await gallery().locator(".generation-card").evaluateAll((cards) => new Set(cards.map((card) => Math.round(card.getBoundingClientRect().left))).size), 3, "Three differently sized works occupy the three selected masonry columns");
+		assert.equal(await gallery().locator(".generation-card").evaluateAll((cards) => new Set(cards.map((card) => Math.round(card.getBoundingClientRect().left))).size), 1, "Every work in the flow shares one column");
 		await page.screenshot({ path: `dist/workspace-modes/${theme}-studio.png`, animations: "disabled" });
-		assert.ok(Number(await gallery().locator(".generation-gallery-grid").evaluate((element) => getComputedStyle(element).columnCount)) > 1, "Studio uses responsive masonry columns");
+		assert.equal(await gallery().locator(".generation-gallery-grid").count(), 0, "The canvas flow is not a masonry gallery");
 		await page.getByRole("navigation", { name: "创作", exact: true }).getByRole("button", { name: /^首页/ }).click();
-		await page.locator(".studio-gallery").waitFor();
+		await page.locator(".design-thread").waitFor();
 		await mode("code").click();
 		assert.equal(await page.locator(".composer-input").inputValue(), "Code 草稿：保留工程上下文");
 		await mode("design").click();
@@ -76,17 +75,16 @@ try {
 		await page.evaluate(() => window.skiffPreview.generation.setMode("pending"));
 		await page.getByRole("button", { name: "生成图片", exact: true }).click();
 		await gallery().getByText("正在生成图片…", { exact: true }).waitFor();
-		assert.equal(await page.locator(".studio-gallery").isVisible(), true, "The home feed stays in place");
+		assert.equal(await gallery().isVisible(), true, "The home flow stays in place");
 		assert.equal(await page.locator(".design-composer[data-variant=hero]").count(), 1, "The composer stays mounted");
 		await mode("code").click(); await mode("design").click();
-		assert.equal(await gallery().locator(".generation-pending-card").count(), 1, "Pending work stays at the head of the feed");
+		assert.equal(await gallery().locator(".generation-pending-card").count(), 1, "Pending work stays in the flow");
 		await gallery().getByRole("button", { name: "停止等待", exact: true }).click();
-		// Failure history still lives in the scoped canvas gallery.
+		// A stopped task settles next to its own prompt in the scoped flow.
 		await openDesignCanvas(page);
-		await view("失败记录").click();
-		await gallery().getByText("已停止等待", { exact: true }).waitFor();
-		await view("作品").click();
-		const card = gallery().locator(".generation-card").filter({ hasText: "Studio 作品 1" });
+		await page.locator(".design-failure").filter({ hasText: "已停止等待" }).last().waitFor();
+		const card = page.locator(".design-turn").filter({ hasText: "Studio 作品 1" }).locator(".design-result-card");
+		await card.locator(".generation-card-media").hover();
 		await card.getByRole("button", { name: /^更多作品操作/ }).click();
 		await page.getByRole("menuitem", { name: "保存至当前项目", exact: true }).click();
 		await page.getByRole("button", { name: "在 Code 中查看", exact: true }).waitFor();
@@ -101,7 +99,8 @@ try {
 		assert.equal(await sidebar.getByRole("combobox").count(), 0, "Design does not bind a Code project");
 		assert.equal(await page.getByRole("button", { name: "同步项目图片", exact: true }).count(), 0, "No project image sync entry");
 		assert.deepEqual(await sidebar.getByRole("navigation").evaluateAll((navs) => navs.map((nav) => nav.getAttribute("aria-label"))), ["创作", "画布", "素材"], "The sidebar keeps the launcher, canvases and assets only");
-		assert.deepEqual(await page.getByRole("group", { name: "画廊视图", exact: true }).getByRole("button").evaluateAll((buttons) => buttons.map((button) => button.textContent.replace(/ \d+$/, ""))), ["作品", "失败记录", "已移除"], "One status filter lives next to the works");
+		assert.equal(await page.getByRole("group", { name: "画廊视图", exact: true }).count(), 0, "The flow carries no status filter");
+		assert.equal(await page.getByRole("group", { name: "画廊列数", exact: true }).count(), 0, "The flow carries no density switch");
 		assert.equal(await gallery().getByText("Code", { exact: true }).count(), 0, "Code assets never appear in the studio");
 
 		// The launcher resets on reload; the canvas scene is one click away.

@@ -13,6 +13,7 @@ page.on("pageerror", (error) => errors.push(String(error)));
 const generate = () => page.getByRole("button", { name: "生成图片", exact: true });
 const prompt = () => page.getByRole("textbox", { name: "提示词 Prompt" });
 const cards = () => page.locator(".generation-pending-card");
+const task = (text) => page.locator(".design-turn").filter({ hasText: text }).locator(".generation-pending-card");
 const settings = () => page.getByRole("dialog", { name: "设置", exact: true });
 const limit = () => settings().getByRole("combobox", { name: "同时生成任务数", exact: true });
 async function setLimit(value) {
@@ -51,7 +52,7 @@ try {
 		// Two synchronous submit events must still create only one billable task.
 		await prompt().evaluate((input) => { input.form.requestSubmit(); input.form.requestSubmit(); });
 		await page.waitForFunction(() => window.skiffPreview.generation.calls.length === 1);
-		await cards().getByText("任务 1", { exact: true }).waitFor();
+		await task("任务 1").waitFor();
 		await page.evaluate(() => window.skiffPreview.generation.deferNextJobs());
 		await page.waitForFunction(() => window.skiffPreview.generation.hasDeferredJobs);
 		await submit("任务 2");
@@ -60,7 +61,7 @@ try {
 		for (let i = 3; i <= 5; i++) await submit(`任务 ${i}`);
 		assert.equal(await cards().count(), 5);
 		assert.equal(await generate().isDisabled(), true);
-		assert.match(await page.locator(".generation-submit").innerText(), /进行中 5 \/ 5.*已达上限/);
+		assert.equal(await page.locator(".generation-service-status").count(), 0, "The docked composer no longer prints the running-count status line");
 		await prompt().press("Control+Enter");
 		assert.equal(await page.evaluate(() => window.skiffPreview.generation.calls.length), 5);
 		await page.screenshot({ path: `dist/image-concurrency/${theme}-five-running.png`, animations: "disabled" });
@@ -68,25 +69,26 @@ try {
 		assert.equal(await cards().count(), 5, "Lowering the limit preserves existing tasks");
 		assert.equal(await generate().isDisabled(), true);
 		await setLimit(10);
-		await page.locator(".generation-gallery-scroll").evaluate((element) => { element.scrollTop = element.scrollHeight; });
+		await page.locator(".design-thread-feed").evaluate((element) => { element.scrollTop = 0; });
 		await submit("任务 6");
 		assert.equal(await cards().count(), 6);
-		assert.equal(await page.locator(".generation-gallery-scroll").evaluate((element) => element.scrollTop), 0, "Each submission reveals the new task even while other tasks are running");
+		await page.waitForFunction(() => { const feed = document.querySelector(".design-thread-feed"); return feed.scrollHeight - feed.scrollTop - feed.clientHeight < 24; }, null, { timeout: 5000 });
+		assert.equal(await page.locator(".design-turn").last().evaluate((element) => !!element.querySelector(".generation-pending-card")), true, "Each submission reveals the newest task even while other tasks are running");
 		await page.evaluate(() => {
 			const calls = window.skiffPreview.generation.calls;
 			window.skiffPreview.generation.finishJob(calls[5].id);
 			window.skiffPreview.generation.finishJob(calls[2].id, "failed");
 		});
 		await page.waitForFunction(() => document.querySelectorAll(".generation-pending-card").length === 4);
-		await cards().filter({ hasText: "任务 2" }).getByRole("button", { name: "停止等待", exact: true }).click();
+		await task("任务 2").getByRole("button", { name: "停止等待", exact: true }).click();
 		await page.waitForFunction(() => document.querySelectorAll(".generation-pending-card").length === 3);
-		assert.ok(await cards().filter({ hasText: "任务 1" }).count(), "Cancelling one task preserves another");
-		assert.equal(await page.locator(".generation-card:not(.generation-pending-card)").count(), 1);
+		assert.ok(await task("任务 1").count(), "Cancelling one task preserves another");
+		assert.equal(await page.locator(".design-result-card").count(), 1);
 		await setLimit(0);
 		for (let i = 7; i <= 15; i++) await submit(`任务 ${i}`);
 		assert.equal(await cards().count(), 12, "Unlimited permits more than ten active jobs");
 		assert.equal(await generate().isEnabled(), true);
-		assert.match(await page.locator(".generation-submit").innerText(), /进行中 12 \/ 不限/);
+		assert.equal(await page.locator(".generation-service-status").count(), 0);
 		await page.reload();
 		await openDesignCanvas(page);
 		await page.waitForFunction(() => document.querySelectorAll(".generation-pending-card").length === 12);

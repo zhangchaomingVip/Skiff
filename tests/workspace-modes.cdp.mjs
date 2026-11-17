@@ -12,17 +12,18 @@ export async function verifyWorkspaceModes(page, generationDir, artifacts, model
 		workspace.activeId = "c-design-cdp";
 		localStorage.setItem("skiff.workspace.v1", JSON.stringify(workspace));
 		localStorage.setItem("skiff.workspace.navigation.v1", JSON.stringify({ workspaceMode: "design", codeTool: "chats", designTool: "image-generation" }));
-		localStorage.setItem("skiff.design.collections.v1", JSON.stringify({ image: "all", video: "all" }));
 	}, root);
 	await page.reload({ waitUntil: "domcontentloaded" });
 	await page.locator(".design-workspace:not([hidden])").waitFor();
-	const card = page.locator(".design-gallery-route:not([hidden]) .generation-card:not(.generation-pending-card)").first();
+	const card = page.locator(".design-result-card").first();
+	await card.locator(".generation-card-media").hover();
 	await card.getByRole("button", { name: /^更多作品操作/ }).click();
 	await page.getByRole("menuitem", { name: "保存至当前项目", exact: true }).click();
 	await page.getByRole("button", { name: "在 Code 中查看", exact: true }).waitFor();
 	let paths = await page.evaluate((root) => window.__TAURI_INTERNALS__.invoke("list_project_directory", { root, path: "assets" }), root);
 	assert.equal(paths.entries.length, 1); assert.deepEqual(await readFile(join(root, "assets", paths.entries[0].name)), testImage());
 	// A repeated save creates a new file, preserving the first original.
+	await card.locator(".generation-card-media").hover();
 	await card.getByRole("button", { name: /^更多作品操作/ }).click();
 	await page.getByRole("menuitem", { name: "保存至当前项目", exact: true }).click();
 	await page.getByRole("button", { name: "在 Code 中查看", exact: true }).waitFor();
