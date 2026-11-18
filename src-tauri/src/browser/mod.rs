@@ -1,6 +1,7 @@
 //! Managed browser service. This layer is independent of pi and of the browser panel.
 mod agent;
 mod bridge;
+mod frames;
 mod input;
 mod lifecycle;
 mod runtime;
@@ -945,7 +946,9 @@ impl Service {
 	}
 }
 
-/// The viewport is expressed in CSS pixels; the live stream keeps CSS resolution, so callers pass device pixels here.
+/// The viewport is expressed in CSS pixels, exactly as the panel lays the page out. The
+/// device scale keeps the stream at the panel's real pixel density, so a page never renders
+/// at the screen scale factor.
 fn viewport_arguments(width: u32, height: u32, scale: f32) -> Result<Vec<String>> {
 	if !(200..=3000).contains(&width) || !(200..=3000).contains(&height) {
 		return Err("无效的浏览器画面尺寸".into());

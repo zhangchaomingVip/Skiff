@@ -187,6 +187,17 @@ async fn relay(socket: WebSocket, entry: Arc<Entry>) {
 	let (upstream_out, mut upstream_in) = upstream.split();
 	let upstream_out = Arc::new(AsyncMutex::new(upstream_out));
 	let (input_ack, mut input_acks) = tokio::sync::mpsc::channel::<Value>(32);
+	// Frames come from Skiff's own CDP capture at device resolution; the managed stream
+	// only supplies status, address and reload notices. Until that capture delivers, the
+	// upstream frames stay as a fallback.
+	let (frame_send, mut frame_recv) = tokio::sync::mpsc::channel::<super::frames::Picture>(2);
+	let capture_entry = entry.clone();
+	let capture = tokio::spawn(async move {
+		if let Err(error) = super::frames::run(capture_entry, frame_send).await {
+			eprintln!("[skiff] browser frames: {error}");
+		}
+	});
+	let mut own_frames = true;
 	let mut stop = entry.closed.subscribe();
 	if *stop.borrow() {
 		return;
@@ -285,6 +296,10 @@ async fn relay(socket: WebSocket, entry: Arc<Entry>) {
 				if input_ack.send(report).await.is_err() {
 					break;
 				}
+			} else if own_frames && value["type"] == "ack" {
+				// Acks belong to Skiff's own capture; the managed stream must not be told to
+				// keep encoding a picture nobody renders.
+				continue;
 			} else if reader_upstream
 				.lock()
 				.await
@@ -305,6 +320,14 @@ async fn relay(socket: WebSocket, entry: Arc<Entry>) {
 					let state = json!({"type":"control","status":entry.status()});
 					if client_out.send(Message::Text(state.to_string().into())).await.is_err() { break; }
 				},
+				frame = frame_recv.recv(), if own_frames => {
+					match frame {
+						// Raw JPEG bytes: no base64, no JSON envelope to build or parse.
+						Some(picture) => { if client_out.send(Message::Binary(picture.bytes.into())).await.is_err() { break; } },
+						// The capture ended; fall back to the managed stream's frames.
+						None => { own_frames = false; }
+					}
+				},
 				message = upstream_in.next() => {
 					let Some(Ok(message)) = message else { break; };
 					let Upstream::Text(text) = message else { if matches!(message, Upstream::Close(_)) { break; } continue; };
@@ -313,6 +336,7 @@ async fn relay(socket: WebSocket, entry: Arc<Entry>) {
 						if value["type"] == "status" && value["connected"] == false { entry.invalidate(Control::Disconnected); break; }
 						// Console/network output can carry secrets and is not needed for a viewport.
 						if !["frame", "status", "url", "tabs"].iter().any(|kind| value["type"] == *kind) { continue; }
+						if own_frames && value["type"] == "frame" { continue; }
 					}
 					if !tokio::time::timeout(Duration::from_secs(5), client_out.send(Message::Text(text.to_string().into()))).await.is_ok_and(|sent| sent.is_ok()) { break; }
 				}
@@ -320,6 +344,7 @@ async fn relay(socket: WebSocket, entry: Arc<Entry>) {
 		}
 	};
 	tokio::select! { _ = input => {}, _ = output => {} }
+	capture.abort();
 	{
 		let _gate = entry.input.lock().await;
 		if let Err(error) = super::input::release(&entry).await {

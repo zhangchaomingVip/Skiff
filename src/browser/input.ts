@@ -1,17 +1,20 @@
 import type { BrowserStatus } from "./native";
 import type { BrowserViewer } from "./viewer";
 
-export function browserPoint(rect: { left: number; top: number; width: number; height: number }, image: { width: number; height: number }, x: number, y: number) {
-	if (!rect.width || !rect.height || !image.width || !image.height) return undefined;
+/** Frames arrive at the panel's device pixel density, so clicks map back to page CSS pixels. */
+export function browserPoint(rect: { left: number; top: number; width: number; height: number }, image: { width: number; height: number }, x: number, y: number, deviceScale = 1) {
+	if (!rect.width || !rect.height || !image.width || !image.height || !(deviceScale > 0)) return undefined;
 	const scale = Math.min(rect.width / image.width, rect.height / image.height);
 	const left = rect.left + (rect.width - image.width * scale) / 2;
 	const top = rect.top + (rect.height - image.height * scale) / 2;
-	const point = { x: (x - left) / scale, y: (y - top) / scale };
-	return point.x >= 0 && point.x < image.width && point.y >= 0 && point.y < image.height ? point : undefined;
+	const point = { x: (x - left) / scale / deviceScale, y: (y - top) / scale / deviceScale };
+	const width = image.width / deviceScale;
+	const height = image.height / deviceScale;
+	return point.x >= 0 && point.x < width && point.y >= 0 && point.y < height ? point : undefined;
 }
 
 /** Ephemeral input only. Nothing here is sent to chat history or storage. */
-export function attachBrowserInput(element: HTMLTextAreaElement, canvas: HTMLCanvasElement, viewer: BrowserViewer, status: BrowserStatus) {
+export function attachBrowserInput(element: HTMLTextAreaElement, canvas: HTMLCanvasElement, viewer: BrowserViewer, status: BrowserStatus, deviceScale: () => number = () => 1) {
 	let active = true;
 	let composing = false;
 	let lastComposition = "";
@@ -20,10 +23,9 @@ export function attachBrowserInput(element: HTMLTextAreaElement, canvas: HTMLCan
 	let pressed = 0;
 	let moveFrame: number | undefined;
 	let pendingMove: { x: number; y: number; buttons: number; modifiers: number } | undefined;
-	let lastWheel = 0;
 	const send = (value: Record<string, unknown>) => active && viewer.send(value, status);
 	const modifiers = (event: MouseEvent | KeyboardEvent) => (event.altKey ? 1 : 0) | (event.ctrlKey ? 2 : 0) | (event.metaKey ? 4 : 0) | (event.shiftKey ? 8 : 0);
-	const point = (event: MouseEvent) => browserPoint(canvas.getBoundingClientRect(), canvas, event.clientX, event.clientY);
+	const point = (event: MouseEvent) => browserPoint(canvas.getBoundingClientRect(), canvas, event.clientX, event.clientY, deviceScale());
 	const mask = (button: string) => button === "left" ? 1 : button === "right" ? 2 : button === "middle" ? 4 : 0;
 	const sendMove = (move: { x: number; y: number; buttons: number; modifiers: number }) => send({ type: "input_mouse", eventType: "mouseMoved", x: move.x, y: move.y, button: "none", buttons: move.buttons, clickCount: 0, modifiers: move.modifiers });
 	// Pointer moves are paced by animation frames and always carry the newest
@@ -43,6 +45,7 @@ export function attachBrowserInput(element: HTMLTextAreaElement, canvas: HTMLCan
 	const release = () => {
 		if (moveFrame !== undefined) cancelAnimationFrame(moveFrame);
 		moveFrame = undefined; pendingMove = undefined; pressed = 0;
+		if (wheelTimer !== undefined) { clearTimeout(wheelTimer); wheelTimer = undefined; flushWheel(); }
 		for (const key of keys.values()) send({ ...key, eventType: "keyUp", modifiers: 0 }); keys.clear();
 		for (const [button, point] of buttons) send({ type: "input_mouse", eventType: "mouseReleased", ...point, button, buttons: 0, clickCount: 1 }); buttons.clear();
 		element.value = ""; composing = false;
@@ -70,12 +73,27 @@ export function attachBrowserInput(element: HTMLTextAreaElement, canvas: HTMLCan
 		} else if (button) { pressed &= ~mask(button); buttons.delete(button); }
 		send({ type: "input_mouse", eventType: event.type === "pointerdown" ? "mousePressed" : "mouseReleased", ...location, button: button ?? "none", buttons: pressed, clickCount: Math.min(event.detail || 1, 3), modifiers: modifiers(event) });
 	};
+	let wheelDelta = { x: 0, y: 0 };
+	let wheelTimer: ReturnType<typeof setTimeout> | undefined;
+	let wheelAt = { x: 0, y: 0 };
+	let wheelModifiers = 0;
+	// Coalescing must accumulate: dropping events in the window made a fast wheel turn
+	// travel less than the user scrolled.
+	const flushWheel = () => {
+		wheelTimer = undefined;
+		const deltaX = Math.max(-4000, Math.min(4000, wheelDelta.x));
+		const deltaY = Math.max(-4000, Math.min(4000, wheelDelta.y));
+		wheelDelta = { x: 0, y: 0 };
+		if (!deltaX && !deltaY) return;
+		send({ type: "input_mouse", eventType: "mouseWheel", x: wheelAt.x, y: wheelAt.y, deltaX, deltaY, modifiers: wheelModifiers });
+	};
 	const wheel = (event: WheelEvent) => {
 		const location = point(event); if (!location) return;
 		event.preventDefault(); event.stopPropagation();
-		if (performance.now() - lastWheel < 35) return; lastWheel = performance.now();
 		const factor = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? canvas.height : 1;
-		send({ type: "input_mouse", eventType: "mouseWheel", ...location, deltaX: Math.max(-4000, Math.min(4000, event.deltaX * factor)), deltaY: Math.max(-4000, Math.min(4000, event.deltaY * factor)), modifiers: modifiers(event) });
+		wheelDelta.x += event.deltaX * factor; wheelDelta.y += event.deltaY * factor;
+		wheelAt = location; wheelModifiers = modifiers(event);
+		if (wheelTimer === undefined) wheelTimer = setTimeout(flushWheel, 35);
 	};
 	const text = (value: string) => {
 		if (!active || !value) return;

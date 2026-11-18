@@ -116,7 +116,10 @@ pub fn clean_command(binary: &Path, cwd: &Path) -> Command {
 	}
 	command
 		.env("AGENT_BROWSER_NO_VERSION_CHECK", "1")
-		.env("AGENT_BROWSER_DEFAULT_TIMEOUT", "10000");
+		.env("AGENT_BROWSER_DEFAULT_TIMEOUT", "10000")
+		// Chrome only rasterizes the screencast at device resolution when the window itself
+		// is HiDPI; without this, its capture stays at CSS size and panel text looks soft.
+		.env("AGENT_BROWSER_ARGS", "--force-device-scale-factor=2");
 	#[cfg(windows)]
 	command.creation_flags(0x08000000);
 	command

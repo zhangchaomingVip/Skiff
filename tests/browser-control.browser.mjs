@@ -22,20 +22,31 @@ try {
 		await page.getByRole("alert").filter({ hasText: "模拟控制权确认失败" }).waitFor();
 		assert.equal(await page.getByRole("textbox", { name: "浏览器键盘输入", exact: true }).count(), 0, "Failed takeover cannot claim human control");
 		await page.getByRole("button", { name: "接管浏览器", exact: true }).click();
-		await page.getByText("正在接管，请等待在途操作结束…", { exact: true }).waitFor();
+		// The takeover is pending while the native side drains in-flight commands; the button
+		// itself carries that state instead of a separate status line.
+		await page.waitForFunction(() => [...document.querySelectorAll(".browser-actions button")].some((button) => button.textContent === "接管浏览器" && button.disabled));
 		assert.equal(await page.getByRole("textbox", { name: "浏览器键盘输入", exact: true }).count(), 0, "No input until native drain confirms");
 		await page.evaluate(() => window.releaseControl());
 		const input = page.getByRole("textbox", { name: "浏览器键盘输入", exact: true });
 		await input.waitFor();
+		// The page shows a normal arrow, not a text caret, even though a transparent textarea
+		// collects the keyboard.
+		assert.equal(await input.evaluate((element) => getComputedStyle(element).cursor), "default", "The page keeps a normal cursor instead of a text caret");
+		// The panel re-asks for the viewport after the takeover shrinks its screen.
+		await page.waitForTimeout(500);
 		const rect = await page.locator(".browser-screen canvas").boundingBox();
-		const scale = Math.min(rect.width / 1000, rect.height / 700);
-		const left = rect.x + (rect.width - 1000 * scale) / 2;
-		const top = rect.y + (rect.height - 700 * scale) / 2;
-		await page.mouse.click(left + 200 * scale, top + 320 * scale);
-		await page.mouse.move(left + 300 * scale, top + 340 * scale);
+		// The picture is laid out at the panel's requested page size; clicks are page pixels.
+		const view = await page.evaluate(() => {
+			const call = window.skiffPreview.browser.calls.filter((entry) => entry.command === "browser_viewport").at(-1);
+			return call?.args ? { width: call.args.width, height: call.args.height } : { width: 1000, height: 700 };
+		});
+		const left = rect.x; const top = rect.y;
+		const sx = rect.width / view.width; const sy = rect.height / view.height;
+		await page.mouse.click(left + 200 * sx, top + 320 * sy);
+		await page.mouse.move(left + 300 * sx, top + 340 * sy);
 		await page.mouse.down();
 		for (let step = 1; step <= 4; step += 1) {
-			await page.mouse.move(left + (300 + step * 20) * scale, top + 340 * scale);
+			await page.mouse.move(left + (300 + step * 20) * sx, top + 340 * sy);
 			await page.waitForTimeout(60);
 		}
 		await page.mouse.up();
@@ -44,7 +55,7 @@ try {
 		await page.getByRole("button", { name: "刷新网页", exact: true }).click();
 		await page.waitForFunction((count) => window.skiffPreview.browser.sent.filter((message) => message.type === "reload").length > count, reloads);
 		// The panel button holds focus now; one click back on the screen restores input.
-		await page.mouse.click(left + 220 * scale, top + 320 * scale);
+		await page.mouse.click(left + 220 * sx, top + 320 * sy);
 		await page.mouse.wheel(0, 180);
 		await page.keyboard.type("hello");
 		await input.evaluate((element) => {

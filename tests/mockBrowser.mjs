@@ -14,9 +14,14 @@ export function installMockBrowser(target) {
 	let lifecycleDelay;
 	const retired = new Set();
 	const dependencies = () => ({ enabled, ready, supported: true, cliPath: cliPath ?? "C:/mock/agent-browser.exe", configuredCliPath: cliPath, version: "0.41.2", browserInstalled: ready, message: ready ? "浏览器已就绪" : "未检测到 Chrome for Testing，请执行 agent-browser install 后重新检测", installCommands: ["npm install -g agent-browser@0.41.2", "agent-browser install"] });
-	const frame = (chatId, sequence) => {
-		const canvas = target.document.createElement("canvas"); canvas.width = 1000; canvas.height = 700;
-		const ctx = canvas.getContext("2d");
+	const viewports = new Map();
+	const frame = (chatId, sequence, viewport) => {
+		// A real page is laid out at the requested CSS viewport and captured at its density.
+		const width = viewport?.width ?? 1000;
+		const height = viewport?.height ?? 700;
+		const scale = viewport?.scale ?? 1;
+		const canvas = target.document.createElement("canvas"); canvas.width = Math.round(width * scale); canvas.height = Math.round(height * scale);
+		const ctx = canvas.getContext("2d"); ctx.scale((width * scale) / 1000, (height * scale) / 700);
 		ctx.fillStyle = chatId.endsWith("b") ? "#e9f0ff" : "#faf6ed"; ctx.fillRect(0, 0, 1000, 700);
 		ctx.fillStyle = "#ffffff"; ctx.fillRect(90, 70, 820, 540);
 		ctx.fillStyle = "#283d53"; ctx.font = "32px system-ui"; ctx.fillText(chatId.endsWith("b") ? "另一个聊天的页面" : "Skiff 浏览器演示", 130, 135);
@@ -43,7 +48,10 @@ export function installMockBrowser(target) {
 		}
 		frame() {
 			if (this.readyState !== 1) return;
-			this.emit({ type: "frame", seq: ++this.seq, data: frame(this.chatId, this.seq) });
+			// Skiff's capture sends raw JPEG over a binary WebSocket message.
+			const base64 = frame(this.chatId, ++this.seq, viewports.get(this.chatId));
+			const bytes = Uint8Array.from(target.atob(base64), (char) => char.charCodeAt(0));
+			this.onmessage?.({ data: bytes.buffer });
 		}
 		emit(value) { this.onmessage?.({ data: JSON.stringify(value) }); }
 		send(data) {
@@ -104,6 +112,7 @@ export function installMockBrowser(target) {
 				if (!status || status.generation !== args.target.generation) throw new Error("Browser owner changed");
 				return { status: structuredClone(status), streamUrl: `ws://127.0.0.1:1/skiff-preview?chatId=${status.chatId}&generation=${status.generation}`, bridgeUrl: "", agentToken: "" };
 			}
+			if (command === "browser_viewport") { viewports.set(args.target.chatId, { width: args.width, height: args.height, scale: args.scale }); return; }
 			if (command === "browser_close") { api.disconnect(args.target.chatId); return api.set(args.target.chatId, { control: "closed", controlVersion: (entries.get(args.target.chatId)?.controlVersion ?? 0) + 1 }); }
 			throw new Error(`Unsupported mock browser command: ${command}`);
 		},

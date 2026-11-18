@@ -1,4 +1,4 @@
-export interface BrowserFrame { seq: number; data: string }
+export interface BrowserFrame { seq: number; data: string | ArrayBuffer }
 export interface DecodedFrame { width: number; height: number; close: () => void }
 
 /** Bounded decoding: one in progress and one replacement, never a playback queue. */
@@ -8,11 +8,11 @@ export class LatestBrowserFrames<T extends DecodedFrame> {
 	private disposed = false;
 	private timer?: ReturnType<typeof setTimeout>;
 	private nextDraw = 0;
-	private readonly decode: (data: string) => Promise<T>;
+	private readonly decode: (data: string | ArrayBuffer) => Promise<T>;
 	private readonly draw: (frame: T, seq: number) => void;
 	private readonly ack: (seq: number) => void;
 	private readonly fail: () => void;
-	constructor(decode: (data: string) => Promise<T>, draw: (frame: T, seq: number) => void, ack: (seq: number) => void, fail: () => void) {
+	constructor(decode: (data: string | ArrayBuffer) => Promise<T>, draw: (frame: T, seq: number) => void, ack: (seq: number) => void, fail: () => void) {
 		this.decode = decode; this.draw = draw; this.ack = ack; this.fail = fail;
 	}
 	push(frame: BrowserFrame) {
@@ -33,10 +33,12 @@ export class LatestBrowserFrames<T extends DecodedFrame> {
 		let frame: T | undefined;
 		try {
 			frame = await this.decode(pending.data);
-			if (!this.disposed && !this.pending) {
+			if (!this.disposed) {
 				if (frame.width < 1 || frame.height < 1 || frame.width > 16384 || frame.height > 16384 || frame.width * frame.height > 32000000) throw new Error("Invalid frame size");
 				this.draw(frame, pending.seq);
-				this.nextDraw = performance.now() + 100;
+				// The server already paces frames; a 10 fps ceiling here doubled the delay
+				// between a click and the picture that shows it.
+				this.nextDraw = performance.now() + 30;
 			}
 		} catch { if (!this.disposed) this.fail(); }
 		finally {

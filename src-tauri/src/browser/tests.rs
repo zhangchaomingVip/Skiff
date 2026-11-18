@@ -1,5 +1,17 @@
 use super::*;
 
+/// Encoded size of a JPEG, read from its start-of-frame marker.
+fn jpeg_size(bytes: &[u8]) -> (u32, u32) {
+	for index in 2..bytes.len().saturating_sub(9) {
+		if bytes[index] == 0xff && matches!(bytes[index + 1], 0xc0 | 0xc1 | 0xc2) {
+			let height = u16::from_be_bytes([bytes[index + 5], bytes[index + 6]]) as u32;
+			let width = u16::from_be_bytes([bytes[index + 7], bytes[index + 8]]) as u32;
+			return (width, height);
+		}
+	}
+	(0, 0)
+}
+
 async fn killed_client_takeover(service: &Service, first: &BrowserStatus) -> BrowserStatus {
 	let entry = service.entry(&first.target).unwrap();
 	let mut client = entry
@@ -352,6 +364,9 @@ async fn real_browser_service_lifecycle_and_isolation() {
 		assert!(call(&first,Action::Snapshot).await.unwrap().to_string().contains("--headed"),"Text matching CLI flags must stay text");
 		assert!(call(&second, Action::Snapshot).await.unwrap().to_string().contains("owner=b"));
 		let connection = service.connection(&first.target).unwrap();
+		// The panel drives a CSS viewport with a device scale; the picture must arrive at
+		// that device resolution instead of the CSS width the managed stream caps to.
+		service.entry(&first.target).unwrap().runtime.call(vec!["set".into(),"viewport".into(),"640".into(),"360".into(),"2".into()],Duration::from_secs(5)).await.unwrap();
 		let client = reqwest::Client::new();
 		let request = json!({"target":first.target,"requestId":"bridge-check","controlVersion":first.control_version,"action":{"type":"snapshot"}});
 		assert_eq!(client.post(format!("{}/command",connection.bridge_url)).json(&request).send().await.unwrap().status(), 401);
@@ -367,10 +382,14 @@ async fn real_browser_service_lifecycle_and_isolation() {
 		let mut ws_request = connection.stream_url.clone().into_client_request().unwrap();
 		ws_request.headers_mut().insert("Origin", "http://tauri.localhost".parse().unwrap());
 		let (mut viewer, _) = connect_async(ws_request).await.unwrap();
-		let frame = tokio::time::timeout(Duration::from_secs(10), async {
-			loop { let message = viewer.next().await.unwrap().unwrap(); if let Message::Text(text) = message { let value:Value=serde_json::from_str(&text).unwrap(); if value["type"] == "frame" { break value; } } }
+		let jpeg = tokio::time::timeout(Duration::from_secs(10), async {
+			loop {
+				let Some(Ok(message)) = viewer.next().await else { continue };
+				if let Message::Binary(bytes) = message { break bytes; }
+			}
 		}).await.unwrap();
-		viewer.send(Message::Text(json!({"type":"ack","seq":frame["seq"]}).to_string().into())).await.unwrap();
+		let picture = jpeg_size(&jpeg);
+		assert_eq!(picture, (1280, 720), "Frames must arrive at device resolution");
 		let long_service = service.clone(); let target = first.target.clone(); let version = first.control_version;
 		let slow = tokio::spawn(async move { long_service.execute(target, "slow".into(), version, Action::Wait { milliseconds: 1800 }).await });
 		loop { if service.entry(&first.target).unwrap().data.lock().unwrap().active.is_some() { break; } tokio::time::sleep(Duration::from_millis(10)).await; }
