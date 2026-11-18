@@ -1,11 +1,11 @@
 import { seedPolishPreview } from "./polishFixture.mjs";
 
-export const fixtures = ["launcher", "single", "multi", "unknown", "empty", "loading", "error", "chat", "long", "settings", "settings-info", "picker", "voyage", "voyage-output", "voyage-thinking", "voyage-tool", "voyage-moored", "voyage-high", "authorization", "sidebar", "project-limit", "archive", "visual", "tool-spacing", "process-rows", "repeated-process", "process-folding", "process-actions", "file-discovery", "content-replay-a", "content-replay-b", "chat-polish-031", "message-images"];
+export const fixtures = ["new-chat", "single", "multi", "unknown", "empty", "loading", "error", "chat", "long", "settings", "settings-info", "picker", "voyage", "voyage-output", "voyage-thinking", "voyage-tool", "voyage-moored", "voyage-high", "authorization", "sidebar", "project-limit", "archive", "visual", "tool-spacing", "process-rows", "repeated-process", "process-folding", "process-actions", "file-discovery", "content-replay-a", "content-replay-b", "chat-polish-029", "message-images"];
 
 // This entry runs only on the separate preview origin. It never uses real pi.
 export function preparePreview(target) {
 	const params = new URLSearchParams(target.location.search);
-	const fixture = params.get("fixture") || "launcher";
+	const fixture = params.get("fixture") || "new-chat";
 	const storage = target.localStorage;
 	const preservedPreferences = params.get("persist") === "1" ? ["skiff.workspace.navigation.v1", "skiff.design.collections.v1", "skiff.design.canvases.v1", "skiff.design.favorites.v1", "skiff.test.design-assets", "skiff.design.parameters.open", "skiff.design.sidebar.open", "skiff.test.videos.config", "skiff.test.videos.jobs", "skiff.generation.columns.v1", "skiff.test.images.config", "skiff.test.images.jobs", "skiff.workbench.v1", "skiff.git-tree.columns.v1", "skiff.git-tree.files-height.v1", "skiff.sidebar.width", "skiff.voyage.width", "skiff.sidebar.recent-expanded", "skiff.model-favorites.v1", "skiff.theme", "skiff.themeColor", "skiff.darkThemeColor", "skiff.themeStars", "skiff.typography.v1", "skiff.test.metadata.v1", "skiff.settings.providers-view.v1"].map((key) => [key, storage.getItem(key)]).filter((entry) => entry[1] !== null) : [];
 	for (let index = storage.length - 1; index >= 0; index--) {
@@ -37,7 +37,7 @@ export function preparePreview(target) {
 			{ id: "sidebar-empty", name: "cc-switch", path: "D:\\workspace\\cc-switch" },
 		];
 		if (fixture === "project-limit") projects.push(...["api-portal", "workbuddy2api", "emptyForTest"].map((name) => ({ id: name, name, path: `D:\\workspace\\${name}` })));
-		const titles = ["固定模型配置弹窗尺寸", "实现009 UI系统加固需求", "澄清006范围与字段权威", "对比Skiff与cc-switch页面", "回应问候"];
+		const titles = ["固定模型配置弹窗尺寸", "实现008 UI系统加固需求", "澄清006范围与字段权威", "对比Skiff与cc-switch页面", "回应问候"];
 		const chats = projects.flatMap((project, projectIndex) => Array.from({ length: [22, 6, 0][projectIndex] }, (_, index) => ({
 			id: `${project.id}-chat-${index}`, projectId: project.id,
 			title: projectIndex === 0 && index < titles.length ? titles[index] : `${project.name} 任务 ${index + 1}`,
@@ -81,7 +81,7 @@ export function preparePreview(target) {
 		}));
 		for (const chat of chats) if (chat.hasMessages) chat.selectedModel = { provider: "skiff-relay-r1-deepseek", id: "deepseek-chat", modelId: "deepseek-chat", routeId: "route-deepseek-r1", offerId: "route-deepseek-r1/deepseek-chat" };
 		storage.setItem("skiff.workspace.v1", JSON.stringify({ version: 1, projects: [project, otherProject], chats, activeId: "archive-active" }));
-	} else if (["chat", "long", "picker", "voyage", "authorization", "visual", "tool-spacing", "process-rows", "repeated-process", "process-folding", "process-actions", "file-discovery", "content-replay-a", "content-replay-b", "chat-polish-031"].includes(fixture) || fixture.startsWith("voyage-")) {
+	} else if (["chat", "long", "picker", "voyage", "authorization", "visual", "tool-spacing", "process-rows", "repeated-process", "process-folding", "process-actions", "file-discovery", "content-replay-a", "content-replay-b", "chat-polish-029"].includes(fixture) || fixture.startsWith("voyage-")) {
 		seedPolishPreview(storage, fixture === "long");
 		const sessions = JSON.parse(storage.getItem("skiff.test.sessions"));
 		if (fixture === "content-replay-a") sessions["polish-preview.jsonl"] = [
@@ -230,7 +230,7 @@ export function preparePreview(target) {
 			{ role: "assistant", content: "### 检查完成\n\n读数已移出指针扫掠区域。船、波浪与航程保留，刻度在两种主题下均清晰可读。\n\n- 指针与中心保持连接\n- 过程信息可通过键盘折叠\n- Token 与费用明细可展开查看", usage: { input: 73, cacheRead: 1917, cacheWrite: 0, output: 190, totalTokens: 2180 }, durationMs: 3000,
 				routeSnapshot: { providerKey: "skiff-relay-r1-deepseek", familyId: "deepseek", familyName: "DeepSeek", relayId: "r1", modelId: "deepseek-chat", relayName: "官方直连", billingAccountId: "演示账户", currency: "CNY", inputCost: .3, outputCost: 1.2, cacheReadCost: .3, cacheWriteCost: .3 } },
 		];
-		if (fixture === "chat-polish-031") sessions["polish-preview.jsonl"] = [
+		if (fixture === "chat-polish-029") sessions["polish-preview.jsonl"] = [
 			{ role: "user", content: "展示命令动作摘要、结构化结果卡片和新的排版层级。" },
 			{ role: "assistant", content: [
 				{ type: "thinking", thinking: "先并行查看目录、运行测试并检查仓库状态，再演示高风险命令的标题保留。" },

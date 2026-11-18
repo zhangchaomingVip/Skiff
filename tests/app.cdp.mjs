@@ -252,16 +252,22 @@ try {
 	}, seed);
 	await page.reload({ waitUntil: "domcontentloaded" });
 
-	// 空会话默认进启动台（App 的 currentView 由 hasMessages/hasDraft 决定），
-	// 输入框只存在于聊天视图，所以先走一次真实点击：选模型 → 开始聊天。
-	const startButton = page.locator(".launcher-row", { hasText: MODEL_ID }).getByRole("button", { name: "开始聊天" });
+	// 空会话直接进入聊天视图，通过模型选择器选择测试模型后开始。
+	await page.waitForSelector(".composer-input", { timeout: 60_000 });
 	try {
-		await startButton.waitFor({ state: "visible", timeout: 120_000 });
+		await page.waitForFunction(() => !document.querySelector(".model-trigger")?.disabled, undefined, { timeout: 120_000 });
 	} catch (error) {
-		throw new Error(`启动台没有出现可用模型 ${MODEL_ID}：${error.message.split("\n")[0]}。页面文本：\n${(await page.evaluate(() => document.body.innerText)).slice(0, 800)}`);
+		throw new Error(`模型选择器未就绪：${error.message.split("\n")[0]}。页面文本：\n${(await page.evaluate(() => document.body.innerText)).slice(0, 800)}`);
 	}
-	await startButton.click();
-	console.log("已在启动台点击「开始聊天」，等待聊天视图…");
+	await page.getByRole("button", { name: "选择模型", exact: true }).click();
+	await page.getByRole("button", { name: "更多模型…", exact: true }).click();
+	await page.getByRole("option", { name: new RegExp(`${MODEL_ID}$`) }).click();
+	await page.waitForFunction((modelId) => {
+		const value = JSON.parse(localStorage.getItem("skiff.workspace.v1"));
+		const chat = value.chats.find((item) => item.id === value.activeId);
+		return chat.selectedModel?.id === modelId;
+	}, MODEL_ID);
+	console.log("已在模型选择器选择测试模型，等待聊天视图…");
 
 	await page.waitForSelector(".composer-input", { timeout: 60_000 });
 	if (videosOnly || imagesOnly) {
@@ -287,9 +293,9 @@ try {
 			return page;
 		});
 		if (imagesOnly) { await verifyImageGeneration(page, imageScenario, `http://127.0.0.1:${mockPort}/v1`, join(root, "generation"), artifacts); await verifyWorkspaceModes(page, join(root, "generation"), artifacts, MODEL_ID); }
-		// Reloading an empty conversation returns to the launcher. Enter the chat
-		// through its real start control before checking the independent pi flow.
-		if (await page.locator(".launcher-row").count()) await page.locator(".launcher-row", { hasText: MODEL_ID }).getByRole("button", { name: "开始聊天" }).click();
+		// Reloading an empty conversation stays in the chat view; the model stays
+		// selected on the active chat, so the ordinary pi flow can resume directly.
+		await page.waitForSelector(".composer-input", { timeout: 60_000 });
 		await page.fill(".composer-input", "创作后验证普通聊天。");
 		await page.click(".send-btn");
 		await page.waitForFunction((reply) => document.body.innerText.includes(reply), REPLY, { timeout: 90000 });

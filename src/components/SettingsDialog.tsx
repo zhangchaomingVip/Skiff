@@ -94,8 +94,8 @@ export function SettingsDialog({ initialCategory, restrictions, prompt, provider
 				{category === "providers" && <><fieldset className="settings-config" disabled={!!restrictions.providers}><ProvidersSettingsContent {...providers} ref={editor} onLockChange={updateInteraction} /></fieldset>{providers.configError && !locked && <Button disabled={!!restrictions.providers} onClick={onRetryModels}>重新读取配置</Button>}</>}
 				{category === "archives" && <section aria-labelledby="archives-title"><h2 id="archives-title">归档会话</h2><p className="muted">查看、恢复或删除已归档的会话。</p><ArchivedSessions {...archives} busy={archives.busy || !!restrictions.archives} /></section>}
 				{category === "shortcuts" && <section aria-labelledby="shortcuts-title"><h2 id="shortcuts-title">快捷键</h2><p className="muted">设置及其他模态窗口打开期间，后台聊天快捷键暂停。</p><dl className="settings-shortcuts">{[
-					[`${modifier} + ,`, "打开设置", "主页面；不打断其他模态窗口"],
-					[`${modifier} + N`, "新聊天", "主页面；在当前项目创建草稿"],
+					[`${modifier} + ,`, "打开设置", "不打断其他模态窗口"],
+					[`${modifier} + N`, "新聊天", "Code 工作区；在当前项目创建草稿"],
 					["Ctrl + K", "聚焦输入框", "聊天页面"],
 					["Enter", "发送消息 / 运行命令", "输入框；有候选项时选择候选"],
 					["Shift + Enter", "换行", "输入框"],

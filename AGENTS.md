@@ -38,7 +38,7 @@ Run checks relevant to the change. For UI changes, verify interactions and both 
 - Requires Playwright, kept project-local and out of version control: `npm i --prefix .playwright-cli playwright-core` (no browser download — the harness only attaches over CDP). Ports 1420 and 9222 must be free.
 - Timing: a warm cargo build finishes in ~70s; a cold build can take many minutes and the script waits up to 15 minutes for the CDP endpoint.
 - Artifacts: screenshot in `dist/cdp-verify.png`, dev log in `dist/cdp-dev.log`. Read the log tail before assuming a UI bug.
-- Writing new flows: an empty chat opens the launcher, not the chat view (`App.tsx` picks `launcher` unless the chat has messages or a draft), so click `开始聊天` on a `.launcher-row` before expecting `.composer-input`. Prefer clicking real controls over seeding extra state. `page.reload()` is fine but logs a harmless Tauri IPC/postMessage fallback.
+- Writing new flows: an empty chat opens the chat view directly (there is no separate home/launcher page; new chats come from `newDraft`/Ctrl+N), so `.composer-input` is present as soon as a chat is active. When a test needs a specific model, select it through the composer picker (`选择模型` → `更多模型…`) before the first send. Prefer clicking real controls over seeding extra state. `page.reload()` is fine but logs a harmless Tauri IPC/postMessage fallback.
 
 ## Change Guidelines
 

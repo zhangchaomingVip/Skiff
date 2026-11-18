@@ -119,7 +119,9 @@ try {
 	assert.equal(await preview.getByRole("textbox").count(), 0, "Read-only preview must not expose a composer");
 	for (const label of ["编辑并重发", "重新生成", "删除本轮及后续消息", "继续生成"]) assert.equal(await preview.locator(`[aria-label="${label}"]`).count(), 0, `${label} must not be available in read-only preview`);
 	const archiveCommands = await commandTypes("archive_");
-	assert.deepEqual(archiveCommands.filter((type) => type !== "switch_session" && type !== "get_messages"), [], "Preview may only switch and read history");
+	// get_entries is the session transcript read the preview relies on, in the
+	// same read-only category as get_messages.
+	assert.deepEqual(archiveCommands.filter((type) => !["switch_session", "get_messages", "get_entries"].includes(type)), [], "Preview may only switch and read history");
 	const workspaceDuringPreview = await page.evaluate(() => {
 		const workspace = JSON.parse(localStorage.getItem("skiff.workspace.v1"));
 		return { activeId: workspace.activeId, model: workspace.chats.find((chat) => chat.id === workspace.activeId)?.selectedModel };
@@ -145,7 +147,7 @@ try {
 	await waitUntil(() => getComputedStyle(document.querySelector(".project-chats .chat-row.selected .sidebar-row-actions")).pointerEvents === "auto", "Recent row actions did not become interactive");
 	const actionPoint = await activeArchiveButton.evaluate((button) => { const rect = button.getBoundingClientRect(); return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }; });
 	await page.mouse.click(actionPoint.x, actionPoint.y);
-	await waitUntil(() => document.querySelector(".header-title-row > span:first-child")?.textContent?.trim() === "主页", "Archiving the active chat did not return home");
+	await waitUntil(() => document.querySelector(".header-title-row > span:first-child")?.textContent?.trim() === "同项目候选", "Archiving the active chat did not fall back to the latest chat in the project");
 	assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem("skiff.workspace.v1")).activeId), "archive-candidate", "Active archive should select the latest unarchived chat in its project");
 	assert.equal(await page.locator(".project-count").count(), 0);
 

@@ -20,9 +20,9 @@ const openPricing = async () => { await settings.locator('details[data-section="
 try {
 	await mkdir("dist/provider-discovery", { recursive: true });
 	for (const theme of ["light", "dark"]) {
-		await page.goto(`${base}/tests/preview.html?fixture=launcher&theme=${theme}&static=1`);
-		await page.getByRole("heading", { name: "可用模型", exact: true }).waitFor();
-		assert.equal((await priceRequests()).length, 0, "Launcher does not load any public catalog");
+		await page.goto(`${base}/tests/preview.html?fixture=new-chat&theme=${theme}&static=1`);
+		await page.locator(".composer-input").waitFor();
+		assert.equal((await priceRequests()).length, 0, "The new chat view does not load any public catalog");
 		await page.keyboard.press("Control+Comma");
 		await button("供应商").click();
 		assert.equal(await settings.locator(".settings-nav").getByRole("button", { name: "模型", exact: true }).count(), 0);
