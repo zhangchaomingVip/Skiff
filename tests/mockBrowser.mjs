@@ -12,6 +12,7 @@ export function installMockBrowser(target) {
 	let controlFailure;
 	let lifecycleFailure;
 	let lifecycleDelay;
+	let generationSequence = 0;
 	const retired = new Set();
 	const dependencies = () => ({ enabled, ready, supported: true, cliPath: cliPath ?? "C:/mock/agent-browser.exe", configuredCliPath: cliPath, version: "0.41.2", browserInstalled: ready, message: ready ? "浏览器已就绪" : "未检测到 Chrome for Testing，请执行 agent-browser install 后重新检测", installCommands: ["npm install -g agent-browser@0.41.2", "agent-browser install"] });
 	const viewports = new Map();
@@ -58,7 +59,26 @@ export function installMockBrowser(target) {
 			const message = JSON.parse(data); sent.push({ chatId: this.chatId, ...message });
 			if (message.type === "ack") { target.clearTimeout(this.timer); this.timer = target.setTimeout(() => this.frame(), 100); }
 			if (message.type === "input_flush") this.emit({ type: "input_ack", inputId: message.inputId });
-			if (message.type === "reload") this.emit({ type: "reload", ok: true });
+			if (message.type === "reload") {
+				const status = entries.get(this.chatId);
+				if (status) api.set(this.chatId, { title: "已刷新页面" });
+				this.emit({ type: "reload", ok: true });
+			}
+			if (message.type === "navigate") {
+				const status = entries.get(this.chatId);
+				if (status) {
+					// Navigation changes the address, not the tab's identity: a tab keeps the
+					// title it had until the page itself reports a new one.
+					const tabs = status.tabs.map((tab) => tab.active ? { ...tab, url: message.url } : tab);
+					api.set(this.chatId, { url: message.url, tabs, canGoBack: true, canGoForward: false });
+				}
+				this.emit({ type: "action", action: "navigate", ok: true });
+			}
+			if (message.type === "history") {
+				const status = entries.get(this.chatId);
+				if (status) api.set(this.chatId, { canGoBack: message.direction === "forward", canGoForward: message.direction === "back" });
+				this.emit({ type: "action", action: "history", ok: true });
+			}
 		}
 		close() { if (this.readyState === 3) return; this.readyState = 3; target.clearTimeout(this.timer); sockets.delete(this); this.onclose?.({}); }
 	}
@@ -75,7 +95,26 @@ export function installMockBrowser(target) {
 		deferControl() { let resolve; const promise = new Promise((done) => { resolve = done; }); controlDelay = promise; return resolve; },
 		deferFind(chatId) { let resolve; const promise = new Promise((done) => { resolve = done; }); findDelay = { chatId, promise }; return resolve; },
 		set(chatId, patch = {}) {
-			const status = { chatId, generation: `mock-${chatId}-1`, control: "ai", controlVersion: 1, url: `https://example.test/${chatId}`, error: null, ...entries.get(chatId), ...patch };
+			const previous = entries.get(chatId);
+			const url = patch.url !== undefined ? patch.url : previous?.url ?? `https://example.test/${chatId}`;
+			const previousTabs = previous?.tabs ?? [];
+			const tabs = patch.tabs ?? (previousTabs.length ? previousTabs : url ? [{ id: `tab-${chatId}-1`, title: previous?.title ?? "示例页面", url, active: true }] : []);
+			const activeTabId = patch.activeTabId !== undefined ? patch.activeTabId : previous?.activeTabId ?? tabs.find((tab) => tab.active)?.id ?? null;
+			const status = {
+				chatId,
+				generation: previous?.generation ?? `mock-${chatId}-1`,
+				title: previous?.title ?? "示例页面",
+				control: previous?.control ?? "ai",
+				controlVersion: previous?.controlVersion ?? 1,
+				requiresSnapshot: previous?.requiresSnapshot ?? false,
+				url,
+				canGoBack: previous?.canGoBack ?? false,
+				canGoForward: previous?.canGoForward ?? false,
+				tabs,
+				activeTabId,
+				error: null,
+				...patch,
+			};
 			entries.set(chatId, status);
 			for (const socket of sockets) if (socket.chatId === chatId && socket.generation === status.generation) socket.emit({ type: "control", status });
 			return status;
@@ -93,6 +132,17 @@ export function installMockBrowser(target) {
 			}
 			if (command === "browser_set_enabled") { enabled = args.enabled; return dependencies(); }
 			if (command === "browser_configure") { cliPath = args.settings.cliPath; return dependencies(); }
+			if (command === "browser_start") {
+				if (!enabled) throw new Error("AI 浏览器尚未启用");
+				if (!ready) throw new Error("未检测到 Chrome for Testing，请执行 agent-browser install 后重新检测");
+				if (retired.has(args.chatId)) throw new Error("聊天已归档或删除，不能启动浏览器");
+				if (lifecycleFailure) { const failure = lifecycleFailure; lifecycleFailure = undefined; throw new Error(failure); }
+				const previous = entries.get(args.chatId);
+				if (previous && !["closed", "faulted", "disconnected"].includes(previous.control)) return structuredClone(previous);
+				const generation = `mock-${args.chatId}-${++generationSequence}`;
+				const tab = { id: `tab-${generation}-1`, title: "新标签页", url: "about:blank", active: true };
+				return structuredClone(api.set(args.chatId, { generation, control: args.manual ? "human" : "ai", controlVersion: 1, requiresSnapshot: false, url: "about:blank", title: "新标签页", tabs: [tab], activeTabId: tab.id, canGoBack: false, canGoForward: false, error: null }));
+			}
 			if (command === "browser_find") {
 				const value = structuredClone(entries.get(args.chatId) ?? null);
 				if (findDelay?.chatId === args.chatId) { const delay = findDelay; findDelay = undefined; await delay.promise; }
@@ -106,6 +156,31 @@ export function installMockBrowser(target) {
 				if (command === "browser_begin_control") return api.set(status.chatId, { control: { takeOver: "takingOver", return: "returning", stop: "stopping" }[args.operation], controlVersion: status.controlVersion + 1 });
 				if (controlDelay) { const delay = controlDelay; controlDelay = undefined; await delay; }
 				return api.set(status.chatId, { control: { takeOver: "human", return: "ai", stop: "stopped" }[args.operation], requiresSnapshot: args.operation === "return" });
+			}
+			if (command === "browser_tab") {
+				const status = entries.get(args.target.chatId);
+				if (!status || status.generation !== args.target.generation) throw new Error("Browser owner changed");
+				if (!["human", "stopped"].includes(status.control)) throw new Error("请先接管浏览器再管理标签页");
+				const action = args.action;
+				if (action.type === "select") {
+					const tabs = status.tabs.map((tab) => ({ ...tab, active: tab.id === action.tabId }));
+					const active = tabs.find((tab) => tab.active);
+					if (!active) throw new Error("标签页不存在");
+					return api.set(status.chatId, { tabs, activeTabId: active.id, url: active.url, title: active.title });
+				}
+				if (action.type === "new") {
+					const id = `tab-${status.chatId}-${status.tabs.length + 1}`;
+					const tabs = [...status.tabs.map((tab) => ({ ...tab, active: false })), { id, title: "新标签页", url: "about:blank", active: true }];
+					return api.set(status.chatId, { tabs, activeTabId: id, url: "about:blank", title: "新标签页", canGoBack: false, canGoForward: false });
+				}
+				if (action.type === "close") {
+					const tabs = status.tabs.filter((tab) => tab.id !== action.tabId).map((tab) => ({ ...tab }));
+					if (!tabs.length) { api.disconnect(status.chatId); return api.set(status.chatId, { control: "closed", controlVersion: status.controlVersion + 1, tabs: [], activeTabId: null }); }
+					if (!tabs.some((tab) => tab.active)) tabs[0].active = true;
+					const active = tabs.find((tab) => tab.active);
+					return api.set(status.chatId, { tabs, activeTabId: active.id, url: active.url, title: active.title });
+				}
+				throw new Error("Unsupported mock tab action");
 			}
 			if (command === "browser_connection") {
 				const status = entries.get(args.target.chatId);

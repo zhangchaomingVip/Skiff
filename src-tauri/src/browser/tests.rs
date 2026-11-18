@@ -463,3 +463,46 @@ async fn real_browser_service_lifecycle_and_isolation() {
 		std::panic::resume_unwind(panic);
 	}
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[ignore = "requires Windows, agent-browser 0.41.2 and its installed Chrome; temporary profiles only"]
+async fn real_manual_tab_new_and_close_round_trip() {
+	use futures_util::FutureExt;
+	let root = std::env::temp_dir().join(format!("skiff-browser-tabs-{}", opaque()));
+	let service = Service::new(root.clone(), vec!["http://tauri.localhost".into()])
+		.await
+		.unwrap();
+	let result = std::panic::AssertUnwindSafe(async {
+		let mut settings = service.settings.lock().unwrap().clone();
+		settings.enabled = true;
+		service.configure(settings).await.unwrap();
+		let opened = service.start_manual("chat".into()).await.unwrap();
+		assert_eq!(opened.control, Control::Human);
+		let before = opened.tabs.len();
+		let added = service.tab(&opened.target, TabAction::New).await.unwrap();
+		assert_eq!(added.tabs.len(), before + 1);
+		let blank = added
+			.tabs
+			.iter()
+			.find(|tab| tab.url == "about:blank")
+			.map(|tab| tab.id.clone())
+			.expect("new tab must be listed");
+		let closed = service
+			.tab(
+				&opened.target,
+				TabAction::Close {
+					tab_id: blank.clone(),
+				},
+			)
+			.await
+			.unwrap();
+		assert_eq!(closed.tabs.len(), before);
+		assert!(!closed.tabs.iter().any(|tab| tab.id == blank));
+	}).catch_unwind().await;
+	let cleanup = service.shutdown().await;
+	let _ = std::fs::remove_dir_all(&root);
+	assert!(cleanup.is_ok(), "{cleanup:?}");
+	if let Err(panic) = result {
+		std::panic::resume_unwind(panic);
+	}
+}

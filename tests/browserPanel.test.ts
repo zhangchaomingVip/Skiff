@@ -1,9 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { canWatchBrowser, isBrowserStatus, mergeBrowserStatus, observeBrowser } from "../src/browser/model";
+import { browserControlLabels, browserHost, browserTabLabel, canWatchBrowser, isBrowserStatus, mergeBrowserStatus, observeBrowser } from "../src/browser/model";
 import { LatestBrowserFrames } from "../src/browser/frames";
 
-const status = { chatId: "a", generation: "one", control: "ai" as const, controlVersion: 1, url: "https://example.test", error: null };
+const status = { chatId: "a", generation: "one", control: "ai" as const, controlVersion: 1, requiresSnapshot: false, url: "https://example.test", title: "示例页面", canGoBack: false, canGoForward: false, tabs: [{ id: "tab-a", title: "示例页面", url: "https://example.test", active: true }], activeTabId: "tab-a", error: null };
 test("browser panel opens once per instance, preserves manual collapse and rejects stale control", () => {
 	const first = observeBrowser({ expanded: false }, status);
 	assert.equal(first.expanded, true);
@@ -15,8 +15,18 @@ test("browser panel opens once per instance, preserves manual collapse and rejec
 	assert.equal(mergeBrowserStatus(human, status), human);
 	assert.equal(isBrowserStatus({ ...status, control: "invalid" }), false);
 	assert.equal(isBrowserStatus({ ...status, controlVersion: -1 }), false);
+	assert.equal(isBrowserStatus({ ...status, tabs: [{ id: "tab-a", title: "缺少激活标记" }] }), false);
+	assert.equal(isBrowserStatus({ ...status, canGoBack: undefined }), false);
 	assert.equal(canWatchBrowser({ ...status, control: "disconnected" }), false);
 	assert.equal(canWatchBrowser({ ...status, control: "stopped" }), true);
+	// Navigation state can advance without a control change, so a same-version snapshot wins.
+	const navigated = { ...status, url: "https://example.test/two", canGoBack: true, tabs: [{ ...status.tabs[0], url: "https://example.test/two", title: "第二页" }] };
+	assert.deepEqual(mergeBrowserStatus(status, navigated).tabs, navigated.tabs);
+	assert.equal(browserHost("https://gemini.google.com/app?x=1"), "gemini.google.com");
+	assert.equal(browserHost("about:blank"), "");
+	assert.equal(browserTabLabel({ title: "  ", url: "about:blank" }), "新标签页");
+	assert.equal(browserTabLabel({ title: "", url: "https://example.test/deep" }), "example.test");
+	assert.equal(browserControlLabels.human, "人工控制");
 });
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 5));

@@ -1,7 +1,5 @@
 {
-  "errors": [
-    "src/components/generation-workspace.css:353: undefined --space-7"
-  ],
+  "errors": [],
   "inventory": {
     "files": [
       "src/tokens.css",
@@ -582,6 +580,7 @@
       "src/index.css:1133 .model-route-status box-shadow: 0 0 0 2px color-mix(in srgb, currentColor 12%, transparent)",
       "src/index.css:1453 .switch .slider::after box-shadow: 0 1px 2px var(--shadow-color)",
       "src/index.css:1598 .git-commit-box .ui-textarea:focus:not(:disabled) box-shadow: inset 0 0 0 var(--space-px) color-mix(in srgb, var(--accent) 12%, transparent)",
+      "src/browser.css:39 .browser-address.is-editing box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 16%, transparent)",
       "src/components/ui.css:30 .ui-button[data-variant=setting].active, .ui-button[data-variant=setting][aria-pressed=true] box-shadow: inset 2px 0 0 var(--accent)",
       "src/components/generation-workspace.css:315 .design-composer .generation-submit > .ui-button[data-variant=primary] box-shadow: 0 3px 12px color-mix(in srgb, var(--action) 34%, transparent)",
       "src/components/generation-workspace.css:316 .design-composer .generation-submit > .ui-button[data-variant=primary]:hover:not(:disabled) box-shadow: 0 6px 18px color-mix(in srgb, var(--action) 42%, transparent)",
@@ -618,7 +617,8 @@
       "src/index.css:1695 .workbench-project-search .ui-input height: var(--control-compact)",
       "src/index.css:1703 .workbench-project-actions .ui-button height: var(--control-compact)",
       "src/index.css:1733 .provider-model-config-levels input height: 100%",
-      "src/browser.css:20 .browser-input height: 100%",
+      "src/browser.css:42 .browser-address-input height: 100%",
+      "src/browser.css:57 .browser-input height: 100%",
       "src/components/ui.css:9 .msg .message-actions .copy-btn, .msg.assistant .message-actions .usage-trigger height: var(--control-compact)",
       "src/components/ui.css:14 .ui-button height: var(--control-regular)",
       "src/components/ui.css:17 .ui-button[data-size=compact] height: var(--control-compact)",
@@ -782,42 +782,42 @@
       "theme": "light",
       "fg": "--color-text-tertiary",
       "bg": "--color-bg-primary",
-      "ratio": 7.011865308349365,
+      "ratio": 7.011865308349367,
       "minimum": 4.5
     },
     {
       "theme": "light",
       "fg": "--color-text-tertiary",
       "bg": "--color-bg-secondary",
-      "ratio": 7.011865308349365,
+      "ratio": 7.011865308349367,
       "minimum": 4.5
     },
     {
       "theme": "light",
       "fg": "--color-text-tertiary",
       "bg": "--color-bg-tertiary",
-      "ratio": 6.181723210675633,
+      "ratio": 6.181723210675634,
       "minimum": 4.5
     },
     {
       "theme": "light",
       "fg": "--color-text-tertiary",
       "bg": "--color-bg-hover",
-      "ratio": 5.921047262554396,
+      "ratio": 5.921047262554397,
       "minimum": 4.5
     },
     {
       "theme": "light",
       "fg": "--color-text-tertiary",
       "bg": "--color-sidebar-bg",
-      "ratio": 6.713678117198099,
+      "ratio": 6.7136781171981,
       "minimum": 4.5
     },
     {
       "theme": "light",
       "fg": "--color-text-tertiary",
       "bg": "--selected",
-      "ratio": 6.161259730722633,
+      "ratio": 6.161259730722634,
       "minimum": 4.5
     },
     {
@@ -1027,7 +1027,7 @@
       "theme": "light",
       "fg": "--disabled-text",
       "bg": "--surface",
-      "ratio": 7.011865308349365,
+      "ratio": 7.011865308349367,
       "minimum": 3
     },
     {
@@ -1070,7 +1070,7 @@
       "theme": "light",
       "fg": "--syn-keyword",
       "bg": "--sidebar",
-      "ratio": 5.854045340184195,
+      "ratio": 5.854045340184196,
       "minimum": 4.5
     },
     {
@@ -1224,28 +1224,28 @@
       "theme": "dark",
       "fg": "--color-text-tertiary",
       "bg": "--color-bg-primary",
-      "ratio": 8.854122518037185,
+      "ratio": 8.854122518037183,
       "minimum": 4.5
     },
     {
       "theme": "dark",
       "fg": "--color-text-tertiary",
       "bg": "--color-bg-secondary",
-      "ratio": 7.607314717203061,
+      "ratio": 7.60731471720306,
       "minimum": 4.5
     },
     {
       "theme": "dark",
       "fg": "--color-text-tertiary",
       "bg": "--color-bg-tertiary",
-      "ratio": 6.717040826836995,
+      "ratio": 6.717040826836994,
       "minimum": 4.5
     },
     {
       "theme": "dark",
       "fg": "--color-text-tertiary",
       "bg": "--color-bg-hover",
-      "ratio": 5.582756543168742,
+      "ratio": 5.582756543168741,
       "minimum": 4.5
     },
     {
@@ -1259,7 +1259,7 @@
       "theme": "dark",
       "fg": "--color-text-tertiary",
       "bg": "--selected",
-      "ratio": 5.129153547118927,
+      "ratio": 5.129153547118926,
       "minimum": 4.5
     },
     {
@@ -1469,7 +1469,7 @@
       "theme": "dark",
       "fg": "--disabled-text",
       "bg": "--surface",
-      "ratio": 7.607314717203061,
+      "ratio": 7.60731471720306,
       "minimum": 3
     },
     {
@@ -1498,7 +1498,7 @@
       "theme": "dark",
       "fg": "--danger",
       "bg": "--error-bg",
-      "ratio": 8.366127854574216,
+      "ratio": 8.366127854574215,
       "minimum": 4.5
     },
     {
@@ -1533,7 +1533,7 @@
       "theme": "dark",
       "fg": "--syn-title",
       "bg": "--sidebar",
-      "ratio": 7.45591022042263,
+      "ratio": 7.455910220422631,
       "minimum": 4.5
     },
     {
@@ -1554,7 +1554,7 @@
       "theme": "dark",
       "fg": "--syn-meta",
       "bg": "--sidebar",
-      "ratio": 7.45591022042263,
+      "ratio": 7.455910220422631,
       "minimum": 4.5
     },
     {

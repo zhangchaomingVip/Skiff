@@ -75,6 +75,14 @@ pub struct Target {
 	pub chat_id: String,
 	pub generation: String,
 }
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct BrowserTab {
+	pub id: String,
+	pub title: String,
+	pub url: String,
+	pub active: bool,
+}
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BrowserStatus {
@@ -84,6 +92,11 @@ pub struct BrowserStatus {
 	pub control_version: u64,
 	pub requires_snapshot: bool,
 	pub url: Option<String>,
+	pub title: Option<String>,
+	pub can_go_back: bool,
+	pub can_go_forward: bool,
+	pub tabs: Vec<BrowserTab>,
+	pub active_tab_id: Option<String>,
 	pub error: Option<String>,
 }
 #[derive(Serialize)]
@@ -143,6 +156,11 @@ impl Entry {
 	}
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum StartOwner {
+	Ai,
+	Human,
+}
 pub struct Service {
 	root: PathBuf,
 	namespace: String,
@@ -311,8 +329,16 @@ impl Service {
 	pub async fn start(&self, chat_id: String) -> Result<BrowserStatus> {
 		self.start_with_idle(chat_id, 3_600_000).await
 	}
+	/// A user-opened browser starts under human ownership. The AI can still join later
+	/// through the normal return handoff, which forces a fresh snapshot of this page.
+	pub async fn start_manual(&self, chat_id: String) -> Result<BrowserStatus> {
+		if !self.settings.lock().unwrap().enabled {
+			return Err("AI 浏览器尚未启用".into());
+		}
+		self.start_checked(chat_id, 3_600_000, None, StartOwner::Human).await
+	}
 	async fn start_with_idle(&self, chat_id: String, idle_ms: u64) -> Result<BrowserStatus> {
-		self.start_checked(chat_id, idle_ms, None).await
+		self.start_checked(chat_id, idle_ms, None, StartOwner::Ai).await
 	}
 	async fn start_checked(
 		&self,
@@ -322,6 +348,7 @@ impl Service {
 			&std::sync::atomic::AtomicBool,
 			&std::sync::atomic::AtomicBool,
 		)>,
+		owner: StartOwner,
 	) -> Result<BrowserStatus> {
 		if chat_id.is_empty() || chat_id.len() > 256 {
 			return Err("无效聊天标识".into());
@@ -344,9 +371,17 @@ impl Service {
 		let existing = self.entries.lock().unwrap().get(&chat_id).cloned();
 		let existing = if let Some(entry) = existing {
 			self.status(&entry.status().target).await?;
-			if entry.terminal() {
-				let _operation = entry.operation.lock().await;
-				self.close_locked(&entry).await?;
+			// A manual open also recovers a faulted instance: the user is explicitly asking
+			// for a fresh page, so close it instead of handing the broken control state back.
+			let restart = entry.terminal()
+				|| (owner == StartOwner::Human && entry.status().control == Control::Faulted);
+			if restart {
+				if owner == StartOwner::Human && !entry.terminal() {
+					self.close_instance(&entry.status().target).await?;
+				} else {
+					let _operation = entry.operation.lock().await;
+					self.close_locked(&entry).await?;
+				}
 				None
 			} else {
 				Some(entry)
@@ -415,6 +450,9 @@ impl Service {
 				data.cdp_url = Some(cdp_url.into());
 				data.status.url = Some("about:blank".into());
 			}
+			// The tab list is best effort: a browser that has not painted a page yet still
+			// starts, and the capture loop fills the list in as targets appear.
+			let _ = input::initialize(&entry).await;
 			Ok::<_, String>(())
 		}
 		.await;
@@ -432,7 +470,11 @@ impl Service {
 		}
 		// A close/takeover may invalidate Starting while launch is in flight. Never reopen the gate.
 		if entry.status().control == Control::Starting {
-			entry.update(Control::Ai, None);
+			if owner == StartOwner::Human {
+				entry.invalidate(Control::Human);
+			} else {
+				entry.update(Control::Ai, None);
+			}
 		}
 		Ok(entry.status())
 	}
@@ -468,6 +510,11 @@ impl Service {
 					control_version: 1,
 					requires_snapshot: false,
 					url: None,
+					title: None,
+					can_go_back: false,
+					can_go_forward: false,
+					tabs: Vec::new(),
+					active_tab_id: None,
 					error: None,
 				},
 				stream_port: None,
@@ -689,6 +736,14 @@ impl Service {
 			if let Some(url) = data["url"].as_str() {
 				entry.data.lock().unwrap().status.url = Some(url.into());
 			}
+			// `open` may navigate the current target or spawn a new one. Adopt whichever
+			// target now hosts the requested address so capture and input follow it.
+			if let Action::Open { .. } = &action {
+				let url = data["url"].as_str().unwrap_or_default();
+				if !url.is_empty() {
+					let _ = input::adopt(&entry, url).await;
+				}
+			}
 		}
 		let result = result.map_err(String::from)?;
 		if matches!(action, Action::Snapshot) {
@@ -845,6 +900,31 @@ impl Service {
 	pub async fn close(&self, target: &Target) -> Result<BrowserStatus> {
 		let _registration = self.registration.lock().await;
 		self.close_instance(target).await
+	}
+	/// Panel-driven tab management. Tab switches happen while the human owns the page, so
+	/// input and capture may both be bound to the old target; the locks keep them from
+	/// dispatching into a tab that is being replaced.
+	pub async fn tab(&self, target: &Target, action: TabAction) -> Result<BrowserStatus> {
+		let entry = self.entry(target)?;
+		if entry.terminal() || entry.status().control == Control::Faulted {
+			return Err("浏览器未连接，请重新打开".into());
+		}
+		let last = {
+			let _input = entry.input.lock().await;
+			let _operation = entry.operation.lock().await;
+			ensure_alive(&entry)?;
+			if !matches!(entry.status().control, Control::Human | Control::Stopped) {
+				return Err("请先接管浏览器再管理标签页".into());
+			}
+			let mut driver = input::Driver::connect_browser(&entry).await?;
+			input::tab_action(&entry, &mut driver, action).await?
+		};
+		if last {
+			// Closing the last page is closing the instance: stop the owned daemon and
+			// release the generation instead of leaving a browser window with no tabs.
+			return self.close(target).await;
+		}
+		Ok(entry.status())
 	}
 	async fn close_instance(&self, target: &Target) -> Result<BrowserStatus> {
 		let entry = self.entry(target)?;
@@ -1014,6 +1094,14 @@ pub enum ControlAction {
 	TakeOver,
 	Return,
 	Stop,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(tag = "type", rename_all = "camelCase", deny_unknown_fields)]
+pub enum TabAction {
+	Select { tab_id: String },
+	New,
+	Close { tab_id: String },
 }
 
 #[derive(Clone, Deserialize)]
@@ -1308,8 +1396,14 @@ pub async fn browser_start(
 	app: tauri::AppHandle,
 	state: tauri::State<'_, BrowserState>,
 	chat_id: String,
+	manual: Option<bool>,
 ) -> Result<BrowserStatus> {
-	state.get(&app).await?.start(chat_id).await
+	let service = state.get(&app).await?;
+	if manual.unwrap_or(false) {
+		service.start_manual(chat_id).await
+	} else {
+		service.start(chat_id).await
+	}
 }
 #[tauri::command]
 pub async fn browser_status(
@@ -1403,6 +1497,15 @@ pub async fn browser_close(
 	target: Target,
 ) -> Result<BrowserStatus> {
 	state.get(&app).await?.close(&target).await
+}
+#[tauri::command]
+pub async fn browser_tab(
+	app: tauri::AppHandle,
+	state: tauri::State<'_, BrowserState>,
+	target: Target,
+	action: TabAction,
+) -> Result<BrowserStatus> {
+	state.get(&app).await?.tab(&target, action).await
 }
 
 #[tauri::command]

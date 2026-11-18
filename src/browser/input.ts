@@ -134,6 +134,7 @@ export function attachBrowserInput(element: HTMLTextAreaElement, canvas: HTMLCan
 	window.addEventListener("blur", release);
 	return {
 		async flush() { release(); await viewer.flush(status); },
+		focus() { element.focus(); },
 		dispose() {
 			release(); active = false;
 			element.removeEventListener("pointerdown", mouse); element.removeEventListener("pointerup", mouse); element.removeEventListener("pointermove", mouse);

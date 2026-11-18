@@ -26,7 +26,10 @@ export function useBrowserPanel(chatId: string | undefined, active: boolean) {
 				if (disposed || current.current !== chatId || epochs.current.get(chatId) !== epoch) return;
 				if (status !== null && (!isBrowserStatus(status) || status.chatId !== chatId)) throw new Error("浏览器状态归属不匹配，请重新连接");
 				const previous = records.current.get(chatId) ?? { expanded: false };
-				if (previous.status && previous.status !== before && !sameBrowser(previous.status, before)) return;
+				// A WebSocket update landed while this poll was in flight. Its snapshot is already
+				// older than what the panel shows, and applying it would overwrite navigation or
+				// tab state that shares the control version. Wait for the next poll instead.
+				if (previous.status && previous.status !== before) return;
 				const next = observeBrowser(previous, status);
 				if (JSON.stringify(previous) !== JSON.stringify(next)) { records.current.set(chatId, next); render(); }
 			} catch (reason) {
@@ -50,8 +53,10 @@ export function useBrowserPanel(chatId: string | undefined, active: boolean) {
 		const id = current.current;
 		if (!id || status.chatId !== id) return;
 		const previous = records.current.get(id);
-		if (!previous || !sameBrowser(previous.status, status)) return;
-		records.current.set(id, observeBrowser(previous, status)); render();
+		// A manually started browser has no prior record. Seed it rather than waiting for
+		// the next poll, so the freshly opened page and its address bar appear immediately.
+		if (previous?.status && !sameBrowser(previous.status, status)) return;
+		records.current.set(id, observeBrowser(previous ?? { expanded: false }, status)); render();
 	}, []);
 	const updateUrl = useCallback((target: BrowserTarget, url: string) => {
 		const previous = records.current.get(target.chatId);

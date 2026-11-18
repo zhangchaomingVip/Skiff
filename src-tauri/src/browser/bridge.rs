@@ -227,6 +227,7 @@ async fn relay(socket: WebSocket, entry: Arc<Entry>) {
 				break;
 			};
 			let reload = value["type"] == "reload";
+			let navigation = ["navigate", "history"].contains(&value["type"].as_str().unwrap_or(""));
 			let _gate = reader_entry.input.lock().await;
 			if !allowed_message(&mut value, &reader_entry.status()) {
 				if reload
@@ -254,9 +255,13 @@ async fn relay(socket: WebSocket, entry: Arc<Entry>) {
 					let moving =
 						value["type"] == "input_mouse" && value["eventType"] == "mouseMoved";
 					if moving {
-						driver.as_mut().unwrap().dispatch_move(&value).await
+						driver
+							.as_mut()
+							.unwrap()
+							.dispatch_move(&reader_entry, &value)
+							.await
 					} else {
-						driver.as_mut().unwrap().dispatch(&value).await
+						driver.as_mut().unwrap().dispatch(&reader_entry, &value).await
 					}
 				}
 				.await;
@@ -283,7 +288,7 @@ async fn relay(socket: WebSocket, entry: Arc<Entry>) {
 					if driver.is_none() {
 						driver = Some(super::input::Driver::connect(&reader_entry).await?);
 					}
-					driver.as_mut().unwrap().reload().await
+					driver.as_mut().unwrap().reload(&reader_entry).await
 				}
 				.await;
 				let report = match result {
@@ -291,6 +296,43 @@ async fn relay(socket: WebSocket, entry: Arc<Entry>) {
 					Err(error) => {
 						eprintln!("[skiff] browser reload: {error}");
 						json!({"type":"reload","ok":false,"error":error})
+					}
+				};
+				if input_ack.send(report).await.is_err() {
+					break;
+				}
+			} else if navigation {
+				let kind = value["type"].as_str().unwrap_or_default().to_owned();
+				let result: Result<()> = async {
+					if driver.is_none() {
+						driver = Some(super::input::Driver::connect(&reader_entry).await?);
+					}
+					if kind == "navigate" {
+						driver
+							.as_mut()
+							.unwrap()
+							.navigate(
+								&reader_entry,
+								value["url"].as_str().unwrap_or_default(),
+							)
+							.await
+					} else {
+						driver
+							.as_mut()
+							.unwrap()
+							.history(
+								&reader_entry,
+								value["direction"].as_str().unwrap_or_default(),
+							)
+							.await
+					}
+				}
+				.await;
+				let report = match result {
+					Ok(()) => json!({"type":"action","action":kind,"ok":true}),
+					Err(error) => {
+						eprintln!("[skiff] browser {kind}: {error}");
+						json!({"type":"action","action":kind,"ok":false,"error":error})
 					}
 				};
 				if input_ack.send(report).await.is_err() {
@@ -372,6 +414,39 @@ fn allowed_message(value: &mut Value, status: &BrowserStatus) -> bool {
 		// it stays unavailable while the AI owns the page.
 		*value = json!({"type":"reload"});
 		return matches!(status.control, Control::Human | Control::Stopped);
+	}
+	if kind == "navigate" {
+		// The address bar is part of human control. The panel takes over first, so
+		// navigation is rejected while the AI owns the page.
+		if !matches!(status.control, Control::Human | Control::Stopped) {
+			return false;
+		}
+		let url = value["url"].as_str().unwrap_or_default().to_owned();
+		if url.len() > 8192 {
+			return false;
+		}
+		let Ok(parsed) = reqwest::Url::parse(&url) else {
+			return false;
+		};
+		if !["http", "https"].contains(&parsed.scheme())
+			|| !parsed.username().is_empty()
+			|| parsed.password().is_some()
+		{
+			return false;
+		}
+		*value = json!({"type":"navigate","url":url});
+		return true;
+	}
+	if kind == "history" {
+		if !matches!(status.control, Control::Human | Control::Stopped) {
+			return false;
+		}
+		let direction = value["direction"].as_str().unwrap_or_default();
+		if !["back", "forward"].contains(&direction) {
+			return false;
+		}
+		*value = json!({"type":"history","direction":direction});
+		return true;
 	}
 	if status.control != Control::Human
 		|| value["controlVersion"].as_u64() != Some(status.control_version)
@@ -470,6 +545,11 @@ mod tests {
 			control_version: 3,
 			requires_snapshot: false,
 			url: None,
+			title: None,
+			can_go_back: false,
+			can_go_forward: false,
+			tabs: Vec::new(),
+			active_tab_id: None,
 			error: None,
 		};
 		let input = json!({"type":"input_mouse","eventType":"mousePressed","x":12,"y":20,"controlVersion":3});
@@ -500,6 +580,11 @@ mod tests {
 			control_version: 3,
 			requires_snapshot: false,
 			url: None,
+			title: None,
+			can_go_back: false,
+			can_go_forward: false,
+			tabs: Vec::new(),
+			active_tab_id: None,
 			error: None,
 		};
 		assert!(!allowed_message(
@@ -514,5 +599,63 @@ mod tests {
 		assert!(allowed_message(&mut json!({"type":"reload"}), &status));
 		status.control = Control::Returning;
 		assert!(!allowed_message(&mut json!({"type":"reload"}), &status));
+	}
+
+	#[test]
+	fn address_and_history_navigation_are_human_page_actions() {
+		let mut status = BrowserStatus {
+			target: Target {
+				chat_id: "a".into(),
+				generation: "b".into(),
+			},
+			control: Control::Ai,
+			control_version: 3,
+			requires_snapshot: false,
+			url: None,
+			title: None,
+			can_go_back: true,
+			can_go_forward: false,
+			tabs: Vec::new(),
+			active_tab_id: None,
+			error: None,
+		};
+		assert!(!allowed_message(
+			&mut json!({"type":"navigate","url":"https://example.test"}),
+			&status
+		));
+		status.control = Control::Human;
+		let mut navigate = json!({"type":"navigate","url":"https://example.test/a","controlVersion":3,"extra":"drop"});
+		assert!(allowed_message(&mut navigate, &status));
+		assert_eq!(navigate, json!({"type":"navigate","url":"https://example.test/a"}));
+		// The address bar can never reach local files or cell credentials.
+		assert!(!allowed_message(
+			&mut json!({"type":"navigate","url":"file:///etc/passwd"}),
+			&status
+		));
+		assert!(!allowed_message(
+			&mut json!({"type":"navigate","url":"https://user:pass@example.test"}),
+			&status
+		));
+		assert!(!allowed_message(
+			&mut json!({"type":"navigate","url":"not a url"}),
+			&status
+		));
+		let mut back = json!({"type":"history","direction":"back","controlVersion":3});
+		assert!(allowed_message(&mut back, &status));
+		assert_eq!(back, json!({"type":"history","direction":"back"}));
+		assert!(!allowed_message(
+			&mut json!({"type":"history","direction":"sideways"}),
+			&status
+		));
+		status.control = Control::Stopped;
+		assert!(allowed_message(
+			&mut json!({"type":"history","direction":"forward"}),
+			&status
+		));
+		status.control = Control::TakingOver;
+		assert!(!allowed_message(
+			&mut json!({"type":"navigate","url":"https://example.test"}),
+			&status
+		));
 	}
 }

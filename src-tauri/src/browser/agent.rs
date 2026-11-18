@@ -89,8 +89,13 @@ impl Permit {
 			return Err("浏览器工具凭据已失效，请重新连接聊天".into());
 		}
 		let mut binding = self.binding.lock().await;
-		if let Some(target) = binding.as_ref() {
-			return Ok(Some(service.status(target).await?));
+		if let Some(target) = binding.as_ref().cloned() {
+			if let Ok(status) = service.status(&target).await {
+				return Ok(Some(status));
+			}
+			// The user may have manually restarted a closed/faulted browser. Drop the stale
+			// generation and adopt the current one instead of forcing a new AI session.
+			*binding = None;
 		}
 		let existing = service.entries.lock().unwrap().get(&self.chat_id).cloned();
 		if let Some(entry) = existing {
@@ -333,6 +338,7 @@ async fn execute(service: Arc<Service>, permit: Arc<Permit>, command: AgentComma
 					permit.chat_id.clone(),
 					3_600_000,
 					Some((&request.cancelled, &permit.revoked)),
+					StartOwner::Ai,
 				)
 				.await?;
 			*binding = Some(status.target.clone());
@@ -556,6 +562,37 @@ mod tests {
 			.enabled
 		);
 		service.shutdown().await.unwrap();
+		drop(service);
+		let _ = std::fs::remove_dir_all(root);
+	}
+
+	#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+	async fn context_drops_stale_generation_and_adopts_current_browser() {
+		let root = std::env::temp_dir().join(format!("skiff-agent-manual-{}", opaque()));
+		let service = Service::new(root.clone(), vec![]).await.unwrap();
+		let mut settings = service.settings.lock().unwrap().clone();
+		settings.enabled = true;
+		service.configure(settings).await.unwrap();
+		let lease = service.grant_agent("chat".into()).unwrap().unwrap();
+		// A fixture with no daemon stays in Starting, so status does not require a live CDP
+		// endpoint; this test is only about the generation the lease follows.
+		let entry = service.new_entry("chat", "fixture".into(), 3_600_000).unwrap();
+		service.entries.lock().unwrap().insert("chat".into(), entry.clone());
+		// A browser that was manually restarted has a new generation while the pi lease
+		// still remembers the previous one. Context must recover to the current entry.
+		*lease.permit.binding.lock().await = Some(Target {
+			chat_id: "chat".into(),
+			generation: "stale".into(),
+		});
+		let status = lease.permit.context(&service).await.unwrap().unwrap();
+		assert_eq!(status.control, Control::Starting);
+		assert_eq!(status.target.generation, entry.status().target.generation);
+		assert_eq!(
+			lease.permit.binding.lock().await.as_ref().unwrap().generation,
+			entry.status().target.generation
+		);
+		service.shutdown().await.unwrap();
+		drop(lease);
 		drop(service);
 		let _ = std::fs::remove_dir_all(root);
 	}

@@ -4,7 +4,7 @@ import { LatestBrowserFrames } from "./frames";
 
 export type BrowserStreamPhase = "connecting" | "waiting" | "live" | "disconnected";
 export type BrowserViewer = ReturnType<typeof watchBrowser>;
-export function watchBrowser(target: BrowserTarget, canvas: HTMLCanvasElement, callbacks: { phase: (phase: BrowserStreamPhase) => void; status: (status: BrowserStatus) => void; url: (url: string) => void; reload?: (ok: boolean, error?: string) => void }, density: () => number = () => 2) {
+export function watchBrowser(target: BrowserTarget, canvas: HTMLCanvasElement, callbacks: { phase: (phase: BrowserStreamPhase) => void; status: (status: BrowserStatus) => void; url: (url: string) => void; reload?: (ok: boolean, error?: string) => void; action?: (name: string, ok: boolean, error?: string) => void }, density: () => number = () => 2) {
 	let disposed = false;
 	let socket: WebSocket | undefined;
 	let firstFrame: ReturnType<typeof setTimeout> | undefined;
@@ -79,6 +79,7 @@ export function watchBrowser(target: BrowserTarget, canvas: HTMLCanvasElement, c
 				else if (message.type === "control" && isBrowserStatus(message.status) && sameBrowser(target, message.status)) callbacks.status(message.status);
 				else if (message.type === "url" && typeof message.url === "string") callbacks.url(message.url.slice(0, 8192));
 				else if (message.type === "reload") callbacks.reload?.(message.ok === true, typeof message.error === "string" ? message.error.slice(0, 500) : undefined);
+				else if (message.type === "action" && typeof message.action === "string") callbacks.action?.(message.action, message.ok === true, typeof message.error === "string" ? message.error.slice(0, 500) : undefined);
 				else if (message.type === "status" && message.connected === false) lost();
 				else if (message.type === "frame") {
 					if (!Number.isSafeInteger(message.seq) || message.seq < 0 || typeof message.data !== "string" || message.data.length > 6 * 1024 * 1024 || !/^[A-Za-z0-9+/]+={0,2}$/.test(message.data)) { lost(); return; }
@@ -96,6 +97,14 @@ export function watchBrowser(target: BrowserTarget, canvas: HTMLCanvasElement, c
 			if (disposed || failed || !live || status.control !== "human" || !sameBrowser(target, status) || socket?.readyState !== WebSocket.OPEN || socket.bufferedAmount > 65536) return false;
 			socket.send(JSON.stringify({ ...value, controlVersion: status.controlVersion })); return true;
 		},
+		/** Navigation and reload stay available while the human owns the page or when the
+		 * AI task is stopped; both are page-level actions that never mutate a form. */
+		control(value: Record<string, unknown>, status: BrowserStatus) {
+			if (disposed || failed || !live || !["human", "stopped"].includes(status.control) || !sameBrowser(target, status) || socket?.readyState !== WebSocket.OPEN || socket.bufferedAmount > 65536) return false;
+			socket.send(JSON.stringify({ ...value, controlVersion: status.controlVersion })); return true;
+		},
+		navigate(url: string, status: BrowserStatus) { return this.control({ type: "navigate", url }, status); },
+		history(direction: "back" | "forward", status: BrowserStatus) { return this.control({ type: "history", direction }, status); },
 		/** Bitmap pixels per page CSS pixel, measured from the frames themselves. */
 		scale() { return pixelRatio; },
 		/** Page-level reload the human may request while in charge. */

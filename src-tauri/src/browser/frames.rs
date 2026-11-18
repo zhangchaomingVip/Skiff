@@ -1,6 +1,10 @@
 //! The panel picture is captured by Skiff itself over CDP. The managed stream caps frames
 //! at the page's CSS width, so a HiDPI panel upscales every frame and text turns soft;
 //! Chrome captures the same page at device resolution instead, at the panel's frame rate.
+//!
+//! Capture follows the panel's active tab. When the panel switches tabs the session is
+//! re-attached and `Page.startScreencast` restarted, so the picture, the address and the
+//! human input all describe the same page.
 use super::*;
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use futures_util::{SinkExt, StreamExt};
@@ -78,6 +82,58 @@ impl Cdp {
 	}
 }
 
+fn any_page(targets: &Value) -> Option<(String, String)> {
+	let page = targets["targetInfos"]
+		.as_array()?
+		.iter()
+		.find(|target| {
+			target["type"] == "page"
+				&& target["url"].as_str().is_some_and(|url| {
+					!url.starts_with("devtools://") && !url.starts_with("chrome-extension://")
+				})
+		})?;
+	Some((
+		page["targetId"].as_str()?.to_owned(),
+		page["url"].as_str()?.to_owned(),
+	))
+}
+
+/// Prefer the panel's active target, then the recorded address, then any real page
+/// (a fresh browser may only have a new-tab page before the AI opens something).
+fn capture_page(
+	targets: &Value,
+	active: Option<&str>,
+	current_url: &str,
+) -> Option<(String, String)> {
+	active
+		.and_then(|id| super::input::page_target(targets, id))
+		.or_else(|| super::input::select_page(targets, current_url))
+		.or_else(|| any_page(targets))
+}
+
+/// Push the tab strip and navigation state to the panel. A failed CDP read keeps the
+/// previous list instead of blanking the strip.
+async fn apply(cdp: &mut Cdp, entry: &Entry, active: &str) {
+	let history = cdp
+		.request("Page.getNavigationHistory", json!({}), true)
+		.await
+		.ok();
+	let Ok(targets) = cdp.request("Target.getTargets", json!({}), false).await else {
+		return;
+	};
+	super::input::apply_state(entry, Some(active.to_owned()), history.as_ref(), &targets);
+}
+
+fn navigation_event(value: &Value) -> bool {
+	match value["method"].as_str().unwrap_or_default() {
+		"Page.frameNavigated" => value["params"]["frame"]
+			.get("parentId")
+			.is_none_or(Value::is_null),
+		"Page.navigatedWithinDocument" | "Page.loadEventFired" | "Page.frameStoppedLoading" => true,
+		_ => false,
+	}
+}
+
 pub(super) async fn run(entry: Arc<Entry>, out: tokio::sync::mpsc::Sender<Picture>) -> Result<()> {
 	let url = entry
 		.data
@@ -95,90 +151,130 @@ pub(super) async fn run(entry: Arc<Entry>, out: tokio::sync::mpsc::Sender<Pictur
 		id: 0,
 		session: String::new(),
 	};
-	let targets = cdp.request("Target.getTargets", json!({}), false).await?;
-	let current = entry.status().url.unwrap_or_default();
-	let (page, _) = super::input::select_page(&targets, &current).ok_or("没有可显示的浏览器页面")?;
-	let attached = cdp
-		.request(
-			"Target.attachToTarget",
-			json!({"targetId":page,"flatten":true}),
-			false,
-		)
-		.await?;
-	cdp.session = attached["sessionId"]
-		.as_str()
-		.ok_or("无法绑定浏览器页面")?
-		.into();
-	cdp.request("Page.enable", json!({}), true).await?;
-	cdp.request(
-		"Page.startScreencast",
-		json!({"format":"jpeg","quality":QUALITY,"maxWidth":0,"maxHeight":0,"everyNthFrame":1}),
-		true,
-	)
-	.await?;
 	let mut closed = entry.closed.subscribe();
+	let mut attached: Option<String> = None;
 	let mut delivered = Instant::now()
 		.checked_sub(INTERVAL)
 		.unwrap_or_else(Instant::now);
 	let mut acked = Instant::now()
 		.checked_sub(ACK_INTERVAL)
 		.unwrap_or_else(Instant::now);
-	loop {
-		let message = tokio::select! {
-			_ = closed.changed() => break,
-			message = cdp.socket.next() => message,
-		};
-		let Some(Ok(message)) = message else {
+	'outer: loop {
+		if *closed.borrow() {
 			break;
-		};
-		let Message::Text(text) = message else {
-			if matches!(message, Message::Close(_)) {
-				break;
+		}
+		let targets = cdp.request("Target.getTargets", json!({}), false).await?;
+		let active = entry.status().active_tab_id;
+		let recorded = entry.status().url.unwrap_or_default();
+		let Some((target, _)) = capture_page(&targets, active.as_deref(), &recorded) else {
+			// No page has appeared yet. The AI's open will create one; retry quietly.
+			tokio::select! {
+				_ = closed.changed() => break,
+				_ = tokio::time::sleep(Duration::from_millis(300)) => continue,
 			}
-			continue;
 		};
-		let Ok(value) = serde_json::from_str::<Value>(&text) else {
-			continue;
-		};
-		if value["method"] != "Page.screencastFrame" {
-			continue;
-		}
-		let frame = value["params"]["sessionId"].clone();
-		let data = value["params"]["data"].as_str().unwrap_or_default();
-		if data.is_empty() || data.len() > FRAME_LIMIT {
-			cdp.notify("Page.screencastFrameAck", json!({"sessionId":frame}))
+		if attached.as_deref() != Some(target.as_str()) {
+			if attached.is_some() {
+				let _ = cdp.request("Page.stopScreencast", json!({}), true).await;
+			}
+			let attached_target = cdp
+				.request(
+					"Target.attachToTarget",
+					json!({"targetId":target,"flatten":true}),
+					false,
+				)
 				.await?;
-			continue;
-		}
-		// Acknowledge at once unless Chrome is producing faster than the panel can absorb;
-		// the hold keeps capture near 30 fps instead of compositor speed.
-		if let Some(rest) = ACK_INTERVAL.checked_sub(acked.elapsed()) {
-			tokio::time::sleep(rest).await;
-		}
-		acked = Instant::now();
-		cdp.notify("Page.screencastFrameAck", json!({"sessionId":frame}))
+			cdp.session = attached_target["sessionId"]
+				.as_str()
+				.ok_or("无法绑定浏览器页面")?
+				.into();
+			// Capture must follow the tab Chrome actually treats as foreground. Without this,
+			// a tab selected in the strip can stay hidden and later input dispatch times out.
+			cdp.request(
+				"Target.activateTarget",
+				json!({"targetId":target}),
+				false,
+			)
 			.await?;
-		// Big pictures (zoomed-out or wide panels) cost more to encode and decode, so they
-		// get a slower cadence; the skipped ones were already acknowledged above.
-		let interval = if data.len() > HEAVY_FRAME * 4 / 3 {
-			HEAVY_INTERVAL
-		} else {
-			INTERVAL
-		};
-		if delivered.elapsed() < interval {
-			continue;
+			cdp.request("Page.enable", json!({}), true).await?;
+			cdp.request(
+				"Page.startScreencast",
+				json!({"format":"jpeg","quality":QUALITY,"maxWidth":0,"maxHeight":0,"everyNthFrame":1}),
+				true,
+			)
+			.await?;
+			attached = Some(target.clone());
+			apply(&mut cdp, &entry, &target).await;
 		}
-		let Ok(bytes) = STANDARD.decode(data) else {
-			continue;
-		};
-		if bytes.is_empty() || bytes.len() > FRAME_LIMIT {
-			continue;
-		}
-		delivered = Instant::now();
-		if out.send(Picture { bytes }).await.is_err() {
-			break;
+		loop {
+			let changed = entry.changed.notified();
+			tokio::select! {
+				_ = closed.changed() => break 'outer,
+				_ = changed => {
+					if *closed.borrow() { break 'outer; }
+					let next = entry.status().active_tab_id;
+					if next.as_deref() != attached.as_deref() {
+						// The outer loop stops the old screencast and attaches the new target.
+						break;
+					}
+				},
+				message = cdp.socket.next() => {
+					let Some(Ok(message)) = message else { break 'outer; };
+					let Message::Text(text) = message else {
+						if matches!(message, Message::Close(_)) { break 'outer; }
+						continue;
+					};
+					let Ok(value) = serde_json::from_str::<Value>(&text) else { continue; };
+					if navigation_event(&value) {
+						if let Some(active) = attached.clone() {
+							apply(&mut cdp, &entry, &active).await;
+						}
+						continue;
+					}
+					if value["method"] != "Page.screencastFrame" {
+						continue;
+					}
+					let frame = value["params"]["sessionId"].clone();
+					let data = value["params"]["data"].as_str().unwrap_or_default();
+					if data.is_empty() || data.len() > FRAME_LIMIT {
+						cdp.notify("Page.screencastFrameAck", json!({"sessionId":frame}))
+							.await?;
+						continue;
+					}
+					// Acknowledge at once unless Chrome is producing faster than the panel can absorb;
+					// the hold keeps capture near 30 fps instead of compositor speed.
+					if let Some(rest) = ACK_INTERVAL.checked_sub(acked.elapsed()) {
+						tokio::time::sleep(rest).await;
+					}
+					acked = Instant::now();
+					cdp.notify("Page.screencastFrameAck", json!({"sessionId":frame}))
+						.await?;
+					// Big pictures (zoomed-out or wide panels) cost more to encode and decode, so they
+					// get a slower cadence; the skipped ones were already acknowledged above.
+					let interval = if data.len() > HEAVY_FRAME * 4 / 3 {
+						HEAVY_INTERVAL
+					} else {
+						INTERVAL
+					};
+					if delivered.elapsed() < interval {
+						continue;
+					}
+					let Ok(bytes) = STANDARD.decode(data) else {
+						continue;
+					};
+					if bytes.is_empty() || bytes.len() > FRAME_LIMIT {
+						continue;
+					}
+					delivered = Instant::now();
+					if out.send(Picture { bytes }).await.is_err() {
+						break 'outer;
+					}
+				},
+			}
 		}
 	}
-	let _ = cdp.request("Page.stopScreencast", json!({}), true).await;
+	if attached.is_some() {
+		let _ = cdp.request("Page.stopScreencast", json!({}), true).await;
+	}
 	Ok(())
 }
