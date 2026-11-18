@@ -5,7 +5,7 @@ import fs from "node:fs/promises";
 const { chromium } = createRequire(import.meta.url)("playwright");
 const browser = await chromium.launch({ headless: true, channel: process.env.SKIFF_BROWSER_CHANNEL ?? "msedge" });
 const base = process.argv[2] ?? "http://localhost:1423";
-const screenshots = new URL(process.argv[3] ?? "../features/012-voyage-experience/screenshots/", import.meta.url);
+const screenshots = new URL(process.argv[3] ?? "../features/009-voyage-tool-waterfall/screenshots/regression/", import.meta.url);
 await fs.mkdir(screenshots, { recursive: true });
 const page = await browser.newPage({ viewport: { width: 1200, height: 800 } });
 const errors = [];

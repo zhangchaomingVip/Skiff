@@ -73,7 +73,7 @@ try {
 	assert.ok(workspace.chats.find((chat) => chat.id === "archive-candidate").archivedAt > 0, "Batch archive stamps archivedAt on the second chat");
 	assert.equal(workspace.chats.find((chat) => chat.id === "archive-other-chat").archivedAt, undefined, "Unselected chats stay unarchived");
 	assert.deepEqual(await deletedFiles(), [], "Archiving must not touch pi session files");
-	assert.equal(await title(), "主页", "Archiving the active chat returns home");
+	assert.equal(await title(), "新聊天", "Archiving the last project chats leaves a fresh new chat");
 	assert.equal(await page.locator(".sidebar-bulk").count(), 0, "Batch actions exit selection mode when they finish");
 
 	await enterBulk();

@@ -8,7 +8,7 @@ const { chromium } = require(process.env.SKIFF_PLAYWRIGHT_DIR || "playwright");
 const browser = await chromium.launch({ headless: true, channel: "msedge" });
 const page = await browser.newPage({ viewport: { width: 1440, height: 960 }, reducedMotion: "reduce" });
 const base = process.argv[2] ?? "http://127.0.0.1:1424";
-const output = new URL("../features/018-chat-interaction-integrity/", import.meta.url);
+const output = new URL("../features/013-chat-interaction-integrity/", import.meta.url);
 await fs.mkdir(new URL("screenshots/", output), { recursive: true });
 const errors = [], evidence = { browser: browser.version(), mode: "Vite, headless Edge, simulated Tauri bridge; real pi verified separately", checks: [] };
 page.on("pageerror", (error) => errors.push(error.message));

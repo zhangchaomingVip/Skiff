@@ -9,7 +9,7 @@
 - 最后一轮有 **7 次模型请求**，完整输入累计 **218,805**，输出累计 **1,871**；两者相加 **220,676**，也与截图的 `Tokens: 220.68k` 一致。
 - 最后一次请求完整输入为 **32,401**，对应 **25.31%**。
 - pi 自身的上下文估算包含最近一次回复输出，为 **32,679**，对应 **25.53%**。
-- 该会话更早的第三轮有 **19 次模型请求**，累计输入 **283,771**，最后一次输入 **28,029**。它不是截图中 218,805 的来源。
+- 该会话更早的第三轮有 **19 次模型请求**，累计输入 **283,771**，最后一次输入 **28,020**。它不是截图中 218,805 的来源。
 - 全会话 `usage.input` 累计 **37,523**、缓存读取累计 **527,872**，与反馈中的“输入 37.5K”吻合。
 
 ## 实际 usage 证据
@@ -62,7 +62,7 @@ lastRequestInput = requestInput[lastValidRequest]
 3. 同函数第 176 行再保留整个航行的历史最大值。这样，即使后续出现更小的真实读数，旧读数也不能回落。
 4. `src/chat/useVoyageMetrics.ts:90` 使用上述结果计算 ratio，第 111 行送入 `contextReminder()`，第 121 行又用同一 input 覆盖本轮输入统计。
 5. `src/chat/sailing.ts:129` 的提醒函数对传入分子按阈值工作；错误主要来自分子来源，而非百分比或提醒阈值。
-6. `tests/voyageContext.test.ts` 明确断言跨请求求和等于 context。`features/014-voyage-panel-polish/task.md` 与 verification.md 也记录了这一设计，所以现有测试通过并不能证明口径正确。
+6. `tests/voyageContext.test.ts` 明确断言跨请求求和等于 context。`features/011-context-usage-correction/panel-polish-task.md` 与 verification.md 也记录了这一设计，所以现有测试通过并不能证明口径正确。
 
 历史恢复和实时展示共用这个路径，都会受影响。`summarizeUsage()` 的累加仍然适合展示消耗和计算费用，无须改成只取最后一次。
 
@@ -142,7 +142,7 @@ Skiff 当前 `usePiSession()` 没有请求这个 RPC。建议：
 8. 用户新输入和工具结果产生于最后一次 usage 之后：pi 的估算能反映增量，前端降级不会重复或漏计已合并的工具结果。
 9. 旧 pi 不支持 contextUsage：兼容降级；支持但明确返回 null：保留未知；快速刷新响应乱序：旧版本不能覆盖新版本。
 
-修改测试时需更新 `voyageContext.test.ts`，以及 `voyage-waterfall.browser.mjs`、`voyage-polish.browser.mjs` 等依赖“上下文等于累计输入”的 DOM 断言；为 usePiSession 的新 RPC 更新 mock。feature 014 的旧规则应注明已被新方案替代。
+修改测试时需更新 `voyageContext.test.ts`，以及 `voyage-waterfall.browser.mjs`、`voyage-polish.browser.mjs` 等依赖“上下文等于累计输入”的 DOM 断言；为 usePiSession 的新 RPC 更新 mock。feature 011 的旧规则应注明已被新方案替代。
 
 ## 本次验证
 

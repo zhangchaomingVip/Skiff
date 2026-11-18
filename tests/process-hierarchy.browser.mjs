@@ -22,7 +22,7 @@ try {
 		const page = await browser.newPage({ viewport: { width: 1200, height: 1000 }, reducedMotion: "reduce" });
 		const errors = [];
 		page.on("pageerror", (error) => errors.push(error.message));
-		await page.goto(`${base}/tests/preview.html?fixture=chat-polish-031&theme=${theme}`);
+		await page.goto(`${base}/tests/preview.html?fixture=chat-polish-029&theme=${theme}`);
 		await page.locator(".composer").waitFor();
 		await page.locator(".turn-process > summary").first().click();
 		await page.screenshot({ path: `${output}/app-${theme}.png` });

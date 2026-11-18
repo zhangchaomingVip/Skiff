@@ -7,7 +7,7 @@ import fs from "node:fs/promises";
 const { chromium } = createRequire(new URL("../.playwright-cli/package.json", import.meta.url))("playwright-core");
 const browser = await chromium.launch({ headless: true, channel: process.env.SKIFF_BROWSER_CHANNEL ?? "msedge" });
 const base = process.argv[2] ?? "http://localhost:1424";
-const screenshots = new URL(process.argv[3] ?? "../features/014-voyage-panel-polish/screenshots/companion/", import.meta.url);
+const screenshots = new URL(process.argv[3] ?? "../features/011-context-usage-correction/screenshots/companion/", import.meta.url);
 await fs.mkdir(screenshots, { recursive: true });
 const page = await browser.newPage({ viewport: { width: 1200, height: 800 } });
 const errors = [];

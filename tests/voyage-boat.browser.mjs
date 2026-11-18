@@ -7,7 +7,7 @@ import fs from "node:fs/promises";
 const { chromium } = createRequire(import.meta.url)("playwright");
 const browser = await chromium.launch({ headless: true, channel: process.env.SKIFF_BROWSER_CHANNEL ?? "msedge" });
 const base = process.argv[2] ?? "http://localhost:1424";
-const screenshots = new URL("../features/014-voyage-panel-polish/screenshots/boat/", import.meta.url);
+const screenshots = new URL("../features/011-context-usage-correction/screenshots/boat/", import.meta.url);
 await fs.mkdir(screenshots, { recursive: true });
 const page = await browser.newPage();
 const errors = [];

@@ -5,7 +5,7 @@ const require = createRequire(import.meta.url);
 const { chromium } = require(process.env.SKIFF_PLAYWRIGHT_DIR || "playwright");
 const browser = await chromium.launch({ headless: true, channel: "msedge" });
 const base = process.argv[2] || "http://localhost:1421";
-const output = process.argv[3] || "features/030-chat-reading-experience/screenshots";
+const output = process.argv[3] || "features/021-chat-reading-experience/screenshots";
 await mkdir(output, { recursive: true });
 try {
 	for (const theme of ["light", "dark"]) {

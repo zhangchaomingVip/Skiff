@@ -4,7 +4,7 @@
 
 ## 结论
 
-当前提示符合 019 功能原先规定的降级行为，但原有容量策略与附件导入能力存在明显冲突：一张允许添加的 1 MiB 图片，已经无法完整保存进草稿。建议把“成功导入且保存完成的附件，重载后能够恢复”作为正常路径，把仅内存可用作为异常状态。
+当前提示符合 014 功能原先规定的降级行为，但原有容量策略与附件导入能力存在明显冲突：一张允许添加的 1 MiB 图片，已经无法完整保存进草稿。建议把“成功导入且保存完成的附件，重载后能够恢复”作为正常路径，把仅内存可用作为异常状态。
 
 优先修复恢复入口和错误分类，再拆分草稿元数据与附件内容存储。仅修改三个容量常量不能同时解决可靠性、性能与恢复体验。
 
@@ -183,4 +183,4 @@ IndexedDB 的配额由浏览器存储管理决定，20 MiB 不是通用上限。
 3. [Anthropic — Upload files to Claude](https://support.claude.com/en/articles/8241126-upload-files-to-claude)，页面标注 2026-07-24；核实聊天 / 项目文件分别限制与内容处理方式。
 4. [Google — Upload & analyze files in Gemini Apps](https://support.google.com/gemini/answer/14903178?hl=en)，核实文件大小、数量，以及展开后的存储 / 频率 / 内容过大提示。
 5. [MDN — Storage quotas and eviction criteria](https://developer.mozilla.org/en-US/docs/Web/API/Storage_API/Storage_quotas_and_eviction_criteria)，核实 IndexedDB 配额、估计值、持久存储及回收边界。
-6. 仓库设计来源：`features/019-session-retrievability/task.md` 草稿容量要求，以及 `verification.md` 已有回归记录；实现位置见第 1 节。
+6. 仓库设计来源：`features/014-session-retrievability/task.md` 草稿容量要求，以及 `verification.md` 已有回归记录；实现位置见第 1 节。

@@ -1,4 +1,4 @@
-// Feature 020: actual SVG geometry and real app layout, using only simulated pi.
+// Feature 015: actual SVG geometry and real app layout, using only simulated pi.
 import { createRequire } from "node:module";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
@@ -9,7 +9,7 @@ const require = createRequire(import.meta.url);
 const { chromium } = process.env.SKIFF_PLAYWRIGHT_DIR ? require(process.env.SKIFF_PLAYWRIGHT_DIR) : await import("playwright");
 const browser = await chromium.launch({ headless: true, channel: process.env.SKIFF_BROWSER_CHANNEL ?? "msedge" });
 const base = process.argv[2] ?? "http://127.0.0.1:1424";
-const screenshots = new URL("../features/020-voyage-visual-convergence/screenshots/", import.meta.url);
+const screenshots = new URL("../features/015-voyage-visual-convergence/screenshots/", import.meta.url);
 await fs.mkdir(screenshots, { recursive: true });
 const page = await browser.newPage({ viewport: { width: 1200, height: 900 }, reducedMotion: "reduce" });
 const errors = [];
@@ -248,6 +248,6 @@ try {
 		evidence.controls.push({ theme, states });
 	}
 	assert.deepEqual(errors, []);
-	await fs.writeFile(new URL("../features/020-voyage-visual-convergence/browser-verification.json", import.meta.url), JSON.stringify(evidence, null, 2) + "\n");
+	await fs.writeFile(new URL("../features/015-voyage-visual-convergence/browser-verification.json", import.meta.url), JSON.stringify(evidence, null, 2) + "\n");
 	console.log(`PASS: ${samples} CTM geometry samples; 2 themes × 3 rail widths; rendered fonts/opacity; bob extremes/reduced motion; 360/1200/2200 alignment, keyboard folds, narrow send/rail; 6 screenshots`);
 } finally { await browser.close(); }

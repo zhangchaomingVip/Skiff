@@ -84,7 +84,7 @@ export function auditContrast() {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
 	const result = auditStyles();
 	const rows = auditContrast();
-	fs.writeFileSync(path.join(root, "features/009-ui-system-hardening/style-audit.json"), JSON.stringify({ ...result, contrast: rows }, null, 2) + "\n");
+	fs.writeFileSync(path.join(root, "features/007-ui-system-hardening/style-audit.json"), JSON.stringify({ ...result, contrast: rows }, null, 2) + "\n");
 	const failures = rows.filter((row) => row.ratio < row.minimum);
 	console.log(`Tokens: ${result.inventory.tokens.length}; style errors: ${result.errors.length}; contrast pairs: ${rows.length}; contrast failures: ${failures.length}`);
 	for (const error of result.errors) console.error(error);

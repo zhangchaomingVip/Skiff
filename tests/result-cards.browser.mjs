@@ -28,7 +28,7 @@ try {
 				return original.call(this, key, value);
 			};
 		});
-		await page.goto(`${origin}/tests/preview.html?fixture=chat-polish-031&theme=${theme}`);
+		await page.goto(`${origin}/tests/preview.html?fixture=chat-polish-029&theme=${theme}`);
 		await page.waitForFunction(() => document.querySelector(".sidebar")?.dataset.connected === "true");
 		const card = page.locator(".result-card").filter({ hasText: "已编辑 3 个文件" });
 		await card.waitFor();

@@ -41,9 +41,9 @@ npm run dev -- --port 1421
 
 Word 附件回归包含在 `npm test` 中。启动上述预览后，可运行 `node tests/wordAttachments.browser.mjs` 验证文件选择、拖放、粘贴、实际发送和错误后的草稿保留；需要 Playwright 和 Edge，可通过 `SKIFF_PLAYWRIGHT_DIR` 指定已有 Playwright 安装目录。截图与浏览器验收结果输出到 `dist/word-attachments*`。
 
-设计与验收记录见 [features/002/DESIGN.md](features/002/DESIGN.md)。
+设计与验收记录见 [features/001-chat-workspace-layout/DESIGN.md](features/001-chat-workspace-layout/DESIGN.md)。
 
-本次能力设计与验证见 [features/003-chat-capabilities/DESIGN.md](features/003-chat-capabilities/DESIGN.md)。真实 pi 的可选集成测试只连接本地模拟服务、使用临时配置（不调用已配置的在线提供商）：
+本次能力设计与验证见 [features/002-chat-capabilities/DESIGN.md](features/002-chat-capabilities/DESIGN.md)。真实 pi 的可选集成测试只连接本地模拟服务、使用临时配置（不调用已配置的在线提供商）：
 
 ```powershell
 node tests/pi.integration.mjs <pi安装目录>/dist/bundle/cli.js
