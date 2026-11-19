@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 
 export interface VideoModel { id: string; durations: number[]; ratios: string[]; referenceEnabled: boolean }
-export const defaultVideoModel: VideoModel = { id: "muse-video", durations: [5], ratios: ["9:16"], referenceEnabled: false };
+export const defaultVideoModel: VideoModel = { id: "muse-video", durations: [5, 10], ratios: ["9:16"], referenceEnabled: false };
 export interface VideoService { id: string; name: string; baseUrl: string; configured: boolean; keyHint: string; models: VideoModel[]; defaultModel: string }
 export interface VideoConfig { services: VideoService[]; defaultServiceId: string }
 export type VideoServiceInput = Omit<VideoService, "id" | "configured" | "keyHint"> & { id?: string; apiKey?: string; makeDefault: boolean };

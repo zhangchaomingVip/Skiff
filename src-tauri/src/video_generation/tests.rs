@@ -90,18 +90,30 @@ async fn mock(mode: &'static str) -> (String, Arc<AtomicUsize>, tokio::task::Joi
 	let app = Router::new().fallback(move |request: Request| {
 		let count = count.clone();
 		async move {
-			assert_eq!(request.headers().get("authorization").unwrap(), "Bearer dummy-video-key");
+			let path = request.uri().path().to_string();
+			let authorized = request.headers().get("authorization").and_then(|value| value.to_str().ok());
+			let host = request.headers().get("host").and_then(|value| value.to_str().ok()).unwrap_or("127.0.0.1").to_string();
+			if path.starts_with("/media/") {
+				assert!(authorized.is_none(), "a returned CDN URL must not receive the provider key");
+				return ([("content-type", "video/mp4")], video()).into_response();
+			}
+			assert_eq!(authorized, Some("Bearer dummy-video-key"));
 			if request.method() == "POST" {
 				count.fetch_add(1, Ordering::SeqCst);
 				let body: Value = serde_json::from_slice(&axum::body::to_bytes(request.into_body(), 4 * 1024 * 1024).await.unwrap()).unwrap();
 				assert_eq!(body["duration"], 5); assert_eq!(body["aspect_ratio"], "9:16"); assert_eq!(body["model"], "muse-video");
-				for field in ["size", "seconds", "mode", "fps", "motion", "quality"] { assert!(body.get(field).is_none()); }
+				if mode == "reject-size" {
+					if body.get("size").is_some() { return (axum::http::StatusCode::BAD_REQUEST, axum::Json(json!({"error":{"message":"unknown field: size"}}))).into_response(); }
+				} else { assert_eq!(body["size"], "720x1280"); }
+				if mode == "policy-reject" { return (axum::http::StatusCode::BAD_REQUEST, axum::Json(json!({"error":{"message":"prompt violates policy"}}))).into_response(); }
+				for field in ["seconds", "mode", "fps", "motion", "quality"] { assert!(body.get(field).is_none()); }
 				if mode == "reference" { assert_eq!(reference_bytes(body["image"].as_str().unwrap()).unwrap(), jpeg()); }
 				if mode == "unauthorized" { return (axum::http::StatusCode::UNAUTHORIZED, "dummy-video-key must never appear in errors").into_response(); }
 				if mode == "ambiguous" { return (axum::http::StatusCode::BAD_GATEWAY, "accepted but response lost").into_response(); }
 				return (axum::http::StatusCode::ACCEPTED, axum::Json(json!({"id":"muse_test","status":"queued"}))).into_response();
 			}
-			if request.uri().path().ends_with("/content") {
+			if path.ends_with("/content") {
+				if mode == "direct" { return (axum::http::StatusCode::GONE, "artifact gone").into_response(); }
 				if mode == "download-failure" { return (axum::http::StatusCode::GONE, "expired").into_response(); }
 				if mode == "oversize" { return ([("content-length", "300000000")], "").into_response(); }
 				if mode == "invalid-video" { return ([("content-type", "text/html")], "<html>bad gateway</html>").into_response(); }
@@ -109,7 +121,9 @@ async fn mock(mode: &'static str) -> (String, Arc<AtomicUsize>, tokio::task::Joi
 			}
 			if mode == "rate-limit" { return (axum::http::StatusCode::TOO_MANY_REQUESTS, [("retry-after", "3600")], "slow down").into_response(); }
 			let status = if mode == "pending" { "in_progress" } else if mode == "remote-failure" { "failed" } else { "completed" };
-			axum::Json(json!({"id":"muse_test", "status":status, "progress":100, "error":{"message":"upstream failed dummy-video-key"}, "usage":{"billing_seconds":5,"cost":0}})).into_response()
+			let mut payload = json!({"id":"muse_test", "status":status, "progress":100, "error":{"message":"upstream failed dummy-video-key"}, "usage":{"billing_seconds":5,"cost":0}});
+			if mode == "direct" && status == "completed" { payload["url"] = json!(format!("http://{host}/media/test.mp4")); }
+			axum::Json(payload).into_response()
 		}
 	});
 	let task = tokio::spawn(async move { axum::serve(listener, app).await.unwrap(); }); (base, posts, task)
@@ -157,4 +171,45 @@ async fn pause_stops_local_polling_without_ending_remote_task() {
 	create_remote(&dir.0, &mut job, &key, &active).await.unwrap();
 	let (sender, mut receiver) = watch::channel(false); sender.send(true).unwrap();
 	let error = follow(&dir.0, &mut job, &key, &active, &mut receiver).await.unwrap_err(); assert!(error.contains("计费")); assert!(job.blocks_submission()); assert_eq!(posts.load(Ordering::SeqCst), 1); server.abort();
+}
+#[test]
+fn upgrades_legacy_durations_and_accepts_ten_second_clips() {
+	let dir = TestDir::new(); config(&dir.0, "https://example.com/v1");
+	assert_eq!(read_config(&dir.0).unwrap().services[0].models[0].durations, vec![5, 10]);
+	let mut request = input(); request.duration = 10; assert!(prepare(&dir.0, request).is_ok());
+	let other = TestDir::new(); config(&other.0, "https://example.com/v1");
+	let mut bad = input(); bad.duration = 15; assert!(prepare(&other.0, bad).is_err());
+}
+#[tokio::test]
+async fn downloads_declared_artifacts_without_the_provider_key() {
+	let dir = TestDir::new(); let (base, _, server) = mock("direct").await; config(&dir.0, &base);
+	let (mut job, key, _) = prepare(&dir.0, input()).unwrap(); let active = Active::default();
+	create_remote(&dir.0, &mut job, &key, &active).await.unwrap();
+	assert!(job.download_url.is_none(), "create responses carry no artifact URL");
+	// A resumed task that already knows the remote finished must hydrate the URL first.
+	let mut resumed = read_job(&dir.0, &job.id).unwrap();
+	resumed.status = "download_failed".into(); resumed.remote_status = Some("completed".into());
+	let (_sender, mut receiver) = watch::channel(false);
+	follow(&dir.0, &mut resumed, &key, &active, &mut receiver).await.unwrap();
+	assert_eq!(resumed.status, "completed");
+	assert_eq!(std::fs::read(resumed.path.unwrap()).unwrap(), video());
+	server.abort();
+}
+#[tokio::test]
+async fn drops_size_only_when_the_provider_rejects_the_field() {
+	let dir = TestDir::new(); let (base, posts, server) = mock("reject-size").await; config(&dir.0, &base);
+	let (mut job, key, _) = prepare(&dir.0, input()).unwrap(); let active = Active::default();
+	create_remote(&dir.0, &mut job, &key, &active).await.unwrap();
+	assert_eq!(posts.load(Ordering::SeqCst), 2);
+	assert_eq!(job.status, "queued");
+	server.abort();
+}
+#[tokio::test]
+async fn does_not_retry_a_bad_request_that_is_not_about_size() {
+	let dir = TestDir::new(); let (base, posts, server) = mock("policy-reject").await; config(&dir.0, &base);
+	let (mut job, key, _) = prepare(&dir.0, input()).unwrap(); let active = Active::default();
+	assert!(create_remote(&dir.0, &mut job, &key, &active).await.is_err());
+	assert_eq!(posts.load(Ordering::SeqCst), 1);
+	assert_eq!(job.status, "failed");
+	server.abort();
 }

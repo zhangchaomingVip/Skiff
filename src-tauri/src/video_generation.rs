@@ -12,6 +12,8 @@ mod media;
 const MAX_VIDEO: u64 = 256 * 1024 * 1024;
 const MAX_REFERENCE: usize = 2 * 1024 * 1024;
 type Active = Arc<Mutex<HashMap<String, watch::Sender<bool>>>>;
+pub(crate) const VIDEO_JOBS_DIR: &str = "video-jobs";
+
 #[derive(Default)]
 pub struct VideoState { active: Active }
 
@@ -42,7 +44,14 @@ fn write_json(path: &Path, value: &impl Serialize) -> Result<(), String> {
 fn read_config(dir: &Path) -> Result<Config, String> {
 	let path = dir.join("video-config.json");
 	if !path.exists() { return Ok(Config::default()); }
-	serde_json::from_slice(&std::fs::read(path).map_err(|_| "无法读取视频配置")?).map_err(|_| "视频配置损坏，请恢复配置文件".into())
+	let mut config: Config = serde_json::from_slice(&std::fs::read(path).map_err(|_| "无法读取视频配置")?).map_err(|_| "视频配置损坏，请恢复配置文件".to_string())?;
+	// Ten-second Muse clips are verified; earlier configs only listed the five-second combination.
+	for service in &mut config.services {
+		for model in &mut service.models {
+			if model.id == "muse-video" && model.durations == [5] { model.durations = vec![5, 10]; }
+		}
+	}
+	Ok(config)
 }
 impl Config {
 	fn view(&self) -> ConfigView {
@@ -71,8 +80,9 @@ fn save_service(dir: &Path, input: ServiceInput) -> Result<ConfigView, String> {
 	if input.models.is_empty() || input.models.len() > 32 { return Err("请配置 1–32 个视频模型".into()); }
 	for model in &input.models {
 		if model.id.is_empty() || model.id != model.id.trim() || model.id.len() > 200 || model.id.chars().any(char::is_control) || !ids.insert(&model.id) { return Err("模型 ID 无效或重复".into()); }
-		// Only combinations covered by the first Muse integration are exposed.
-		if model.durations != [5] || model.ratios != ["9:16"] { return Err("首版仅开放已验证的 5 秒、9:16 组合".into()); }
+		// Only combinations verified against Muse are exposed.
+		if model.durations.is_empty() || model.durations.iter().any(|duration| ![5, 10].contains(duration)) { return Err("时长仅支持 5 秒与 10 秒".into()); }
+		if model.ratios.is_empty() || model.ratios.iter().any(|ratio| ratio != "9:16") { return Err("画面比例仅支持 9:16".into()); }
 	}
 	if !ids.contains(&input.default_model) { return Err("默认模型须在模型列表中".into()); }
 	let key = input.api_key.as_deref().unwrap_or("").trim();
@@ -113,7 +123,7 @@ pub struct VideoJob {
 	id: String, status: String, prompt: String, service_id: String, service_name: String, base_url: String,
 	model_id: String, duration: u32, ratio: String, resolution: String, created_at: u64, completed_at: Option<u64>,
 	remote_id: Option<String>, remote_status: Option<String>, progress: Option<f64>,
-	message: Option<String>, path: Option<String>, usage: Option<Value>, has_reference: bool,
+	message: Option<String>, path: Option<String>, #[serde(default)] download_url: Option<String>, usage: Option<Value>, has_reference: bool,
 	actual_width: Option<u32>, actual_height: Option<u32>, actual_duration: Option<f64>, actual_fps: Option<f64>,
 	#[serde(default)] project_root: Option<String>,
 	/// Design canvas that owns the video; older jobs simply have no canvas.
@@ -122,14 +132,14 @@ pub struct VideoJob {
 impl VideoJob {
 	fn active(&self) -> bool { matches!(self.status.as_str(), "submitting" | "queued" | "in_progress" | "downloading") }
 	fn blocks_submission(&self) -> bool { !matches!(self.status.as_str(), "completed" | "failed" | "abandoned" | "download_failed") && self.remote_status.as_deref() != Some("completed") }
-	fn save(&self, dir: &Path) -> Result<(), String> { write_json(&dir.join("video-jobs").join(format!("{}.json", self.id)), self) }
+	fn save(&self, dir: &Path) -> Result<(), String> { write_json(&dir.join(VIDEO_JOBS_DIR).join(format!("{}.json", self.id)), self) }
 }
 fn read_job(dir: &Path, id: &str) -> Result<VideoJob, String> {
 	valid_id(id)?;
-	serde_json::from_slice(&std::fs::read(dir.join("video-jobs").join(format!("{id}.json"))).map_err(|_| "无法读取视频任务")?).map_err(|_| "视频任务记录损坏".into())
+	serde_json::from_slice(&std::fs::read(dir.join(VIDEO_JOBS_DIR).join(format!("{id}.json"))).map_err(|_| "无法读取视频任务")?).map_err(|_| "视频任务记录损坏".into())
 }
 fn read_jobs(dir: &Path) -> Result<Vec<VideoJob>, String> {
-	let path = dir.join("video-jobs");
+	let path = dir.join(VIDEO_JOBS_DIR);
 	if !path.exists() { return Ok(vec![]); }
 	let mut jobs = vec![];
 	for entry in std::fs::read_dir(path).map_err(|_| "无法读取视频目录")? {
@@ -181,7 +191,7 @@ fn reference_bytes(raw: &str) -> Result<Vec<u8>, String> {
 }
 fn prepare(dir: &Path, input: GenerateInput) -> Result<(VideoJob, String, bool), String> {
 	valid_id(&input.id)?;
-	if dir.join("video-jobs").join(format!("{}.json", input.id)).exists() { return Ok((read_job(dir, &input.id)?, String::new(), false)); }
+	if dir.join(VIDEO_JOBS_DIR).join(format!("{}.json", input.id)).exists() { return Ok((read_job(dir, &input.id)?, String::new(), false)); }
 	if read_jobs(dir)?.iter().any(VideoJob::blocks_submission) { return Err("已有未确认结束的视频任务，请先继续查询或核对记录".into()); }
 	let config = read_config(dir)?;
 	let service = config.services.iter().find(|s| s.id == input.service_id).ok_or("请先配置视频生成服务")?;
@@ -193,7 +203,7 @@ fn prepare(dir: &Path, input: GenerateInput) -> Result<(VideoJob, String, bool),
 	if key.is_empty() { return Err("请重新配置视频 Key".into()); }
 	if input.reference.is_some() && !model.reference_enabled { return Err("此模型尚未启用实验性单图参考，请先移除参考图或在视频设置中启用".into()); }
 	let reference = input.reference.as_deref().map(reference_bytes).transpose()?;
-	let job = VideoJob { id: input.id, status: "submitting".into(), prompt, service_id: service.id.clone(), service_name: service.name.clone(), base_url: service.base_url.clone(), model_id: input.model_id, duration: input.duration, ratio: input.ratio, resolution: "1080p".into(), created_at: SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() as u64, completed_at: None, remote_id: None, remote_status: None, progress: None, message: None, path: None, usage: None, has_reference: reference.is_some(), actual_width: None, actual_height: None, actual_duration: None, actual_fps: None, project_root: input.project_root, canvas_id: input.canvas_id };
+	let job = VideoJob { id: input.id, status: "submitting".into(), prompt, service_id: service.id.clone(), service_name: service.name.clone(), base_url: service.base_url.clone(), model_id: input.model_id, duration: input.duration, ratio: input.ratio, resolution: "1080p".into(), created_at: SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() as u64, completed_at: None, remote_id: None, remote_status: None, progress: None, message: None, path: None, download_url: None, usage: None, has_reference: reference.is_some(), actual_width: None, actual_height: None, actual_duration: None, actual_fps: None, project_root: input.project_root, canvas_id: input.canvas_id };
 	if let Some(bytes) = reference {
 		std::fs::create_dir_all(dir.join("video-inputs")).map_err(|_| "无法创建参考图目录")?;
 		std::fs::write(dir.join("video-inputs").join(format!("{}.jpg", job.id)), bytes).map_err(|_| "无法保存参考图快照")?;
@@ -270,19 +280,57 @@ fn remote_id(value: &Value) -> Result<String, String> {
 	if id.is_empty() || id.len() > 200 || !id.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_' || c == b'-') { return Err("服务返回无效任务 ID，请核对服务记录".into()); }
 	Ok(id.into())
 }
-fn http_error(code: u16) -> String { format!("视频服务 HTTP {code}；请检查地址、权限或额度。未重新发起生成。") }
+fn http_error(code: u16) -> String {
+	if code == 410 { return "视频产物已失效（HTTP 410）；可重新查询后下载，未重新生成。".into(); }
+	format!("视频服务 HTTP {code}；请检查地址、权限或额度。未重新发起生成。")
+}
+/// Completed tasks may declare where the artifact lives; that URL is authoritative.
+/// The value is only accepted when it is a reachable HTTP(S) location without credentials.
+fn artifact_url(value: &Value) -> Option<String> {
+	for pointer in ["/result/url", "/url", "/video/url"] {
+		let Some(raw) = value.pointer(pointer).and_then(Value::as_str) else { continue };
+		if raw.len() > 2048 { continue; }
+		let Ok(mut url) = reqwest::Url::parse(raw.trim()) else { continue };
+		if !["http", "https"].contains(&url.scheme()) || url.host_str().is_none() || !url.username().is_empty() || url.password().is_some() { continue; }
+		url.set_fragment(None);
+		return Some(url.to_string());
+	}
+	None
+}
+fn same_origin(left: &str, right: &str) -> bool {
+	matches!((reqwest::Url::parse(left), reqwest::Url::parse(right)), (Ok(left), Ok(right))
+		if left.scheme() == right.scheme() && left.host_str() == right.host_str() && left.port_or_known_default() == right.port_or_known_default())
+}
+/// OpenAI-style video endpoints take a concrete frame size; Muse takes a ratio.
+fn frame_size(ratio: &str) -> Option<&'static str> {
+	match ratio { "9:16" => Some("720x1280"), "16:9" => Some("1280x720"), _ => None }
+}
 async fn create_remote(dir: &Path, job: &mut VideoJob, key: &str, active: &Active) -> Result<(), String> {
 	let mut payload = json!({"model": job.model_id, "prompt": job.prompt, "duration": job.duration, "aspect_ratio": job.ratio, "resolution": job.resolution});
+	if let Some(size) = frame_size(&job.ratio) { payload["size"] = json!(size); }
 	if job.has_reference {
 		let bytes = std::fs::read(dir.join("video-inputs").join(format!("{}.jpg", job.id))).map_err(|_| "参考图快照不可用；未提交")?;
 		payload["image"] = json!(format!("data:image/jpeg;base64,{}", STANDARD.encode(bytes)));
 	}
-	let response = client()?.post(format!("{}/videos", job.base_url)).bearer_auth(key).json(&payload).send().await.map_err(|_| "提交连接中断，服务端可能已接单；请核对服务记录，未自动重试")?;
-	let status = response.status();
-	if !status.is_success() {
+	let client = client()?;
+	let endpoint = format!("{}/videos", job.base_url);
+	let mut response = client.post(&endpoint).bearer_auth(key).json(&payload).send().await.map_err(|_| "提交连接中断，服务端可能已接单；请核对服务记录，未自动重试")?;
+	let mut code = response.status().as_u16();
+	// Strict Muse proxies whitelist fields and reject `size`; drop it once so those
+	// providers keep working, while OpenAI-style gateways still get the frame size.
+	if matches!(code, 400 | 422) && payload.get("size").is_some() {
+		let body = response.text().await.unwrap_or_default();
+		let lower: String = body.chars().take(4096).collect::<String>().to_lowercase();
+		let rejects = lower.contains("size") && ["unknown", "extra", "unexpected", "invalid", "unsupported", "not permitted", "not allowed", "不支持", "未知"].iter().any(|word| lower.contains(word));
+		if !rejects { job.status = "failed".into(); return Err(http_error(code)); }
+		if let Some(map) = payload.as_object_mut() { map.remove("size"); }
+		response = client.post(&endpoint).bearer_auth(key).json(&payload).send().await.map_err(|_| "提交连接中断，服务端可能已接单；请核对服务记录，未自动重试")?;
+		code = response.status().as_u16();
+	}
+	if !(200..300).contains(&code) {
 		// 5xx may be returned after accepting the task; preserve ambiguity.
-		if [400, 401, 403, 404, 405, 413, 415, 422, 429].contains(&status.as_u16()) { job.status = "failed".into(); }
-		return Err(http_error(status.as_u16()));
+		if [400, 401, 403, 404, 405, 413, 415, 422, 429].contains(&code) { job.status = "failed".into(); }
+		return Err(http_error(code));
 	}
 	let value = json_response(response).await?;
 	job.remote_id = Some(remote_id(&value)?);
@@ -295,6 +343,7 @@ fn apply_remote(job: &mut VideoJob, value: &Value) -> Result<(), String> {
 	let status = value.get("status").and_then(Value::as_str).ok_or("响应缺少状态，已暂停查询")?;
 	job.remote_status = Some(status.chars().take(100).collect());
 	job.progress = value.get("progress").and_then(Value::as_f64).filter(|p| p.is_finite() && *p >= 0.0 && *p <= 100.0);
+	if let Some(url) = artifact_url(value) { job.download_url = Some(url); }
 	if let Some(usage) = value.get("usage") { job.usage = Some(usage.clone()); }
 	match status {
 		"queued" | "in_progress" => job.status = status.into(),
@@ -312,6 +361,12 @@ async fn follow(dir: &Path, job: &mut VideoJob, key: &str, active: &Active, canc
 	loop {
 		if *cancel.borrow() { return Err("已停止等待，服务端可能仍在生成并计费。".into()); }
 		if job.remote_status.as_deref() == Some("completed") {
+			// Legacy or resumed tasks may predate the artifact URL; fetch it once so the
+			// download never depends on a provider-specific content route.
+			if job.download_url.is_none() {
+				let result = tokio::select! { biased; _ = cancel.changed() => return Err("已停止等待，服务端可能仍在生成并计费。".into()), result = client.get(format!("{}/videos/{id}", job.base_url)).bearer_auth(key).send() => result };
+				if let Ok(response) = result { if response.status().is_success() { if let Ok(value) = json_response(response).await { if let Some(url) = artifact_url(&value) { job.download_url = Some(url); } } } }
+			}
 			job.status = "downloading".into(); persist(dir, job, active)?;
 			return tokio::select! { biased; _ = cancel.changed() => Err("下载已暂停，可重新下载；未重新生成。".into()), result = download(dir, job, key, &client) => result };
 		}
@@ -321,7 +376,7 @@ async fn follow(dir: &Path, job: &mut VideoJob, key: &str, active: &Active, canc
 			Ok(response) if response.status().is_success() => {
 				let value = tokio::select! { biased; _ = cancel.changed() => return Err("已暂停查询，服务端可能仍在生成。".into()), result = json_response(response) => result }?;
 				if let Err(error) = apply_remote(job, &value) {
-					let detail = value.pointer("/error/message").or_else(|| value.get("message")).and_then(Value::as_str).unwrap_or("");
+					let detail = value.pointer("/error/message").or_else(|| value.get("error")).or_else(|| value.get("message")).and_then(Value::as_str).unwrap_or("");
 					let detail: String = detail.replace(key, "[已隐藏]").chars().filter(|c| !c.is_control()).take(400).collect();
 					return Err(if job.status == "failed" && !detail.is_empty() && !detail.contains("data:") { format!("{error} {detail}") } else { error });
 				}
@@ -346,8 +401,22 @@ struct PartialFile(PathBuf);
 impl Drop for PartialFile { fn drop(&mut self) { let _ = std::fs::remove_file(&self.0); } }
 async fn download(dir: &Path, job: &mut VideoJob, key: &str, client: &reqwest::Client) -> Result<(), String> {
 	let id = job.remote_id.as_deref().ok_or("缺少远端 ID")?;
-	let mut response = client.get(format!("{}/videos/{id}/content", job.base_url)).bearer_auth(key).timeout(Duration::from_secs(180)).send().await.map_err(|_| "下载连接失败，可重新下载此任务")?;
-	if !response.status().is_success() { return Err(http_error(response.status().as_u16())); }
+	let direct = job.download_url.clone();
+	let mut response = match direct.as_deref() {
+		// A returned CDN URL must never receive the provider's Authorization header.
+		Some(url) => client.get(url).timeout(Duration::from_secs(180)).send().await,
+		None => client.get(format!("{}/videos/{id}/content", job.base_url)).bearer_auth(key).timeout(Duration::from_secs(180)).send().await,
+	}.map_err(|_| "下载连接失败，可重新下载此任务")?;
+	if let Some(url) = direct.as_deref() {
+		if matches!(response.status().as_u16(), 401 | 403) && same_origin(url, &job.base_url) {
+			response = client.get(url).bearer_auth(key).timeout(Duration::from_secs(180)).send().await.map_err(|_| "下载连接失败，可重新下载此任务")?;
+		}
+	}
+	if !response.status().is_success() {
+		// A stale or signed link should be re-read from the task on the next resume, not retried here.
+		if direct.is_some() && matches!(response.status().as_u16(), 401 | 403 | 404 | 410) { job.download_url = None; }
+		return Err(http_error(response.status().as_u16()));
+	}
 	if response.content_length().is_some_and(|size| size > MAX_VIDEO) { return Err("视频超过 256 MB 下载上限".into()); }
 	let path = dir.join("assets").join(format!("{}.mp4", job.id));
 	std::fs::create_dir_all(path.parent().unwrap()).map_err(|_| "无法创建视频资产目录")?;

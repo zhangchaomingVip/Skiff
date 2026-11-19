@@ -26,8 +26,8 @@ CDP 运行时 1420 已有开发服务，因此设置 `SKIFF_CDP_BINARY` 为刚�
 
 - Rust 覆盖本地 UUID 防重、原生单任务限制、5 秒/9:16 能力校验、默认关闭实验性首帧、JPEG 内容校验及输入快照、路径越界拒绝。
 - 配置验证 Windows DPAPI 密文、Key 不返回前端、编辑留空保留 Key，以及旧任务不能使用修改后的端点凭据。
-- 协议验证只发送 `model/prompt/duration/aspect_ratio/resolution` 和可选 `image`，不发送 `size/seconds/mode/motion/fps/quality`。
-- 成功任务恢复只使用 GET；HTTP 401、502 提交歧义、远端失败、GET 429 的长 `Retry-After`、下载 410、超大响应、无效 MP4 和资产目录写入失败都不自动重发 POST。
+- 协议验证发送 `model/prompt/duration/aspect_ratio/resolution`、按比例 `size` 和可选 `image`，不发送 `seconds/mode/motion/fps/quality`。上游 400/422 明确因 `size` 字段拒绝时，去掉该字段重试一次创建；其他 400 不重试。
+- 成功任务恢复只使用 GET；除上述 `size` 协商外，HTTP 401、502 提交歧义、远端失败、GET 429 的长 `Retry-After`、下载 410、超大响应、无效 MP4 和资产目录写入失败都不自动重发 POST。
 - `Retry-After` 支持秒数及 HTTP 日期；长于查询预算时暂停，不通过上限截短后提前重试。
 - MP4 读取校验 box 边界、视频轨道、尺寸、时长和平均帧率；测试夹具是 5 秒、72×128、24fps 的 H.264，另有截断和 HTML 响应反例。应用运行无需 FFmpeg。
 - 桌面场景实际完成配置加密、单图 data URL 与快照、原始 MP4 字节落盘、asset 播放和拖动，并确认配置/参考图目录通过 asset 返回 403。
