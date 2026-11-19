@@ -1,5 +1,6 @@
 // CDP 全链路验证：附身真实桌面窗口（WebView2），一次跑通 UI → Tauri IPC → Rust → pi → provider。
 // 用法：node tests/app.cdp.mjs
+// 会话统计专项：node tests/app.cdp.mjs --statistics（真实 pi 用量及本地生成记录）
 // 模型切换专项：node tests/app.cdp.mjs --model-picker（跳过附件、航行台性能持久化和 Git 用例）
 //
 // 与 `pi.integration.mjs` 同样的思路：临时 agent 目录 + 本地 mock OpenAI 服务，
@@ -31,10 +32,12 @@ import { createLifecycleScenario, verifyBrowserLifecycle } from "./browser-lifec
 import { createImageGenerationScenario, verifyImageGeneration } from "./image-generation.cdp.mjs";
 import { createVideoGenerationScenario, verifyVideoGeneration } from "./video-generation.cdp.mjs";
 import { verifyWorkspaceModes } from "./workspace-modes.cdp.mjs";
+import { seedSessionStatistics, verifySessionStatistics } from "./session-statistics.cdp.mjs";
 import { testImage } from "./imageFixture.mjs";
 
 const CDP_PORT = 9222;
 const modelPickerOnly = process.argv.includes("--model-picker");
+const statisticsOnly = process.argv.includes("--statistics");
 const imagesOnly = process.argv.includes("--images");
 const videosOnly = process.argv.includes("--videos");
 const videoScenario = createVideoGenerationScenario();
@@ -150,7 +153,7 @@ const families = {
 			id: "local-mock-glm",
 			relayId: "local-mock",
 			enabled: true,
-			models: [{ modelId: MODEL_ID, alias: "cdp-test", inputCost: 0, outputCost: 0, cacheReadCost: 0, cacheWriteCost: 0, currency: "CNY", maxTokens: 8192, contextWindow: 128000 }],
+			models: [{ modelId: MODEL_ID, alias: "cdp-test", inputCost: statisticsOnly ? 30 : 0, outputCost: statisticsOnly ? 60 : 0, cacheReadCost: 0, cacheWriteCost: 0, currency: "CNY", maxTokens: 8192, contextWindow: 128000 }],
 			streaming: true,
 			tools: true,
 			vision: browserToolsOnly,
@@ -214,7 +217,7 @@ try {
 	console.log("CDP 端点已就绪，正在附身窗口…");
 
 	browser = await chromium.connectOverCDP(cdpUrl);
-	if (browserOnly || imagesOnly || videosOnly) {
+	if (browserOnly || imagesOnly || videosOnly || statisticsOnly) {
 		const diagnostic = await browser.newBrowserCDPSession();
 		const { arguments: browserArguments } = await diagnostic.send("Browser.getBrowserCommandLine");
 		const profileArgument = browserArguments.find((argument) => argument.startsWith("--user-data-dir="));
@@ -246,6 +249,7 @@ try {
 		chats: [{ id: "c-cdp", projectId: "p-cdp", title: "CDP 全链路验证", createdAt: Date.now(), updatedAt: Date.now(), hasMessages: false }],
 		activeId: "c-cdp",
 	};
+	if (statisticsOnly) await seedSessionStatistics(root, agentDir, seed);
 	await page.evaluate((value) => {
 		localStorage.setItem("skiff.workspace.v1", JSON.stringify(value));
 		localStorage.setItem("skiff.prompt.append", ""); // Existing explicit empty preferences must still receive product identity.
@@ -314,7 +318,7 @@ try {
 		await verifyToolResultsAndRetries(page, (scenario) => { retryScenario = scenario; scenarioRequests = 0; }, requests, artifacts);
 		assert.deepEqual(pageErrors, [], "No uncaught errors during tools and retry verification");
 	} else {
-	if (!modelPickerOnly) await verifyDraftAttachments(page);
+	if (!modelPickerOnly && !statisticsOnly) await verifyDraftAttachments(page);
 	await page.fill(".composer-input", "请原样回复一句话，用于验证链路。");
 	await page.click(".send-btn", { timeout: 60_000 });
 	console.log("消息已发送，等待 pi 经由本地 mock 返回流式回复…");
@@ -328,6 +332,10 @@ try {
 	if (requests[0].model !== MODEL_ID) throw new Error(`pi 请求了错误的模型：${requests[0].model}`);
 	assert.ok(requests[0].systemText.includes(SKIFF_IDENTITY_PROMPT), "Built-in identity must reach the provider even with an explicitly empty preference");
 
+	if (statisticsOnly) {
+		await verifySessionStatistics(page, root, artifacts);
+		assert.deepEqual(pageErrors, [], "No uncaught errors during statistics verification");
+	} else {
 	if (!modelPickerOnly) {
 		// Performance receipts must survive a full WebView reload and pi history restore.
 		await page.waitForFunction(() => {
@@ -395,6 +403,7 @@ try {
 	}
 	assert.deepEqual(pageErrors, [], "No uncaught errors after full-chain verification");
 	console.log(`\n验证通过：\n- mock 收到 ${requests.length} 次请求，model=${requests[0].model}，messages=${requests[0].messageCount}\n- 回复已渲染到真实窗口 DOM\n- 页面无未捕获异常\n- 截图：${shotPath}`);
+	}
 	}
 } catch (error) {
 	if (page) await page.screenshot({ path: join(artifacts, "cdp-failure.png") }).catch(() => {});

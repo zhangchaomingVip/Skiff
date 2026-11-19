@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ComponentProps } from "react";
 import { darkThemeColors, setDarkThemeColor, setThemeColor, setThemePreference, setThemeStars, themeColors, useDarkThemeColor, useThemeColor, useThemePreference, useThemeStars } from "../theme";
+import { SessionStatistics, type SessionStatisticsProps } from "./SessionStatistics";
 import { ArchivedSessions } from "./ArchivedSessions";
 import { Icon } from "./Icon";
 import { PromptSettings } from "./PromptSettings";
@@ -16,12 +17,13 @@ import { ImageGenerationSettings } from "./ImageGenerationSettings";
 import { VideoGenerationSettings } from "./VideoGenerationSettings";
 import type { GenerationStudio } from "../workbench/useGenerationStudio";
 
-export function SettingsDialog({ initialCategory, restrictions, prompt, providers, archives, search, images, videos, onRetryModels, onClose, onCategoryChange }: {
+export function SettingsDialog({ initialCategory, restrictions, prompt, providers, archives, statistics, search, images, videos, onRetryModels, onClose, onCategoryChange }: {
 	initialCategory: SettingsCategory;
 	restrictions: SettingsRestrictions;
 	prompt: ComponentProps<typeof PromptSettings>;
 	providers: Omit<ProvidersSettingsProps, "onLockChange" | "focusLocation">;
 	archives: ComponentProps<typeof ArchivedSessions>;
+	statistics: SessionStatisticsProps;
 	search: WebSearchControls;
 	images: GenerationStudio["images"];
 	videos: GenerationStudio["videos"];
@@ -58,6 +60,7 @@ export function SettingsDialog({ initialCategory, restrictions, prompt, provider
 			</nav>
 			<div className="settings-content">
 				{category === "browser" && <fieldset className="settings-config" disabled={!!restrictions.browser}><BrowserSettings onSaved={prompt.onSaved} /></fieldset>}
+				{category === "statistics" && <SessionStatistics {...statistics} />}
 				{category === "fonts" && <FontSettings />}
 				{category === "images" && <ImageGenerationSettings images={images} ref={editor} onLockChange={updateInteraction} />}
 				{category === "videos" && <VideoGenerationSettings videos={videos} ref={editor} onLockChange={updateInteraction} />}

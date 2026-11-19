@@ -12,6 +12,7 @@ mod families;
 mod providers;
 mod search;
 mod history;
+mod statistics;
 mod settings_metadata;
 mod project_workbench;
 mod browser;
@@ -592,6 +593,7 @@ pub fn run() {
 			project_workbench::history::get_project_git_commit_diff,
 			project_workbench::update::update_project_from_remote,
 			project_workbench::commit_project_files, project_workbench::rollback_project_files,
+			statistics::read_session_statistics,
 			history::set_history_workspace, history::read_session_history, history::delete_session_file,
 			families::list_model_families, families::list_model_runtime,
 			families::save_relay, families::delete_relay, families::set_relay_enabled,

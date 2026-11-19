@@ -56,7 +56,7 @@ fn input() -> ServiceInput {
 }
 
 fn job() -> ImageJob {
-	ImageJob { id: uuid::Uuid::new_v4().to_string(), status: "generating".into(), prompt: "A paper boat".into(), service_id: "test".into(), service_name: "Test Images".into(), model_id: "test-image".into(), size: "1024x1024".into(), quality: "auto".into(), created_at: 42, message: None, path: None, usage: None, revised_prompt: None, actual_size: None, reference: None, removed: false, project_root: None, canvas_id: None }
+	ImageJob { id: uuid::Uuid::new_v4().to_string(), status: "generating".into(), prompt: "A paper boat".into(), service_id: "test".into(), service_name: "Test Images".into(), model_id: "test-image".into(), size: "1024x1024".into(), quality: "auto".into(), created_at: 42, completed_at: None, message: None, path: None, usage: None, revised_prompt: None, actual_size: None, reference: None, removed: false, project_root: None, canvas_id: None }
 }
 
 #[test]
@@ -194,6 +194,7 @@ async fn persists_base64_and_url_results_with_metadata_and_without_auth_on_downl
 		assert_eq!(std::fs::read(asset_path(&dir.0, &task.id).unwrap()).unwrap(), STANDARD.decode(PNG).unwrap());
 		let restored = list_jobs(&dir.0, &HashMap::new()).unwrap();
 		assert_eq!(restored[0].status, "completed"); assert_eq!(restored[0].usage.as_ref().unwrap()["total_tokens"], 42);
+		assert!(restored[0].completed_at.is_some_and(|at| at >= restored[0].created_at));
 		server.abort();
 	}
 }

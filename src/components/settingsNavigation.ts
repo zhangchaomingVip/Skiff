@@ -1,4 +1,4 @@
-export type SettingsCategory = "appearance" | "fonts" | "websearch" | "browser" | "images" | "videos" | "prompt" | "providers" | "archives" | "shortcuts";
+export type SettingsCategory = "appearance" | "fonts" | "websearch" | "browser" | "images" | "videos" | "prompt" | "providers" | "statistics" | "archives" | "shortcuts";
 
 export const settingsCategories = [
 	{ id: "appearance", label: "外观", icon: "sun" },
@@ -9,6 +9,7 @@ export const settingsCategories = [
 	{ id: "videos", label: "视频生成", icon: "video" },
 	{ id: "prompt", label: "系统提示词", icon: "message" },
 	{ id: "providers", label: "供应商", icon: "anchor" },
+	{ id: "statistics", label: "会话统计", icon: "chart" },
 	{ id: "archives", label: "归档会话", icon: "archive" },
 	{ id: "shortcuts", label: "快捷键", icon: "code" },
 ] as const;

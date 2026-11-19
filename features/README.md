@@ -54,6 +54,7 @@
 | 018 | [供应商独立入口](018-provider-settings-split/task.md) | 已完成 |
 | 019 | [设置信息整理（一期）](019-settings-information-redesign/task.md)；含模型家族设置截图（原 027） | 已完成 |
 | 020 | [设置批量管理（二期）](020-settings-management-tools/task.md) | 已完成 |
+| 033 | [会话统计](033-session-statistics/README.md)：项目、提供商、模型与生成记录 | 已完成 |
 
 ## 项目工作台
 

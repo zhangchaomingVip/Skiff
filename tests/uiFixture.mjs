@@ -1,6 +1,6 @@
 import { seedPolishPreview } from "./polishFixture.mjs";
 
-export const fixtures = ["new-chat", "single", "multi", "unknown", "empty", "loading", "error", "chat", "long", "settings", "settings-info", "picker", "voyage", "voyage-output", "voyage-thinking", "voyage-tool", "voyage-moored", "voyage-high", "authorization", "sidebar", "project-limit", "archive", "visual", "tool-spacing", "process-rows", "repeated-process", "process-folding", "process-actions", "file-discovery", "content-replay-a", "content-replay-b", "chat-polish-029", "message-images"];
+export const fixtures = ["new-chat", "single", "multi", "unknown", "empty", "loading", "error", "chat", "long", "settings", "settings-info", "picker", "voyage", "voyage-output", "voyage-thinking", "voyage-tool", "voyage-moored", "voyage-high", "authorization", "sidebar", "project-limit", "archive", "statistics", "visual", "tool-spacing", "process-rows", "repeated-process", "process-folding", "process-actions", "file-discovery", "content-replay-a", "content-replay-b", "chat-polish-029", "message-images"];
 
 // This entry runs only on the separate preview origin. It never uses real pi.
 export function preparePreview(target) {
@@ -60,6 +60,23 @@ export function preparePreview(target) {
 		}));
 		storage.setItem("skiff.test.sessions", JSON.stringify(Object.fromEntries(chats.map((chat) => [chat.sessionFile, [{ role: "user", content: chat.title }, { role: "assistant", content: "预览回答。" }]]))));
 		storage.setItem("skiff.workspace.v1", JSON.stringify({ version: 1, projects: [project, otherProject], chats, activeId: chats[2].id }));
+	} else if (fixture === "statistics") {
+		const alpha = { id: "stats-alpha", name: "Project Alpha", path: "D:\\workspace\\Skiff" };
+		const beta = { id: "stats-beta", name: "Project Beta", path: "D:\\workspace\\StatsBeta" };
+		const chat = (id, projectId, title, extra) => ({ id, projectId, title, sessionFile: `${id}.jsonl`, hasMessages: true, updatedAt: now, ...extra });
+		const first = chat("stats-chat", alpha.id, "活跃会话");
+		const second = chat("stats-archive", beta.id, "历史归档会话", { archivedAt: now });
+		const missing = chat("stats-missing", beta.id, "缺少记录", { archivedAt: now });
+		const statisticsNow = Date.now();
+		const at = (days) => statisticsNow - days * 86_400_000;
+		const request = (provider, model, days, input, cacheRead, output, stopReason = "stop") => ({ role: "assistant", provider, model, content: [{ type: "text", text: "Preview response" }], timestamp: at(days), stopReason, usage: { input, cacheRead, cacheWrite: 0, output } });
+		const sample = [request("skiff-relay-r1", "deepseek-chat", 1, 100, 600, 300), request("skiff-relay-r1", "deepseek-chat", 3, 400, 5000, 600), request("skiff-relay-r1", "deepseek-chat", 9, 2000, 15000, 3000)];
+		const extras = Array.from({ length: 25 }, (_, index) => request("older-provider", "archive-model", 8 + index % 13, 24, 60, 16));
+		storage.setItem("skiff.test.sessions", JSON.stringify({ [first.sessionFile]: sample, [second.sessionFile]: [request("older-provider", "archive-model", 42, 250, 10, 20), request("older-provider", "archive-model", 1, 100, 800, 100), ...extras] }));
+		storage.setItem("skiff.workspace.v1", JSON.stringify({ version: 1, projects: [alpha, beta], chats: [first, second, missing], activeId: first.id }));
+		const image = { id: "img-1", status: "completed", serviceId: "local-image-id", serviceName: "图像工作室", modelId: "gpt-image", createdAt: at(2), completedAt: at(1), projectRoot: alpha.path };
+		storage.setItem("skiff.test.images.jobs", JSON.stringify([image, { ...image, id: "img-2", createdAt: at(13), completedAt: at(12), removed: true }, { ...image, id: "img-failed", status: "failed" }]));
+		storage.setItem("skiff.test.videos.jobs", JSON.stringify([{ id: "vid-1", status: "download_failed", remoteStatus: "completed", serviceId: "video-id", serviceName: "视频工作室", modelId: "video-1", createdAt: at(2), projectRoot: beta.path }]));
 	} else if (fixture === "archive") {
 		const project = { id: "archive-project", name: "Skiff Archive", path: "D:\\workspace\\Skiff" };
 		const otherProject = { id: "archive-other", name: "Other Project", path: "D:\\workspace\\aiagent" };

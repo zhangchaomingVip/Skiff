@@ -162,6 +162,18 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 			if (command === "plugin:dialog|open") return dialogPath;
 			if (command === "open_url") return;
 			if (command === "set_history_workspace") { historyTargets = args.targets; return; }
+			if (command === "read_session_statistics") {
+				if (target.skiffStatisticsReadFailure) throw new Error("Cannot read local statistics");
+				let skippedSessions = 0;
+				const sessions = args.targets.flatMap(({ chatId, sessionFile }) => {
+					const entries = histories.get(sessionFile) ?? saved[sessionFile];
+					if (!entries || entries instanceof Error) { skippedSessions++; return []; }
+					return [{ chatId, forked: false, requests: entries.filter(({ role }) => role === "assistant").map(({ id, provider, model, usage, stopReason, timestamp }, assistantIndex) => ({ id, provider, model, usage, stopReason, timestamp, assistantIndex })) }];
+				});
+				const images = await generation.invoke("list_image_generation_jobs");
+				const videoJobs = await videos.invoke("list_video_generation_jobs");
+				return { sessions, skippedSessions, images: images.filter(({ status }) => status === "completed"), videos: videoJobs.filter(({ status, remoteStatus }) => status === "completed" || remoteStatus === "completed"), skippedMedia: 0 };
+			}
 			if (command === "read_session_history") {
 				if (!historyTargets.some((item) => item.chatId === args.chatId && item.sessionFile === args.sessionFile)) throw new Error("Not indexed");
 				const messages = histories.get(args.sessionFile) ?? saved[args.sessionFile];

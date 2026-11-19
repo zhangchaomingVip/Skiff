@@ -11,6 +11,8 @@ const MAX_IMAGE: usize = 32 * 1024 * 1024;
 const MAX_RESPONSE: usize = 48 * 1024 * 1024;
 const MAX_REFERENCE: usize = 20 * 1024 * 1024;
 
+pub(crate) const IMAGE_JOBS_DIR: &str = "jobs";
+
 #[derive(Default)]
 pub struct GenerationState {
 	// Lock order: gate, then active. No lock is held across an await.
@@ -184,6 +186,7 @@ fn check_capacity(limit: usize, active_count: usize) -> Result<(), String> {
 pub struct ImageJob {
 	id: String, status: String, prompt: String, service_id: String, service_name: String,
 	model_id: String, size: String, quality: String, created_at: u64,
+	#[serde(default)] completed_at: Option<u64>,
 	#[serde(default)] message: Option<String>,
 	#[serde(default)] path: Option<String>,
 	#[serde(default)] usage: Option<Value>,
@@ -243,16 +246,16 @@ fn save_reference(dir: &Path, job: &ImageJob, bytes: &[u8]) -> Result<(), String
 
 impl ImageJob {
 	fn pending(&self) -> bool { matches!(self.status.as_str(), "generating" | "saving") }
-	fn save(&self, dir: &Path) -> Result<(), String> { write_json(&dir.join("jobs").join(format!("{}.json", self.id)), self) }
+	fn save(&self, dir: &Path) -> Result<(), String> { write_json(&dir.join(IMAGE_JOBS_DIR).join(format!("{}.json", self.id)), self) }
 }
 
 fn read_job(dir: &Path, id: &str) -> Result<ImageJob, String> {
 	valid_id(id)?;
-	serde_json::from_slice(&std::fs::read(dir.join("jobs").join(format!("{id}.json"))).map_err(|_| "无法读取作品记录")?).map_err(|_| "作品记录损坏".into())
+	serde_json::from_slice(&std::fs::read(dir.join(IMAGE_JOBS_DIR).join(format!("{id}.json"))).map_err(|_| "无法读取作品记录")?).map_err(|_| "作品记录损坏".into())
 }
 
 fn list_jobs(dir: &Path, active: &HashMap<String, watch::Sender<bool>>) -> Result<Vec<ImageJob>, String> {
-	let jobs = dir.join("jobs");
+	let jobs = dir.join(IMAGE_JOBS_DIR);
 	if !jobs.exists() { return Ok(Vec::new()); }
 	let mut result = Vec::new();
 	for entry in std::fs::read_dir(jobs).map_err(|_| "无法读取作品目录")? {
@@ -325,7 +328,7 @@ fn start_image_generation_inner(app: AppHandle, input: GenerateInput) -> Result<
 	let dir = data_dir(&app)?;
 	valid_id(&input.id)?;
 	// The client request ID makes retries of the IPC submission idempotent.
-	if dir.join("jobs").join(format!("{}.json", input.id)).exists() { return read_job(&dir, &input.id); }
+	if dir.join(IMAGE_JOBS_DIR).join(format!("{}.json", input.id)).exists() { return read_job(&dir, &input.id); }
 	let mut active = state.active.lock().map_err(|_| "生成状态不可用")?;
 	let config = read_config(&dir)?;
 	check_capacity(config.concurrency_limit, active.len())?;
@@ -337,7 +340,7 @@ fn start_image_generation_inner(app: AppHandle, input: GenerateInput) -> Result<
 	if prompt.is_empty() || prompt.chars().count() > 32000 { return Err("提示词须为 1–32000 个字符".into()); }
 	let key = super::crypto::open(&service.api_key).map_err(|_| "无法解密生图 Key，请在设置中重新填写")?;
 	let reference = input.reference.map(validate_reference).transpose()?;
-	let job = ImageJob { id: input.id, status: "generating".into(), prompt, service_id: service.id.clone(), service_name: service.name.clone(), model_id: input.model_id, size: input.size, quality: input.quality, created_at: SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() as u64, message: None, path: None, usage: None, revised_prompt: None, actual_size: None, reference: reference.as_ref().map(|(info, _)| info.clone()), removed: false, project_root: input.project_root, canvas_id: input.canvas_id };
+	let job = ImageJob { id: input.id, status: "generating".into(), prompt, service_id: service.id.clone(), service_name: service.name.clone(), model_id: input.model_id, size: input.size, quality: input.quality, created_at: SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() as u64, completed_at: None, message: None, path: None, usage: None, revised_prompt: None, actual_size: None, reference: reference.as_ref().map(|(info, _)| info.clone()), removed: false, project_root: input.project_root, canvas_id: input.canvas_id };
 	if let Some((_, bytes)) = reference { save_reference(&dir, &job, &bytes)?; }
 	job.save(&dir)?;
 	let (sender, mut cancel) = watch::channel(false);
@@ -459,6 +462,7 @@ async fn generate_with_client(dir: &Path, service: &Service, key: &str, job: &mu
 	job.usage = payload.get("usage").cloned();
 	job.revised_prompt = image.get("revised_prompt").and_then(Value::as_str).map(str::to_string);
 	job.status = "completed".into();
+	job.completed_at = Some(SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() as u64);
 	Ok(())
 }
 
