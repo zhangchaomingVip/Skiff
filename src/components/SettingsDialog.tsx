@@ -5,6 +5,7 @@ import { SessionStatistics, type SessionStatisticsProps } from "./SessionStatist
 import { ArchivedSessions } from "./ArchivedSessions";
 import { Icon } from "./Icon";
 import { PromptSettings } from "./PromptSettings";
+import { TitleModelSettings } from "./TitleModelSettings";
 import { ProvidersSettingsContent, type ProvidersSettingsProps } from "./ProvidersSettings";
 import { Button, Dialog, IconButton, SegmentedControl } from "./ui";
 import { isMacPlatform, settingsCategories, type SettingsCategory, type SettingsRestrictions } from "./settingsNavigation";
@@ -93,6 +94,7 @@ export function SettingsDialog({ initialCategory, restrictions, prompt, provider
 					</div>
 				</section>}
 				{category === "websearch" && <section className="settings-page" aria-labelledby="websearch-title"><h2 id="websearch-title">联网搜索</h2><p className="muted">为 pi 配置 web_search 工具，引擎可在 Tavily 与 Exa 之间选择；开关作用于当前 pi 会话。</p><WebSearchSettings search={search} /></section>}
+			{category === "chat" && <section className="settings-page" aria-labelledby="chat-settings-title"><h2 id="chat-settings-title">对话</h2><p className="muted">新对话首轮回复完成后，若首条消息超过 32 字，Skiff 会用所选模型生成简短标题；较短的消息直接沿用完整首句，未设置或生成失败时同理。</p><TitleModelSettings onManage={() => setCategory("providers")} /></section>}
 				{category === "prompt" && <section aria-labelledby="prompt-title"><h2 id="prompt-title">系统提示词</h2><p className="muted">附加到 pi 系统提示词末尾（--append-system-prompt），随每次会话启动生效。保存后当前会话会重启。</p><fieldset className="settings-config" disabled={!!restrictions.prompt}><PromptSettings {...prompt} /></fieldset>{restrictions.prompt && <p className="settings-restriction">{restrictions.prompt}</p>}</section>}
 				{category === "providers" && <><fieldset className="settings-config" disabled={!!restrictions.providers}><ProvidersSettingsContent {...providers} ref={editor} onLockChange={updateInteraction} /></fieldset>{providers.configError && !locked && <Button disabled={!!restrictions.providers} onClick={onRetryModels}>重新读取配置</Button>}</>}
 				{category === "archives" && <section aria-labelledby="archives-title"><h2 id="archives-title">归档会话</h2><p className="muted">查看、恢复或删除已归档的会话。</p><ArchivedSessions {...archives} busy={archives.busy || !!restrictions.archives} /></section>}

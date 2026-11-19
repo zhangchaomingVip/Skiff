@@ -171,6 +171,7 @@ export function ModelPicker({ models, familyOf, current, onSelect, onManage, onC
 								{showProvider ? <span className="model-catalog-provider" title={providerName}>{providerName}</span> : <span className="sr-only">{providerName}</span>}
 								{showProvider && context && <span className="model-catalog-separator" aria-hidden="true">·</span>}
 								{context && <span className="model-catalog-spec" title={`${context} 上下文`}>{context}</span>}
+								{isFree && <span className="model-catalog-free">免费</span>}
 							</span>
 							<span className="model-catalog-check" aria-label={selected ? "当前模型" : undefined}>{selected && <Icon name="check" size={16} />}</span>
 						</button>

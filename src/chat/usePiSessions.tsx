@@ -3,6 +3,7 @@ import { usePiSession, type SessionTarget } from "./usePiSession";
 import type { RuntimeOffer } from "./modelFamilies";
 import type { FamiliesConfig } from "./useModelFamilies";
 import { deriveTitle } from "./conversationDisplay";
+import { buildTitlePrompt, generateConversationTitle, loadTitleModelSelection, titleSummaryNeeded } from "./titleGeneration";
 import { useRuntimeRoutes } from "./useRuntimeRoutes";
 import { conversationStatus } from "./sessionStatus";
 import { snapshotsForMessages } from "./routeSnapshot";
@@ -49,6 +50,31 @@ function SessionRuntime({ target, chat, offers, configuration, report, updateCha
 		if (JSON.stringify(chat.turnPerformances) !== JSON.stringify(turnPerformances)) patch.turnPerformances = turnPerformances;
 		updateChat(target.id, patch);
 	}, [session.isCurrent, session.loadedId, session.sessionFile, session.elapsedMs, session.state.messages, session.state.model, target.id]);
+	// After the first reply of a freshly started conversation settles, ask the
+	// configured title model for a summary title. Restored history never sees a
+	// streaming transition, so old chats keep their derived titles.
+	const titleRun = useRef({ observed: false, attempted: false });
+	useEffect(() => {
+		if (!session.isCurrent() || session.loadedId !== target.id) return;
+		if (session.state.isStreaming || session.state.activeRun) {
+			titleRun.current.observed = true;
+			return;
+		}
+		if (!titleRun.current.observed || titleRun.current.attempted) return;
+		titleRun.current.observed = false;
+		const { chat } = latest.current;
+		if (chat.customTitle) return;
+		if (!titleSummaryNeeded(session.state.messages)) return;
+		const prompt = buildTitlePrompt(session.state.messages);
+		if (!prompt) return;
+		const selection = loadTitleModelSelection();
+		if (!selection.primary && !selection.fallback) return;
+		titleRun.current.attempted = true;
+		const chatId = target.id;
+		void generateConversationTitle({ prompt, offers: latest.current.offers, selection })
+			.then((title) => { if (title) latest.current.updateChat(chatId, { title, customTitle: true }); })
+			.catch(() => undefined);
+	}, [session.isCurrent, session.loadedId, session.state.isStreaming, session.state.activeRun, session.state.messages, target.id]);
 	return null;
 }
 

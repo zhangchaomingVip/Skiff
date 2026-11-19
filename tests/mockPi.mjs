@@ -335,6 +335,14 @@ export function installMockPi(target, storage, fixture, sessionOverrides) {
 			if (command === "save_web_search_key") { webSearchConfigured = true; webSearchValidated = null; return; }
 			if (command === "clear_web_search_key") { webSearchConfigured = false; webSearchValidated = null; return; }
 			if (command === "install_web_search_extension") return false;
+			if (command === "generate_chat_title") {
+				const relay = relays.find((item) => item.id === args.relayId && item.enabled !== false);
+				if (!relay) throw new Error("标题模型所属的供应商不存在或已停用");
+				const model = relay.models?.find((item) => item.modelId === args.modelId && item.enabled !== false);
+				if (!model) throw new Error("标题模型不可用");
+				if (!String(args.prompt ?? "").includes("生成一个简短的会话标题")) throw new Error("标题请求缺少指令");
+				return "示例对话标题";
+			}
 			if (command !== "rpc_send") throw new Error(`Unknown mock command: ${command}`);
 			if (failSend) { failSend = false; throw new Error("Simulated transport failure"); }
 			const request = JSON.parse(args.message);

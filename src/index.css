@@ -907,6 +907,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .model-catalog-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--font-size-base); font-weight: var(--font-weight-medium); line-height: var(--line-height-tight); }
 .model-catalog-separator, .model-catalog-spec { flex: none; }
 .model-catalog-spec { font-variant-numeric: tabular-nums; }
+.model-catalog-free { flex: none; padding: 0 var(--space-1-5); border-radius: var(--radius-full); background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); font-size: var(--font-size-xs); line-height: var(--line-height-tight); }
+.title-model-actions { display: flex; align-items: center; gap: var(--space-1); flex: none; }
 .model-catalog-check { display: flex; justify-content: center; color: var(--accent); }
 .model-catalog-row .model-favorite { flex: none; width: var(--control-compact); height: var(--control-compact); color: var(--muted); border-radius: var(--radius-md); }
 .model-catalog-row .model-favorite.is-favorite { color: var(--accent); background: transparent; }

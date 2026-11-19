@@ -1112,7 +1112,37 @@ mod tests {
 		let mut config=FamiliesConfig::default(); let mut relay: RelaySpec=serde_json::from_value(json!({"id":"r1","name":"First","baseUrl":"https://example.com/v1","models":[{"modelId":"shared","contextWindow":128000,"maxTokens":8192,"inputCost":2}]})).unwrap();
 		relay=normalize_relay(relay,&config).unwrap(); assert_eq!(relay.models[0].model.cache_read_cost,0.0); relay.models.push(relay.models[0].clone()); config.relays.push(relay); assert!(validate_config(&config).is_err());
 	}
-}
+	#[test]
+	fn title_request_follows_each_protocol_shape() {
+		let (url, body, auth) = title_request("openai", "https://api.example.com/v1", "key", "model-a", "用户：你好");
+		assert_eq!(url, "https://api.example.com/v1/chat/completions");
+		assert_eq!(auth, "bearer");
+		assert_eq!(body["messages"][1]["content"], json!("用户：你好"));
+		assert_eq!(body["max_tokens"], json!(64));
+		assert_eq!(body["stream"], json!(false));
+		let (url, _body, auth) = title_request("kimi", "https://api.moonshot.cn/v1", "key", "kimi-k2", "p");
+		assert!(url.ends_with("/chat/completions") && auth == "bearer");
+		let (url, body, auth) = title_request("anthropic", "https://api.anthropic.com", "key", "claude", "p");
+		assert!(url.ends_with("/v1/messages") && auth == "anthropic");
+		assert_eq!(body["system"].as_str().unwrap().contains("会话标题"), true);
+		let (url, _body, auth) = title_request("google-genai", "https://genai.example.com", "key", "gemini", "p");
+		assert!(url.contains(":generateContent?key=key") && auth == "query");
+	}
+	#[test]
+	fn title_reply_text_extracts_each_protocol_and_rejects_errors() {
+		let encode = |value: serde_json::Value| serde_json::to_vec(&value).unwrap();
+		let openai = encode(json!({"choices":[{"message":{"role":"assistant","content":"《登录页》"},"finish_reason":"stop"}]}));
+		assert_eq!(title_reply_text("openai", &openai).unwrap(), "《登录页》");
+		let openai_blocks = encode(json!({"choices":[{"message":{"role":"assistant","content":[{"type":"text","text":"标题"}]},"finish_reason":"stop"}]}));
+		assert_eq!(title_reply_text("openai", &openai_blocks).unwrap(), "标题");
+		let anthropic = encode(json!({"type":"message","role":"assistant","stop_reason":"end_turn","content":[{"type":"text","text":" 标题 "}]}));
+		assert_eq!(title_reply_text("anthropic", &anthropic).unwrap(), "标题");
+		let google = encode(json!({"candidates":[{"finishReason":"STOP","content":{"role":"model","parts":[{"text":"标题"}]}}]}));
+		assert_eq!(title_reply_text("google-genai", &google).unwrap(), "标题");
+		assert!(title_reply_text("openai", br#"{"error":{"message":"boom"}}"#).is_err());
+		assert!(title_reply_text("openai", br#"{"choices":[{"message":{"role":"assistant","content":""},"finish_reason":"stop"}]}"#).is_err());
+	}
+	}
 
 #[tauri::command]
 pub async fn fetch_public_catalog(refresh: Option<bool>) -> Result<providers::CatalogResponse, String> {
@@ -1359,6 +1389,108 @@ async fn run_provider_test(base_url: String, api_key: String, model_id: String, 
 		}
 		Err(error) => Ok(TestResult { ok: false, latency_ms, status: None, error: Some(network_error(&error)) }),
 	}
+}
+
+/// The one-shot title request per protocol: endpoint, JSON body and auth style.
+/// Shaped like `connection_test_request` but carries a system instruction plus
+/// the conversation excerpt, and caps the reply at title length.
+fn title_request(protocol: &str, base: &str, key: &str, model: &str, prompt: &str) -> (String, Value, &'static str) {
+	const MAX_TOKENS: u32 = 64;
+	const SYSTEM: &str = "你是会话标题生成器。为给定的对话生成一个简短标题：不超过 15 个字，概括对话主题，只输出标题本身，不要引号、书名号或任何解释，使用与用户相同的语言。";
+	match protocol {
+		"anthropic" => (anthropic_messages_url(base), json!({
+			"model": model, "max_tokens": MAX_TOKENS, "system": SYSTEM,
+			"messages": [{ "role": "user", "content": prompt }],
+		}), "anthropic"),
+		"openai-responses" => (format!("{base}/responses"), json!({
+			"model": model, "max_output_tokens": MAX_TOKENS,
+			"input": [
+				{ "role": "system", "content": [{ "type": "input_text", "text": SYSTEM }] },
+				{ "role": "user", "content": [{ "type": "input_text", "text": prompt }] },
+			],
+		}), "bearer"),
+		"google-genai" | "vertex" => (format!("{base}/models/{model}:generateContent?key={key}"), json!({
+			"systemInstruction": { "parts": [{ "text": SYSTEM }] },
+			"contents": [{ "role": "user", "parts": [{ "text": prompt }] }],
+			"generationConfig": { "maxOutputTokens": MAX_TOKENS },
+		}), "query"),
+		// `stream` is sent explicitly: some relays type it as a required boolean.
+		_ => (format!("{base}/chat/completions"), json!({
+			"model": model,
+			"messages": [
+				{ "role": "system", "content": SYSTEM },
+				{ "role": "user", "content": prompt },
+			],
+			"max_tokens": MAX_TOKENS, "stream": false,
+		}), "bearer"),
+	}
+}
+
+fn title_reply_text(protocol: &str, bytes: &[u8]) -> Result<String, String> {
+	let value: Value = serde_json::from_slice(bytes).map_err(|_| "接口未返回有效 JSON，未收到标题".to_string())?;
+	if value.get("error").is_some_and(|error| !error.is_null()) || value.get("errors").is_some_and(|error| !error.is_null()) {
+		return Err("接口返回了错误对象，未收到标题".into());
+	}
+	fn items(value: &Value) -> &[Value] { value.as_array().map(Vec::as_slice).unwrap_or(&[]) }
+	let text = match protocol {
+		"anthropic" => items(&value["content"]).iter().find(|block| block["type"] == "text").and_then(|block| block["text"].as_str()),
+		"openai-responses" => items(&value["output"]).iter()
+			.find(|item| item["type"] == "message" && item["role"] == "assistant")
+			.and_then(|item| items(&item["content"]).iter().find(|block| block["type"] == "output_text").and_then(|block| block["text"].as_str())),
+		"google-genai" | "vertex" => items(&value["candidates"]).iter()
+			.find(|candidate| matches!(candidate["finishReason"].as_str(), Some("STOP" | "MAX_TOKENS")))
+			.and_then(|candidate| items(&candidate["content"]["parts"]).iter().find(|part| part["thought"] != true).and_then(|part| part["text"].as_str())),
+		_ => {
+			let message = &value["choices"][0]["message"];
+			message["content"].as_str().or_else(||
+				items(&message["content"]).iter().find(|block| block["type"] == "text").and_then(|block| block["text"].as_str()))
+		},
+	};
+	text.map(str::trim).filter(|text| !text.is_empty()).map(str::to_string).ok_or_else(|| "未收到模型文本回复，无法生成标题".into())
+}
+
+/// Generates a conversation title with one minimal HTTP request — no pi
+/// process, no agent system prompt and no tools. The relay is resolved here
+/// and its key decrypted in place, so the credential never crosses IPC for
+/// this call. Failures surface as errors and the caller tries its backup.
+#[tauri::command]
+pub async fn generate_chat_title(relay_id: String, model_id: String, prompt: String) -> Result<String, String> {
+	let dir = agent_dir()?;
+	let config = { let _guard = providers::CONFIG_LOCK.lock().map_err(|_| "配置锁异常")?; load_plain(&dir)? };
+	let relay = config.relays.iter().find(|relay| relay.id == relay_id && relay.enabled).ok_or("标题模型所属的供应商不存在或已停用")?;
+	let key = validate_api_key(&relay.api_key)?;
+	if key.is_empty() {
+		return Err(format!("{} 未填写 API Key", relay.name));
+	}
+	let model = validate_model_id(&model_id)?;
+	let mut base = validate_base_url(&relay.base_url)?;
+	let protocol = normalize_protocol(relay.protocol.as_deref());
+	if matches!(protocol.as_str(), "openai" | "kimi" | "openai-responses" | "anthropic") {
+		let url = reqwest::Url::parse(&base).map_err(|_| "接口地址格式不正确")?;
+		if url.path().trim_matches('/').is_empty() { base.push_str("/v1"); }
+	}
+	let client = reqwest::Client::builder()
+		// Titles must fail fast and hand over to the backup model, never wait
+		// out a relay's full conversation timeout.
+		.timeout(std::time::Duration::from_secs(u64::from(relay.timeout_seconds).clamp(5, 30)))
+		.redirect(reqwest::redirect::Policy::none())
+		.build()
+		.map_err(|_| "无法初始化连接".to_string())?;
+	let (url, body, auth) = title_request(&protocol, &base, &key, &model, &prompt);
+	let mut request = client.post(url).json(&body);
+	request = match auth {
+		"anthropic" => request.header("x-api-key", &key).header("anthropic-version", "2023-06-01"),
+		"query" => request,
+		_ => request.bearer_auth(&key),
+	};
+	let response = request.send().await.map_err(|error| network_error(&error))?;
+	let status = response.status();
+	let bytes = response.bytes().await.map_err(|error| network_error(&error))?;
+	if !status.is_success() {
+		let body = String::from_utf8_lossy(&bytes);
+		return Err(summarize(&body.replace(&key, "[密钥已隐藏]")));
+	}
+	title_reply_text(&protocol, &bytes)
 }
 
 /// Short, log-safe excerpt of a provider error body.

@@ -1,13 +1,13 @@
 import { seedPolishPreview } from "./polishFixture.mjs";
 
-export const fixtures = ["new-chat", "single", "multi", "unknown", "empty", "loading", "error", "chat", "long", "settings", "settings-info", "picker", "voyage", "voyage-output", "voyage-thinking", "voyage-tool", "voyage-moored", "voyage-high", "authorization", "sidebar", "project-limit", "archive", "statistics", "visual", "tool-spacing", "process-rows", "repeated-process", "process-folding", "process-actions", "file-discovery", "content-replay-a", "content-replay-b", "chat-polish-029", "message-images"];
+export const fixtures = ["new-chat", "single", "multi", "unknown", "empty", "loading", "error", "chat", "long", "settings", "settings-info", "picker", "voyage", "voyage-output", "voyage-thinking", "voyage-tool", "voyage-moored", "voyage-high", "authorization", "sidebar", "project-limit", "archive", "statistics", "visual", "tool-spacing", "process-rows", "repeated-process", "process-folding", "process-actions", "file-discovery", "content-replay-a", "content-replay-b", "chat-polish-029", "message-images", "title-generation"];
 
 // This entry runs only on the separate preview origin. It never uses real pi.
 export function preparePreview(target) {
 	const params = new URLSearchParams(target.location.search);
 	const fixture = params.get("fixture") || "new-chat";
 	const storage = target.localStorage;
-	const preservedPreferences = params.get("persist") === "1" ? ["skiff.browser.history.v1", "skiff.workspace.navigation.v1", "skiff.design.collections.v1", "skiff.design.canvases.v1", "skiff.design.favorites.v1", "skiff.test.design-assets", "skiff.design.parameters.open", "skiff.design.sidebar.open", "skiff.test.videos.config", "skiff.test.videos.jobs", "skiff.generation.columns.v1", "skiff.test.images.config", "skiff.test.images.jobs", "skiff.workbench.v1", "skiff.git-tree.columns.v1", "skiff.git-tree.files-height.v1", "skiff.sidebar.width", "skiff.voyage.width", "skiff.sidebar.recent-expanded", "skiff.model-favorites.v1", "skiff.theme", "skiff.themeColor", "skiff.darkThemeColor", "skiff.themeStars", "skiff.typography.v1", "skiff.test.metadata.v1", "skiff.settings.providers-view.v1"].map((key) => [key, storage.getItem(key)]).filter((entry) => entry[1] !== null) : [];
+	const preservedPreferences = params.get("persist") === "1" ? ["skiff.browser.history.v1", "skiff.workspace.navigation.v1", "skiff.design.collections.v1", "skiff.design.canvases.v1", "skiff.design.favorites.v1", "skiff.test.design-assets", "skiff.design.parameters.open", "skiff.design.sidebar.open", "skiff.test.videos.config", "skiff.test.videos.jobs", "skiff.generation.columns.v1", "skiff.test.images.config", "skiff.test.images.jobs", "skiff.workbench.v1", "skiff.git-tree.columns.v1", "skiff.git-tree.files-height.v1", "skiff.sidebar.width", "skiff.voyage.width", "skiff.sidebar.recent-expanded", "skiff.model-favorites.v1", "skiff.titleModel.v1", "skiff.theme", "skiff.themeColor", "skiff.darkThemeColor", "skiff.themeStars", "skiff.typography.v1", "skiff.test.metadata.v1", "skiff.settings.providers-view.v1"].map((key) => [key, storage.getItem(key)]).filter((entry) => entry[1] !== null) : [];
 	for (let index = storage.length - 1; index >= 0; index--) {
 		const key = storage.key(index);
 		if (key?.startsWith("skiff.")) storage.removeItem(key);
@@ -60,6 +60,11 @@ export function preparePreview(target) {
 		}));
 		storage.setItem("skiff.test.sessions", JSON.stringify(Object.fromEntries(chats.map((chat) => [chat.sessionFile, [{ role: "user", content: chat.title }, { role: "assistant", content: "预览回答。" }]]))));
 		storage.setItem("skiff.workspace.v1", JSON.stringify({ version: 1, projects: [project, otherProject], chats, activeId: chats[2].id }));
+	} else if (fixture === "title-generation") {
+		const project = { id: "title-project", name: "Skiff", path: "D:\\workspace\\Skiff" };
+		const chat = { id: "title-chat", projectId: project.id, title: "新聊天", createdAt: now, updatedAt: now, hasMessages: false, selectedModel: { provider: "skiff-relay-r1-deepseek", id: "deepseek-chat", modelId: "deepseek-chat", routeId: "route-deepseek-r1", offerId: "route-deepseek-r1/deepseek-chat" } };
+		storage.setItem("skiff.workspace.v1", JSON.stringify({ version: 1, projects: [project], chats: [chat], activeId: chat.id }));
+		storage.setItem("skiff.titleModel.v1", JSON.stringify({ primary: { provider: "skiff-relay-r3", id: "kimi-k2" }, fallback: { provider: "skiff-relay-r1", id: "deepseek-chat" } }));
 	} else if (fixture === "statistics") {
 		const alpha = { id: "stats-alpha", name: "Project Alpha", path: "D:\\workspace\\Skiff" };
 		const beta = { id: "stats-beta", name: "Project Beta", path: "D:\\workspace\\StatsBeta" };
