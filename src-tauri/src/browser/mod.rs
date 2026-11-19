@@ -926,6 +926,24 @@ impl Service {
 		}
 		Ok(entry.status())
 	}
+	/// Address navigation is independent of the picture stream, including on a blank tab.
+	pub async fn navigate(&self, target: &Target, tab_id: &str, control_version: u64, url: &str) -> Result<BrowserStatus> {
+		let entry = self.entry(target)?;
+		let _input = entry.input.lock().await;
+		let _operation = entry.operation.lock().await;
+		ensure_alive(&entry)?;
+		let status = entry.status();
+		if !matches!(status.control, Control::Human | Control::Stopped)
+			|| status.control_version != control_version
+			|| status.active_tab_id.as_deref() != Some(tab_id)
+		{
+			return Err("浏览器标签或控制权已改变，请重试".into());
+		}
+		if url.len() > 8192 { return Err("网址过长".into()); }
+		let mut driver = input::Driver::connect(&entry).await?;
+		driver.navigate(&entry, url).await?;
+		Ok(entry.status())
+	}
 	async fn close_instance(&self, target: &Target) -> Result<BrowserStatus> {
 		let entry = self.entry(target)?;
 		let permits: Vec<_> = self
@@ -1097,7 +1115,7 @@ pub enum ControlAction {
 }
 
 #[derive(Clone, Deserialize)]
-#[serde(tag = "type", rename_all = "camelCase", deny_unknown_fields)]
+#[serde(tag = "type", rename_all = "camelCase", rename_all_fields = "camelCase", deny_unknown_fields)]
 pub enum TabAction {
 	Select { tab_id: String },
 	New,
@@ -1508,6 +1526,17 @@ pub async fn browser_tab(
 	state.get(&app).await?.tab(&target, action).await
 }
 
+#[tauri::command]
+pub async fn browser_navigate(
+	app: tauri::AppHandle,
+	state: tauri::State<'_, BrowserState>,
+	target: Target,
+	tab_id: String,
+	control_version: u64,
+	url: String,
+) -> Result<BrowserStatus> {
+	state.get(&app).await?.navigate(&target, &tab_id, control_version, &url).await
+}
 #[tauri::command]
 pub async fn browser_retire_chat(
 	app: tauri::AppHandle,

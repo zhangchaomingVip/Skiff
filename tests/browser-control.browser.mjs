@@ -80,7 +80,7 @@ try {
 			element.dispatchEvent(new ClipboardEvent("paste", { bubbles: true, clipboardData: data }));
 		});
 		await page.keyboard.down("Shift");
-		await page.getByRole("button", { name: "交还 AI", exact: true }).focus();
+		await page.getByRole("button", { name: "更多浏览器操作", exact: true }).focus();
 		const messages = await page.evaluate(() => window.skiffPreview.browser.sent.filter((message) => message.type.startsWith("input_")));
 		const presses = messages.filter((message) => message.eventType === "mousePressed");
 		// The first gesture races the panel's initial viewport settle, so allow the picture
@@ -100,12 +100,14 @@ try {
 		await page.screenshot({ path: join(output, `${theme}-human.png`), animations: "disabled" });
 
 		// Handing the page back flushes held input, and the AI continues with a fresh snapshot.
-		await page.getByRole("button", { name: "交还 AI", exact: true }).click();
-		await page.getByRole("button", { name: "继续浏览任务", exact: true }).waitFor();
+		await page.getByRole("button", { name: "更多浏览器操作", exact: true }).click();
+		await page.getByRole("menuitem", { name: "交还 AI 继续任务", exact: true }).click();
+		await page.getByRole("button", { name: "更多浏览器操作", exact: true }).click();
+		await page.getByRole("menuitem", { name: "继续浏览任务", exact: true }).waitFor();
 		assert.equal(await input.count(), 0);
 		assert.ok(await page.evaluate(() => window.skiffPreview.browser.sent.some((message) => message.type === "input_flush")));
 		const before = await page.evaluate(() => window.skiffPreview.commands.filter((call) => call.command === "rpc_send" && JSON.parse(call.args.message).type === "prompt").length);
-		await page.getByRole("button", { name: "继续浏览任务", exact: true }).click();
+		await page.getByRole("menuitem", { name: "继续浏览任务", exact: true }).click();
 		await page.waitForFunction((before) => window.skiffPreview.commands.filter((call) => call.command === "rpc_send" && JSON.parse(call.args.message).type === "prompt").length > before, before);
 		const prompt = await page.evaluate(() => window.skiffPreview.commands.filter((call) => call.command === "rpc_send" && JSON.parse(call.args.message).type === "prompt").at(-1));
 		assert.match(JSON.parse(prompt.args.message).message, /第一步必须调用 browser snapshot/);
@@ -131,7 +133,7 @@ try {
 		await page.locator(".browser-address-input").fill("example.test/typed");
 		await page.locator(".browser-address-input").press("Enter");
 		await page.waitForFunction(() => window.skiffPreview.browser.entries.get("browser-a").url === "https://example.test/typed");
-		assert.ok(await page.evaluate(() => window.skiffPreview.browser.sent.some((message) => message.type === "navigate" && message.url === "https://example.test/typed")));
+		assert.ok(await page.evaluate(() => window.skiffPreview.browser.calls.some((call) => call.command === "browser_navigate" && call.args.url === "https://example.test/typed")));
 		await page.locator(".browser-address-display").click();
 		await page.locator(".browser-address-input").waitFor();
 		await page.locator(".browser-address-input").press("Escape");
@@ -170,7 +172,7 @@ try {
 		// The last tab is the browser instance: closing it goes through browser_close.
 		const closesBefore = await page.evaluate(() => window.skiffPreview.browser.calls.filter((call) => call.command === "browser_close").length);
 		await page.locator(".browser-tab.is-active .browser-tab-close").click();
-		await page.getByText("浏览器已关闭", { exact: true }).waitFor();
+		await page.locator(".browser-panel").waitFor({ state: "detached" });
 		assert.equal(await page.evaluate(() => window.skiffPreview.browser.calls.filter((call) => call.command === "browser_close").length), closesBefore + 1);
 		assert.equal(await input.count(), 0, "Closing the last tab ends human input");
 
@@ -208,7 +210,7 @@ try {
 	await manualPage.getByText("打开浏览器开始浏览", { exact: true }).waitFor();
 	await manualPage.getByRole("button", { name: "打开浏览器", exact: true }).click();
 	await manualPage.waitForFunction(() => window.skiffPreview.browser.entries.get("browser-a")?.control === "human");
-	await manualPage.locator('.browser-screen[data-phase="live"]').waitFor();
+	await manualPage.locator(".browser-new-page").waitFor();
 	assert.equal(await manualPage.locator(".browser-address-input").count(), 1, "Manual start focuses the address bar");
 	const firstGeneration = await manualPage.evaluate(() => window.skiffPreview.browser.entries.get("browser-a").generation);
 	await manualPage.locator(".browser-address-input").pressSequentially("example.test/manual");
@@ -231,7 +233,7 @@ try {
 		const entry = window.skiffPreview.browser.entries.get("browser-a");
 		return entry.control === "human" && entry.generation !== generation;
 	}, firstGeneration);
-	await manualPage.locator('.browser-screen[data-phase="live"]').waitFor();
+	await manualPage.locator(".browser-new-page").waitFor();
 	assert.equal(await manualPage.evaluate(() => window.skiffPreview.browser.calls.filter((call) => call.command === "browser_start" && call.args.manual === true).length), 2);
 	assert.deepEqual(manualErrors, []);
 	await manualPage.close();

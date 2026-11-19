@@ -12,6 +12,9 @@ export function installMockBrowser(target) {
 	let controlFailure;
 	let lifecycleFailure;
 	let lifecycleDelay;
+	let tabFailure;
+	let tabDelay;
+	let closeFailure;
 	let generationSequence = 0;
 	const retired = new Set();
 	const dependencies = () => ({ enabled, ready, supported: true, cliPath: cliPath ?? "C:/mock/agent-browser.exe", configuredCliPath: cliPath, version: "0.41.2", browserInstalled: ready, message: ready ? "浏览器已就绪" : "未检测到 Chrome for Testing，请执行 agent-browser install 后重新检测", installCommands: ["npm install -g agent-browser@0.41.2", "agent-browser install"] });
@@ -91,6 +94,9 @@ export function installMockBrowser(target) {
 		setEnabled(value) { enabled = value; },
 		failControl(value) { controlFailure = value; },
 		failLifecycle(value) { lifecycleFailure = value; },
+		failTab(value) { tabFailure = value; },
+		failClose(value) { closeFailure = value; },
+		deferTab() { let resolve; tabDelay = new Promise((done) => { resolve = done; }); return resolve; },
 		deferLifecycle() { let resolve; lifecycleDelay = new Promise((done) => { resolve = done; }); return resolve; },
 		deferControl() { let resolve; const promise = new Promise((done) => { resolve = done; }); controlDelay = promise; return resolve; },
 		deferFind(chatId) { let resolve; const promise = new Promise((done) => { resolve = done; }); findDelay = { chatId, promise }; return resolve; },
@@ -139,7 +145,7 @@ export function installMockBrowser(target) {
 				if (lifecycleFailure) { const failure = lifecycleFailure; lifecycleFailure = undefined; throw new Error(failure); }
 				const previous = entries.get(args.chatId);
 				if (previous && !["closed", "faulted", "disconnected"].includes(previous.control)) return structuredClone(previous);
-				const generation = `mock-${args.chatId}-${++generationSequence}`;
+				const generation = `started-${args.chatId}-${++generationSequence}`;
 				const tab = { id: `tab-${generation}-1`, title: "新标签页", url: "about:blank", active: true };
 				return structuredClone(api.set(args.chatId, { generation, control: args.manual ? "human" : "ai", controlVersion: 1, requiresSnapshot: false, url: "about:blank", title: "新标签页", tabs: [tab], activeTabId: tab.id, canGoBack: false, canGoForward: false, error: null }));
 			}
@@ -157,7 +163,15 @@ export function installMockBrowser(target) {
 				if (controlDelay) { const delay = controlDelay; controlDelay = undefined; await delay; }
 				return api.set(status.chatId, { control: { takeOver: "human", return: "ai", stop: "stopped" }[args.operation], requiresSnapshot: args.operation === "return" });
 			}
+			if (command === "browser_navigate") {
+				const status = entries.get(args.target.chatId);
+				if (!status || status.generation !== args.target.generation || status.controlVersion !== args.controlVersion || status.activeTabId !== args.tabId || !["human", "stopped"].includes(status.control)) throw new Error("Browser owner changed");
+				const tabs = status.tabs.map((tab) => tab.active ? { ...tab, url: args.url } : tab);
+				return api.set(status.chatId, { url: args.url, tabs, canGoBack: true, canGoForward: false });
+			}
 			if (command === "browser_tab") {
+				if (tabFailure) { const failure = tabFailure; tabFailure = undefined; throw new Error(failure); }
+				if (tabDelay) { const delay = tabDelay; tabDelay = undefined; await delay; }
 				const status = entries.get(args.target.chatId);
 				if (!status || status.generation !== args.target.generation) throw new Error("Browser owner changed");
 				if (!["human", "stopped"].includes(status.control)) throw new Error("请先接管浏览器再管理标签页");
@@ -188,7 +202,10 @@ export function installMockBrowser(target) {
 				return { status: structuredClone(status), streamUrl: `ws://127.0.0.1:1/skiff-preview?chatId=${status.chatId}&generation=${status.generation}`, bridgeUrl: "", agentToken: "" };
 			}
 			if (command === "browser_viewport") { viewports.set(args.target.chatId, { width: args.width, height: args.height, scale: args.scale }); return; }
-			if (command === "browser_close") { api.disconnect(args.target.chatId); return api.set(args.target.chatId, { control: "closed", controlVersion: (entries.get(args.target.chatId)?.controlVersion ?? 0) + 1 }); }
+			if (command === "browser_close") {
+				if (closeFailure) { const failure = closeFailure; closeFailure = undefined; throw new Error(failure); }
+				api.disconnect(args.target.chatId); return api.set(args.target.chatId, { control: "closed", controlVersion: (entries.get(args.target.chatId)?.controlVersion ?? 0) + 1 });
+			}
 			throw new Error(`Unsupported mock browser command: ${command}`);
 		},
 	};

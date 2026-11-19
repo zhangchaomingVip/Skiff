@@ -49,6 +49,7 @@ export const browserNative = {
 	completeControl: (target: BrowserTarget, operation: "takeOver" | "return" | "stop", controlVersion: number) => invoke<BrowserStatus>("browser_complete_control", { target: targetRef(target), operation, controlVersion }),
 	close: (target: BrowserTarget) => invoke<BrowserStatus>("browser_close", { target: targetRef(target) }),
 	tab: (target: BrowserTarget, action: BrowserTabAction) => invoke<BrowserStatus>("browser_tab", { target: targetRef(target), action }),
+	navigate: (target: BrowserStatus, url: string) => invoke<BrowserStatus>("browser_navigate", { target: targetRef(target), tabId: target.activeTabId, controlVersion: target.controlVersion, url }),
 	retireChat: (chatId: string, deleteProfile = false) => invoke<void>("browser_retire_chat", { chatId, deleteProfile }),
 	restoreChat: (chatId: string) => invoke<void>("browser_restore_chat", { chatId }),
 };

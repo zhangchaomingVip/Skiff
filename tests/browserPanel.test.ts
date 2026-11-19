@@ -25,6 +25,7 @@ test("browser panel opens once per instance, preserves manual collapse and rejec
 	assert.equal(browserHost("https://gemini.google.com/app?x=1"), "gemini.google.com");
 	assert.equal(browserHost("about:blank"), "");
 	assert.equal(browserTabLabel({ title: "  ", url: "about:blank" }), "新标签页");
+	assert.equal(browserTabLabel({ title: "about:blank", url: "" }), "新标签页");
 	assert.equal(browserTabLabel({ title: "", url: "https://example.test/deep" }), "example.test");
 	assert.equal(browserControlLabels.human, "人工控制");
 });

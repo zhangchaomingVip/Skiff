@@ -114,6 +114,7 @@ fn capture_page(
 /// Push the tab strip and navigation state to the panel. A failed CDP read keeps the
 /// previous list instead of blanking the strip.
 async fn apply(cdp: &mut Cdp, entry: &Entry, active: &str) {
+	let expected = entry.status().active_tab_id;
 	let history = cdp
 		.request("Page.getNavigationHistory", json!({}), true)
 		.await
@@ -121,6 +122,14 @@ async fn apply(cdp: &mut Cdp, entry: &Entry, active: &str) {
 	let Ok(targets) = cdp.request("Target.getTargets", json!({}), false).await else {
 		return;
 	};
+	// A tab action may have completed while the capture queried its old page.
+	// Never let that late picture metadata select the old tab again.
+	let _operation = entry.operation.lock().await;
+	if entry.terminal() || entry.status().active_tab_id != expected
+		|| expected.as_deref().is_some_and(|id| id != active && super::input::page_target(&targets, id).is_some())
+	{
+		return;
+	}
 	super::input::apply_state(entry, Some(active.to_owned()), history.as_ref(), &targets);
 }
 

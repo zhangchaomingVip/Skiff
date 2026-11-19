@@ -224,10 +224,30 @@ impl Driver {
 		if self.session.is_empty() {
 			return Err("当前标签页无法打开网页".into());
 		}
+		let previous_url = entry.status().url.unwrap_or_default();
 		self.activate().await?;
-		self.request("Page.navigate", json!({"url":url}), true)
-			.await?;
-		sync(entry, self).await
+		let result = self.request("Page.navigate", json!({"url":url}), true).await?;
+		if let Some(error) = result["errorText"].as_str().filter(|error| !error.is_empty()) {
+			return Err(format!("网页跳转失败：{error}"));
+		}
+		sync(entry, self).await?;
+		// Chrome can acknowledge navigation before history leaves about:blank. The
+		// new-tab UI deliberately has no viewer, so publish the accepted destination
+		// now; otherwise nothing starts capture to report the subsequent commit.
+		let mut data = entry.data.lock().unwrap();
+		if data.status.active_tab_id.as_deref() == Some(self.target_id.as_str())
+			&& data.status.url.as_deref().is_none_or(|current| current.is_empty() || current == previous_url)
+		{
+			data.status.url = Some(url.to_owned());
+			let title = parsed.host_str().unwrap_or(url).to_owned();
+			data.status.title = Some(title.clone());
+			for tab in &mut data.status.tabs {
+				if tab.id == self.target_id { tab.url = url.to_owned(); tab.title = title.clone(); }
+			}
+		}
+		drop(data);
+		entry.changed.notify_waiters();
+		Ok(())
 	}
 	/// Browser history navigation through the same page session the input uses.
 	pub(super) async fn history(&mut self, entry: &Entry, direction: &str) -> Result<()> {
@@ -382,11 +402,11 @@ pub(super) fn apply_state(
 	if active.is_empty() || !tabs.iter().any(|tab| tab.id == active) {
 		active = tabs[0].id.clone();
 	}
-	let status = entry.status();
-	let mut url = status.url.unwrap_or_default();
-	let mut title = status.title.unwrap_or_default();
-	let mut can_go_back = status.can_go_back;
-	let mut can_go_forward = status.can_go_forward;
+	let selected = tabs.iter().find(|tab| tab.id == active).unwrap();
+	let mut url = selected.url.clone();
+	let mut title = selected.title.clone();
+	let mut can_go_back = false;
+	let mut can_go_forward = false;
 	if let Some(history) = history {
 		let current = history["currentIndex"].as_u64().unwrap_or(0) as usize;
 		let entries = history["entries"].as_array();
@@ -440,6 +460,12 @@ pub(super) fn apply_state(
 
 pub(super) async fn sync(entry: &Entry, driver: &mut Driver) -> Result<()> {
 	driver.ensure_target(entry).await?;
+	sync_attached(entry, driver).await
+}
+
+// An explicit tab action has just attached its destination. Following the entry here
+// would reattach the *previous* active tab before the new selection can be published.
+async fn sync_attached(entry: &Entry, driver: &mut Driver) -> Result<()> {
 	if driver.target_id.is_empty() {
 		return Ok(());
 	}
@@ -531,7 +557,7 @@ pub(super) async fn tab_action(
 				.request("Target.activateTarget", json!({"targetId":id}), false)
 				.await?;
 			driver.attach(id).await?;
-			sync(entry, driver).await?;
+			sync_attached(entry, driver).await?;
 			Ok(false)
 		}
 		TabAction::New => {
@@ -550,17 +576,26 @@ pub(super) async fn tab_action(
 				.request("Target.activateTarget", json!({"targetId":id}), false)
 				.await?;
 			driver.attach(&id).await?;
-			sync(entry, driver).await?;
+			sync_attached(entry, driver).await?;
 			Ok(false)
 		}
 		TabAction::Close { tab_id: closing } => {
 			let closing = tab_id(&closing)?;
-			driver
+			let result = driver
 				.request("Target.closeTarget", json!({"targetId":closing}), false)
 				.await?;
-			let targets = driver
-				.request("Target.getTargets", json!({}), false)
-				.await?;
+			if result["success"] != true { return Err("浏览器未能关闭标签页".into()); }
+			// closeTarget acknowledges the request before Chrome removes the target.
+			// Publishing that interim list leaves a ghost tab which cannot be closed again.
+			let targets = tokio::time::timeout(Duration::from_secs(3), async {
+				loop {
+					let targets = driver.request("Target.getTargets", json!({}), false).await?;
+					if !list_tabs(&targets).iter().any(|tab| tab.id == closing) {
+						return Ok::<Value, String>(targets);
+					}
+					tokio::time::sleep(Duration::from_millis(25)).await;
+				}
+			}).await.map_err(|_| "等待标签页关闭超时".to_string())??;
 			let tabs = list_tabs(&targets);
 			if tabs.is_empty() {
 				let mut data = entry.data.lock().unwrap();
@@ -590,7 +625,7 @@ pub(super) async fn tab_action(
 			if let Err(error) = driver.attach(&next).await {
 				eprintln!("[skiff] browser tab switch: {error}");
 			}
-			sync(entry, driver).await?;
+			sync_attached(entry, driver).await?;
 			Ok(false)
 		}
 	}

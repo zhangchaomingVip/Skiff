@@ -481,12 +481,14 @@ async fn real_manual_tab_new_and_close_round_trip() {
 		let before = opened.tabs.len();
 		let added = service.tab(&opened.target, TabAction::New).await.unwrap();
 		assert_eq!(added.tabs.len(), before + 1);
-		let blank = added
-			.tabs
-			.iter()
-			.find(|tab| tab.url == "about:blank")
-			.map(|tab| tab.id.clone())
-			.expect("new tab must be listed");
+		let blank = added.active_tab_id.clone().expect("new tab must be active");
+		assert!(!opened.tabs.iter().any(|tab| tab.id == blank));
+		assert!(service.navigate(&opened.target, &blank, added.control_version + 1, "https://example.com").await.is_err());
+		let original = opened.active_tab_id.clone().unwrap();
+		let selected = service.tab(&opened.target, TabAction::Select { tab_id: original.clone() }).await.unwrap();
+		assert_eq!(selected.active_tab_id.as_deref(), Some(original.as_str()));
+		let selected = service.tab(&opened.target, TabAction::Select { tab_id: blank.clone() }).await.unwrap();
+		assert_eq!(selected.active_tab_id.as_deref(), Some(blank.as_str()));
 		let closed = service
 			.tab(
 				&opened.target,
@@ -505,4 +507,16 @@ async fn real_manual_tab_new_and_close_round_trip() {
 	if let Err(panic) = result {
 		std::panic::resume_unwind(panic);
 	}
+}
+
+#[test]
+fn tab_actions_accept_frontend_camel_case_fields() {
+	for kind in ["select", "close"] {
+		let action: TabAction = serde_json::from_value(json!({"type":kind,"tabId":"page-1"})).unwrap();
+		match action {
+			TabAction::Select { tab_id } | TabAction::Close { tab_id } => assert_eq!(tab_id, "page-1"),
+			TabAction::New => panic!("expected a target tab"),
+		}
+	}
+	assert!(serde_json::from_value::<TabAction>(json!({"type":"close","tabId":"page-1","extra":true})).is_err());
 }

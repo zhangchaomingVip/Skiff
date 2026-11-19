@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { browserNative, type BrowserStatus, type BrowserTarget } from "./native";
 import { isBrowserStatus, observeBrowser, sameBrowser, type BrowserPanelRecord } from "./model";
+import { observeBrowserVisit } from "./history";
 
 export function useBrowserPanel(chatId: string | undefined, active: boolean) {
 	const records = useRef(new Map<string, BrowserPanelRecord>());
@@ -31,6 +32,7 @@ export function useBrowserPanel(chatId: string | undefined, active: boolean) {
 				// tab state that shares the control version. Wait for the next poll instead.
 				if (previous.status && previous.status !== before) return;
 				const next = observeBrowser(previous, status);
+				if (next.status) observeBrowserVisit(next.status);
 				if (JSON.stringify(previous) !== JSON.stringify(next)) { records.current.set(chatId, next); render(); }
 			} catch (reason) {
 				if (!disposed && current.current === chatId && epochs.current.get(chatId) === epoch) {
@@ -56,7 +58,9 @@ export function useBrowserPanel(chatId: string | undefined, active: boolean) {
 		// A manually started browser has no prior record. Seed it rather than waiting for
 		// the next poll, so the freshly opened page and its address bar appear immediately.
 		if (previous?.status && !sameBrowser(previous.status, status)) return;
-		records.current.set(id, observeBrowser(previous ?? { expanded: false }, status)); render();
+		const next = observeBrowser(previous ?? { expanded: false }, status);
+		if (next.status) observeBrowserVisit(next.status);
+		records.current.set(id, next); render();
 	}, []);
 	const updateUrl = useCallback((target: BrowserTarget, url: string) => {
 		const previous = records.current.get(target.chatId);

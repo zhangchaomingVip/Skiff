@@ -1,4 +1,5 @@
 import type { BrowserControl, BrowserStatus, BrowserTab, BrowserTarget } from "./native";
+import { isNewTab } from "./history";
 
 export const sameBrowser = (a: BrowserTarget | undefined | null, b: BrowserTarget | undefined | null) => !!a && !!b && a.chatId === b.chatId && a.generation === b.generation;
 export const canWatchBrowser = (status?: BrowserStatus | null) => !!status && ["ai", "human", "takingOver", "returning", "stopping", "stopped"].includes(status.control);
@@ -13,6 +14,7 @@ export function browserHost(url?: string | null) {
 	} catch { return ""; }
 }
 export function browserTabLabel(tab: Pick<BrowserTab, "title" | "url">) {
+	if (isNewTab(tab.url) && (tab.url || !tab.title.trim() || tab.title === "about:blank")) return "新标签页";
 	return tab.title.trim() || browserHost(tab.url) || "新标签页";
 }
 const validTab = (tab: unknown): tab is BrowserTab => {

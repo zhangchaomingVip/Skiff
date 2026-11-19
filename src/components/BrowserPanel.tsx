@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type MutableRefObject, type ReactNode, type RefObject } from "react";
+import { useEffect, useRef, useState, type MutableRefObject, type RefObject } from "react";
 import { browserNative, type BrowserDependencies, type BrowserStatus, type BrowserTab } from "../browser/native";
 import { browserControlLabels, browserHost, browserTabLabel, canWatchBrowser } from "../browser/model";
 import { watchBrowser, type BrowserStreamPhase, type BrowserViewer } from "../browser/viewer";
@@ -8,6 +8,8 @@ import type { BrowserActions } from "../browser/useBrowserActions";
 import type { BrowserPanelControls } from "../browser/useBrowserPanel";
 import { Button, IconButton, Popover } from "./ui";
 import { Icon } from "./Icon";
+import { BrowserAddress } from "./BrowserAddress";
+import { browserDestination, isNewTab } from "../browser/history";
 
 type BrowserInputHandle = { flush: () => Promise<void>; focus?: () => void };
 interface BrowserPageHandle {
@@ -94,7 +96,7 @@ function TakeoverLayer({ canvas, viewer, takeOver, inputHandle }: { canvas: RefO
 	return <div ref={layer} className="browser-takeover" data-label="点击画面即接管浏览器" aria-hidden="true" />;
 }
 
-function BrowserScreen({ status, controls, actions, inputHandle, pageHandle, onReload, onAction, zoom, onPhase, takeOver, notice }: {
+function BrowserScreen({ status, controls, actions, inputHandle, pageHandle, onReload, onAction, zoom, onPhase, takeOver }: {
 	status: BrowserStatus;
 	controls: BrowserPanelControls;
 	actions: BrowserActions;
@@ -105,7 +107,6 @@ function BrowserScreen({ status, controls, actions, inputHandle, pageHandle, onR
 	zoom: number;
 	onPhase: (phase: BrowserStreamPhase) => void;
 	takeOver: () => Promise<BrowserStatus | undefined>;
-	notice?: ReactNode;
 }) {
 	const canvas = useRef<HTMLCanvasElement>(null);
 	const screen = useRef<HTMLDivElement>(null);
@@ -185,7 +186,6 @@ function BrowserScreen({ status, controls, actions, inputHandle, pageHandle, onR
 		<canvas ref={canvas} role="img" aria-label="当前聊天的浏览器画面" />
 		{interactive && <textarea ref={keyboard} className="browser-input" aria-label="浏览器键盘输入" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} />}
 		{phase === "live" && takeover && !actions.pending && <TakeoverLayer canvas={canvas} viewer={viewer} takeOver={takeOver} inputHandle={inputHandle} />}
-		{phase === "live" && notice && <div className="browser-notice">{notice}</div>}
 		{phase !== "live" && <div className="browser-screen-message" role="status"><Icon name={phase === "disconnected" ? "wifi" : "clock"} size={24} /><strong>{phase === "disconnected" ? "画面连接已断开" : phase === "waiting" ? "等待浏览器画面…" : "正在连接画面…"}</strong><p>{phase === "disconnected" ? "当前画面已失效。重新连接会读取最新页面，不会重复执行操作。" : "连接到当前聊天的浏览器。"}</p>{phase === "disconnected" && <Button onClick={() => { current.current.refresh(); retry((value) => value + 1); }}>重新连接画面</Button>}</div>}
 	</div>;
 }
@@ -208,8 +208,11 @@ export function BrowserPanel({ chatId, controls, browserActions, compact, maximi
 	const pageHandle = useRef<BrowserPageHandle>();
 	const panel = useRef<HTMLElement>(null);
 	const menuAnchor = useRef<HTMLButtonElement>(null);
-	const addressInput = useRef<HTMLInputElement>(null);
 	const statusRef = useRef(status); statusRef.current = status;
+	const mounted = useRef(true);
+	const operationLock = useRef(false);
+	const [tabPending, setTabPending] = useState(false);
+	useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
 	const [dependencies, setDependencies] = useState<BrowserDependencies>();
 	const [dependencyError, setDependencyError] = useState<string>();
 	const [checking, setChecking] = useState(false);
@@ -219,8 +222,6 @@ export function BrowserPanel({ chatId, controls, browserActions, compact, maximi
 	const [menu, setMenu] = useState(false);
 	const [editing, setEditing] = useState<string>();
 	const [opening, setOpening] = useState(false);
-	const [addressOnOpen, setAddressOnOpen] = useState(false);
-	const editingActive = editing !== undefined;
 	const [phase, setPhase] = useState<BrowserStreamPhase>("connecting");
 	const [zoom, setZoom] = useState<number>(() => {
 		try { const stored = Number(localStorage.getItem("skiff.browser.zoom")); return isBrowserZoom(stored) ? stored : defaultBrowserZoom; } catch { return defaultBrowserZoom; }
@@ -237,20 +238,16 @@ export function BrowserPanel({ chatId, controls, browserActions, compact, maximi
 		return () => { disposed = true; };
 	}, [check]);
 	useEffect(() => { if (focusRequest || compact) panel.current?.focus(); }, [focusRequest, compact]);
-	useEffect(() => {
-		if (!editingActive) return;
-		const frame = requestAnimationFrame(() => { addressInput.current?.focus(); addressInput.current?.select(); });
-		return () => cancelAnimationFrame(frame);
-	}, [editingActive]);
+	useEffect(() => { setEditing(undefined); setMenu(false); setPhase("connecting"); }, [status?.generation, status?.activeTabId]);
 	useEffect(() => { if (!canWatchBrowser(status)) setPhase("connecting"); }, [status?.control]);
 	const collapse = () => { setMenu(false); onCollapse(); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>(".browser-trigger")?.focus()); };
 	const live = phase === "live" && !error;
 	const watch = canWatchBrowser(status) && !error;
 	const failed = status && ["disconnected", "faulted"].includes(status.control);
-	const applyStatus = (value: BrowserStatus) => { statusRef.current = value; controls.updateStatus(value); };
+	const applyStatus = (value: BrowserStatus) => { if (!mounted.current) return; statusRef.current = value; controls.updateStatus(value); };
 	const ensureHuman = async (): Promise<BrowserStatus | undefined> => {
 		const current = statusRef.current;
-		if (!current || !live || browserActions.pending) return undefined;
+		if (!current || browserActions.pending) return undefined;
 		if (current.control === "human") return current;
 		if (current.control === "ai" || current.control === "stopped") return browserActions.run("takeOver");
 		return undefined;
@@ -260,26 +257,41 @@ export function BrowserPanel({ chatId, controls, browserActions, compact, maximi
 		if (!current) return;
 		setActionError(undefined);
 		setEditing(value ?? current.url ?? "");
-		requestAnimationFrame(() => { addressInput.current?.focus(); addressInput.current?.select(); });
 	};
-	useEffect(() => {
-		if (!addressOnOpen || phase !== "live" || status?.control !== "human") return;
-		setAddressOnOpen(false);
-		beginAddress(status.url && status.url !== "about:blank" ? status.url : "");
-	}, [addressOnOpen, phase, status?.url, status?.control]);
 	const editAddress = async () => {
-		if (!live || browserActions.pending) return;
-		const next = await ensureHuman();
-		if (next) beginAddress(next.url ?? "");
+		if (browserActions.pending || tabPending) return;
+		beginAddress(statusRef.current?.url ?? "");
 	};
-	const commitAddress = async () => {
-		const text = editing?.trim() ?? "";
-		if (!text) { setEditing(undefined); return; }
-		const url = /^[a-z][a-z0-9+.-]*:\/\//i.test(text) ? text : `https://${text}`;
-		const next = await ensureHuman();
-		if (!next) return;
-		if (!pageHandle.current?.navigate(url, next)) { setActionError("画面尚未连接，暂时无法跳转"); return; }
-		setEditing(undefined);
+	const runTabOperation = async (operation: (next: BrowserStatus) => Promise<void>) => {
+		if (operationLock.current || browserActions.pending) return;
+		operationLock.current = true; setTabPending(true); setActionError(undefined);
+		const target = statusRef.current;
+		try {
+			const next = await ensureHuman();
+			if (!next || !mounted.current || next.generation !== target?.generation || statusRef.current?.generation !== target.generation) return;
+			await operation(next);
+		} catch (reason) { if (mounted.current) { setActionError(String(reason)); controls.refresh(); } }
+		finally { operationLock.current = false; if (mounted.current) setTabPending(false); }
+	};
+	const commitAddress = (text: string) => runTabOperation(async (next) => {
+		const updated = await browserNative.navigate(next, browserDestination(text));
+		if (!mounted.current || statusRef.current?.generation !== next.generation) return;
+		applyStatus(updated); setEditing(undefined);
+	});
+	const manageTab = (action: Parameters<typeof browserNative.tab>[1]) => runTabOperation(async (next) => {
+		const updated = await browserNative.tab(next, action);
+		if (!mounted.current || statusRef.current?.generation !== next.generation) return;
+		applyStatus(updated); setEditing(undefined);
+		if (updated.control === "closed") collapse();
+	});
+	const closeTab = (tab: BrowserTab) => {
+		if (!tab.id || operationLock.current || browserActions.pending) return;
+		if ((statusRef.current?.tabs.length ?? 0) > 1) { void manageTab({ type: "close", tabId: tab.id }); return; }
+		operationLock.current = true; setTabPending(true);
+		const generation = statusRef.current?.generation;
+		void browserActions.run("close", inputHandle.current?.flush).then((closed) => {
+			if (mounted.current && closed?.control === "closed" && statusRef.current?.generation === generation) collapse();
+		}).finally(() => { operationLock.current = false; if (mounted.current) setTabPending(false); });
 	};
 	const history = async (direction: "back" | "forward") => {
 		const next = await ensureHuman();
@@ -294,44 +306,6 @@ export function BrowserPanel({ chatId, controls, browserActions, compact, maximi
 	};
 	const reloadResult = (ok: boolean, failure?: string) => { if (!ok) setActionError(failure ?? "刷新网页失败，请重新连接画面"); };
 	const actionResult = (name: string, ok: boolean, failure?: string) => { if (!ok) setActionError(failure ?? `${name === "navigate" ? "网页跳转" : "浏览历史"}失败`); else setActionError(undefined); };
-	const changeTab = async (tab: BrowserTab) => {
-		const current = statusRef.current;
-		if (!current || !live || browserActions.pending || !tab.id) return;
-		const next = await ensureHuman();
-		if (!next) return;
-		try {
-			const updated = await browserNative.tab(next, { type: "select", tabId: tab.id });
-			applyStatus(updated); setActionError(undefined);
-		} catch (reason) { setActionError(String(reason)); }
-	};
-	const newTab = async () => {
-		const current = statusRef.current;
-		if (!current || !live || browserActions.pending) return;
-		const next = await ensureHuman();
-		if (!next) return;
-		try {
-			const updated = await browserNative.tab(next, { type: "new" });
-			applyStatus(updated); setActionError(undefined);
-			// A new tab starts at about:blank; put the caret in the address bar so the
-			// next keystroke is the destination rather than a click on an empty page.
-			beginAddress("");
-		} catch (reason) { setActionError(String(reason)); }
-	};
-	const closeTab = async (tab: BrowserTab) => {
-		const current = statusRef.current;
-		if (!current || !live || browserActions.pending) return;
-		const next = await ensureHuman();
-		if (!next) return;
-		const tabs = statusRef.current?.tabs ?? [];
-		if (!tab.id || tabs.length <= 1) {
-			await browserActions.run("close", inputHandle.current?.flush);
-			return;
-		}
-		try {
-			const updated = await browserNative.tab(next, { type: "close", tabId: tab.id });
-			applyStatus(updated); setActionError(undefined);
-		} catch (reason) { setActionError(String(reason)); }
-	};
 	const returnToAi = () => { setMenu(false); void browserActions.run("return", inputHandle.current?.flush); };
 	const readCurrentPage = () => { setMenu(false); void browserActions.run("read", inputHandle.current?.flush); };
 	const continueTask = () => void browserActions.run("continue");
@@ -342,7 +316,6 @@ export function BrowserPanel({ chatId, controls, browserActions, compact, maximi
 		try {
 			const opened = await browserNative.start(chatId, true);
 			applyStatus(opened);
-			setAddressOnOpen(true);
 			controls.refresh();
 		} catch (reason) { setActionError(String(reason)); }
 		finally { setOpening(false); }
@@ -360,33 +333,29 @@ export function BrowserPanel({ chatId, controls, browserActions, compact, maximi
 	const tabs: BrowserTab[] = status?.tabs.length && !["closed", "closing"].includes(status.control)
 		? status.tabs
 		: [{ id: "", title: status?.control === "closed" ? "浏览器" : status?.title ?? "浏览器", url: status?.control === "closed" ? "" : status?.url ?? "", active: true }];
-	const tabsAvailable = !!status && ["ai", "human", "stopped"].includes(status.control) && !browserActions.pending;
+	const tabsAvailable = !!status && ["ai", "human", "stopped"].includes(status.control) && !browserActions.pending && !tabPending;
+	const blank = watch && !!status?.activeTabId && isNewTab(status.url);
 	const returnable = status?.control === "human" || status?.control === "stopped";
 	const manualAvailable = !!dependencies?.enabled && dependencies.ready && !busy && !checking;
-	const notice = status?.control === "human" && live
-		? <Button className="browser-handoff" size="compact" disabled={!!browserActions.pending || busy} loading={browserActions.pending === "return"} onClick={returnToAi}><Icon name="spark" size={14} />交还 AI</Button>
-		: status?.control === "ai" && status.requiresSnapshot && live
-			? <Button className="browser-handoff" size="compact" variant="primary" disabled={!!browserActions.pending || busy} loading={browserActions.pending === "continue"} onClick={continueTask}>继续浏览任务</Button>
-			: undefined;
 	return <section className="browser-panel" ref={panel} tabIndex={-1} aria-label="浏览器画面" aria-description={browserActions.pending ? "正在处理控制请求" : browserControlLabels[status?.control ?? "closed"]} data-chat-id={chatId} data-generation={status?.generation ?? ""} data-control={status?.control ?? "none"} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); collapse(); } }}>
 		<header className="browser-panel-header">
 			<div className="browser-tabs" role="tablist" aria-label="浏览器标签页">
 				{tabs.map((tab) => {
 					const label = browserTabLabel(tab);
-					return <div key={tab.id || "current"} className={`browser-tab${tab.active ? " is-active" : ""}`} role="tab" aria-selected={tab.active} aria-label={label} tabIndex={tab.active ? 0 : -1} title={tab.url || label} onClick={() => { if (tab.active || !tab.id) return; void changeTab(tab); }} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); if (!tab.active && tab.id) void changeTab(tab); } }}>
+					return <div key={tab.id || "current"} className={`browser-tab${tab.active ? " is-active" : ""}`} role="tab" aria-selected={tab.active} aria-label={label} tabIndex={tab.active ? 0 : -1} title={tab.url || label} onClick={() => { if (tab.active || !tab.id) return; void manageTab({ type: "select", tabId: tab.id }); }} onKeyDown={(event) => { if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); if (!tab.active && tab.id) void manageTab({ type: "select", tabId: tab.id }); } }}>
 						<BrowserFavicon url={tab.url} />
 						<span className="browser-tab-title">{label}</span>
-						<button type="button" className="browser-tab-close" aria-label={`关闭 ${label}`} title="关闭标签页" disabled={!tabsAvailable || !live} onClick={(event) => { event.stopPropagation(); void closeTab(tab); }}><Icon name="close" size={12} /></button>
+						<button type="button" className="browser-tab-close" aria-label={`关闭 ${label}`} title="关闭标签页" disabled={!tabsAvailable} onClick={(event) => { event.stopPropagation(); void closeTab(tab); }}><Icon name="close" size={12} /></button>
 					</div>;
 				})}
-				<button type="button" className="browser-new-tab" aria-label="新建标签页" title="新建标签页" disabled={!tabsAvailable || !live} onClick={() => void newTab()}><Icon name="plus" size={14} /></button>
+				<button type="button" className="browser-new-tab" aria-label="新建标签页" title="新建标签页" disabled={!tabsAvailable} onClick={() => void manageTab({ type: "new" })}><Icon name="plus" size={14} /></button>
 			</div>
 			<div className="browser-panel-header-actions">
 				<IconButton size="compact" aria-label={maximized ? "还原浏览器宽度" : "最大化浏览器"} title={maximized ? "还原浏览器宽度" : "最大化浏览器"} disabled={compact} onClick={onMaximize}><Icon name={maximized ? "collapse" : "expand"} size={16} /></IconButton>
 				<IconButton size="compact" aria-label={compact ? "返回聊天" : "收起浏览器"} title={compact ? "返回聊天" : "收起浏览器"} onClick={collapse}><Icon name={compact ? "arrowLeft" : "panel"} size={16} /></IconButton>
 			</div>
 		</header>
-		<div className="browser-toolbar">
+		{!blank && <div className="browser-toolbar">
 			<div className="browser-nav" role="group" aria-label="网页导航">
 				<IconButton size="compact" aria-label="后退" title={status?.canGoBack ? "后退" : "没有可后退的页面"} disabled={!live || !status?.canGoBack || !!browserActions.pending} onClick={() => void history("back")}><Icon name="arrowLeft" size={16} /></IconButton>
 				<IconButton size="compact" aria-label="前进" title={status?.canGoForward ? "前进" : "没有可前进的页面"} disabled={!live || !status?.canGoForward || !!browserActions.pending} onClick={() => void history("forward")}><Icon name="arrowRight" size={16} /></IconButton>
@@ -394,10 +363,7 @@ export function BrowserPanel({ chatId, controls, browserActions, compact, maximi
 			</div>
 			<div className={`browser-address${editing !== undefined ? " is-editing" : ""}`}>
 				{editing !== undefined
-					? <input ref={addressInput} className="browser-address-input" aria-label="地址栏" value={editing} onChange={(event) => setEditing(event.target.value)} onKeyDown={(event) => {
-						if (event.key === "Enter") { event.preventDefault(); void commitAddress(); }
-						else if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setEditing(undefined); }
-					}} onBlur={() => setEditing(undefined)} autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} />
+					? <BrowserAddress initialValue={editing} onSubmit={(text) => void commitAddress(text)} onCancel={() => setEditing(undefined)} disabled={!tabsAvailable} />
 					: <button type="button" className="browser-address-display" aria-label="地址栏" title={status?.url ?? "尚未打开网页"} onClick={() => void editAddress()}>{host || "新标签页"}</button>}
 			</div>
 			<IconButton ref={menuAnchor} size="compact" aria-label="更多浏览器操作" aria-haspopup="menu" aria-expanded={menu} title="更多浏览器操作" disabled={!status} onClick={() => setMenu((value) => !value)}><Icon name="more" size={16} /></IconButton>
@@ -414,9 +380,9 @@ export function BrowserPanel({ chatId, controls, browserActions, compact, maximi
 				<span className="browser-menu-separator" role="presentation" />
 				<Button size="compact" variant="ghost" className="browser-menu-item" role="menuitem" disabled={!!browserActions.pending} loading={browserActions.pending === "close"} onClick={closeBrowser}><Icon name="close" size={16} /><span>关闭浏览器</span></Button>
 			</Popover>}
-		</div>
+		</div>}
 		{browserActions.error && <p className="browser-panel-error" role="alert">{browserActions.error}</p>}
-		{watch && status ? controls.visible ? <BrowserScreen key={`${status.chatId}:${status.generation}`} status={status} controls={controls} actions={browserActions} inputHandle={inputHandle} pageHandle={pageHandle} onReload={reloadResult} onAction={actionResult} zoom={zoom} onPhase={setPhase} takeOver={ensureHuman} notice={notice} /> : <div className="browser-empty"><Icon name="monitor" size={28} /><strong>画面已暂停</strong><p>返回此聊天后显示最新画面，浏览器任务继续运行。</p></div> : <div className="browser-empty" role="status">
+		{blank ? <div className="browser-new-page"><BrowserAddress key={`${status?.generation}:${status?.activeTabId}`} initialValue="" newTab onSubmit={(text) => void commitAddress(text)} disabled={!tabsAvailable} /></div> : watch && status ? controls.visible ? <BrowserScreen key={`${status.chatId}:${status.generation}`} status={status} controls={controls} actions={browserActions} inputHandle={inputHandle} pageHandle={pageHandle} onReload={reloadResult} onAction={actionResult} zoom={zoom} onPhase={setPhase} takeOver={ensureHuman} /> : <div className="browser-empty"><Icon name="monitor" size={28} /><strong>画面已暂停</strong><p>返回此聊天后显示最新画面，浏览器任务继续运行。</p></div> : <div className="browser-empty" role="status">
 			<Icon name={error || dependencyError || failed ? "wifi" : status?.control === "starting" ? "clock" : "monitor"} size={28} />
 			<strong>{error ? "浏览器服务暂不可用" : status?.control === "starting" ? "正在启动浏览器…" : failed ? browserControlLabels[status.control] : status?.control === "closing" ? "正在关闭浏览器…" : status?.control === "closed" ? "浏览器已关闭" : !dependencies ? "正在检查浏览器…" : !dependencies.ready ? "浏览器尚未就绪" : !dependencies.enabled ? "AI 浏览器尚未启用" : "打开浏览器开始浏览"}</strong>
 			<p>{error ?? dependencyError ?? status?.error ?? (failed ? "重新打开会关闭当前页面，保留此聊天的登录状态。" : status?.control === "starting" ? "首次启动可能需要几秒，画面就绪后会自动显示。" : status?.control === "closed" ? "当前页面已关闭。可以自己打开浏览器继续浏览，也可以让 AI 打开网页。" : dependencies && !dependencies.ready ? dependencies.message : dependencies && !dependencies.enabled ? "在设置中开启后，可以自己浏览或交给 AI。" : "先自己输入网址、开标签；需要 AI 时，把当前页面交给它。")}</p>
