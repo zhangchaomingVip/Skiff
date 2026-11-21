@@ -36,6 +36,8 @@ export async function verifySessionStatistics(page, root, artifacts) {
 	const settings = page.getByRole("dialog", { name: "设置", exact: true });
 	await settings.getByRole("button", { name: "会话统计", exact: true }).click();
 	const stats = settings.getByRole("region", { name: "会话统计", exact: true });
+	// The app opens on the Code workspace, so the panel starts on the code slice.
+	await stats.getByRole("group", { name: "统计模式" }).getByRole("button", { name: /全部汇总/ }).click();
 	const label = (text) => stats.getByLabel(text, { exact: true });
 	const button = (text) => stats.getByRole("button", { name: text, exact: true });
 	const kpi = (text) => stats.locator(".statistics-stat").filter({ has: page.getByText(text, { exact: true }) }).locator("dd");
@@ -43,7 +45,6 @@ export async function verifySessionStatistics(page, root, artifacts) {
 	await stats.getByRole("cell", { name: /CDP 本地验证/ }).waitFor();
 	assert.deepEqual(await Promise.all(["会话请求", "消耗 Tokens", "生成图片", "生成视频"].map((item) => kpi(item).textContent())), ["2", "168", "1", "1"]);
 	assert.equal(await kpi("已知费用").textContent(), "¥0.00156");
-	assert.ok((await stats.getByText("1 次未定价", { exact: true }).count()) > 0);
 	const projection = await page.evaluate(async () => {
 		const workspace = JSON.parse(localStorage.getItem("skiff.workspace.v1"));
 		return window.__TAURI_INTERNALS__.invoke("read_session_statistics", { targets: workspace.chats.filter(({ sessionFile }) => sessionFile).map(({ id, projectId, sessionFile }) => ({ chatId: id, sessionFile, cwd: workspace.projects.find((p) => p.id === projectId).path })) });
@@ -54,6 +55,7 @@ export async function verifySessionStatistics(page, root, artifacts) {
 	const archive = stats.getByRole("row", { name: /统计归档项目/ });
 	assert.equal(await archive.locator("td").first().textContent(), "1");
 	assert.equal(await archive.locator("td").last().textContent(), "1");
+	assert.ok((await stats.getByText("1 次未定价", { exact: true }).count()) > 0, "The cost caveat stays in the grouped view");
 	await stats.getByRole("button", { name: "筛选项目：统计归档项目", exact: true }).click();
 	assert.equal(await kpi("消耗 Tokens").textContent(), "136");
 	await label("项目").selectOption("");

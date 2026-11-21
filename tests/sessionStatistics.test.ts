@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { cacheHitRate, collectStatistics, groupStatistics, rangeStart, showCost, statisticsTargets, statisticsTrend, summarizeStatistics, totalTokens, type StatisticsProjection } from "../src/chat/sessionStatistics";
+import { cacheHitRate, calendarWeeks, collectStatistics, groupStatistics, heatLevel, rangeStart, showCost, statisticsCalendar, statisticsTargets, statisticsTrend, summarizeStatistics, totalTokens, type StatisticsProjection } from "../src/chat/sessionStatistics";
 import { snapshotForOffer } from "../src/chat/routeSnapshot";
 import type { RuntimeOffer } from "../src/chat/modelFamilies";
 import type { Conversation, Project } from "../src/chat/workspace";
@@ -66,4 +66,27 @@ test("groups local calendar dates with zero-filled buckets and uses media comple
 	const all = statisticsTrend([...rows, { ...rows[0], at: date(-150) }], "all", now);
 	assert.equal(all.monthly, true);
 	assert.equal(all.points.reduce((sum, point) => sum + point.totals.video, 0), 1);
+});
+
+test("the activity calendar always covers the last 53 weeks, independent of any time range", () => {
+	const rows = collectStatistics(data, chats, projects, []);
+	const calendar = statisticsCalendar(rows, now, "tokens");
+	assert.equal(calendar.weeks, calendarWeeks);
+	assert.equal(calendar.days.length, 368);
+	assert.equal(calendar.days[0].at, new Date(2025, 10, 17).getTime());
+	assert.equal(calendar.days.at(-1)?.at, new Date(2026, 10, 19).getTime());
+	assert.ok(calendar.days.every((day, index) => day.week === Math.floor(index / 7) && day.weekday === index % 7));
+	assert.equal(Math.max(...calendar.days.map((day) => day.week)), calendarWeeks - 1);
+	const inside = rows.filter((row) => row.at !== undefined && row.at >= calendar.days[0].at && row.at <= now);
+	assert.equal(calendar.days.reduce((sum, day) => sum + day.value, 0), totalTokens(summarizeStatistics(inside).tokens));
+	assert.equal(calendar.maximum, Math.max(...calendar.days.map((day) => day.value)));
+	assert.equal(calendar.days.reduce((sum, day) => sum + day.totals.image, 0), 1);
+	assert.equal(statisticsCalendar(rows, now, "image").maximum, 1);
+	assert.equal(statisticsCalendar(rows, now, "video").days.reduce((sum, day) => sum + day.value, 0), 1);
+	const outside = { ...rows.find((row) => row.kind === "request")!, at: new Date(2024, 0, 5).getTime() };
+	assert.deepEqual(statisticsCalendar([...rows, outside], now, "tokens").days.map((day) => day.value), calendar.days.map((day) => day.value));
+	assert.equal(heatLevel(0, 100), 0);
+	assert.equal(heatLevel(1, 100), 1);
+	assert.equal(heatLevel(50, 100), 2);
+	assert.equal(heatLevel(100, 100), 4);
 });

@@ -164,6 +164,38 @@ export function rangeStart(range: StatisticsRange, now: number) {
 	const start = dayStart(now); start.setDate(start.getDate() - Number(range) + 1);
 	return start.getTime();
 }
+export type StatisticsMetric = "tokens" | "request" | "image" | "video";
+const heatLevels = 4;
+/** Bucket a day against the busiest day; zero stays on the empty placeholder. */
+export const heatLevel = (value: number, maximum: number) => !value || !maximum ? 0
+	: Math.min(heatLevels, Math.max(1, Math.ceil((heatLevels * value) / maximum)));
+/** A calendar is always a GitHub-style year view: 53 Monday-aligned weeks ending today. */
+export const calendarWeeks = 53;
+export type CalendarDay = { key: string; at: number; totals: Totals; value: number; week: number; weekday: number };
+export function statisticsCalendar(rows: readonly UsageRecord[], now: number, metric: StatisticsMetric) {
+	const today = dayStart(now);
+	const start = new Date(today);
+	start.setDate(start.getDate() - ((today.getDay() + 6) % 7) - (calendarWeeks - 1) * 7);
+	const first = start.getTime();
+	const buckets = new Map<number, UsageRecord[]>();
+	for (const row of rows) {
+		if (row.at === undefined) continue;
+		const at = dayStart(row.at).getTime();
+		if (at < first || at > today.getTime()) continue;
+		const bucket = buckets.get(at);
+		if (bucket) bucket.push(row); else buckets.set(at, [row]);
+	}
+	const days: CalendarDay[] = [];
+	let week = 0, weekday = 0;
+	for (const date = new Date(start); date <= today; date.setDate(date.getDate() + 1)) {
+		const at = dayStart(date.getTime()).getTime();
+		const totals = summarizeStatistics(buckets.get(at) ?? []);
+		days.push({ key: dayKey(date), at, totals, value: metric === "tokens" ? totalTokens(totals.tokens) : totals[metric], week, weekday });
+		if (weekday === 6) { week += 1; weekday = 0; } else weekday += 1;
+	}
+	return { days, weeks: calendarWeeks, maximum: days.reduce((maximum, day) => Math.max(maximum, day.value), 0) };
+}
+
 export function statisticsTrend(rows: readonly UsageRecord[], range: StatisticsRange, now: number) {
 	const today = dayStart(now);
 	const earliest = rows.reduce((value, row) => Math.min(value, row.at ?? Infinity), Infinity);

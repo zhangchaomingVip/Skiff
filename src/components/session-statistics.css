@@ -1,24 +1,58 @@
 @layer components {
-	.settings-dialog:has(.statistics-page) { width: min(1120px, calc(100vw - 24px)); height: min(880px, calc(100dvh - 24px)); }
+	/* Keep the shared settings shell size: a taller page must not resize the dialog between tabs. */
 	.statistics-page { max-width: none; display: grid; gap: var(--space-4); }
 	.statistics-heading, .statistics-trend-heading, .statistics-log-heading, .statistics-pager { display: flex; justify-content: space-between; align-items: center; gap: var(--space-2) var(--space-3); flex-wrap: wrap; }
-	.statistics-heading h2 { margin: 0 0 var(--space-1); font-size: var(--font-size-xl); }
+	.statistics-heading h2 { margin: 0; font-size: var(--font-size-xl); }
 	.statistics-heading p, .statistics-footnote, .statistics-caption, .statistics-empty, .statistics-notice { margin: 0; color: var(--muted); font-size: var(--font-size-sm); }
-	.statistics-filters { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-2); }
-	.statistics-filters label { display: grid; gap: var(--space-1); min-width: 0; font-size: var(--font-size-xs); color: var(--muted); }
-	.statistics-filters select { width: 100%; min-width: 0; padding: var(--space-2); border: 1px solid var(--border); border-radius: var(--radius-md); color: var(--foreground); background: var(--surface); font: inherit; font-size: var(--font-size-sm); text-overflow: ellipsis; }
+	.statistics-header { display: grid; gap: var(--space-2); }
+	.statistics-modes { display: flex; }
+	.statistics-filters { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+	.statistics-filters select { flex: 1 1 150px; min-width: 0; padding: var(--space-2); border: 1px solid var(--border); border-radius: var(--radius-md); color: var(--foreground); background: var(--surface); font: inherit; font-size: var(--font-size-sm); text-overflow: ellipsis; }
 	.statistics-card { min-width: 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); }
-	.statistics-kpis { margin: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; background: var(--border); border-radius: var(--radius-lg); overflow: hidden; }
+	.statistics-kpis { margin: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; background: var(--border); border-radius: var(--radius-lg); overflow: hidden; }
+	.statistics-kpis[data-count="4"] { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 	.statistics-card:has(.statistics-trend) .statistics-kpis { border-end-start-radius: 0; border-end-end-radius: 0; }
 	.statistics-stat { background: var(--surface); padding: var(--space-3); min-width: 0; }
-	.statistics-stat:nth-child(n + 5) { grid-column: span 2; }
 	.statistics-stat dt { font-size: var(--font-size-sm); color: var(--muted); }
-	.statistics-stat dd { margin: var(--space-1) 0; font-size: var(--font-size-xl); font-weight: var(--font-weight-semibold); font-variant-numeric: tabular-nums; }
-	.statistics-stat small, .statistics-table small { display: block; color: var(--muted); font-size: var(--font-size-xs); }
+	.statistics-stat dd { margin: var(--space-2) 0 0; font-size: var(--font-size-xl); font-weight: var(--font-weight-semibold); font-variant-numeric: tabular-nums; }
+	.statistics-table small { display: block; color: var(--muted); font-size: var(--font-size-xs); }
 	.statistics-trend, .statistics-log-heading, .statistics-pager, .statistics-empty { padding: var(--space-3); }
 	.statistics-trend { border-top: 1px solid var(--border); }
 	.statistics-trend h3 { margin: 0; font-size: var(--font-size-sm); }
 	.statistics-chart { margin-top: var(--space-3); display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: var(--space-2); }
+	.statistics-plot-chart { position: relative; }
+	.statistics-tooltip { position: absolute; z-index: 2; transform: translate(calc(-50% + var(--tip-x, 0px)), calc(-100% - 6px + var(--tip-y, 0px))); padding: 2px var(--space-2); border-radius: var(--radius-sm); background: var(--foreground); color: var(--surface); font-size: var(--font-size-xs); line-height: 1.4; white-space: nowrap; pointer-events: none; font-variant-numeric: tabular-nums; }
+	/* A GitHub-style year view: every column shares the card width, so it never scrolls. */
+	.statistics-calendar { min-width: 0; container-type: inline-size; }
+	.statistics-heatmap { --statistics-weeks: 53; position: relative; display: grid; grid-template-columns: auto repeat(var(--statistics-weeks), minmax(0, 1fr)); gap: 3px; width: 100%; max-width: 100%; padding: 2px; }
+	.statistics-heatmap-month { grid-row: 1; overflow: hidden; white-space: nowrap; font-size: var(--font-size-xs); line-height: var(--line-height-tight); color: var(--muted); }
+	.statistics-heatmap-weekday { grid-column: 1; display: flex; align-items: center; white-space: nowrap; overflow: hidden; font-size: var(--font-size-xs); line-height: var(--line-height-tight); color: var(--muted); }
+	.statistics-heatmap-cell { position: relative; align-self: start; width: 100%; aspect-ratio: 1; border-radius: var(--radius-sm); background: color-mix(in srgb, var(--border) 60%, transparent); }
+	.statistics-heatmap-cell[data-level="1"] { background: color-mix(in srgb, var(--accent) 25%, transparent); }
+	.statistics-heatmap-cell[data-level="2"] { background: color-mix(in srgb, var(--accent) 50%, transparent); }
+	.statistics-heatmap-cell[data-level="3"] { background: color-mix(in srgb, var(--accent) 75%, transparent); }
+	.statistics-heatmap-cell[data-level="4"] { background: var(--accent); }
+	.statistics-heatmap-cell[data-active="true"] { outline: 1px solid var(--foreground); outline-offset: 1px; }
+	.statistics-heatmap:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+	/* Anchored to the hovered cell; --tip-shift is only the edge-overflow correction. */
+	.statistics-heatmap-tip { position: absolute; z-index: 3; bottom: calc(100% + 8px); left: 50%; display: grid; gap: 2px; width: max-content; padding: var(--space-1) var(--space-2); transform: translateX(calc(-50% + var(--tip-shift, 0px))); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); box-shadow: var(--shadow-elevation-2); color: var(--foreground); font-size: var(--font-size-xs); line-height: var(--line-height-base); white-space: nowrap; pointer-events: none; font-variant-numeric: tabular-nums; }
+	.statistics-heatmap-tip strong { font-weight: var(--font-weight-semibold); font-variant-numeric: normal; }
+	.statistics-heatmap-tip span { color: var(--muted); }
+	.statistics-heatmap-foot { display: flex; align-items: center; justify-content: flex-end; margin-top: var(--space-2); }
+	@container (max-width: 660px) {
+		.statistics-heatmap { gap: 2px; }
+		/* Weekday labels are taller than the cells here and would stretch the rows. */
+		.statistics-heatmap-weekday { display: none; }
+	}
+	@container (max-width: 520px) {
+		.statistics-heatmap-month { display: none; }
+	}
+	.statistics-heatmap-legend { display: inline-flex; align-items: center; gap: 3px; color: var(--muted); font-size: var(--font-size-xs); }
+	.statistics-heatmap-legend i { width: 10px; height: 10px; border-radius: var(--radius-sm); background: color-mix(in srgb, var(--border) 60%, transparent); }
+	.statistics-heatmap-legend i[data-level="1"] { background: color-mix(in srgb, var(--accent) 25%, transparent); }
+	.statistics-heatmap-legend i[data-level="2"] { background: color-mix(in srgb, var(--accent) 50%, transparent); }
+	.statistics-heatmap-legend i[data-level="3"] { background: color-mix(in srgb, var(--accent) 75%, transparent); }
+	.statistics-heatmap-legend i[data-level="4"] { background: var(--accent); }
 	.statistics-scale { height: 112px; display: flex; flex-direction: column; align-items: end; justify-content: space-between; }
 	.statistics-scale, .statistics-chart-dates { font-size: var(--font-size-xs); color: var(--muted); font-variant-numeric: tabular-nums; }
 	.statistics-plot { min-width: 0; }
@@ -43,8 +77,9 @@
 	.statistics-notice { padding: var(--space-2) var(--space-3); border-inline-start: 2px solid var(--accent); background: var(--subtle); }
 	.statistics-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 	@media (max-width: 540px) {
-		.statistics-filters, .statistics-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-		.statistics-stat:nth-child(n + 5) { grid-column: auto; }
+		.statistics-kpis, .statistics-kpis[data-count="4"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+		/* An odd count would leave a bare cell showing the separator colour. */
+		.statistics-kpis[data-count="3"] .statistics-stat:last-child { grid-column: span 2; }
 		.statistics-chart-dates span:nth-child(even):not(:last-child) { display: none; }
 	}
 }
