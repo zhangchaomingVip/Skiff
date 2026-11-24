@@ -61,9 +61,11 @@ export class DiffPreviewCache {
 		this.setVersion(root, version);
 		const token = {};
 		this.preloaded.set(root, { version, token });
-		// Five visible projects * 24 entries fit under the normal 128-entry limit.
+		// Visible projects share one entry budget, so the warmup queue stays near
+		// maxEntries instead of growing with the number of projects.
 		const unique = [...new Set(paths.map((path) => path.replaceAll("\\", "/")))];
-		this.queue.push(...unique.slice(0, Math.min(24, this.maxEntries)).map((path) => ({ root, path, token })));
+		const perProject = Math.min(24, Math.max(2, Math.floor(this.maxEntries / Math.max(1, this.roots?.size ?? 1))));
+		this.queue.push(...unique.slice(0, perProject).map((path) => ({ root, path, token })));
 		this.schedulePreloads();
 	}
 

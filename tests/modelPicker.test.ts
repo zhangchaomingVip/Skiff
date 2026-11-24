@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { pickerGroups, pickerFamilyGroups, pickerModelName, formatPriceMultiplier } from "../src/chat/modelPicker.ts";
+import { FAVORITES_GROUP_KEY, modelFavoriteKey, pickerGroups, pickerFamilyGroups, pickerModelName, formatPriceMultiplier, quickPickerGroups } from "../src/chat/modelPicker.ts";
 import { modelsFromOffers } from "../src/chat/modelFamilies.ts";
 import type { ModelInfo } from "../src/chat/types.ts";
 
@@ -38,6 +38,26 @@ test("picker keeps aliases compact and preserves multiplier precision", () => {
 	assert.equal(formatPriceMultiplier(0), "0x");
 	assert.equal(formatPriceMultiplier(1.5), "1.5x");
 	for (const multiplier of [undefined, 1, -1, NaN, Infinity]) assert.equal(formatPriceMultiplier(multiplier), undefined);
+});
+
+test("the quick list leads with cross-provider favorites and keeps the current provider whole", () => {
+	const models = [
+		{ id: "glm-5.3", provider: "magpie-glm", relayId: "magpie", providerName: "magpie" },
+		{ id: "glm-5.3-flash", provider: "magpie-glm", relayId: "magpie", providerName: "magpie" },
+		{ id: "deepseek-chat", provider: "relay-a", relayId: "a", providerName: "中转 A" },
+		{ id: "kimi-k3", provider: "relay-b", relayId: "b", providerName: "中转 B" },
+	];
+	const familyOf = () => undefined;
+	const outsider = modelFavoriteKey(models[3]);
+	const groups = quickPickerGroups(models, models[1], [outsider, modelFavoriteKey(models[1])], familyOf);
+	assert.deepEqual(groups.map((group) => [group.name, group.models.map((model) => model.id)]), [
+		["收藏", ["kimi-k3"]],
+		["magpie", ["glm-5.3", "glm-5.3-flash"]],
+	], "A favorite inside the current provider is already in its full list");
+	assert.equal(groups[0].key, FAVORITES_GROUP_KEY);
+	assert.deepEqual(quickPickerGroups(models, undefined, [outsider], familyOf).map((group) => group.name), ["收藏"]);
+	assert.deepEqual(quickPickerGroups(models, { id: "unlisted", provider: "relay-z" }, [outsider], familyOf).at(-1)?.models.map((model) => model.id), ["unlisted"], "A current model missing from the catalog stays recognizable");
+	assert.deepEqual(quickPickerGroups([], undefined, [], familyOf), []);
 });
 
 test("family sections combine suppliers without merging exact model targets", () => {

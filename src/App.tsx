@@ -15,7 +15,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { usePiSessions } from "./chat/usePiSessions";
 import { useSessionRef } from "./chat/useSessionValue";
 import { showVoyageIcon } from "./taskbarIcon";
-import { MAX_PROJECTS, isArchived, useWorkspace, visibleConversations, visibleProjects } from "./chat/workspace";
+import { MAX_PROJECTS, isArchived, isHiddenProject, useWorkspace, visibleConversations, visibleProjects } from "./chat/workspace";
 import { useModelFamilies } from "./chat/useModelFamilies";
 import { ModelFamilyContext } from "./chat/familyContext";
 import { familyFromProvider } from "./chat/modelDisplay";
@@ -28,7 +28,7 @@ import { ProjectDialog } from "./components/ProjectDialog";
 import { ProjectListLimit } from "./components/ProjectListLimit";
 import { useProjectGitActivity, useProjectGitPolling, useProjectGitStatus } from "./workbench/useProjectGitStatus";
 import type { ImageAttachment } from "./chat/types";
-import { SettingsDialog } from "./components/SettingsDialog";
+import { SettingsWorkspace } from "./components/SettingsDialog";
 import { TitleBarNav } from "./components/TitleBarNav";
 import { isMacPlatform, type SettingsCategory, type SettingsRestrictions } from "./components/settingsNavigation";
 import { ResizeSeparator } from "./components/ResizeSeparator";
@@ -64,6 +64,7 @@ export default function App() {
 	const { activeChat, activeProject } = library;
 	const allChats = library.workspace?.chats ?? [];
 	const shownProjects = useMemo(() => visibleProjects(library.workspace?.projects ?? []), [library.workspace?.projects]);
+	const hiddenProjects = useMemo(() => (library.workspace?.projects ?? []).filter(isHiddenProject).map((project) => ({ ...project, chatCount: allChats.filter((chat) => chat.projectId === project.id).length })), [library.workspace?.projects, allChats]);
 	useProjectGitPolling(shownProjects);
 	const activeProjectGit = useProjectGitStatus(activeProject);
 	const projectHasGit = !!activeProjectGit.status;
@@ -115,6 +116,21 @@ export default function App() {
 		const resize = () => setViewportWidth(window.innerWidth);
 		window.addEventListener("resize", resize);
 		return () => window.removeEventListener("resize", resize);
+	}, []);
+	// Chromium freezes :hover when the pointer leaves the window, leaving the
+	// last panel's scrollbar thumb painted on an unfocused window; dim the
+	// capsule thumbs until the pointer re-enters (see .scrollbar-frozen).
+	useEffect(() => {
+		const freeze = () => document.body.classList.add("scrollbar-frozen");
+		const thaw = () => document.body.classList.remove("scrollbar-frozen");
+		document.documentElement.addEventListener("mouseleave", freeze);
+		window.addEventListener("blur", freeze);
+		window.addEventListener("mousemove", thaw);
+		return () => {
+			document.documentElement.removeEventListener("mouseleave", freeze);
+			window.removeEventListener("blur", freeze);
+			window.removeEventListener("mousemove", thaw);
+		};
 	}, []);
 	const [projectDialogOpen, setProjectDialogOpen] = useState(false);
 	const [purgeError, setPurgeError] = useState<string>();
@@ -345,12 +361,13 @@ export default function App() {
 	};
 	const browserActions = useBrowserActions(activeChat?.id, browserPanel, actions, session.isCurrent, send);
 	const selectTool = useCallback((tool: WorkbenchTool) => {
+		if (settingsCategory && tool === "chats") { setSettingsCategory(undefined); setActiveTool("chats"); setSidebarOpen(true); return; }
 		if (tool === "files") tool = lastFileTab.current;
 		// The studio owns its route now: picking a generation tool only selects the
 		// mode, it never pulls the user out of the canvas they are looking at.
 		if (activeTool === tool && sidebarOpen) { setSidebarOpen(false); return; }
 		setActiveTool(tool); setSidebarOpen(true);
-	}, [activeTool, sidebarOpen]);
+	}, [activeTool, sidebarOpen, settingsCategory]);
 	const openProjectChanges = useCallback(() => {
 		setManualBrowseProjectId(undefined);
 		setActiveTool(projectHasGit ? "git" : "files");
@@ -419,28 +436,30 @@ export default function App() {
 	return (
 		<ModelFamilyContext.Provider value={familyContext}>
 		{pool.runtimes}
-		<div className={`app ${sidebarOpen ? "with-sidebar" : ""}`} data-workspace-mode={workspaceMode}>
+		<div className={`app ${sidebarOpen || settingsCategory ? "with-sidebar" : ""} ${settingsCategory ? "settings-open" : ""}`} data-workspace-mode={workspaceMode}>
 			<TitleBar nav={<><TitleBarNav sidebarOpen={sidebarOpen} onToggleSidebar={() => setSidebarOpen((value) => !value)} /><WorkspaceModeSwitcher mode={workspaceMode} onChange={switchWorkspaceMode} /></>} voyageOpen={voyageExpanded && !browserPanel.expanded} onToggleVoyage={workspaceMode === "code" ? toggleVoyage : undefined}>{workspaceMode === "code" && activeChat && <IconButton className="browser-trigger" size="compact" aria-label="浏览器" aria-pressed={browserPanel.expanded} title={browserPanel.expanded ? "收起浏览器" : "展开浏览器"} onClick={toggleBrowser}><Icon name="monitor" /></IconButton>}</TitleBar>
 			<div className="app-body" style={{ "--sidebar-width": `${shownSidebarWidth}px` } as CSSProperties}>
 			{(!narrowViewport || !sidebarOpen) && <ActivityBar mode={workspaceMode} active={activeTool} panelOpen={sidebarOpen} onSelect={selectTool} onOpenSettings={() => openSettings()} />}
 			<WorkspaceRoute className="workbench-shell code-workspace" active={workspaceMode === "code"} label="Code 工作区">
-			{codeSidebarOpen && !(narrowViewport && (workspaceMode !== "code" || settingsCategory)) && <SidebarPresentation active={workspaceMode === "code"} activityBar={<ActivityBar mode={workspaceMode} active={codeTool} panelOpen={sidebarOpen} onSelect={selectTool} onOpenSettings={() => openSettings()} />} onClose={() => setSidebarOpen(false)}>{codeTool === "chats" ? <Sidebar projects={shownProjects} chats={visibleChats} activeId={activeChat?.id} selectedProjectId={selectedProjectId} disabled={navigationDisabled} runningIds={pool.runningIds} canCloseChat={pool.canClose} navigationDisabled={navigationDisabled} connected={connected} onNewChat={newDraft} statuses={pool.statuses} searchProgress={retrieval.progress} searchQuery={retrieval.query} onSearch={retrieval.setQuery} onSearchMatch={retrieval.openMatch} onSelectChat={selectChat} onSelectProject={selectProject} onAddProject={() => setProjectDialogOpen(true)} onRenameChat={library.renameChat} onRenameProject={library.renameProject} onDeleteChat={deleteArchivedChat} onHideProject={hideProject} onPurgeProject={purgeProject} onArchiveChat={archiveChat} onPurgeChat={purgeChat} onTogglePinChat={(id, pinned) => library.updateChat(id, { pinned })} /> : isFileWorkbenchTab(codeTool) && <ProjectWorkbenchPanel history={<GitBranches key={browse.project?.path} history={gitHistory} onSelect={(reference) => { gitHistory.selectRef(reference); if (narrowViewport) setSidebarOpen(false); }} />} tool={codeTool} onSelectTab={setActiveTool} projects={shownProjects} project={browse.project} following={!browse.manualProjectId} onSelectProject={setManualBrowseProjectId} onFollow={() => setManualBrowseProjectId(undefined)} onAddProject={() => setProjectDialogOpen(true)} onOpen={openProjectPreview} onMutated={() => setWorkbenchRevision((value) => value + 1)} />}</SidebarPresentation>}
+{settingsCategory ? <SidebarPresentation active={!narrowViewport} label="设置分类导航" onClose={() => setSettingsCategory(undefined)}><div className="sidebar settings-sidebar"><div id="settings-sidebar-navigation" /></div></SidebarPresentation> : codeSidebarOpen && !(narrowViewport && (workspaceMode !== "code" || settingsCategory)) && <SidebarPresentation active={workspaceMode === "code"} activityBar={<ActivityBar mode={workspaceMode} active={codeTool} panelOpen={sidebarOpen} onSelect={selectTool} onOpenSettings={() => openSettings()} />} onClose={() => setSidebarOpen(false)}>{codeTool === "chats" ? <Sidebar projects={shownProjects} chats={visibleChats} activeId={activeChat?.id} selectedProjectId={selectedProjectId} disabled={navigationDisabled} runningIds={pool.runningIds} canCloseChat={pool.canClose} navigationDisabled={navigationDisabled} connected={connected} onNewChat={newDraft} statuses={pool.statuses} searchProgress={retrieval.progress} searchQuery={retrieval.query} onSearch={retrieval.setQuery} onSearchMatch={retrieval.openMatch} onSelectChat={selectChat} onSelectProject={selectProject} onAddProject={() => setProjectDialogOpen(true)} onRenameChat={library.renameChat} onRenameProject={library.renameProject} onDeleteChat={deleteArchivedChat} onHideProject={hideProject} onPurgeProject={purgeProject} onArchiveChat={archiveChat} onPurgeChat={purgeChat} onTogglePinChat={(id, pinned) => library.updateChat(id, { pinned })} /> : isFileWorkbenchTab(codeTool) && <ProjectWorkbenchPanel history={<GitBranches key={browse.project?.path} history={gitHistory} onSelect={(reference) => { gitHistory.selectRef(reference); if (narrowViewport) setSidebarOpen(false); }} />} tool={codeTool} onSelectTab={setActiveTool} projects={shownProjects} project={browse.project} following={!browse.manualProjectId} onSelectProject={setManualBrowseProjectId} onFollow={() => setManualBrowseProjectId(undefined)} onAddProject={() => setProjectDialogOpen(true)} onOpen={openProjectPreview} onMutated={() => setWorkbenchRevision((value) => value + 1)} />}</SidebarPresentation>}
 			{workspaceMode === "code" && desktopSidebarOpen && <ResizeSeparator label="调整左侧导航宽度" value={shownSidebarWidth} bounds={sidebarBounds} onResize={setSidebarWidthFromDrag} onCommit={commitSidebarWidth} />}
 			<ProjectChangesNavigationContext.Provider value={resultNavigation}>
-			<main className="workspace">
+			<main className={`workspace ${settingsCategory ? "settings-active" : ""}`}>
+				{settingsCategory ? <SettingsWorkspace onRetryModels={() => void modelFamilies.refresh()} initialCategory={settingsCategory} images={generationStudio.images} videos={generationStudio.videos} prompt={{ sessionPath: session.sessionFile, onSaved: () => { setSettingsCategory(undefined); session.reconnect(); } }} restrictions={settingsRestrictions} providers={{ configError: modelFamilies.error, relays: modelFamilies.relays, families: modelFamilies.families, usdCnyRate: modelFamilies.usdCnyRate, onPreviewBatch: modelFamilies.previewRelayBatch, onBatch: modelFamilies.batchRelays, onSaveRelay: modelFamilies.saveRelay, onDeleteRelay: modelFamilies.deleteRelay, onSetRelayEnabled: modelFamilies.setRelayEnabled, onTest: modelFamilies.test, onCancelTest: modelFamilies.cancelTest, onDiscover: modelFamilies.discover, onCreateFamily: modelFamilies.createFamily }} statistics={{ chats: allChats, projects: library.workspace?.projects ?? [], offers: modelFamilies.offers, workspaceMode }} archives={{ chats: archivedChats, projects: library.workspace?.projects ?? [], busy: locked, canClose: pool.canClose, onRestore: restoreArchivedChat, onDelete: deleteArchivedChat }} search={search} onCategoryChange={rememberSettingsCategory} onClose={() => setSettingsCategory(undefined)} /> : <>
 				<div className={`primary-view ${codeTool !== "chats" ? "preview-hidden" : ""}`}>{<BrowserWorkspace chatId={activeChat?.id} controls={browserPanel} browserActions={browserActions} availableWidth={workspaceWidth} width={browserWidth} onWidth={setBrowserWidth} onWidthCommit={commitBrowserWidth} focusRequest={browserFocus.chatId === activeChat?.id ? browserFocus.version : 0} busy={busy || session.loading} onSettings={() => openSettings("browser")} onReconnect={session.reconnect}><VoyageWorkspace topBar={<>{chatHeader}{workspaceAlerts}</>} draftTarget={activeChat && activeProject ? { chatId: activeChat.id, cwd: activeProject.path, sessionFile: activeChat.hasMessages ? activeChat.sessionFile : undefined } : undefined} revealMessage={retrieval.reveal} modelNotice={modelNotice} key={`${session.owner.id ?? "loading"}:${session.owner.cwd ?? ""}`} state={displayState} loading={session.loading} connected={connected && !lifecyclePending} pending={session.pending || lifecyclePending} actions={actions} onSend={send} onReconnect={session.reconnect} projectName={activeProject?.name} railWidth={shownVoyageWidth} availableWidth={workspaceWidth} onRailWidth={setVoyageWidthFromDrag} onRailWidthCommit={commitVoyageWidth} expanded={workspaceMode === "code" && voyageExpanded && !browserPanel.expanded} onToggle={toggleVoyage} /></BrowserWorkspace>}</div>
 				<GitTreeWorkspace key={browse.project?.path} project={browse.project} history={gitHistory} branchesOpen={sidebarOpen} hidden={codeTool !== "git-tree"} onBack={() => setActiveTool("chats")} onBranches={() => setSidebarOpen((value) => !value)} />
 				{/* Keep previews mounted while another tool owns the workspace so returning restores their scroll position. */}
 				{(previewTabs.length > 0 || isFileWorkbenchTab(codeTool)) && <div className={`file-workspace-view ${codeTool !== "files" && codeTool !== "git" ? "preview-hidden" : ""}`}>{activePreviewId ? <ProjectPreview tabs={previewTabs} activeId={activePreviewId} revision={workbenchRevision} onActivate={setActivePreviewId} onClose={closeProjectPreview} onMode={(id, mode) => setPreviewTabs((current) => current.map((tab) => tab.id === id ? { ...tab, mode } : tab))} onBack={() => setActiveTool("chats")} /> : <FileWorkspaceEmpty project={browse.project} tool={codeTool === "git" ? "git" : "files"} />}</div>}
+			</>}
 			</main>
 			</ProjectChangesNavigationContext.Provider>
 			</WorkspaceRoute>
-			<DesignWorkspace active={workspaceMode === "design"} kind={generationKind} studio={generationStudio} onKind={(kind) => setActiveTool(kind === "image" ? "image-generation" : "video-generation")} onConfigure={(kind) => openSettings(kind === "image" ? "images" : "videos")} sidebarOpen={designSidebarOpen && !(narrowViewport && !!settingsCategory)} onCloseSidebar={() => setDesignSidebarOpen(false)} onOpenSidebar={() => setDesignSidebarOpen(true)} sidebarResize={workspaceMode === "design" && desktopSidebarOpen && <ResizeSeparator label="调整设计导航宽度" value={shownSidebarWidth} bounds={sidebarBounds} onResize={setSidebarWidthFromDrag} onCommit={commitSidebarWidth} />} activityBar={<ActivityBar mode="design" active={designTool} panelOpen={designSidebarOpen} onSelect={selectTool} onOpenSettings={() => openSettings()} />} project={activeProject} onOpenCodeFile={(project, path) => { if (activeProject?.id !== project.id) library.selectProject(project.id); setActiveTool("files"); openProjectPreview(project, path, "file"); setCodeSidebarOpen(true); }} />
+			{settingsCategory && workspaceMode === "design" ? <div className="workbench-shell settings-shell"><SidebarPresentation active={!narrowViewport} label="设置分类导航" onClose={() => setSettingsCategory(undefined)}><div className="sidebar settings-sidebar"><div id="settings-sidebar-navigation" /></div></SidebarPresentation><main className="workspace settings-active"><SettingsWorkspace onRetryModels={() => void modelFamilies.refresh()} initialCategory={settingsCategory} images={generationStudio.images} videos={generationStudio.videos} prompt={{ sessionPath: session.sessionFile, onSaved: () => { setSettingsCategory(undefined); session.reconnect(); } }} restrictions={settingsRestrictions} providers={{ configError: modelFamilies.error, relays: modelFamilies.relays, families: modelFamilies.families, usdCnyRate: modelFamilies.usdCnyRate, onPreviewBatch: modelFamilies.previewRelayBatch, onBatch: modelFamilies.batchRelays, onSaveRelay: modelFamilies.saveRelay, onDeleteRelay: modelFamilies.deleteRelay, onSetRelayEnabled: modelFamilies.setRelayEnabled, onTest: modelFamilies.test, onCancelTest: modelFamilies.cancelTest, onDiscover: modelFamilies.discover, onCreateFamily: modelFamilies.createFamily }} statistics={{ chats: allChats, projects: library.workspace?.projects ?? [], offers: modelFamilies.offers, workspaceMode }} archives={{ chats: archivedChats, projects: library.workspace?.projects ?? [], busy: locked, canClose: pool.canClose, onRestore: restoreArchivedChat, onDelete: deleteArchivedChat }} search={search} onCategoryChange={rememberSettingsCategory} onClose={() => setSettingsCategory(undefined)} /></main></div> : <DesignWorkspace active={workspaceMode === "design"} kind={generationKind} studio={generationStudio} onKind={(kind) => setActiveTool(kind === "image" ? "image-generation" : "video-generation")} onConfigure={(kind) => openSettings(kind === "image" ? "images" : "videos")} sidebarOpen={designSidebarOpen && !(narrowViewport && !!settingsCategory)} onCloseSidebar={() => setDesignSidebarOpen(false)} onOpenSidebar={() => setDesignSidebarOpen(true)} sidebarResize={workspaceMode === "design" && desktopSidebarOpen && <ResizeSeparator label="调整设计导航宽度" value={shownSidebarWidth} bounds={sidebarBounds} onResize={setSidebarWidthFromDrag} onCommit={commitSidebarWidth} />} activityBar={<ActivityBar mode="design" active={designTool} panelOpen={designSidebarOpen} onSelect={selectTool} onOpenSettings={() => openSettings()} />} project={activeProject} onOpenCodeFile={(project, path) => { if (activeProject?.id !== project.id) library.selectProject(project.id); setActiveTool("files"); openProjectPreview(project, path, "file"); setCodeSidebarOpen(true); }} />}
 			</div>
 			{retrieval.historyView && <HistorySearchDialog {...retrieval.historyView} onClose={retrieval.closeHistory} />}
-			{shownProjects.length > MAX_PROJECTS ? <ProjectListLimit projects={shownProjects} onRemove={(ids) => { for (const id of ids) library.hideProject(id); }} /> : projectDialogOpen && <ProjectDialog projects={shownProjects} onAdd={library.addProject} onClose={() => setProjectDialogOpen(false)} />}
-			{settingsCategory && <SettingsDialog onRetryModels={() => void modelFamilies.refresh()} initialCategory={settingsCategory} images={generationStudio.images} videos={generationStudio.videos} prompt={{ sessionPath: session.sessionFile, onSaved: () => { setSettingsCategory(undefined); session.reconnect(); } }} restrictions={settingsRestrictions} providers={{ configError: modelFamilies.error, relays: modelFamilies.relays, families: modelFamilies.families, usdCnyRate: modelFamilies.usdCnyRate, onPreviewBatch: modelFamilies.previewRelayBatch, onBatch: modelFamilies.batchRelays, onSaveRelay: modelFamilies.saveRelay, onDeleteRelay: modelFamilies.deleteRelay, onSetRelayEnabled: modelFamilies.setRelayEnabled, onTest: modelFamilies.test, onCancelTest: modelFamilies.cancelTest, onDiscover: modelFamilies.discover, onCreateFamily: modelFamilies.createFamily }} statistics={{ chats: allChats, projects: library.workspace?.projects ?? [], offers: modelFamilies.offers, workspaceMode }} archives={{ chats: archivedChats, projects: library.workspace?.projects ?? [], busy: locked, canClose: pool.canClose, onRestore: restoreArchivedChat, onDelete: deleteArchivedChat }} search={search} onCategoryChange={rememberSettingsCategory} onClose={() => setSettingsCategory(undefined)} />}
+			{shownProjects.length > MAX_PROJECTS ? <ProjectListLimit projects={shownProjects} onRemove={(ids) => { for (const id of ids) library.hideProject(id); }} /> : projectDialogOpen && <ProjectDialog projects={shownProjects} hidden={hiddenProjects} onAdd={library.addProject} onRestore={library.restoreProject} onClose={() => setProjectDialogOpen(false)} />}
 		</div>
 		</ModelFamilyContext.Provider>
 	);
 }
+

@@ -32,7 +32,7 @@ try {
 		const legacy = page.getByRole("dialog", { name: "整理项目列表" });
 		await legacy.waitFor();
 		const before = await workspace();
-		assert.equal(before.projects.length, 6);
+		assert.equal(before.projects.length, 21);
 		assert.equal(await legacy.getByRole("button", { name: "移出所选项目" }).isDisabled(), true);
 		await legacy.getByRole("radio", { name: /emptyForTest/ }).check();
 		await page.screenshot({ path: fileURLToPath(new URL(`${theme}-limit.png`, output)), animations: "disabled" });
@@ -42,7 +42,7 @@ try {
 		await page.getByRole("tab", { name: "Commit", exact: true }).click();
 		await page.locator(".git-file").first().waitFor();
 		await page.getByRole("button", { name: /^浏览项目：/ }).click();
-		assert.equal(await page.getByRole("option").count(), 5);
+		assert.equal(await page.getByRole("option").count(), 20);
 		await page.keyboard.press("Escape");
 
 		// Canceling replacement must not hide the selected project.
@@ -58,7 +58,7 @@ try {
 		await dialog.getByRole("button", { name: "移出并创建项目" }).click();
 		await dialog.waitFor({ state: "hidden" });
 		const replaced = await workspace();
-		assert.equal(replaced.projects.filter((item) => item.hiddenAt === undefined).length, 5);
+		assert.equal(replaced.projects.filter((item) => item.hiddenAt === undefined).length, 20);
 		assert.ok(replaced.projects.find((item) => item.name === "aiagent").hiddenAt);
 		for (const chat of before.chats) assert.equal(replaced.chats.find((item) => item.id === chat.id)?.sessionFile, chat.sessionFile);
 		assert.equal(await page.evaluate(() => window.skiffPreview.commands.filter((item) => item.command === "delete_session_file").length), 0);
@@ -68,7 +68,7 @@ try {
 		assert.equal(await dialog.getByRole("radio").count(), 0);
 		await dialog.getByRole("button", { name: "创建项目", exact: true }).click();
 		await dialog.waitFor({ state: "hidden" });
-		assert.equal((await workspace()).projects.filter((item) => item.hiddenAt === undefined).length, 5);
+		assert.equal((await workspace()).projects.filter((item) => item.hiddenAt === undefined).length, 20);
 		await chooseProject("Skiff");
 
 		// Override the preview transport, keeping its normal command recording.
@@ -86,7 +86,7 @@ try {
 			window.skiffPreview.commands.length = 0;
 			window.dispatchEvent(new Event("focus"));
 		});
-		await page.waitForFunction(() => window.skiffPreview.commands.filter((item) => item.command === "get_project_git_status").length === 5);
+		await page.waitForFunction(() => window.skiffPreview.commands.filter((item) => item.command === "get_project_git_status").length === 20);
 		await chooseProject("cc-switch");
 		await page.getByText("Local project", { exact: true }).waitFor();
 		assert.equal(await page.locator(".git-panel [role=alert]").count(), 0);

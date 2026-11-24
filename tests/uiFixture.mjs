@@ -1,6 +1,6 @@
 import { seedPolishPreview } from "./polishFixture.mjs";
 
-export const fixtures = ["new-chat", "single", "multi", "unknown", "empty", "loading", "error", "chat", "long", "settings", "settings-info", "picker", "voyage", "voyage-output", "voyage-thinking", "voyage-tool", "voyage-moored", "voyage-high", "authorization", "sidebar", "project-limit", "archive", "statistics", "visual", "tool-spacing", "process-rows", "repeated-process", "process-folding", "process-actions", "file-discovery", "content-replay-a", "content-replay-b", "chat-polish-029", "message-images", "title-generation"];
+export const fixtures = ["new-chat", "single", "multi", "unknown", "empty", "loading", "error", "chat", "long", "settings", "settings-info", "picker", "voyage", "voyage-output", "voyage-thinking", "voyage-tool", "voyage-moored", "voyage-high", "authorization", "sidebar", "project-limit", "project-restore", "archive", "statistics", "visual", "tool-spacing", "process-rows", "repeated-process", "process-folding", "process-actions", "file-discovery", "content-replay-a", "content-replay-b", "chat-polish-029", "message-images", "title-generation"];
 
 // This entry runs only on the separate preview origin. It never uses real pi.
 export function preparePreview(target) {
@@ -36,7 +36,12 @@ export function preparePreview(target) {
 			{ id: "sidebar-aiagent", name: "aiagent", path: "D:\\workspace\\aiagent" },
 			{ id: "sidebar-empty", name: "cc-switch", path: "D:\\workspace\\cc-switch" },
 		];
-		if (fixture === "project-limit") projects.push(...["api-portal", "workbuddy2api", "emptyForTest"].map((name) => ({ id: name, name, path: `D:\\workspace\\${name}` })));
+		// MAX_PROJECTS + 1 projects: the overflow dialog only opens above the cap.
+		if (fixture === "project-limit") projects.push(
+			...["api-portal", "workbuddy2api"].map((name) => ({ id: name, name, path: `D:\\workspace\\${name}` })),
+			...Array.from({ length: 15 }, (_, index) => ({ id: `bench-${index}`, name: `bench-${index}`, path: `D:\\workspace\\bench-${index}` })),
+			{ id: "emptyForTest", name: "emptyForTest", path: "D:\\workspace\\emptyForTest" },
+		);
 		const titles = ["固定模型配置弹窗尺寸", "实现008 UI系统加固需求", "澄清006范围与字段权威", "对比Skiff与cc-switch页面", "回应问候"];
 		const chats = projects.flatMap((project, projectIndex) => Array.from({ length: [22, 6, 0][projectIndex] }, (_, index) => ({
 			id: `${project.id}-chat-${index}`, projectId: project.id,
@@ -46,6 +51,20 @@ export function preparePreview(target) {
 		})));
 		storage.setItem("skiff.test.sessions", JSON.stringify(Object.fromEntries(chats.map((chat) => [chat.sessionFile, [{ role: "user", content: chat.title }, { role: "assistant", content: "预览任务已完成。" }]]))));
 		storage.setItem("skiff.sidebar.collapsed", JSON.stringify(projects.map((project) => project.id)));
+		storage.setItem("skiff.workspace.v1", JSON.stringify({ version: 1, projects, chats, activeId: chats[0].id }));
+	} else if (fixture === "project-restore") {
+		const projects = [
+			{ id: "restore-live", name: "现有项目", path: "D:\\workspace\\live" },
+			{ id: "restore-old", name: "被移出的项目", path: "D:\\workspace\\old-project", hiddenAt: now - 86400000 },
+		];
+		const chats = [
+			{ id: "restore-live-chat", projectId: "restore-live", title: "现有聊天", hasMessages: true, updatedAt: now, sessionFile: "restore-live.jsonl" },
+			{ id: "restore-old-chat", projectId: "restore-old", title: "被移出的聊天", hasMessages: true, updatedAt: now - 60000, sessionFile: "restore-old.jsonl" },
+		];
+		storage.setItem("skiff.test.sessions", JSON.stringify({
+			"restore-live.jsonl": [{ role: "user", content: "现有消息" }, { role: "assistant", content: "收到。" }],
+			"restore-old.jsonl": [{ role: "user", content: "被移出的消息" }, { role: "assistant", content: "欢迎回来。" }],
+		}));
 		storage.setItem("skiff.workspace.v1", JSON.stringify({ version: 1, projects, chats, activeId: chats[0].id }));
 	} else if (fixture === "conversation-titles") {
 		const project = { id: "titles-project", name: "emptyForTest", path: "D:\\workspace\\emptyForTest" };

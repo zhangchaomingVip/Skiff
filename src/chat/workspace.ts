@@ -14,7 +14,12 @@ export interface Project {
 	hiddenAt?: number;
 }
 
-export const MAX_PROJECTS = 5;
+/**
+ * Upper bound for the visible project list. It only guards navigation; resource
+ * use is independent because Git polling is one cheap read per project and the
+ * Diff warmup budget is shared across all visible projects.
+ */
+export const MAX_PROJECTS = 20;
 
 export const projectPathKey = (value: string) => /^[a-z]:[\\/]|^\\\\/i.test(value) ? value.replaceAll("/", "\\").toLowerCase().replace(/\\+$/, "") : value.replace(/\/+$/, "");
 
@@ -325,6 +330,7 @@ export function useWorkspace() {
 		renameProject: (id: string, name: string) => setWorkspace((w) => w && name.trim() ? { ...w, projects: w.projects.map((p) => p.id === id ? { ...p, name: name.trim().slice(0, 100) } : p) } : w),
 		deleteChat: (id: string) => { drafts.remove(id); setWorkspace((w) => w ? deleteConversation(w, id) : w); },
 		hideProject: (id: string) => setWorkspace((w) => w ? hideProject(w, id) : w),
+		restoreProject: (id: string) => setWorkspace((w) => w ? unhideProject(w, id) : w),
 		deleteProject: (id: string) => {
 			if (!workspace || workspace.projects.length <= 1) return;
 			for (const chat of workspace.chats.filter((chat) => chat.projectId === id)) drafts.remove(chat.id);

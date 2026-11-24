@@ -7,6 +7,8 @@ import { reduce } from "../src/chat/reducer.ts";
 import { aggregateTurnProcess, turnDurationLabel, turnProcessPresentation, processBlocks, processCountLabel, type ProcessCounts } from "../src/chat/turnProcess.ts";
 import { latestThinkingLabel, processStepLabel } from "../src/chat/processStepLabel.ts";
 import { processStatus } from "../src/chat/processStatus.ts";
+import { groupTurns } from "../src/chat/turns.ts";
+import { currentTurnStats } from "../src/chat/sailing.ts";
 
 const user: ChatMessage = { id: "user", role: "user", blocks: [{ kind: "text", text: "检查项目" }] };
 const thought = (text = "分析"): ContentBlock => ({ kind: "thinking", text });
@@ -330,6 +332,21 @@ test("duration labels prefer measured runtime and mark historical estimates with
 	assert.equal(turnDurationLabel([prompt, { ...reply, durationMs: 93784000 }]), "用时 1天 2小时 3分钟 4秒");
 	assert.equal(turnDurationLabel([user, assistant("a", [])]), "用时未记录");
 	assert.equal(turnDurationLabel([prompt, { ...reply, durationMs: undefined, timestamp: 0 }]), "用时未记录");
+});
+
+test("pi's per-request duration never becomes the restored turn duration", () => {
+	// pi stamps every assistant message with its own request duration; a long
+	// tool-heavy turn must not report that last request as its wall clock.
+	const messages = parseMessages([
+		{ role: "user", content: "继续执行下一步", timestamp: 1795399993881 },
+		{ role: "assistant", content: [{ type: "text", text: "先看测试基线" }], timestamp: 1795399993887, durationMs: 5008 },
+		{ role: "assistant", content: [{ type: "text", text: "B 线骨架确认未交付。" }], timestamp: 1795401406756, durationMs: 10930 },
+	]);
+	assert.equal(messages[1].durationMs, undefined);
+	assert.equal(messages[2].durationMs, undefined);
+	assert.equal(turnDurationLabel(messages), "用时约 23分钟 33秒");
+	assert.equal(groupTurns(messages)[1].durationMs, 1412875);
+	assert.equal(currentTurnStats(messages).durationMs, 1412875);
 });
 
 test("latest thinking previews never reuse the first block or leak code and tool arguments", () => {

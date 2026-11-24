@@ -123,7 +123,7 @@ try {
 		assert.ok((await customOption.getAttribute("title"))?.includes("扣费账户：wallet-a"));
 		assert.ok(!(await modelList.getByRole("option", { name: "选择 官方 kimi-k3", exact: true }).getAttribute("title"))?.includes("扣费账户"));
 		assert.equal(await modelList.getByRole("option", { name: "选择 官方直连 personal-model", exact: true }).locator(".model-catalog-brand svg[fill=none]").count(), 1, "Unknown brands use the generic icon");
-		assert.ok(!(await catalog.innerText()).match(/CNY|USD|扣费账户：未标注|每百万 token|按量计费|免费|待配置/));
+		assert.ok(!(await catalog.innerText()).match(/CNY|USD|扣费账户：未标注|每百万 token|按量计费|待配置/), "Rows keep a single free badge instead of billing labels");
 		for (const id of ["deepseek-v4-1-flash-1017-uncensored", "deepseek-v4.1-flash-uncensored", "personal-model", "unlisted-model"]) {
 			await modelList.getByRole("option", { name: `选择 官方直连 ${id}`, exact: true }).click();
 			await page.waitForFunction((id) => document.querySelector(".model-trigger-label")?.textContent === id, id);
@@ -164,11 +164,20 @@ try {
 		await page.waitForFunction(() => document.querySelector(".model-trigger-label")?.textContent === "deepseek-flash");
 		assert.equal(await catalog.count(), 0);
 		assert.equal(await trigger.evaluate((element) => element === document.activeElement), true);
+		const enabledModels = (name) => page.evaluate((provider) => window.skiffPreview.relays.filter((relay) => relay.enabled && relay.name === provider).flatMap((relay) => relay.models.filter((model) => model.enabled).map((model) => model.modelId)).sort(), name);
 		await trigger.click();
-		assert.equal(await page.locator(".model-quick-option").count(), 2, "Quick list contains current and favorite models");
-		await page.keyboard.press("ArrowDown");
-		assert.equal(await page.locator(".model-quick-option:focus").innerText(), "deepseek-v4-pro");
-		await page.keyboard.press("Escape");
+		assert.deepEqual(await page.locator(".model-quick-group h3").allTextContents(), ["收藏", "官方直连"], "Cross-provider favorites lead, then the current provider");
+		const quickLabels = (await page.locator(".model-quick-option").evaluateAll((elements) => elements.map((element) => element.getAttribute("aria-label")))).sort();
+		assert.deepEqual(quickLabels, [...(await enabledModels("官方直连")).map((id) => `选择 官方直连 ${id}`), "选择 硅基低价 deepseek-v4-pro"].sort(), "A favorite stays one click away and the current provider remains complete");
+		await page.keyboard.press("Home");
+		assert.equal(await page.locator(".model-quick-option:focus").getAttribute("aria-label"), "选择 硅基低价 deepseek-v4-pro", "The favorite section comes first");
+		await page.locator('.model-quick-option[aria-label="选择 官方直连 deepseek-reasoner"]').click();
+		await page.waitForFunction(() => document.querySelector(".model-trigger-label")?.textContent === "deepseek-reasoner");
+		assert.equal(await page.locator(".model-popover").count(), 0, "One click switches models inside the provider and closes the popover");
+		await trigger.click();
+		await page.locator('.model-quick-option[aria-label="选择 硅基低价 deepseek-v4-pro"]').click();
+		await page.waitForFunction(() => document.querySelector(".model-trigger-label")?.textContent === "deepseek-v4-pro");
+		assert.match(await trigger.getAttribute("title"), /硅基低价/, "A favorite also moves the session to its supplier");
 		const saved = await page.evaluate(() => localStorage.getItem("skiff.model-favorites.v1"));
 		await page.reload();
 		await page.locator(".model-trigger:not(:disabled)").waitFor();
@@ -177,7 +186,9 @@ try {
 		await page.getByRole("button", { name: "取消收藏 硅基低价 deepseek-v4-pro", exact: true }).click();
 		await page.keyboard.press("Escape");
 		await trigger.click();
-		assert.equal(await page.locator(".model-quick-option").count(), 1, "Removing a favorite updates the quick list");
+		const quickGroups = await page.locator(".model-quick-group h3").allTextContents();
+		assert.equal(quickGroups.length, 1, "Without a cross-provider favorite the popover stays inside one provider");
+		assert.deepEqual((await page.locator(".model-quick-option").allTextContents()).sort(), await enabledModels(quickGroups[0]), "Removing a favorite leaves the provider's full list");
 		await page.keyboard.press("Escape");
 		await open();
 		await search.press("Shift+Tab");
@@ -237,7 +248,7 @@ try {
 		await page.setViewportSize({ width: 1200, height: 900 });
 	}
 	assert.deepEqual(errors, []);
-	console.log("Model picker passed: 24px family pills, custom dropdown keyboard/Tab/Escape, unclipped options, family sections, combined filters, custom and ungrouped families, empty intersections, keyboard navigation across sections, header management, pricing/account tooltips, last-row clearance, favorites, persistence, reasoning, IME and focus trapping; both themes at 1200, 900, 600, 360 and 320px.");
+	console.log("Model picker passed: 24px family pills, custom dropdown keyboard/Tab/Escape, unclipped options, family sections, combined filters, custom and ungrouped families, empty intersections, keyboard navigation across sections, header management, pricing/account tooltips, last-row clearance, provider-scoped quick switching, cross-provider favorites, persistence, reasoning, IME and focus trapping; both themes at 1200, 900, 600, 360 and 320px.");
 } finally {
 	await browser.close();
 }

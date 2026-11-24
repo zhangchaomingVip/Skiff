@@ -174,7 +174,9 @@ export function parseMessages(raw: unknown, history?: SessionEntries): ChatMessa
 				usage: message.usage as ChatMessage["usage"],
 				stopReason: typeof message.stopReason === "string" ? message.stopReason : undefined,
 				errorMessage: typeof message.errorMessage === "string" ? message.errorMessage : undefined,
-				durationMs: typeof message.durationMs === "number" ? message.durationMs : undefined,
+				// pi stores durationMs per model request on each assistant message.
+				// ChatMessage.durationMs means the whole turn, so restored turns use
+				// the prompt/reply timestamp span (marked approximate) instead.
 				timestamp: parseTimestamp(message.timestamp),
 			});
 		}

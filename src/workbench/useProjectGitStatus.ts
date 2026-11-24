@@ -1,5 +1,5 @@
 import { useEffect, useRef, useSyncExternalStore } from "react";
-import { MAX_PROJECTS, type Conversation, type Project } from "../chat/workspace";
+import type { Conversation, Project } from "../chat/workspace";
 import type { ChatMessage } from "../chat/types";
 import { gitStatus } from "./projectWorkbench";
 import { GIT_REFRESH_MS, GitStatusCache } from "./gitStatusCache";
@@ -16,7 +16,7 @@ export const projectGitCache = new GitStatusCache(gitStatus, (root, snapshot) =>
 
 export function useProjectGitPolling(projects: Project[]) {
 	useEffect(() => {
-		const roots = projects.slice(0, MAX_PROJECTS).map((project) => project.path);
+		const roots = projects.map((project) => project.path);
 		projectDiffCache.retainRoots(roots);
 		projectGitCache.setProjects(roots);
 		void projectGitCache.refreshAll();

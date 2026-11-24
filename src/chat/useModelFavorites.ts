@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { ModelInfo } from "./types";
+import { modelFavoriteKey } from "./modelPicker";
 
-export const modelFavoriteKey = (model: ModelInfo) => JSON.stringify([model.provider, model.id]);
 const STORAGE_KEY = "skiff.model-favorites.v1";
 const CHANGE_EVENT = "skiff:model-favorites-changed";
 

@@ -7,8 +7,8 @@ import { ModelPicker } from "./ModelPicker";
 import { BrandIcon, type BrandName } from "./BrandIcon";
 import { Icon } from "./Icon";
 import { modelBrand } from "../chat/modelDisplay";
-import { pickerGroups, pickerModelName } from "../chat/modelPicker";
-import { modelFavoriteKey, useModelFavorites } from "../chat/useModelFavorites";
+import { FAVORITES_GROUP_KEY, modelFavoriteKey, pickerModelName, quickPickerGroups } from "../chat/modelPicker";
+import { useModelFavorites } from "../chat/useModelFavorites";
 import { LEVEL_LABELS } from "./ReasoningChip";
 
 const BRANDABLE = ["deepseek", "kimi", "glm"] as const;
@@ -39,9 +39,9 @@ export function ModelMenu({ models, model, disabled, onModel, thinkingLevel, thi
 	const mark = brand(family?.id) ?? modelBrand(model?.provider, model?.id, model?.name);
 	const displayName = model ? pickerModelName(model) : "选择模型";
 	const fullTitle = model ? [family ? FAMILY_LABELS[family.id] ?? family.name : undefined, displayName, model.providerName, model.routeId, `${model.provider}/${model.id}`].filter(Boolean).join(" · ") : "选择模型";
-	const quickModels = models.filter((item) => favorites.includes(modelFavoriteKey(item)) || (model && modelFavoriteKey(item) === modelFavoriteKey(model)));
-	if (model && !quickModels.some((item) => modelFavoriteKey(item) === modelFavoriteKey(model))) quickModels.unshift(model);
-	const groups = pickerGroups(quickModels, "", familyOf);
+	// Favorites lead the popover so a model from another supplier is one click
+	// away; below them the current provider is listed in full.
+	const groups = quickPickerGroups(models, model, favorites, familyOf);
 	const level = thinkingLevels.includes(thinkingLevel ?? "") ? thinkingLevel! : thinkingLevels[0];
 	const canThink = thinkingLevels.some((value) => value !== "off");
 	const selectModel = (next: ModelInfo) => { if (disabled) return; onModel(next); setOpen(false); setCatalogOpen(false); trigger.current?.focus(); };
@@ -67,7 +67,12 @@ export function ModelMenu({ models, model, disabled, onModel, thinkingLevel, thi
 		</Button>
 		{open && <Popover anchor={trigger} onClose={() => setOpen(false)} className="model-popover" aria-label="选择模型">
 			<div className="model-quick-list" ref={quickList} onKeyDown={navigateQuickModels}>
-				{groups.map((group) => <section className="model-quick-group" key={group.key}><h3>{group.name}</h3>{group.models.map((item) => <Button variant="ghost" className="model-quick-option" key={modelFavoriteKey(item)} aria-pressed={!!model && modelFavoriteKey(item) === modelFavoriteKey(model)} title={item.id} disabled={disabled} onClick={() => selectModel(item)}><span>{pickerModelName(item)}</span>{model && modelFavoriteKey(item) === modelFavoriteKey(model) && <Icon name="check" size={16} />}</Button>)}</section>)}
+				{groups.map((group) => <section className="model-quick-group" key={group.key}><h3>{group.name}</h3>{group.models.map((item) => {
+					const selected = !!model && modelFavoriteKey(item) === modelFavoriteKey(model);
+					const name = pickerModelName(item);
+					const providerName = item.providerName ?? item.provider;
+					return <Button variant="ghost" className="model-quick-option" key={modelFavoriteKey(item)} aria-pressed={selected} aria-label={`选择 ${providerName} ${name}`} title={`${providerName} · ${item.id}`} disabled={disabled} onClick={() => selectModel(item)}><span className="model-quick-label"><span>{name}</span>{group.key === FAVORITES_GROUP_KEY && <span className="model-quick-provider">{providerName}</span>}</span>{selected && <Icon name="check" size={16} />}</Button>;
+				})}</section>)}
 				{!groups.length && <p className="menu-hint">收藏模型后，可在这里快速切换。</p>}
 			</div>
 			{canThink && onThinkingLevel && <div className="model-quick-thinking"><span>思考</span><SegmentedControl value={level} label="推理等级" options={thinkingLevels.map((value) => ({ value, label: LEVEL_LABELS[value] ?? value }))} disabled={disabled || thinkingDisabled} onChange={onThinkingLevel} /></div>}

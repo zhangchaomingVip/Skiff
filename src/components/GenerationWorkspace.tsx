@@ -139,7 +139,7 @@ function ImageGenerationControls({ studio, onConfigure, onSubmitted, variant, mo
 			<div className="generation-fields">
 				<div className="generation-field generation-field-prompt">
 					<div className="generation-field-heading"><label htmlFor={`${id}-prompt`}>提示词 <span>Prompt</span></label>{draft.prompt && <Tooltip text="清空提示词"><IconButton size="compact" variant="ghost" aria-label="清空提示词" onClick={() => { update({ prompt: "" }); promptInput.current?.focus(); }}><Icon name="close" size={14} /></IconButton></Tooltip>}</div>
-					<TextArea ref={promptInput} id={`${id}-prompt`} rows={variant === "panel" ? 2 : 4} maxLength={32000} value={draft.prompt} aria-keyshortcuts="Control+Enter Meta+Enter" placeholder="描述你想看到的画面：窗边的一束花、午后的柔光、温暖的胶片质感…" onChange={(event) => update({ prompt: event.target.value })} onKeyDown={(event) => {
+					<TextArea ref={promptInput} id={`${id}-prompt`} rows={variant === "panel" ? 2 : 4} maxLength={32000} value={draft.prompt} aria-keyshortcuts="Control+Enter Meta+Enter" placeholder="描述你想看到的画面：窗边的一束花、午后的柔光、温暖的胶片质感…" onChange={(event) => update({ prompt: event.target.value })} onPaste={(event) => { const file = Array.from(event.clipboardData.files).find((item) => item.type.startsWith("image/")); if (!file) return; event.preventDefault(); studio.uploadImageReference(file); }} onKeyDown={(event) => {
 						if (event.key === "Enter" && (event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && !event.nativeEvent.isComposing && event.nativeEvent.keyCode !== 229) {
 							event.preventDefault(); event.stopPropagation();
 							if (canGenerate && !event.repeat) event.currentTarget.form?.requestSubmit();
@@ -154,9 +154,9 @@ function ImageGenerationControls({ studio, onConfigure, onSubmitted, variant, mo
 						{studio.imageReference ? <>
 							<button type="button" className="generation-reference-image" aria-label={`替换参考图：${studio.imageReference.name}`} onClick={() => referenceInput.current?.click()}><MediaView key={studio.imageReference.url} asset={{ ...studio.imageReference, kind: "image" }} /></button>
 							<div className="generation-reference-caption"><span title={studio.imageReference.name}>{studio.imageReference.name}</span><IconButton size="compact" variant="ghost" aria-label="移除图生图参考图" onClick={studio.removeImageReference}><Icon name="close" size={13} /></IconButton></div>
-						</> : <button type="button" className="generation-reference-upload" aria-label="添加参考图" onClick={() => referenceInput.current?.click()}><Icon name="image" size={15} /><strong>添加参考图</strong><span>拖入或点击上传，按提示词修改画面</span></button>}
+						</> : <button type="button" className="generation-reference-upload" aria-label="添加参考图" onClick={() => referenceInput.current?.click()}><Icon name="image" size={15} /><strong>添加参考图</strong><span>拖入、粘贴或点击上传，按提示词修改画面</span></button>}
 					</div>
-					<p className="generation-field-hint">{studio.imageReference ? "描述想保留和修改的内容。参考图将在生成时发送给服务，原图保留。" : "不添加参考图时使用文生图。PNG、JPG、WebP、GIF · 最大 20 MB；动画仅取静态首帧。"}</p>
+					<p className="generation-field-hint">{studio.imageReference ? "描述想保留和修改的内容。参考图将在生成时发送给服务，原图保留。" : "不添加参考图时使用文生图。可拖入或粘贴图片，PNG、JPG、WebP、GIF · 最大 20 MB；动画仅取静态首帧。"}</p>
 					{studio.imageReferenceError && <div className="generation-error" role="alert"><span>{studio.imageReferenceError}</span><IconButton size="compact" variant="ghost" aria-label="关闭参考图提示" onClick={studio.clearImageReferenceError}><Icon name="close" /></IconButton></div>}
 				</div>
 				<div className="generation-settings">

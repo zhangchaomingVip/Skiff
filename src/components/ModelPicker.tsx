@@ -4,8 +4,7 @@ import type { ModelInfo } from "../chat/types";
 import { Icon } from "./Icon";
 import { BrandIcon } from "./BrandIcon";
 import { modelBrand } from "../chat/modelDisplay";
-import { pickerGroups, pickerFamilyGroups, pickerModelName } from "../chat/modelPicker";
-import { modelFavoriteKey } from "../chat/useModelFavorites";
+import { modelFavoriteKey, pickerGroups, pickerFamilyGroups, pickerModelName } from "../chat/modelPicker";
 import { formatContextWindow } from "../chat/modelFamilies";
 
 const sameModel = (a?: ModelInfo, b?: ModelInfo) => !!a && !!b && a.provider === b.provider && a.id === b.id;

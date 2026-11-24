@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ComponentProps } from "react";
+import { createPortal } from "react-dom";
 import { darkThemeColors, setDarkThemeColor, setThemeColor, setThemePreference, setThemeStars, themeColors, useDarkThemeColor, useThemeColor, useThemePreference, useThemeStars } from "../theme";
 import { SessionStatistics, type SessionStatisticsProps } from "./SessionStatistics";
 import { ArchivedSessions } from "./ArchivedSessions";
@@ -7,7 +8,7 @@ import { Icon } from "./Icon";
 import { PromptSettings } from "./PromptSettings";
 import { TitleModelSettings } from "./TitleModelSettings";
 import { ProvidersSettingsContent, type ProvidersSettingsProps } from "./ProvidersSettings";
-import { Button, Dialog, IconButton, SegmentedControl } from "./ui";
+import { Button, Dialog, SegmentedControl } from "./ui";
 import { isMacPlatform, settingsCategories, type SettingsCategory, type SettingsRestrictions } from "./settingsNavigation";
 import type { SettingsEditorHandle } from "./settingsEditor";
 import type { WebSearchControls } from "../chat/webSearch";
@@ -18,7 +19,7 @@ import { ImageGenerationSettings } from "./ImageGenerationSettings";
 import { VideoGenerationSettings } from "./VideoGenerationSettings";
 import type { GenerationStudio } from "../workbench/useGenerationStudio";
 
-export function SettingsDialog({ initialCategory, restrictions, prompt, providers, archives, statistics, search, images, videos, onRetryModels, onClose, onCategoryChange }: {
+export function SettingsWorkspace({ initialCategory, restrictions, prompt, providers, archives, statistics, search, images, videos, onRetryModels, onClose, onCategoryChange }: {
 	initialCategory: SettingsCategory;
 	restrictions: SettingsRestrictions;
 	prompt: ComponentProps<typeof PromptSettings>;
@@ -34,6 +35,9 @@ export function SettingsDialog({ initialCategory, restrictions, prompt, provider
 	onCategoryChange?: (category: SettingsCategory) => void;
 }) {
 	const [category, setCategoryRaw] = useState(initialCategory);
+	const [navigationHost, setNavigationHost] = useState<HTMLElement | null>(null);
+	const [narrow, setNarrow] = useState(() => window.innerWidth <= 760);
+	useEffect(() => { const host = document.getElementById("settings-sidebar-navigation"); setNavigationHost(host); const query = window.matchMedia("(max-width: 760px)"); const update = () => setNarrow(query.matches); update(); query.addEventListener("change", update); return () => query.removeEventListener("change", update); }, []);
 	useEffect(() => { onCategoryChange?.(category); }, [category, onCategoryChange]);
 	const [{ locked, pending }, setInteraction] = useState({ locked: false, pending: false });
 	const setCategory = useCallback((next: SettingsCategory) => { setInteraction({ locked: false, pending: false }); setCategoryRaw(next); }, []);
@@ -54,12 +58,17 @@ export function SettingsDialog({ initialCategory, restrictions, prompt, provider
 	const modifier = isMacPlatform() ? "Cmd" : "Ctrl";
 	const close = () => { if (!editor.current?.pending) onClose(); };
 	const escape = () => { if (editor.current?.pending) return; if (editor.current?.editing) editor.current.back(); else close(); };
-	return <Dialog className="settings-dialog" aria-labelledby="settings-title" onClose={close} onEscape={escape} pending={pending} returnFocusSelector=".settings-trigger">
-		<div className="settings-heading"><h1 id="settings-title">设置</h1><IconButton aria-label="关闭设置" disabled={pending} onClick={close}><Icon name="close" /></IconButton></div>
+	const navigation = <nav className="settings-nav" aria-label="设置分类"><Button className="settings-back" variant="ghost" onClick={close} disabled={pending}>← 返回工作区</Button>{([
+				["通用", ["appearance", "fonts", "shortcuts"]],
+				["能力与模型", ["websearch", "browser", "images", "videos", "providers", "prompt"]],
+				["会话与数据", ["chat", "statistics", "archives"]],
+			] as const).map(([group, ids]) => <div className="settings-nav-group" key={group}><span>{group}</span>{settingsCategories.filter(({ id }) => (ids as readonly string[]).includes(id)).map(({ id, label, icon }) => <Button key={id} variant="ghost" aria-pressed={category === id} disabled={navigationLocked || !!restrictions[id]} title={navigationLocked ? "请先返回列表或等待保存完成" : restrictions[id]} onClick={() => switchCategory(id)}><Icon name={icon} size={16} />{label}</Button>)}</div>)}
+			</nav>;
+	return <div className="settings-workspace" aria-labelledby="settings-title" onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); escape(); } }}>
+		{navigationHost ? createPortal(navigation, navigationHost) : narrow ? navigation : null}
 		<div className="settings-layout">
-			<nav className="settings-nav" aria-label="设置分类">{settingsCategories.map(({ id, label, icon }) => <Button key={id} variant="ghost" aria-pressed={category === id} disabled={navigationLocked || !!restrictions[id]} title={navigationLocked ? "请先返回列表或等待保存完成" : restrictions[id]} onClick={() => switchCategory(id)}><Icon name={icon} size={16} />{label}</Button>)}
-			</nav>
-			<div className="settings-content">
+
+			<div className="settings-content"><h1 className="settings-workspace-title" id="settings-title">设置</h1>
 				{category === "browser" && <fieldset className="settings-config" disabled={!!restrictions.browser}><BrowserSettings onSaved={prompt.onSaved} /></fieldset>}
 				{category === "statistics" && <SessionStatistics {...statistics} />}
 				{category === "fonts" && <FontSettings />}
@@ -118,5 +127,6 @@ export function SettingsDialog({ initialCategory, restrictions, prompt, provider
 				<Button variant="primary" onClick={() => { setCategory(switchTarget); setSwitchTarget(undefined); }}>放弃更改并切换</Button>
 			</div>
 		</Dialog>}
-	</Dialog>;
+	</div>;
 }
+

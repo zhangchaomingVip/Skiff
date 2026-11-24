@@ -7,7 +7,14 @@ import { ProjectRemovalChoices } from "./ProjectListLimit";
 
 const folderName = (path: string) => path.split(/[\\/]/).filter(Boolean).pop() ?? path;
 
-export function ProjectDialog({ projects = [], onAdd, onClose }: { projects?: Project[]; onAdd: (path: string, name?: string, removeIds?: string[]) => Promise<void>; onClose: () => void }) {
+export function ProjectDialog({ projects = [], hidden = [], onAdd, onRestore, onClose }: {
+	projects?: Project[];
+	/** Projects removed from the list; their chats and session files are still there. */
+	hidden?: Array<Project & { chatCount: number }>;
+	onAdd: (path: string, name?: string, removeIds?: string[]) => Promise<void>;
+	onRestore?: (id: string) => void;
+	onClose: () => void;
+}) {
 	const inputRef = useRef<HTMLInputElement>(null);
 	const [name, setName] = useState("");
 	const [folder, setFolder] = useState("");
@@ -64,6 +71,22 @@ export function ProjectDialog({ projects = [], onAdd, onClose }: { projects?: Pr
 				</div>
 				{error && <span className="ui-field-help" role="alert">{error}</span>}
 			</div>
+			{!!hidden.length && <section className="project-hidden" aria-label="已移出的项目">
+				<h3>已移出的项目<span className="project-hidden-count">{hidden.length}</span></h3>
+				<p>移出时保留了聊天记录和本地文件，恢复后回到原来的分组。</p>
+				<ul>
+					{hidden.map((project) => {
+						const atLimit = projects.length >= MAX_PROJECTS;
+						return <li key={project.id}>
+							<div className="project-hidden-info" title={project.path}>
+								<Icon name="folder" size={16} />
+								<span><strong>{project.name}</strong><small>{project.path}</small></span>
+							</div>
+							<Button type="button" size="compact" disabled={pending || atLimit} title={atLimit ? `最多保留 ${MAX_PROJECTS} 个项目，请先移出一个` : `恢复 ${project.name}`} onClick={() => { onRestore?.(project.id); onClose(); }}>恢复{project.chatCount ? ` · ${project.chatCount} 个聊天` : ""}</Button>
+						</li>;
+					})}
+				</ul>
+			</section>}
 			{removeCount > 0 && <ProjectRemovalChoices projects={projects} count={removeCount} selected={removeIds} onChange={setRemoveIds} disabled={pending} />}
 			<div className="dialog-actions"><Button variant="ghost" onClick={onClose} disabled={pending}>取消</Button><Button type="submit" variant="primary" size="primary" loading={pending} disabled={!folder || (removeCount > 0 && removeIds.length !== removeCount)}>{pending ? "正在创建…" : removeCount ? "移出并创建项目" : "创建项目"}</Button></div>
 		</form>
