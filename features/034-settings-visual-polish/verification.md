@@ -62,22 +62,15 @@
 | 外观页结构 | 卡片顺序、色块描边加 ✓、分段控件、字体两行都符合约定 |
 | 活动栏 | 选中为浅色块，没有竖条；设置打开时只有齿轮高亮 |
 | 关于页 | 版本 0.0.1、Tauri 2.12.1，两个路径显示正确 |
-| 浅色下「深色背景」卡片 | 第一版做成了平时变淡、悬停恢复，实际表现为悬停时闪烁（[截图](screenshots/issue-dark-card-hover-fade.png)）。现在已改为不变淡，修改后的状态还需要再截一张图确认 |
+| 浅色下「深色背景」卡片 | 第一版做成了平时变淡、悬停恢复，实际表现为悬停时闪烁。现在已改为不变淡，修改后的状态还需要再截一张图确认 |
 
 ## 截图
 
-截图只保存在本地，没有纳入版本库。
-
-- [改前：浅色外观页](screenshots/before-appearance-light.png)
-- [参考：圆角内容卡片](screenshots/reference-card-layout.png)、[参考：活动栏](screenshots/reference-activity-rail.png)
-- [改后：浅色外观页](screenshots/after-appearance-light.png)：这张截于移除变淡效果之前，当时鼠标正停在卡片上，所以呈现的样子和最终状态一致
-- [改后：深色星空黑外观页](screenshots/after-appearance-dark.png)
-- [改后：浅色 Code 工作区](screenshots/after-code-workspace-light.png)：截于渐变接缝修复之前
-- [改后：关于页（第一版）](screenshots/after-about-light-r1.png)：复制按钮统一为纯图标之前的版本
+截图只用于本地比对，没有纳入版本库，现已删除。当时比对过：改前的浅色外观页；两张参考图（圆角内容卡片、活动栏）；改后的浅色外观页、深色星空黑外观页、浅色 Code 工作区和关于页第一版。
 
 ## 未覆盖项
 
-- 没有运行浏览器模拟测试和 `npm run test:cdp`，其中浏览器脚本的断言还没同步新文案。
+- 没有运行 `npm run test:cdp`（真实窗口链路）。
 - 没有验证窄屏 ≤760px 的布局（本期不处理）。
 - 没有截以下几张：关于页最终版、修复接缝后的 Code 工作区、星空蓝主题、Design 工作区的设置页。
 - 没有验证 macOS 上 Cmd 的显示。
