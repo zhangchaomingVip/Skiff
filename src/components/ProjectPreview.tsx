@@ -68,7 +68,7 @@ export function ProjectPreview({ tabs, activeId, revision, onActivate, onClose, 
 	const image = result?.kind === "image" && result.content && result.mimeType ? { content: result.content, mimeType: result.mimeType } : undefined;
 	return <section className="project-preview" aria-label="文件预览">
 		<header className="preview-header">
-			<Button size="compact" variant="ghost" onClick={onBack}><Icon name="arrow" />返回聊天</Button>
+			<Button size="compact" variant="ghost" onClick={onBack}><Icon name="arrow" />返回对话</Button>
 			<div className="preview-tabs" ref={tabList} role="tablist" aria-label="打开的文件">{tabs.map((item) => <PreviewFileTab key={item.id} item={item} active={item.id === tab.id} onActivate={onActivate} onClose={onClose} />)}</div>
 		</header>
 		<div className="preview-subheader"><div><strong>{tab.name}</strong><span title={`${tab.projectName} · ${tab.path}`}>{tab.projectName} / {tab.path}</span></div><div className="preview-mode" role="group" aria-label="预览模式"><button aria-pressed={tab.mode === "file"} onClick={() => onMode(tab.id, "file")}>文件</button><button aria-pressed={tab.mode === "diff"} onClick={() => onMode(tab.id, "diff")}>Diff</button></div></div>

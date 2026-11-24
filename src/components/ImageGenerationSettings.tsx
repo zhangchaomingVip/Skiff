@@ -26,7 +26,7 @@ export const ImageGenerationSettings = forwardRef<SettingsEditorHandle, { images
 	});
 	return <section ref={contentRef} className="settings-page image-generation-settings" aria-labelledby="image-generation-title">
 		<h2 id="image-generation-title">图片生成</h2>
-		<p className="muted">通过 OpenAI Images 接口生成图片，支持自定义兼容服务。图生图需要服务支持图片编辑接口。独立于聊天模型，每次生成一张并自动保存到本地。</p>
+		<p className="muted">使用兼容 OpenAI Images 接口的服务生成图片；图生图需服务支持图片编辑接口。</p>
 		{!draft ? <>
 			<div className="settings-group"><div className="settings-row"><div className="settings-row-text"><label htmlFor="image-concurrency-limit" className="settings-row-title">同时生成任务数</label><span id="image-concurrency-hint" className="settings-row-hint">默认 5 个，适用于所有图片生成服务。调低后已有任务会继续；不限时仍受服务商限流约束。</span></div><Select id="image-concurrency-limit" aria-describedby="image-concurrency-hint" value={images.config?.concurrencyLimit ?? 5} disabled={pending || images.loading || !images.config} onChange={(event) => { const limit = Number(event.target.value) as ImageConcurrencyLimit; void mutate(async () => { images.setConfig(await imageGenerationNative.setConcurrency(limit)); return true; }); }}><option value={3}>3 个</option><option value={5}>5 个</option><option value={10}>10 个</option><option value={0}>不限</option></Select></div></div>
 			<div className="image-settings-actions"><Button onClick={() => edit()} disabled={pending || images.loading || !images.config}><Icon name="plus" />添加生成服务</Button><Button onClick={() => void images.refresh()} disabled={pending || images.loading} loading={images.loading}>重新读取</Button></div>

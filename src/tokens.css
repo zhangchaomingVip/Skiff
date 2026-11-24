@@ -129,6 +129,10 @@
 		--line-height-relaxed: 1.6;
 		--shadow-none: none;
 		--shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.3);
+		/* Segmented controls: a recessed neutral track with the chosen option raised. */
+		--segmented-track: color-mix(in srgb, var(--text) 6%, transparent);
+		--segmented-selected: color-mix(in srgb, var(--text) 12%, var(--surface));
+		--titlebar-segmented-track: color-mix(in srgb, var(--text) 6%, transparent);
 		--shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.35);
 		--shadow-base: 0 4px 8px rgba(0, 0, 0, 0.4);
 		--shadow-md: 0 8px 16px rgba(0, 0, 0, 0.45);
@@ -157,7 +161,9 @@
 		--control-regular: 32px;
 		--control-primary: 36px;
 		/* Width of the activity rail; the title bar's logo box matches it exactly. */
-		--activity-width: 40px;
+		--activity-width: 48px;
+		--activity-button-size: 36px;
+		--activity-radius: 10px;
 		--bg: var(--color-bg-primary);
 		--sidebar: var(--color-sidebar-bg);
 		--sidebar-border: var(--color-sidebar-border);
@@ -297,6 +303,9 @@
 		--shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 		--shadow-color: rgb(0 0 0 / .1);
 		--shadow-xs: 0 1px 2px rgba(0, 0, 0, .08);
+		--segmented-selected: var(--surface);
+		/* On the tinted title bar a grey track turns into a coloured block; a veil of white stays neutral. */
+		--titlebar-segmented-track: color-mix(in srgb, var(--surface) 55%, transparent);
 		--shadow-elevation-1: 0 1px 3px rgba(0, 0, 0, .06);
 		--shadow-elevation-2: 0 4px 12px rgba(0, 0, 0, .08);
 		--shadow-elevation-3: 0 8px 20px rgba(0, 0, 0, .1);
@@ -451,6 +460,10 @@
 		--color-text-primary: #f0f0f5;
 		--color-text-secondary: #c9cbd9;
 		--color-text-tertiary: #b6bacd;
+		/* A muted blue fill like the colour themes use, instead of the global saturated action. */
+		--settings-action: #40609a;
+		--settings-action-hover: #35507f;
+		--settings-action-active: #2a4066;
 		--activity-bg: #14151d;
 		--activity-hover: #2c2d3a;
 		--activity-selected: #383947;
@@ -483,6 +496,9 @@
 		--color-text-secondary: #d2ddef;
 		--color-text-tertiary: #bdcce3;
 		--color-accent: #b1d0ff;
+		--settings-action: #3f68a8;
+		--settings-action-hover: #345790;
+		--settings-action-active: #2a4676;
 		--activity-bg: #111b33;
 		--activity-hover: #233652;
 		--activity-selected: #304569;
@@ -501,9 +517,6 @@
 
 	[data-theme="dark"]:is([data-dark-theme-color="star-black"], [data-dark-theme-color="star-blue"]) {
 		--settings-accent: var(--color-accent);
-		--settings-action: var(--action);
-		--settings-action-hover: var(--action-hover);
-		--settings-action-active: var(--action-active);
 		--settings-selected: var(--selected);
 		--chat-meta: var(--muted);
 	}

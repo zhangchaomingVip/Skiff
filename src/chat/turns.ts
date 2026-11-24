@@ -111,7 +111,7 @@ export function forkEntry(messages: ChatMessage[], id: string, entries: Entry[],
 	while (cursor && !visited.has(cursor)) {
 		visited.add(cursor);
 		const entry = byId.get(cursor);
-		if (!entry) throw new Error("无法定位当前会话分支。");
+		if (!entry) throw new Error("无法定位当前对话分支。");
 		if (entry.type === "message" && entry.message?.role === "user") branch.push(entry);
 		cursor = entry.parentId;
 	}
@@ -121,7 +121,7 @@ export function forkEntry(messages: ChatMessage[], id: string, entries: Entry[],
 	const visible = branch.slice(-users.length);
 	const user = userForTurn(messages, id);
 	const choice = visible[users.findIndex((message) => message.id === user?.id)];
-	if (!choice || visible.length !== users.length || visible.some((entry, index) => JSON.stringify(parseBlocks(entry.message?.content)) !== JSON.stringify(users[index].blocks))) throw new Error("聊天历史已变化，请重新载入后再操作。");
+	if (!choice || visible.length !== users.length || visible.some((entry, index) => JSON.stringify(parseBlocks(entry.message?.content)) !== JSON.stringify(users[index].blocks))) throw new Error("对话历史已变化，请重新载入后再操作。");
 	return choice.id;
 }
 

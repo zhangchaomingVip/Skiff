@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ComponentProps } from "react";
 import { createPortal } from "react-dom";
-import { darkThemeColors, setDarkThemeColor, setThemeColor, setThemePreference, setThemeStars, themeColors, useDarkThemeColor, useThemeColor, useThemePreference, useThemeStars } from "../theme";
+import { darkThemeColors, setDarkThemeColor, setThemeColor, setThemePreference, setThemeStars, themeColors, useDarkThemeColor, useThemeColor, useResolvedTheme, useThemePreference, useThemeStars } from "../theme";
 import { SessionStatistics, type SessionStatisticsProps } from "./SessionStatistics";
 import { ArchivedSessions } from "./ArchivedSessions";
 import { Icon } from "./Icon";
@@ -9,7 +9,7 @@ import { PromptSettings } from "./PromptSettings";
 import { TitleModelSettings } from "./TitleModelSettings";
 import { ProvidersSettingsContent, type ProvidersSettingsProps } from "./ProvidersSettings";
 import { Button, Dialog, SegmentedControl } from "./ui";
-import { isMacPlatform, settingsCategories, type SettingsCategory, type SettingsRestrictions } from "./settingsNavigation";
+import { settingsCategories, type SettingsCategory, type SettingsRestrictions } from "./settingsNavigation";
 import type { SettingsEditorHandle } from "./settingsEditor";
 import type { WebSearchControls } from "../chat/webSearch";
 import { WebSearchSettings } from "./WebSearchSettings";
@@ -17,6 +17,7 @@ import { FontSettings } from "./FontSettings";
 import { BrowserSettings } from "./BrowserSettings";
 import { ImageGenerationSettings } from "./ImageGenerationSettings";
 import { VideoGenerationSettings } from "./VideoGenerationSettings";
+import { AboutSettings } from "./AboutSettings";
 import type { GenerationStudio } from "../workbench/useGenerationStudio";
 
 export function SettingsWorkspace({ initialCategory, restrictions, prompt, providers, archives, statistics, search, images, videos, onRetryModels, onClose, onCategoryChange }: {
@@ -55,67 +56,60 @@ export function SettingsWorkspace({ initialCategory, restrictions, prompt, provi
 	const themeColor = useThemeColor();
 	const darkThemeColor = useDarkThemeColor();
 	const themeStars = useThemeStars();
-	const modifier = isMacPlatform() ? "Cmd" : "Ctrl";
+	const darkActive = useResolvedTheme() === "dark";
 	const close = () => { if (!editor.current?.pending) onClose(); };
 	const escape = () => { if (editor.current?.pending) return; if (editor.current?.editing) editor.current.back(); else close(); };
-	const navigation = <nav className="settings-nav" aria-label="设置分类"><Button className="settings-back" variant="ghost" onClick={close} disabled={pending}>← 返回工作区</Button>{([
-				["通用", ["appearance", "fonts", "shortcuts"]],
-				["能力与模型", ["websearch", "browser", "images", "videos", "providers", "prompt"]],
-				["会话与数据", ["chat", "statistics", "archives"]],
-			] as const).map(([group, ids]) => <div className="settings-nav-group" key={group}><span>{group}</span>{settingsCategories.filter(({ id }) => (ids as readonly string[]).includes(id)).map(({ id, label, icon }) => <Button key={id} variant="ghost" aria-pressed={category === id} disabled={navigationLocked || !!restrictions[id]} title={navigationLocked ? "请先返回列表或等待保存完成" : restrictions[id]} onClick={() => switchCategory(id)}><Icon name={icon} size={16} />{label}</Button>)}</div>)}
+	const navigation = <nav className="settings-nav" aria-label="设置分类"><Button className="settings-back" variant="ghost" onClick={close} disabled={pending}><Icon name="arrowLeft" size={16} />返回工作区</Button><h1 className="settings-nav-title" id="settings-title">设置</h1>{([
+				["通用", ["appearance", "chat"]],
+				["模型与能力", ["providers", "prompt", "websearch", "browser", "images", "videos"]],
+				["数据", ["statistics", "archives"]],
+				// An untitled trailing group: one entry needs no heading of its own.
+				["", ["about"]],
+			] as const).map(([group, ids]) => <div className="settings-nav-group" key={group}>{group && <span>{group}</span>}{settingsCategories.filter(({ id }) => (ids as readonly string[]).includes(id)).map(({ id, label, icon }) => <Button key={id} variant="ghost" aria-pressed={category === id} disabled={navigationLocked || !!restrictions[id]} title={navigationLocked ? "请先返回列表或等待保存完成" : restrictions[id]} onClick={() => switchCategory(id)}><Icon name={icon} size={16} />{label}</Button>)}</div>)}
 			</nav>;
 	return <div className="settings-workspace" aria-labelledby="settings-title" onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); escape(); } }}>
 		{navigationHost ? createPortal(navigation, navigationHost) : narrow ? navigation : null}
 		<div className="settings-layout">
 
-			<div className="settings-content"><h1 className="settings-workspace-title" id="settings-title">设置</h1>
+			<div className="settings-content">
 				{category === "browser" && <fieldset className="settings-config" disabled={!!restrictions.browser}><BrowserSettings onSaved={prompt.onSaved} /></fieldset>}
 				{category === "statistics" && <SessionStatistics {...statistics} />}
-				{category === "fonts" && <FontSettings />}
 				{category === "images" && <ImageGenerationSettings images={images} ref={editor} onLockChange={updateInteraction} />}
 				{category === "videos" && <VideoGenerationSettings videos={videos} ref={editor} onLockChange={updateInteraction} />}
-				{category === "appearance" && <section className="settings-page" aria-labelledby="appearance-title"><h2 id="appearance-title">外观</h2><p className="muted">选择应用主题与主题色，立即生效。</p>
+				{category === "appearance" && <section className="settings-page" aria-labelledby="appearance-title"><h2 id="appearance-title">外观</h2>
 					<div className="settings-group">
 						<div className="settings-row">
-							<div className="settings-row-text"><span className="settings-row-title">主题模式</span><span className="settings-row-hint">跟随系统时，自动匹配操作系统的浅色或深色设置。</span></div>
+							<div className="settings-row-text"><span className="settings-row-title">主题模式</span></div>
 							<SegmentedControl label="应用主题" value={theme} onChange={(value) => setThemePreference(value)} options={[{ value: "system", label: "跟随系统" }, { value: "light", label: "浅色" }, { value: "dark", label: "深色" }]} />
 						</div>
 						<div className="settings-row is-stacked">
-							<div className="settings-row-text"><span className="settings-row-title">主题色</span><span className="settings-row-hint">决定侧边栏、标题栏与控件的基础色；切换浅色或深色时保持不变。</span></div>
+							<div className="settings-row-text"><span className="settings-row-title">主题色</span></div>
 							<div className="settings-swatches" role="group" aria-label="浅色配色">{themeColors.map(({ value, label }) => <Button key={value} variant="setting" className="settings-theme-color" data-theme-color-option={value} aria-pressed={themeColor === value} onClick={() => setThemeColor(value)}>
-								<span className="settings-swatch-art" aria-hidden="true" /><span className="settings-swatch-label">{label}</span>
+								<span className="settings-swatch-art" aria-hidden="true">{themeColor === value && <span className="settings-swatch-check"><Icon name="check" size={12} /></span>}</span><span className="settings-swatch-label">{label}</span>
 							</Button>)}</div>
 						</div>
 					</div>
+					{/* The stars belong to the dark backdrop, so both live in one card. */}
 					<div className="settings-group">
 						<div className="settings-row is-stacked">
-							<div className="settings-row-text"><span className="settings-row-title">深色背景</span><span className="settings-row-hint">仅在深色模式下生效，浅色模式保留上方主题色。</span></div>
+							<div className="settings-row-text"><span className="settings-row-title">深色背景</span>{!darkActive && <span className="settings-row-hint">仅在深色模式下生效。</span>}</div>
 							<div className="settings-swatches" role="group" aria-label="深色背景">{darkThemeColors.map(({ value, label }) => <Button key={value} variant="setting" className="settings-theme-color" data-dark-theme-color-option={value} aria-pressed={darkThemeColor === value} onClick={() => setDarkThemeColor(value)}>
-								<span className="settings-swatch-art" aria-hidden="true" /><span className="settings-swatch-label">{label}</span>
+								<span className="settings-swatch-art" aria-hidden="true">{darkThemeColor === value && <span className="settings-swatch-check"><Icon name="check" size={12} /></span>}</span><span className="settings-swatch-label">{label}</span>
 							</Button>)}</div>
 						</div>
-					</div>
-					<div className="settings-group">
 						<div className="settings-row">
-							<div className="settings-row-text"><label className="settings-row-title" htmlFor="settings-theme-stars">显示星星</label><span id="settings-theme-stars-description" className="settings-row-hint">细小星点静止，部分亮星缓慢呼吸；关闭后保留底色。</span></div>
-							<label className="switch"><input id="settings-theme-stars" type="checkbox" checked={themeStars} aria-describedby="settings-theme-stars-description" onChange={(event) => setThemeStars(event.target.checked)} /><span className="slider" /></label>
+							<div className="settings-row-text"><label className="settings-row-title" htmlFor="settings-theme-stars">显示星星</label></div>
+							<label className="switch"><input id="settings-theme-stars" type="checkbox" checked={themeStars} onChange={(event) => setThemeStars(event.target.checked)} /><span className="slider" /></label>
 						</div>
 					</div>
+					<FontSettings />
 				</section>}
-				{category === "websearch" && <section className="settings-page" aria-labelledby="websearch-title"><h2 id="websearch-title">联网搜索</h2><p className="muted">为 pi 配置 web_search 工具，引擎可在 Tavily 与 Exa 之间选择；开关作用于当前 pi 会话。</p><WebSearchSettings search={search} /></section>}
-			{category === "chat" && <section className="settings-page" aria-labelledby="chat-settings-title"><h2 id="chat-settings-title">对话</h2><p className="muted">新对话首轮回复完成后，若首条消息超过 32 字，Skiff 会用所选模型生成简短标题；较短的消息直接沿用完整首句，未设置或生成失败时同理。</p><TitleModelSettings onManage={() => setCategory("providers")} /></section>}
-				{category === "prompt" && <section aria-labelledby="prompt-title"><h2 id="prompt-title">系统提示词</h2><p className="muted">附加到 pi 系统提示词末尾（--append-system-prompt），随每次会话启动生效。保存后当前会话会重启。</p><fieldset className="settings-config" disabled={!!restrictions.prompt}><PromptSettings {...prompt} /></fieldset>{restrictions.prompt && <p className="settings-restriction">{restrictions.prompt}</p>}</section>}
+				{category === "websearch" && <section className="settings-page" aria-labelledby="websearch-title"><h2 id="websearch-title">联网搜索</h2><WebSearchSettings search={search} /></section>}
+			{category === "chat" && <section className="settings-page" aria-labelledby="chat-settings-title"><h2 id="chat-settings-title">对话</h2><TitleModelSettings onManage={() => setCategory("providers")} /></section>}
+				{category === "prompt" && <section className="settings-page" aria-labelledby="prompt-title"><h2 id="prompt-title">系统提示词</h2><p className="muted">追加到系统提示词末尾，保存后当前对话会重启。</p><fieldset className="settings-config" disabled={!!restrictions.prompt}><PromptSettings {...prompt} /></fieldset>{restrictions.prompt && <p className="settings-restriction">{restrictions.prompt}</p>}</section>}
 				{category === "providers" && <><fieldset className="settings-config" disabled={!!restrictions.providers}><ProvidersSettingsContent {...providers} ref={editor} onLockChange={updateInteraction} /></fieldset>{providers.configError && !locked && <Button disabled={!!restrictions.providers} onClick={onRetryModels}>重新读取配置</Button>}</>}
-				{category === "archives" && <section aria-labelledby="archives-title"><h2 id="archives-title">归档会话</h2><p className="muted">查看、恢复或删除已归档的会话。</p><ArchivedSessions {...archives} busy={archives.busy || !!restrictions.archives} /></section>}
-				{category === "shortcuts" && <section aria-labelledby="shortcuts-title"><h2 id="shortcuts-title">快捷键</h2><p className="muted">设置及其他模态窗口打开期间，后台聊天快捷键暂停。</p><dl className="settings-shortcuts">{[
-					[`${modifier} + ,`, "打开设置", "不打断其他模态窗口"],
-					[`${modifier} + N`, "新聊天", "Code 工作区；在当前项目创建草稿"],
-					["Ctrl + K", "聚焦输入框", "聊天页面"],
-					["Enter", "发送消息 / 运行命令", "输入框；有候选项时选择候选"],
-					["Shift + Enter", "换行", "输入框"],
-					["Ctrl + Shift + Backspace", "停止生成", "输入框获得焦点且正在生成"],
-					["Esc", "返回 / 关闭", "优先关闭弹层、返回编辑列表；输入框中取消编辑或清空草稿"],
-				].map(([keys, action, scope]) => <div key={keys}><dt><kbd>{keys}</kbd></dt><dd><strong>{action}</strong><span>{scope}</span></dd></div>)}</dl></section>}
+				{category === "about" && <AboutSettings />}
+				{category === "archives" && <section className="settings-page" aria-labelledby="archives-title"><h2 id="archives-title">已归档对话</h2><ArchivedSessions {...archives} busy={archives.busy || !!restrictions.archives} /></section>}
 				{Object.entries(restrictions).map(([id, reason]) => reason && <p className="settings-restriction" key={id}>{settingsCategories.find((item) => item.id === id)?.label}：{reason}</p>)}
 			</div>
 		</div>

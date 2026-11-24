@@ -77,7 +77,7 @@ export function ChatView({
 	const degradeEdit = () => {
 		setEditing(undefined); fallbackEdit.current = undefined;
 		if (draftTarget) storedDraft.update({ edit: undefined });
-		setEditNotice("聊天分支或消息已变化，已转为普通草稿；发送将追加到当前分支。");
+		setEditNotice("对话分支或消息已变化，已转为普通草稿；发送将追加到当前分支。");
 	};
 	useEffect(() => {
 		if (!edit || !connected || loading) return;
@@ -130,7 +130,7 @@ export function ChatView({
 
 	return (
 		<section className="chat">
-			{loading ? <div className="session-loading" role="status" aria-label="正在加载会话"><span className="dot busy" />正在加载会话…</div> : <MessageList runStartedAt={state.activeRun?.startedAt} retryAttempts={state.retryAttempts} messages={state.messages} pendingPrompt={state.pendingPrompt} activeTurnId={state.activeRun?.turnId} projectName={projectName} running={state.isStreaming} models={state.availableModels} model={state.model} onSuggestion={(text) => { setDraft(text); setFocusSignal((n) => n + 1); }} followSignal={followSignal} revealMessage={revealMessage} onEdit={canEdit ? beginEdit : undefined} onContinue={continueRun} continuing={continuing} lastOutcome={state.lastOutcome} />}
+			{loading ? <div className="session-loading" role="status" aria-label="正在加载对话"><span className="dot busy" />正在加载对话…</div> : <MessageList runStartedAt={state.activeRun?.startedAt} retryAttempts={state.retryAttempts} messages={state.messages} pendingPrompt={state.pendingPrompt} activeTurnId={state.activeRun?.turnId} projectName={projectName} running={state.isStreaming} models={state.availableModels} model={state.model} onSuggestion={(text) => { setDraft(text); setFocusSignal((n) => n + 1); }} followSignal={followSignal} revealMessage={revealMessage} onEdit={canEdit ? beginEdit : undefined} onContinue={continueRun} continuing={continuing} lastOutcome={state.lastOutcome} />}
 			{alerts.length > 0 && (
 				<div className="notices">
 					{alerts.slice(-3).map((notice) => (
@@ -150,7 +150,7 @@ export function ChatView({
 			    started without its runtime providers (for example a dropped
 			    --extension), so the picker can list them while the composer stays
 			    disabled. Fail loud instead of leaving a dead "选择模型" state. */}
-			{connected && !loading && !pending && !state.isStreaming && state.availableModels.length > 0 && !state.model && <div className="notice model-notice" role="alert"><span>当前会话未加载到有效模型，pi 可能未注册 provider。</span><Button variant="ghost" onClick={onReconnect}>重新连接</Button></div>}
+			{connected && !loading && !pending && !state.isStreaming && state.availableModels.length > 0 && !state.model && <div className="notice model-notice" role="alert"><span>当前对话未加载到有效模型，pi 可能未注册 provider。</span><Button variant="ghost" onClick={onReconnect}>重新连接</Button></div>}
 			{state.dialogs?.[0] && (deferredDialog === state.dialogs[0].id ? <div className="queue-panel" role="status">扩展等待确认 · {state.dialogs.length} 项<Button onClick={() => setDeferredDialog(undefined)}>处理</Button></div> : <ExtensionDialog key={state.dialogs[0].id} request={state.dialogs[0]} onReply={actions.replyDialog} onReconnect={onReconnect} onDefer={() => setDeferredDialog(state.dialogs?.[0]?.id)} />)}
 			{editNotice && <p className="draft-notice" role="status">{editNotice}</p>}
 			{queueSize(state.queue) > 0 && state.queue && <QueuedMessages queue={state.queue} disabled={state.stopping} onChange={actions.updateQueuedMessage} />}

@@ -4,10 +4,10 @@
 	   surface chip. Two pixels of padding around a 24px tab keeps the whole control at
 	   the 28px compact height, so it sits inside the 40px strip without a second bar.
 	   Only the buttons capture the pointer; the track padding still drags the window. */
-	.workspace-mode-switcher { display: flex; align-self: center; align-items: center; gap: var(--space-0-5); flex: none; margin-left: var(--space-1); padding: var(--space-0-5); border-radius: var(--radius-lg); background: color-mix(in srgb, var(--text) 4%, transparent); }
-	.workspace-mode-switcher > button { display: flex; align-items: center; gap: var(--space-1); height: 24px; padding: 0 var(--space-2); border: 0; border-radius: var(--radius-md); background: transparent; color: var(--muted); font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); transition: background-color var(--transition-fast) ease, color var(--transition-fast) ease, box-shadow var(--transition-fast) ease; }
-	.workspace-mode-switcher > button:hover { background: var(--hover); color: var(--text); }
-	.workspace-mode-switcher > button[aria-pressed="true"] { background: var(--surface); color: var(--accent); box-shadow: var(--shadow-xs); }
+	.workspace-mode-switcher { display: flex; align-self: center; align-items: center; gap: var(--space-0-5); flex: none; margin-left: var(--space-1); padding: var(--space-0-5); border-radius: var(--radius-lg); background: var(--titlebar-segmented-track); }
+	.workspace-mode-switcher > button { display: flex; align-items: center; gap: var(--space-1); height: 24px; padding: 0 var(--space-2); border: 0; border-radius: var(--radius-md); background: transparent; color: var(--secondary); font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); transition: background-color var(--transition-fast) ease, color var(--transition-fast) ease, box-shadow var(--transition-fast) ease; }
+	.workspace-mode-switcher > button:hover { color: var(--text); }
+	.workspace-mode-switcher > button[aria-pressed="true"] { background: var(--segmented-selected); color: var(--text); box-shadow: var(--shadow-xs); }
 	.workspace-mode-switcher > button:focus-visible { outline: 2px solid var(--accent); outline-offset: var(--space-px); }
 	.design-sidebar { display: flex; flex-direction: column; gap: var(--space-5); flex: 0 0 var(--sidebar-width); width: var(--sidebar-width); min-height: 0; overflow: auto; padding: var(--space-5) var(--space-3); border-right: 1px solid var(--sidebar-border); background: var(--sidebar-backdrop); animation: design-sidebar-reveal var(--transition-base) var(--easing-default) both; }
 	.design-sidebar > header { padding-inline: var(--space-2); }

@@ -44,6 +44,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 /* One viewport-aligned star field across the shell; it never intercepts input.
    Every star surface leads with its dimming scrim, so the field is the second layer. */
 [data-theme="dark"]:is([data-dark-theme-color="star-black"], [data-dark-theme-color="star-blue"]) :is(.app-body, .workbench-shell, .workspace, .titlebar, .activity-bar, .sidebar, .workbench-panel, .git-tree-workspace, .voyage-rail) { background-attachment: fixed; background-size: cover, 1440px 960px, cover; }
+/* Light gradients are painted on three separate boxes; pinning them to the viewport makes
+   the title bar, rail and settings navigation read as one continuous backdrop. */
+[data-theme="light"] :is(.app-body, .titlebar, .activity-bar) { background-attachment: fixed; }
 .titlebar { flex: 0 0 40px; height: 40px; display: flex; align-items: stretch; background: var(--app-backdrop); }
 /* The corner holds only the mark, in a box exactly as wide as the activity rail, so
    the logo and the 💬/📁/Git column share one vertical axis by construction. */
@@ -58,14 +61,13 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .titlebar-close:hover { background: var(--color-window-close); color: var(--action-foreground); }
 
 /* Project navigation */
-.activity-bar { position: relative; z-index: 5; width: var(--activity-width); flex: 0 0 var(--activity-width); display: flex; flex-direction: column; align-items: center; gap: var(--space-1); padding: var(--space-2) var(--space-1); background: var(--app-backdrop); }
+.activity-bar { position: relative; z-index: 5; width: var(--activity-width); flex: 0 0 var(--activity-width); display: flex; flex-direction: column; align-items: center; gap: var(--space-1-5); padding: var(--space-2) 0; background: var(--app-backdrop); }
 .activity-bar .ui-tooltip-wrap { display: flex; }
-.activity-button { position: relative; width: 32px; height: 32px; display: grid; place-items: center; border: 0; border-radius: var(--radius-md); background: transparent; color: var(--muted); }
+.activity-button { position: relative; width: var(--activity-button-size); height: var(--activity-button-size); display: grid; place-items: center; border: 0; border-radius: var(--activity-radius); background: transparent; color: var(--secondary); transition: background-color var(--transition-fast), color var(--transition-fast); }
 .activity-button:hover { background: var(--activity-hover); color: var(--text); }
-.activity-button[aria-pressed="true"] { background: var(--activity-selected); color: var(--text); }
-/* An accent tick on the rail's edge makes the open tool unmistakable where the
-   selected tint is only a shade away from the backdrop. */
-.activity-button[aria-pressed="true"]::before { content: ""; position: absolute; left: calc(-1 * var(--space-1)); top: 50%; width: 2px; height: 16px; margin-top: -8px; border-radius: var(--radius-full); background: var(--accent); }
+/* The open tool is a theme-tinted tile with a theme-coloured glyph: visible on every
+   backdrop on its own, so the rail needs no edge tick. */
+.activity-button[aria-pressed="true"] { background: color-mix(in srgb, var(--settings-accent) 14%, transparent); color: var(--settings-accent); }
 .sidebar { width: var(--sidebar-width, 272px); flex: 0 0 var(--sidebar-width, 272px); display: flex; flex-direction: column; background: var(--sidebar-backdrop); padding: var(--space-2) var(--space-2) 0; }
 
 /* Project files and Git workbench */
@@ -886,7 +888,7 @@ body.scrollbar-frozen .messages:hover::-webkit-scrollbar-thumb:hover { backgroun
 .model-quick-option[aria-pressed=true] svg { color: var(--accent); }
 .model-quick-thinking { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); margin-inline: var(--space-2); padding: var(--space-3); border-top: 1px solid var(--border); }
 .model-quick-thinking > span { font-weight: var(--font-weight-medium); }
-.model-quick-thinking .ui-segmented { max-width: 100%; flex-wrap: wrap; gap: var(--space-0-5); border-color: var(--border); }
+.model-quick-thinking .ui-segmented { max-width: 100%; flex-wrap: wrap; }
 .model-quick-thinking .ui-button[data-size=compact] { padding-inline: var(--space-1-5); }
 .model-cache-hint { margin: 0 var(--space-2); padding: var(--space-3); border-top: 1px solid var(--border); color: var(--muted); font-size: var(--font-size-sm); line-height: var(--line-height-relaxed); }
 .model-quick-footer { margin-inline: var(--space-2); padding: var(--space-1) 0; border-top: 1px solid var(--border); }
@@ -1012,11 +1014,9 @@ body.scrollbar-frozen .messages:hover::-webkit-scrollbar-thumb:hover { backgroun
 .settings-workspace { --accent: var(--settings-accent); --action: var(--settings-action); --action-hover: var(--settings-action-hover); --action-active: var(--settings-action-active); --selected: var(--settings-selected); display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; accent-color: var(--accent); background: var(--workspace-backdrop); }
 .settings-active > :not(.settings-workspace) { display: none !important; }
 
-.settings-heading h1 { margin: 0; font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold); letter-spacing: -.01em; }
-.settings-layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); flex: 1; min-height: 0; }
-/* Navigation is a quiet rail: a faint tinted column and a pill hover carry the
-   separation, so no full-height rule and no check mark on the current page. */
-.settings-nav { padding: var(--space-4) var(--space-3); background: color-mix(in srgb, var(--subtle) 45%, var(--surface)); overflow: auto; }
+.settings-layout { flex: 1; min-height: 0; overflow: auto; }
+/* Padding and backdrop come from the host: the sidebar on desktop, the workspace when narrow. */
+.settings-nav { overflow: auto; }
 .settings-nav .ui-button { width: 100%; justify-content: flex-start; margin-bottom: var(--space-0-5); padding-inline: var(--space-2-5); border-color: transparent; border-radius: var(--radius-md); color: var(--secondary); font-weight: var(--font-weight-regular); }
 .settings-nav .ui-button-content { gap: var(--space-2-5); }
 .settings-nav .ui-button-content > svg { flex: none; color: var(--muted); transition: color var(--transition-fast); }
@@ -1024,8 +1024,7 @@ body.scrollbar-frozen .messages:hover::-webkit-scrollbar-thumb:hover { backgroun
 .settings-nav .ui-button:hover:not(:disabled):not([aria-pressed=true]) .ui-button-content > svg { color: var(--secondary); }
 .settings-nav .ui-button[aria-pressed=true]:not(:disabled), .settings-nav .ui-button[aria-pressed=true]:not(:disabled):hover { background: var(--selected); border-color: transparent; color: var(--accent); font-weight: var(--font-weight-medium); box-shadow: none; }
 .settings-nav .ui-button[aria-pressed=true] .ui-button-content > svg { color: var(--accent); }
-.settings-nav p { font-size: var(--font-size-sm); color: var(--secondary); }
-.settings-content { min-width: 0; min-height: 0; overflow: auto; padding: var(--space-5) var(--space-6) var(--space-6); scrollbar-gutter: stable; overflow-wrap: anywhere; }
+.settings-content { width: min(100%, 900px); min-width: 0; min-height: 0; margin-inline: auto; overflow: auto; padding: var(--space-5) var(--space-6) var(--space-6); scrollbar-gutter: stable; overflow-wrap: anywhere; background: var(--workspace-backdrop); }
 .settings-content h2 { font-size: var(--font-size-lg); margin: 0 0 var(--space-3); }
 .settings-content .editor-head h2 { margin: 0; }
 .settings-content .muted { margin-bottom: var(--space-4); }
@@ -1033,8 +1032,9 @@ body.scrollbar-frozen .messages:hover::-webkit-scrollbar-thumb:hover { backgroun
 /* Appearance: inset cards of label/control rows. Swatches read as two-tone chips;
    the selected one lifts a hair and takes a soft accent ring instead of a frame. */
 .settings-page { max-width: 820px; }
-.settings-page > h2 { margin: 0 0 var(--space-1); font-size: var(--font-size-xl); font-weight: var(--font-weight-semibold); letter-spacing: -.01em; }
+.settings-page > h2, .providers-settings > h2 { margin: 0 0 var(--space-4); font-size: var(--font-size-xl); font-weight: var(--font-weight-semibold); letter-spacing: -.01em; }
 .settings-page > .muted { margin: 0 0 var(--space-5); font-size: var(--font-size-sm); }
+.settings-page > h2:has(+ .muted) { margin-bottom: var(--space-1); }
 .settings-group { border: 1px solid var(--border-subtle, var(--border)); border-radius: var(--radius-lg); background: var(--card-bg, var(--panel-bg, var(--surface))); overflow: hidden; }
 .settings-group + .settings-group { margin-top: var(--space-3); }
 .settings-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); padding: var(--space-3) var(--space-4); }
@@ -1044,15 +1044,23 @@ body.scrollbar-frozen .messages:hover::-webkit-scrollbar-thumb:hover { backgroun
 .settings-row-title { color: var(--text); font-size: var(--font-size-base); font-weight: var(--font-weight-medium); line-height: var(--line-height-tight); }
 .settings-row-hint { color: var(--secondary); font-size: var(--font-size-sm); line-height: var(--line-height-base); }
 .settings-row > .ui-segmented { flex: none; }
-.settings-row > .ui-segmented .ui-button { height: var(--control-regular); min-width: 72px; padding-inline: var(--space-3); }
+.settings-row > .ui-segmented .ui-button { min-width: 64px; padding-inline: var(--space-3); }
 .settings-row > .switch { flex: none; margin: 0; }
-.settings-swatches { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-2); }
-.settings-theme-color.ui-button { --swatch-bg: var(--theme-swatch-yellow); --swatch-ink: var(--theme-swatch-yellow-ink); width: auto; height: auto; padding: var(--space-2) var(--space-1) var(--space-2-5); border-color: transparent; border-radius: var(--radius-lg); background: transparent; color: var(--secondary); transition: background-color var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast); }
-.ui-button.settings-theme-color:hover:not(:disabled) { background: color-mix(in srgb, var(--text) 4%, transparent); border-color: transparent; color: var(--text); }
-.ui-button.settings-theme-color[data-variant=setting][aria-pressed=true] { background: color-mix(in srgb, var(--swatch-ink) 12%, var(--surface)); border-color: color-mix(in srgb, var(--accent) 40%, transparent); color: var(--text); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent); transform: translateY(-1px); }
-.ui-button.settings-theme-color[data-variant=setting][aria-pressed=true]:hover:not(:disabled) { background: color-mix(in srgb, var(--swatch-ink) 18%, var(--surface)); }
+.settings-row > select.ui-input { flex: none; width: 200px; }
+/* Selects take the card's own rule weight; the strong boundary tone is for free-standing inputs. */
+.settings-row > select.ui-input:not(:disabled) { border-color: var(--border); }
+.settings-row > select.ui-input:hover:not(:disabled) { border-color: color-mix(in srgb, var(--text) 28%, transparent); }
+/* Swatches keep one size in every state: selection is a ring around the colour and a check,
+   never a card, so nothing shifts or nests. Rows wrap left-aligned with a fixed rhythm. */
+.settings-swatches { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); }
+.settings-theme-color.ui-button { --swatch-bg: var(--theme-swatch-yellow); --swatch-ink: var(--theme-swatch-yellow-ink); width: 76px; height: auto; padding: var(--space-1-5) 0; border-color: transparent; border-radius: var(--radius-lg); background: transparent; color: var(--secondary); box-shadow: none; }
+.ui-button.settings-theme-color:hover:not(:disabled) { background: transparent; border-color: transparent; color: var(--text); }
+.ui-button.settings-theme-color[data-variant=setting][aria-pressed=true] { background: transparent; border-color: transparent; color: var(--text); box-shadow: none; }
 .settings-theme-color .ui-button-content { display: flex; flex-direction: column; align-items: center; gap: var(--space-2); width: 100%; }
-.settings-swatch-art { position: relative; display: grid; place-items: center; width: 44px; height: 44px; border-radius: var(--radius-full); background-image: var(--swatch-stars, none), var(--swatch-bg); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 10%, transparent); }
+.settings-swatch-art { position: relative; display: grid; place-items: center; width: 44px; height: 44px; border-radius: var(--radius-full); background-image: var(--swatch-stars, none), var(--swatch-bg); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 10%, transparent), 0 0 0 2px var(--surface), 0 0 0 4px transparent; transition: box-shadow var(--transition-fast); }
+.ui-button.settings-theme-color:hover:not(:disabled):not([aria-pressed=true]) .settings-swatch-art { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 10%, transparent), 0 0 0 2px var(--surface), 0 0 0 4px color-mix(in srgb, var(--text) 18%, transparent); }
+.ui-button.settings-theme-color[aria-pressed=true] .settings-swatch-art { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 10%, transparent), 0 0 0 2px var(--surface), 0 0 0 4px var(--accent); }
+.settings-swatch-check { position: absolute; right: -4px; bottom: -4px; z-index: 1; display: grid; place-items: center; width: 18px; height: 18px; border-radius: var(--radius-full); background: var(--accent); color: var(--surface); box-shadow: 0 0 0 2px var(--surface); }
 .settings-swatch-art::before { content: ""; width: 16px; height: 16px; border-radius: var(--radius-full); background: var(--swatch-ink); box-shadow: 0 1px 2px var(--shadow-color); }
 .settings-swatch-label { font-size: var(--font-size-sm); line-height: var(--line-height-tight); white-space: nowrap; }
 .ui-button.settings-theme-color[data-variant=setting][aria-pressed=true] .settings-swatch-label { font-weight: var(--font-weight-medium); }
@@ -1062,18 +1070,14 @@ body.scrollbar-frozen .messages:hover::-webkit-scrollbar-thumb:hover { backgroun
 .settings-theme-color[data-theme-color-option="blue"] { --swatch-bg: var(--theme-swatch-blue); --swatch-ink: var(--theme-swatch-blue-ink); }
 .settings-theme-color[data-dark-theme-color-option="star-black"] { --swatch-bg: var(--theme-swatch-star-black); --swatch-ink: var(--theme-swatch-star-black-ink); --swatch-stars: var(--theme-swatch-star-black-stars); }
 .settings-theme-color[data-dark-theme-color-option="star-blue"] { --swatch-bg: var(--theme-swatch-star-blue); --swatch-ink: var(--theme-swatch-star-blue-ink); --swatch-stars: var(--theme-swatch-star-blue-stars); }
-.settings-font-controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); gap: var(--space-4); }
-.settings-font-controls label { display: block; margin-bottom: var(--space-2); }
-.settings-font-controls select { width: 100%; }
-.settings-font-preview { padding: var(--space-4); margin-block: var(--space-5); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg); font-variant-numeric: tabular-nums; }
-.settings-font-preview p { margin: 0 0 var(--space-2); font-size: var(--font-size-chat); }
-.settings-font-preview code { display: block; margin-top: var(--space-3); overflow-wrap: anywhere; font-family: var(--font-family-mono); font-size: var(--font-size-sm); }
-.settings-shortcuts { margin: 0; }
-.settings-shortcuts > div { display: grid; grid-template-columns: minmax(130px, 1fr) minmax(0, 2fr); gap: var(--space-3); padding-block: var(--space-3); border-bottom: 1px solid var(--border); }
-.settings-shortcuts dd { margin: 0; }
-.settings-shortcuts dd span { display: block; color: var(--secondary); font-size: var(--font-size-sm); margin-top: var(--space-1); }
-.settings-shortcuts kbd { font-family: var(--font-family-mono); font-size: var(--font-size-sm); }
 .settings-restriction { color: var(--secondary); font-size: var(--font-size-sm); margin-block: var(--space-3); }
+/* About: a mark-led identity row, then copyable paths for bug reports. */
+.about-hero { justify-content: flex-start; padding-block: var(--space-4); }
+.about-hero > .settings-row-text { flex: 1; }
+.about-hero > .brand-mark { width: 40px; height: 40px; flex: 0 0 40px; }
+.about-hero .settings-row-title { font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold); }
+.about-path { font-family: var(--font-family-mono); overflow-wrap: anywhere; }
+.about-license { margin: var(--space-4) 0 0; color: var(--muted); font-size: var(--font-size-sm); }
 .settings-restriction:empty { display: none; }
 /* Provider and route settings editors. Both swap the body for a form, so the
    action row stays reachable and the two pages share their width handling. */
@@ -1084,17 +1088,18 @@ body.scrollbar-frozen .messages:hover::-webkit-scrollbar-thumb:hover { backgroun
 .settings-content:has(.preset-editor) { display: flex; flex-direction: column; padding: 0; overflow: hidden; scrollbar-gutter: auto; }
 .settings-content:has(.preset-editor) > .settings-config, .settings-editor:has(> .preset-editor) { display: flex; flex: 1; min-height: 0; }
 @media (max-width: 760px) {
-	.settings-layout { display: flex; flex-direction: column; }
-	.settings-nav { display: flex; flex-wrap: wrap; gap: var(--space-1); flex-shrink: 0; padding: var(--space-2); border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent); }
+	.settings-workspace { overflow: auto; }
+	.settings-nav { display: flex; flex-wrap: wrap; gap: var(--space-1); flex-shrink: 0; max-height: 38dvh; border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent); }
+	.settings-workspace > .settings-nav { padding: var(--space-2); background: var(--sidebar-backdrop); }
 	.settings-nav .ui-button { width: auto; margin: 0; padding-inline: var(--space-2); }
-	.settings-swatches { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-	.settings-nav p { flex-basis: 100%; margin: var(--space-1); }
+	.settings-nav-title { flex-basis: 100%; }
+	.workbench-shell > .settings-active { margin: 0; border-radius: 0; border-width: 1px 0 0; }
 	.settings-content { flex: 1; padding: var(--space-3); }
+	.settings-workspace .settings-content { width: 100%; }
 	.providers-toolbar { flex-wrap: wrap; }
 	.providers-toolbar > .ui-input { flex: 1 1 240px; }
 	.providers-toolbar .settings-toolbar-extras { flex: 1 1 auto; margin-left: auto; }
 	.settings-editor .dialog-actions, .prompt-settings .dialog-actions { bottom: calc(-1 * var(--space-3)); }
-	.settings-shortcuts > div { grid-template-columns: minmax(0, 1fr); gap: var(--space-1); }
 }
 
 }
@@ -1785,30 +1790,23 @@ span.provider-mark.generic { display: inline-flex; align-items: center; justify-
 	.provider-model-config-levels { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
-.settings-workspace-title { margin: 0 0 var(--space-5); font-size: var(--font-size-xl); font-weight: var(--font-weight-semibold); }
+.settings-nav-title { margin: 0 0 var(--space-1); padding-inline: var(--space-2-5); color: var(--text); font-size: var(--font-size-xl); font-weight: var(--font-weight-semibold); line-height: var(--line-height-tight); }
 .settings-nav .settings-back { justify-content: flex-start; margin: 0 0 var(--space-4); padding-inline: var(--space-2); color: var(--text); }
 .settings-nav .settings-back:hover:not(:disabled) { background: var(--selected); }
-.settings-active { overflow: hidden; }
-@media (max-width: 760px) {
-	.settings-workspace { overflow: auto; }
-	.settings-layout { min-height: 0; }
-	.settings-nav { max-height: 38dvh; overflow: auto; }
-}
+/* Settings dissolve the workbench frame: the navigation sits on the app backdrop and only
+   the content keeps a card, so the page reads as one panel instead of two white columns. */
+.workbench-shell:has(> .settings-active) { border: 0; border-radius: 0; background: transparent; }
+.settings-active { margin: 0 var(--space-2) var(--space-2) 0; overflow: hidden; border: 1px solid var(--sidebar-border); border-radius: var(--radius-xl); }
 .settings-nav-group { margin-top: var(--space-3); }
 .settings-nav-group > span { display: block; padding: 0 var(--space-2-5) var(--space-1); color: var(--text-muted, var(--muted)); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); }
 
-.settings-layout { display: block; overflow: auto; }
-.settings-content { width: min(100%, 900px); margin-inline: auto; background: var(--workspace-backdrop); }
-.settings-sidebar { --sidebar-width: 272px; width: var(--sidebar-width); flex-basis: var(--sidebar-width); padding: var(--space-3) var(--space-2); background: var(--sidebar-bg, var(--sidebar-backdrop)); }
+/* The navigation is portaled out of .settings-workspace, so it restates the settings accent;
+   selection is the same theme-tinted tile as the activity rail, so both read as one system. */
+.settings-sidebar { --sidebar-width: 224px; --accent: var(--settings-accent); --selected: color-mix(in srgb, var(--settings-accent) 14%, transparent); width: var(--sidebar-width); flex-basis: var(--sidebar-width); padding: var(--space-3) var(--space-2); border-right: 0; background: transparent; }
 .settings-sidebar #settings-sidebar-navigation { display: contents; }
 .settings-sidebar .settings-nav { padding: 0; background: transparent; }
-.settings-sidebar .settings-nav .settings-back { margin-bottom: var(--space-5); }
-.settings-workspace { background: var(--workspace-backdrop); }
-@media (max-width: 760px) {
-	.settings-workspace > .settings-nav { max-height: 38dvh; padding: var(--space-2); background: var(--sidebar-backdrop); }
-	.settings-workspace .settings-content { width: 100%; }
-}
+.settings-sidebar .settings-nav .settings-back { margin-bottom: var(--space-3); }
+.settings-nav .settings-back .ui-button-content > svg, .settings-nav .ui-button.settings-back:hover:not(:disabled):not([aria-pressed=true]) .ui-button-content > svg { color: inherit; }
 
-.settings-shell { flex: 1; min-width: 0; min-height: 0; display: flex; margin: 0 var(--space-px) var(--space-px) 0; overflow: hidden; border: 1px solid var(--sidebar-border); border-radius: var(--radius-xl); background: var(--workspace-backdrop); }
 
 }

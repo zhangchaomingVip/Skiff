@@ -20,10 +20,10 @@ export function ProjectRemoveDialog({ name, chatCount, sessionCount, onHide, onP
 	return <Dialog onClose={onClose} className="project-dialog" aria-label={title}>
 		<div className="dialog-heading"><h2>{title}</h2><IconButton aria-label="关闭移除项目" onClick={onClose}><Icon name="close" /></IconButton></div>
 		{confirming
-			? <p>永久删除 {name} 及其 {chatCount} 个聊天{sessionCount ? `，并删除 pi 会话目录中的 ${sessionCount} 个对话文件` : ""}，无法恢复。</p>
+			? <p>永久删除 {name} 及其 {chatCount} 个对话{sessionCount ? `，并删除 pi 会话目录中的 ${sessionCount} 个对话文件` : ""}，无法恢复。</p>
 			: <>
-				<p>隐藏 {name}：从侧栏收起，保留 {chatCount} 个聊天与会话文件；用同一路径重新添加项目即可整组恢复。</p>
-				<p>永久删除：移除项目及其聊天，并删除 pi 会话目录中的对话文件，无法恢复。</p>
+				<p>隐藏 {name}：从侧栏收起，保留 {chatCount} 个对话及其文件；用同一路径重新添加项目即可整组恢复。</p>
+				<p>永久删除：移除项目及其对话，并删除 pi 会话目录中的对话文件，无法恢复。</p>
 			</>}
 		<div className="dialog-actions">
 			{/* Keys keep React from reusing a button across steps, which would

@@ -54,7 +54,7 @@ export interface Workspace {
 
 const STORAGE_KEY = "skiff.workspace.v1";
 const newChat = (projectId: string): Conversation => ({
-	id: crypto.randomUUID(), projectId, title: "新聊天", createdAt: Date.now(), updatedAt: Date.now(), hasMessages: false,
+	id: crypto.randomUUID(), projectId, title: "新对话", createdAt: Date.now(), updatedAt: Date.now(), hasMessages: false,
 });
 
 export function normalizeSelectedModel(value: unknown): Conversation["selectedModel"] {
@@ -247,7 +247,7 @@ export function useWorkspace() {
 			// Archived drafts are intentional records, even when they have no messages.
 			localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...workspace, chats: persistableConversations(workspace.chats, workspace.activeId) }));
 		} catch {
-			setError("无法保存聊天索引。关闭应用后可能无法从侧栏找回本次聊天。");
+			setError("无法保存对话索引。关闭应用后可能无法从侧栏找回本次对话。");
 		}
 	}, [workspace]);
 

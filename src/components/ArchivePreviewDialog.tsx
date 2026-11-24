@@ -41,7 +41,7 @@ export function ArchivePreviewDialog({ chat, project, busy, onRestore, onDelete,
 				const messages = await readArchivedMessages((command) => rpc.request(command), sessionFile, chat.routeSnapshots);
 				if (!cancelled) setPreview({ status: "ready", messages });
 			} catch (error) {
-				if (!cancelled) setPreview({ status: "error", message: `无法读取归档会话：${String(error)}` });
+				if (!cancelled) setPreview({ status: "error", message: `无法读取已归档对话：${String(error)}` });
 			}
 		})();
 		return () => {
@@ -59,7 +59,7 @@ export function ArchivePreviewDialog({ chat, project, busy, onRestore, onDelete,
 			<Button type="button" variant="primary" size="compact" disabled={busy} onClick={onRestore}><Icon name="refresh" size={14} />恢复并继续</Button>
 			<Button type="button" variant="ghost" size="compact" disabled={busy} onClick={onDelete}><Icon name="trash" size={14} />删除索引记录</Button>
 		</div>
-		{preview.status === "loading" && <div className="archive-preview-status" role="status"><span className="dot busy" />正在读取归档会话…</div>}
+		{preview.status === "loading" && <div className="archive-preview-status" role="status"><span className="dot busy" />正在读取已归档对话…</div>}
 		{preview.status === "error" && <div className="archive-preview-error" role="alert"><span>{preview.message}</span><Button type="button" variant="ghost" size="compact" onClick={() => setRetry((value) => value + 1)}><Icon name="refresh" size={14} />重试</Button></div>}
 		{preview.status === "ready" && <MessageList messages={preview.messages} projectName={project?.name} running={false} models={[]} onSuggestion={() => {}} followSignal={0} readOnly />}
 	</Dialog>;

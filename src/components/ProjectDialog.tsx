@@ -73,7 +73,7 @@ export function ProjectDialog({ projects = [], hidden = [], onAdd, onRestore, on
 			</div>
 			{!!hidden.length && <section className="project-hidden" aria-label="已移出的项目">
 				<h3>已移出的项目<span className="project-hidden-count">{hidden.length}</span></h3>
-				<p>移出时保留了聊天记录和本地文件，恢复后回到原来的分组。</p>
+				<p>移出时保留了对话记录和本地文件，恢复后回到原来的分组。</p>
 				<ul>
 					{hidden.map((project) => {
 						const atLimit = projects.length >= MAX_PROJECTS;
@@ -82,7 +82,7 @@ export function ProjectDialog({ projects = [], hidden = [], onAdd, onRestore, on
 								<Icon name="folder" size={16} />
 								<span><strong>{project.name}</strong><small>{project.path}</small></span>
 							</div>
-							<Button type="button" size="compact" disabled={pending || atLimit} title={atLimit ? `最多保留 ${MAX_PROJECTS} 个项目，请先移出一个` : `恢复 ${project.name}`} onClick={() => { onRestore?.(project.id); onClose(); }}>恢复{project.chatCount ? ` · ${project.chatCount} 个聊天` : ""}</Button>
+							<Button type="button" size="compact" disabled={pending || atLimit} title={atLimit ? `最多保留 ${MAX_PROJECTS} 个项目，请先移出一个` : `恢复 ${project.name}`} onClick={() => { onRestore?.(project.id); onClose(); }}>恢复{project.chatCount ? ` · ${project.chatCount} 个对话` : ""}</Button>
 						</li>;
 					})}
 				</ul>

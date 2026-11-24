@@ -338,7 +338,7 @@ export function usePiSession(target?: SessionTarget, runtimeOffers: readonly Run
 				if (!current()) return;
 				if (selected.sessionFile) {
 					const result = await rpc.request<{ cancelled?: boolean }>({ type: "switch_session", sessionPath: selected.sessionFile });
-					if (result.cancelled) throw new Error("pi 扩展取消了聊天切换，未载入该聊天。");
+					if (result.cancelled) throw new Error("pi 扩展取消了对话切换，未载入该对话。");
 				}
 				if (!current()) return;
 				const requested = preferredModel.current?.chatId === selected.id ? preferredModel.current.model ?? selected.model : selected.model;
@@ -459,7 +459,7 @@ export function usePiSession(target?: SessionTarget, runtimeOffers: readonly Run
 				let accepted: boolean;
 				if (expected) {
 					const data = await rpc.request<{ entries: Parameters<typeof forkEntry>[2]; leafId: string | null }>({ type: "get_entries" });
-					if (!ownsRpc(rpc) || JSON.stringify([sessionFile, data.leafId]) !== expected.branchVersion || expected.target.entryId !== forkEntry(stateRef.current.messages, id, data.entries, data.leafId)) throw new Error("聊天分支已变化，未执行编辑重发。");
+					if (!ownsRpc(rpc) || JSON.stringify([sessionFile, data.leafId]) !== expected.branchVersion || expected.target.entryId !== forkEntry(stateRef.current.messages, id, data.entries, data.leafId)) throw new Error("对话分支已变化，未执行编辑重发。");
 					accepted = !(await rpc.request<{ cancelled?: boolean }>({ type: "fork", entryId: expected.target.entryId })).cancelled;
 				} else accepted = await forkTurn(rpc, stateRef.current.messages, id);
 				if (!ownsRpc(rpc)) return false;

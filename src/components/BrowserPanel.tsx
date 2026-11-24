@@ -183,10 +183,10 @@ function BrowserScreen({ status, controls, actions, inputHandle, pageHandle, onR
 	}, [interactive, status.controlVersion, status.generation, attempt]);
 	const takeover = status.control === "ai" || status.control === "stopped";
 	return <div className="browser-screen" data-phase={phase} ref={screen}>
-		<canvas ref={canvas} role="img" aria-label="当前聊天的浏览器画面" />
+		<canvas ref={canvas} role="img" aria-label="当前对话的浏览器画面" />
 		{interactive && <textarea ref={keyboard} className="browser-input" aria-label="浏览器键盘输入" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} />}
 		{phase === "live" && takeover && !actions.pending && <TakeoverLayer canvas={canvas} viewer={viewer} takeOver={takeOver} inputHandle={inputHandle} />}
-		{phase !== "live" && <div className="browser-screen-message" role="status"><Icon name={phase === "disconnected" ? "wifi" : "clock"} size={24} /><strong>{phase === "disconnected" ? "画面连接已断开" : phase === "waiting" ? "等待浏览器画面…" : "正在连接画面…"}</strong><p>{phase === "disconnected" ? "当前画面已失效。重新连接会读取最新页面，不会重复执行操作。" : "连接到当前聊天的浏览器。"}</p>{phase === "disconnected" && <Button onClick={() => { current.current.refresh(); retry((value) => value + 1); }}>重新连接画面</Button>}</div>}
+		{phase !== "live" && <div className="browser-screen-message" role="status"><Icon name={phase === "disconnected" ? "wifi" : "clock"} size={24} /><strong>{phase === "disconnected" ? "画面连接已断开" : phase === "waiting" ? "等待浏览器画面…" : "正在连接画面…"}</strong><p>{phase === "disconnected" ? "当前画面已失效。重新连接会读取最新页面，不会重复执行操作。" : "连接到当前对话的浏览器。"}</p>{phase === "disconnected" && <Button onClick={() => { current.current.refresh(); retry((value) => value + 1); }}>重新连接画面</Button>}</div>}
 	</div>;
 }
 
@@ -352,7 +352,7 @@ export function BrowserPanel({ chatId, controls, browserActions, compact, maximi
 			</div>
 			<div className="browser-panel-header-actions">
 				<IconButton size="compact" aria-label={maximized ? "还原浏览器宽度" : "最大化浏览器"} title={maximized ? "还原浏览器宽度" : "最大化浏览器"} disabled={compact} onClick={onMaximize}><Icon name={maximized ? "collapse" : "expand"} size={16} /></IconButton>
-				<IconButton size="compact" aria-label={compact ? "返回聊天" : "收起浏览器"} title={compact ? "返回聊天" : "收起浏览器"} onClick={collapse}><Icon name={compact ? "arrowLeft" : "panel"} size={16} /></IconButton>
+				<IconButton size="compact" aria-label={compact ? "返回对话" : "收起浏览器"} title={compact ? "返回对话" : "收起浏览器"} onClick={collapse}><Icon name={compact ? "arrowLeft" : "panel"} size={16} /></IconButton>
 			</div>
 		</header>
 		{!blank && <div className="browser-toolbar">
@@ -382,11 +382,11 @@ export function BrowserPanel({ chatId, controls, browserActions, compact, maximi
 			</Popover>}
 		</div>}
 		{browserActions.error && <p className="browser-panel-error" role="alert">{browserActions.error}</p>}
-		{blank ? <div className="browser-new-page"><BrowserAddress key={`${status?.generation}:${status?.activeTabId}`} initialValue="" newTab onSubmit={(text) => void commitAddress(text)} disabled={!tabsAvailable} /></div> : watch && status ? controls.visible ? <BrowserScreen key={`${status.chatId}:${status.generation}`} status={status} controls={controls} actions={browserActions} inputHandle={inputHandle} pageHandle={pageHandle} onReload={reloadResult} onAction={actionResult} zoom={zoom} onPhase={setPhase} takeOver={ensureHuman} /> : <div className="browser-empty"><Icon name="monitor" size={28} /><strong>画面已暂停</strong><p>返回此聊天后显示最新画面，浏览器任务继续运行。</p></div> : <div className="browser-empty" role="status">
+		{blank ? <div className="browser-new-page"><BrowserAddress key={`${status?.generation}:${status?.activeTabId}`} initialValue="" newTab onSubmit={(text) => void commitAddress(text)} disabled={!tabsAvailable} /></div> : watch && status ? controls.visible ? <BrowserScreen key={`${status.chatId}:${status.generation}`} status={status} controls={controls} actions={browserActions} inputHandle={inputHandle} pageHandle={pageHandle} onReload={reloadResult} onAction={actionResult} zoom={zoom} onPhase={setPhase} takeOver={ensureHuman} /> : <div className="browser-empty"><Icon name="monitor" size={28} /><strong>画面已暂停</strong><p>返回此对话后显示最新画面，浏览器任务继续运行。</p></div> : <div className="browser-empty" role="status">
 			<Icon name={error || dependencyError || failed ? "wifi" : status?.control === "starting" ? "clock" : "monitor"} size={28} />
 			<strong>{error ? "浏览器服务暂不可用" : status?.control === "starting" ? "正在启动浏览器…" : failed ? browserControlLabels[status.control] : status?.control === "closing" ? "正在关闭浏览器…" : status?.control === "closed" ? "浏览器已关闭" : !dependencies ? "正在检查浏览器…" : !dependencies.ready ? "浏览器尚未就绪" : !dependencies.enabled ? "AI 浏览器尚未启用" : "打开浏览器开始浏览"}</strong>
-			<p>{error ?? dependencyError ?? status?.error ?? (failed ? "重新打开会关闭当前页面，保留此聊天的登录状态。" : status?.control === "starting" ? "首次启动可能需要几秒，画面就绪后会自动显示。" : status?.control === "closed" ? "当前页面已关闭。可以自己打开浏览器继续浏览，也可以让 AI 打开网页。" : dependencies && !dependencies.ready ? dependencies.message : dependencies && !dependencies.enabled ? "在设置中开启后，可以自己浏览或交给 AI。" : "先自己输入网址、开标签；需要 AI 时，把当前页面交给它。")}</p>
-			{failed && <><p>重新准备会关闭当前页面，保留此聊天的登录状态。</p><div className="browser-empty-actions">{manualAvailable && <Button variant="primary" disabled={opening || busy} loading={opening} onClick={() => void openBrowser()}>重新打开浏览器</Button>}<Button disabled={busy || preparing} loading={preparing} title={busy ? "请等待当前轮次结束后再重新准备" : undefined} onClick={() => void prepare()}>关闭并重新准备</Button></div></>}
+			<p>{error ?? dependencyError ?? status?.error ?? (failed ? "重新打开会关闭当前页面，保留此对话的登录状态。" : status?.control === "starting" ? "首次启动可能需要几秒，画面就绪后会自动显示。" : status?.control === "closed" ? "当前页面已关闭。可以自己打开浏览器继续浏览，也可以让 AI 打开网页。" : dependencies && !dependencies.ready ? dependencies.message : dependencies && !dependencies.enabled ? "在设置中开启后，可以自己浏览或交给 AI。" : "先自己输入网址、开标签；需要 AI 时，把当前页面交给它。")}</p>
+			{failed && <><p>重新准备会关闭当前页面，保留此对话的登录状态。</p><div className="browser-empty-actions">{manualAvailable && <Button variant="primary" disabled={opening || busy} loading={opening} onClick={() => void openBrowser()}>重新打开浏览器</Button>}<Button disabled={busy || preparing} loading={preparing} title={busy ? "请等待当前轮次结束后再重新准备" : undefined} onClick={() => void prepare()}>关闭并重新准备</Button></div></>}
 			{error && <Button onClick={controls.refresh}>重新检测</Button>}
 			{status?.control === "closed" && manualAvailable && <div className="browser-empty-actions"><Button variant="primary" disabled={opening || busy} loading={opening} onClick={() => void openBrowser()}>打开浏览器</Button></div>}
 			{!status && <div className="browser-empty-actions">{manualAvailable && <Button variant="primary" disabled={opening || busy} loading={opening} onClick={() => void openBrowser()}>打开浏览器</Button>}<Button disabled={checking} onClick={() => { recheck((value) => value + 1); controls.refresh(); }}>{checking ? "正在检测…" : "重新检测"}</Button><Button onClick={onSettings}>浏览器设置</Button></div>}

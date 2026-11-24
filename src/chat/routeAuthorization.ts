@@ -35,7 +35,7 @@ export interface RouteAuthorizationPrompt {
 	request: RouteAuthorizationRequest;
 	actions: readonly [
 		{ id: "once"; label: "同意" },
-		{ id: "session"; label: "本次会话都同意" },
+		{ id: "session"; label: "本次对话都同意" },
 		{ id: "keep_failed"; label: "保持失败" },
 	];
 }
@@ -53,7 +53,7 @@ export interface RouteAuthorizationTransition {
 
 const PROMPT_ACTIONS: RouteAuthorizationPrompt["actions"] = [
 	{ id: "once", label: "同意" },
-	{ id: "session", label: "本次会话都同意" },
+	{ id: "session", label: "本次对话都同意" },
 	{ id: "keep_failed", label: "保持失败" },
 ];
 
@@ -96,7 +96,7 @@ export function createRouteAuthorizationState(sessionId: string): RouteAuthoriza
 }
 
 function allow(source: AuthorizationRoute, target: AuthorizationRoute, authorization: RouteAuthorizationKind): RouteAuthorizationEffect {
-	const suffix = authorization === "same_account" ? `（同一扣费账户：${accountLabel(target)}）` : authorization === "session" ? "（本次会话已授权目标账户）" : "（已获得本次切换授权）";
+	const suffix = authorization === "same_account" ? `（同一扣费账户：${accountLabel(target)}）` : authorization === "session" ? "（本次对话已授权目标账户）" : "（已获得本次切换授权）";
 	return { kind: "allow", authorization, source, target, systemMessage: `已切换到 ${routeLabel(target)}${suffix}` };
 }
 

@@ -102,17 +102,17 @@ export function WebSearchSettings({ search }: { search: WebSearchControls }) {
 						? { tone: "error", label: "验证失败" }
 						: { tone: "pending", label: "待验证" };
 	const sessionState: { tone: State; label: string } = active
-		? { tone: "ready", label: "当前会话已生效" }
+		? { tone: "ready", label: "当前对话已生效" }
 		: search.enabled
-			? { tone: "pending", label: "当前会话未生效" }
-			: { tone: "idle", label: "当前会话已关闭" };
+			? { tone: "pending", label: "当前对话未生效" }
+			: { tone: "idle", label: "当前对话已关闭" };
 
 	return <div className="web-search-settings">
 		<div className="settings-group">
 			<div className="settings-row">
 				<div className="settings-row-text">
 					<label className="settings-row-title" htmlFor="web-search-enabled">联网搜索</label>
-					<span className="settings-row-hint">允许模型在回答中调用 web_search 检索网页。</span>
+					<span className="settings-row-hint">允许模型在回答时检索网页。</span>
 				</div>
 				<label className="switch" title={active ? "关闭联网搜索" : "开启联网搜索"}>
 					<input id="web-search-enabled" type="checkbox" checked={active} disabled={!search.statusLoaded || togglePending} onChange={(event) => void search.toggle(event.target.checked)} />

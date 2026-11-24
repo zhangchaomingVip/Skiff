@@ -34,6 +34,10 @@ export function useDarkThemeColor() {
 export function useThemeStars() {
 	return useSyncExternalStore(subscribe, () => document.documentElement.dataset.themeStars !== "false");
 }
+/** The theme actually shown, after "system" is resolved. */
+export function useResolvedTheme() {
+	return useSyncExternalStore(subscribe, () => (document.documentElement.dataset.theme === "dark" ? "dark" : "light") as "light" | "dark");
+}
 export function syncNativeTheme() {
 	const apply = () => {
 		try { void getCurrentWindow().setTheme(document.documentElement.dataset.theme as "light" | "dark").catch(() => undefined); }

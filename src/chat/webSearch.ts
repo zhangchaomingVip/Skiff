@@ -120,7 +120,7 @@ export function useWebSearch(actions: PiSessionActions, connected: boolean, reco
 	const toggle = useCallback(async (next: boolean) => {
 		if (!isCurrent() || !connected) return;
 		if (!available) {
-			setError("当前 pi 会话尚未加载联网搜索扩展，请在设置中安装或重新加载。");
+			setError("当前对话尚未加载联网搜索扩展，请在设置中安装或重新加载。");
 			return;
 		}
 		if (next && status?.validated === false) {

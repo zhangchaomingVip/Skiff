@@ -30,7 +30,7 @@ test("different, empty, and unknown accounts require all three explicit actions"
 		assert.equal(transition.effect.kind, "prompt");
 		if (transition.effect.kind === "prompt") {
 			assert.deepEqual(transition.effect.prompt.actions.map((action) => [action.id, action.label]), [
-				["once", "同意"], ["session", "本次会话都同意"], ["keep_failed", "保持失败"],
+				["once", "同意"], ["session", "本次对话都同意"], ["keep_failed", "保持失败"],
 			]);
 			assert.match(transition.effect.systemMessage, /目标/);
 		}

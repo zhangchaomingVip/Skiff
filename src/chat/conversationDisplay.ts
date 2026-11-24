@@ -8,7 +8,7 @@ export const DERIVE_TITLE_MAX_LENGTH = 32;
 export function deriveTitle(messages: readonly ChatMessage[]): string {
 	const first = messages.find((message) => message.role === "user");
 	const text = first?.blocks.filter((block) => block.kind === "text").map((block) => splitAttachments(block.text).text).join(" ").replace(/\s+/gu, " ").trim();
-	return text ? Array.from(text).slice(0, DERIVE_TITLE_MAX_LENGTH).join("") : first?.blocks.some((block) => block.kind === "image") ? "图片聊天" : "新聊天";
+	return text ? Array.from(text).slice(0, DERIVE_TITLE_MAX_LENGTH).join("") : first?.blocks.some((block) => block.kind === "image") ? "图片对话" : "新对话";
 }
 
 export function conversationRoute(chat: Conversation): RouteSnapshot | undefined { return [...(chat.routeSnapshots ?? [])].reverse().find((snapshot) => snapshot !== null) ?? undefined; }

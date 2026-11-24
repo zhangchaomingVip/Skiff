@@ -71,7 +71,7 @@ export function SessionStatistics({ chats, projects, offers, workspaceMode }: Se
 	const totals = useMemo(() => summarizeStatistics(filtered), [filtered]);
 	const groups = useMemo(() => view === "records" ? [] : groupStatistics(filtered, view), [filtered, view]);
 	const hit = cacheHitRate(totals.tokens);
-	const skipped = snapshot ? [snapshot.data.skippedSessions ? `${number.format(snapshot.data.skippedSessions)} 个会话` : "", snapshot.data.skippedMedia ? `${number.format(snapshot.data.skippedMedia)} 条生成记录` : ""].filter(Boolean).join("、") : "";
+	const skipped = snapshot ? [snapshot.data.skippedSessions ? `${number.format(snapshot.data.skippedSessions)} 个对话` : "", snapshot.data.skippedMedia ? `${number.format(snapshot.data.skippedMedia)} 条生成记录` : ""].filter(Boolean).join("、") : "";
 	const listingCount = view === "records" ? filtered.length : groups.length;
 	const pageCount = Math.ceil(listingCount / pageSize);
 	const shownPage = Math.min(page, Math.max(0, pageCount - 1));
@@ -89,7 +89,7 @@ export function SessionStatistics({ chats, projects, offers, workspaceMode }: Se
 			? { label: "生成费用", value: showCost(totals.cost) }
 			: { label: "生成任务", value: displayCount(totals.image + totals.video) },
 	] : [
-		{ label: "会话请求", value: displayCount(totals.request) },
+		{ label: "对话请求", value: displayCount(totals.request) },
 		{ label: "消耗 Tokens", value: totals.usageRows ? formatTokens(usageTotal) : "—" },
 		{ label: "已知费用", value: showCost(totals.cost) },
 		{ label: "缓存命中率", value: hit === undefined ? "—" : percent.format(hit) },
@@ -98,13 +98,13 @@ export function SessionStatistics({ chats, projects, offers, workspaceMode }: Se
 			{ label: "生成视频", value: displayCount(totals.video) },
 		] : []),
 	];
-	const emptyState = !rows.length ? "暂无会话或生成记录。"
-		: !sceneRows.length ? (scene === "design" ? "还没有图片或视频生成记录。" : "还没有会话请求记录。")
+	const emptyState = !rows.length ? "暂无对话或生成记录。"
+		: !sceneRows.length ? (scene === "design" ? "还没有图片或视频生成记录。" : "还没有对话请求记录。")
 		: "当前筛选没有记录。";
 
 	return <section className="settings-page statistics-page" aria-labelledby="statistics-title" aria-busy={loading}>
 		<header className="statistics-header">
-			<div className="statistics-heading"><h2 id="statistics-title">会话统计</h2>
+			<div className="statistics-heading"><h2 id="statistics-title">对话统计</h2>
 				<Button variant="secondary" size="compact" disabled={loading} onClick={() => setRevision((value) => value + 1)}><Icon name="refresh" size={14} />刷新</Button></div>
 			<div className="statistics-modes"><SegmentedControl label="统计模式" options={[...scenes]} value={scene} onChange={selectScene} /></div>
 		</header>
@@ -114,7 +114,7 @@ export function SessionStatistics({ chats, projects, offers, workspaceMode }: Se
 			<select aria-label="提供商" value={chosenProvider} onChange={(event) => setProvider(event.target.value)}><option value="">全部提供商</option>{providersList.map(({ key, label }) => <option key={key} value={key}>{label}</option>)}</select>
 		</div>
 		{loading && <p className="statistics-notice" role="status">正在读取本地记录…</p>}
-		{error && <p className="statistics-notice" role="alert">无法读取会话统计。{snapshot ? "正在显示上次成功加载的数据。" : ""}请点击刷新重试。</p>}
+		{error && <p className="statistics-notice" role="alert">无法读取对话统计。{snapshot ? "正在显示上次成功加载的数据。" : ""}请点击刷新重试。</p>}
 		<div className="statistics-card">
 			<dl className="statistics-kpis" data-count={stats.length} aria-label="统计概览">
 				{stats.map((stat) => <Stat key={stat.label} label={stat.label} value={stat.value} />)}
@@ -133,7 +133,7 @@ export function SessionStatistics({ chats, projects, offers, workspaceMode }: Se
 			{pageCount > 1 && <div className="statistics-pager"><span className="statistics-caption">第 {shownPage + 1} / {pageCount} 页 · {number.format(from + 1)}–{number.format(to)}</span><Button size="compact" disabled={shownPage === 0} onClick={() => setPage(shownPage - 1)}>上一页</Button><Button size="compact" disabled={shownPage + 1 >= pageCount} onClick={() => setPage(shownPage + 1)}>下一页</Button></div>}
 		</div>
 		<p className="statistics-footnote">{(scene === "design"
-			? "生成记录只计成功的任务，不含本地导入或失败任务。记录来自本机生成任务，不带 Tokens 或会话费用，也不合并不同币种。"
+			? "生成记录只计成功的任务，不含本地导入或失败任务。记录来自本机生成任务，不带 Tokens 或对话费用，也不合并不同币种。"
 			: scene === "code"
 				? "请求数以日志中保存的模型响应为准，含失败与中止，不等同于上游重试次数。Tokens 含新增输入、输出、缓存读写。费用不含未定价请求，不合并不同币种，也不是账单。"
 				: "请求数以日志中保存的模型响应为准，含失败与中止，不等同于上游重试次数。Tokens 含新增输入、输出、缓存读写。费用不含未定价请求，不合并不同币种，也不是账单。生成记录只计成功的任务，不含本地导入或失败任务，也不计 Tokens 或费用。") + (skipped ? `另有 ${skipped}未能读取。` : "")}</p>
@@ -288,7 +288,7 @@ function CalendarHeatmap({ rows, now, metric, options, onMetric }: { rows: Usage
 }
 
 function RequestTable({ rows, scene }: { rows: UsageRecord[]; scene: Scene }) {
-	return <table className="statistics-table"><caption className="statistics-sr-only">{scene === "all" ? "模型请求和生成记录" : "模型请求记录"}</caption><thead><tr>{[scene === "all" ? "时间 / 类型" : "时间 / 状态", "项目 / 会话", "提供商 / 模型", "新增输入", "输出", "缓存读 / 写", "费用"].map((name) => <th key={name} scope="col">{name}</th>)}</tr></thead><tbody>
+	return <table className="statistics-table"><caption className="statistics-sr-only">{scene === "all" ? "模型请求和生成记录" : "模型请求记录"}</caption><thead><tr>{[scene === "all" ? "时间 / 类型" : "时间 / 状态", "项目 / 对话", "提供商 / 模型", "新增输入", "输出", "缓存读 / 写", "费用"].map((name) => <th key={name} scope="col">{name}</th>)}</tr></thead><tbody>
 		{rows.map((row) => {
 			// In the code scene every row is a model request, so the type label only adds noise.
 			const detail = row.kind === "request"

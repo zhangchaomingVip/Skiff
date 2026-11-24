@@ -36,7 +36,7 @@ export type UsageRecord = {
 	id: string; kind: RecordKind; at?: number; project: Dimension; provider: Dimension; model: Dimension;
 	chatTitle?: string; status?: string; tokens?: Tokens; cost?: Partial<Record<Currency, number>>; estimated?: boolean;
 };
-export const kindLabels: Record<RecordKind, string> = { request: "会话请求", image: "图片", video: "视频" };
+export const kindLabels: Record<RecordKind, string> = { request: "对话请求", image: "图片", video: "视频" };
 const unknownProject = { key: "unassigned", label: "未归属项目" };
 const tokenCount = (value?: number | null) => typeof value === "number" && Number.isFinite(value) && value > 0 ? value : 0;
 const timestamp = (value?: number | string | null) => {

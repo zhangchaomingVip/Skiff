@@ -17,7 +17,7 @@ export function PromptSettings({ sessionPath, onSaved }: { sessionPath?: string;
 	const [viewerError, setViewerError] = useState<string>();
 	const [loading, setLoading] = useState(false);
 	const loadSystemPrompt = async () => {
-		if (!sessionPath) { setViewerError("当前聊天还没有 pi 会话文件。"); return; }
+		if (!sessionPath) { setViewerError("当前对话还没有 pi 会话文件。"); return; }
 		setLoading(true); setViewerError(undefined);
 		try {
 			const result = await invoke<SystemPromptSection[]>("read_system_prompt", { sessionPath });

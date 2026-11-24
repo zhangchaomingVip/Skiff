@@ -76,7 +76,7 @@ export function ModelMenu({ models, model, disabled, onModel, thinkingLevel, thi
 				{!groups.length && <p className="menu-hint">收藏模型后，可在这里快速切换。</p>}
 			</div>
 			{canThink && onThinkingLevel && <div className="model-quick-thinking"><span>思考</span><SegmentedControl value={level} label="推理等级" options={thinkingLevels.map((value) => ({ value, label: LEVEL_LABELS[value] ?? value }))} disabled={disabled || thinkingDisabled} onChange={onThinkingLevel} /></div>}
-			<p className="model-cache-hint">切换模型或思考程度可能使提示词缓存失效，增加 token 消耗。建议在新会话中切换。</p>
+			<p className="model-cache-hint">切换模型或思考程度可能使提示词缓存失效，增加 token 消耗。建议在新对话中切换。</p>
 			{configurationHint && <p className="menu-hint" role="status">{configurationHint}</p>}
 			<div className="model-quick-footer"><Button variant="ghost" onClick={() => { setOpen(false); setCatalogOpen(true); }}><Icon name="layers" size={16} />更多模型…</Button></div>
 		</Popover>}

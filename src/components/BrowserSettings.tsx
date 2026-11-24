@@ -43,9 +43,9 @@ export function BrowserSettings({ onSaved }: { onSaved: () => void }) {
 	};
 	return <section className="settings-page" aria-labelledby="browser-title">
 		<h2 id="browser-title">AI 浏览器</h2>
-		<p className="muted">允许 AI 在当前聊天的独立浏览器中打开网页、点击和填写。第一次打开网页时才启动浏览器。</p>
+		<p className="muted">AI 可在独立浏览器中打开网页、点击和填写。</p>
 		<div className="settings-group"><div className="settings-row">
-			<div className="settings-row-text"><label className="settings-row-title" htmlFor="browser-enabled">启用 AI 浏览器</label><span id="browser-enabled-hint" className="settings-row-hint">保存后重新连接当前聊天；其他已有聊天在下次重新连接时生效。关闭后立即拒绝所有聊天的新浏览器操作。</span></div>
+			<div className="settings-row-text"><label className="settings-row-title" htmlFor="browser-enabled">启用 AI 浏览器</label><span id="browser-enabled-hint" className="settings-row-hint">保存后重新连接当前对话；其他已有对话在下次重新连接时生效。关闭后立即拒绝所有对话的新浏览器操作。</span></div>
 			<label className="switch"><input id="browser-enabled" type="checkbox" checked={status?.enabled ?? false} disabled={!status || pending} aria-describedby="browser-enabled-hint" onChange={(event) => void toggle(event.target.checked)} /><span className="slider" /></label>
 		</div></div>
 		<p className="muted" role="status">{status?.message ?? (error ? "无法读取浏览器设置" : "正在读取浏览器设置…")}</p>

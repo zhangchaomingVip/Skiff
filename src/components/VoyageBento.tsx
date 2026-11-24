@@ -110,8 +110,8 @@ export function VoyageBento({ metrics }: { metrics: VoyageMetrics }) {
 	return <div className="voyage-telemetry">
 		<div className="voyage-weather-grid" role="group" aria-label="航行数据看板">
 			<WeatherCard name="speed" icon="gauge" label="推理速率" value={shownSpeed === undefined ? "—" : shownSpeed.toFixed(1)} unit="tok/s" summary={speedSummary} retained={display.retained.speed} detailTitle="本轮耗时剖析" details={<>
-				<Ledger rows={[["模型用时（思考 + 吐字）", elapsed(modelMs)], ["工具调用用时", elapsed(toolMs)], ["本轮首字", formatLatency(metrics.ttftMs)], ["已记录轮次首字均值", formatLatency(avgTtft)], ["本轮输出速度", rate(metrics.averageSpeed)], ["会话加权输出速度", rate(telemetry.session.averageSpeed)], ["本轮速率峰值", rate(metrics.peakSpeed)]]} />
-				<p className="voyage-telemetry-note">速度仅计可见回答，排除思考与工具耗时；{metrics.averageEstimated || metrics.streaming ? "当前为估算。" : "已按用量校准。"}首字均值覆盖 {telemetry.session.latencyTurns} 轮；会话速度按 {telemetry.session.speedTurns} 轮解码时间加权。未记录项显示 —。</p>
+				<Ledger rows={[["模型用时（思考 + 吐字）", elapsed(modelMs)], ["工具调用用时", elapsed(toolMs)], ["本轮首字", formatLatency(metrics.ttftMs)], ["已记录轮次首字均值", formatLatency(avgTtft)], ["本轮输出速度", rate(metrics.averageSpeed)], ["对话加权输出速度", rate(telemetry.session.averageSpeed)], ["本轮速率峰值", rate(metrics.peakSpeed)]]} />
+				<p className="voyage-telemetry-note">速度仅计可见回答，排除思考与工具耗时；{metrics.averageEstimated || metrics.streaming ? "当前为估算。" : "已按用量校准。"}首字均值覆盖 {telemetry.session.latencyTurns} 轮；对话速度按 {telemetry.session.speedTurns} 轮解码时间加权。未记录项显示 —。</p>
 			</>}>
 				<svg className="voyage-weather-gauge" viewBox="0 -20 112 56">
 					<path className="voyage-weather-arc" d="M10 31 A46 46 0 0 1 102 31" pathLength="100" />
@@ -126,7 +126,7 @@ export function VoyageBento({ metrics }: { metrics: VoyageMetrics }) {
 				<Ledger rows={[["对话轮数 / Agent 步数", `${process.turns} / ${process.steps}`], ["用量已上报 / 总步数", `${process.reportedSteps} / ${process.steps}`], ["工具调用总数", exact(process.calls)], ["成功 / 失败 / 未完成", `${process.succeeded} / ${process.failed} / ${process.unresolved}`], ["本轮运行耗时", elapsed(process.durationMs)], ["非缓存输入（含写入）", exact(fresh)], ["本轮较上轮新增输入", inputDelta === undefined ? "—" : `${inputDelta > 0 ? "+" : ""}${exact(inputDelta)} tok`], ["缓存读取", exact(cacheRead)], ["输出（含思考）", exact(output)], ["其中思考", exact(reasoning)], ["Token 合计", exact(total)]]} />
 				<div className="voyage-telemetry-subhead">本轮时间分配</div><div className="voyage-telemetry-timebar" aria-hidden="true"><i style={{ width: timingShare(modelMs) === "—" ? "0%" : timingShare(modelMs) }} /><i style={{ width: timingShare(toolMs) === "—" ? "0%" : timingShare(toolMs) }} /></div>
 				<Ledger rows={[["模型 / 工具", `${timingShare(modelMs)} / ${timingShare(toolMs)}`]]} />
-				<div className="voyage-telemetry-subhead">会话累计</div>
+				<div className="voyage-telemetry-subhead">对话累计</div>
 				<Ledger rows={[["对话轮数 / Agent 步数", `${telemetry.session.turns} / ${telemetry.session.steps}`], ["累计运行耗时", elapsed(telemetry.session.durationMs)], ["非缓存输入（含写入）", exact(telemetry.usageKnown ? usage.input + usage.cacheWrite : undefined)], ["输出（含思考）", exact(metrics.sessionTokens === undefined ? undefined : usage.output)], ["Token 合计", exact(metrics.sessionTokens)]]} />
 				<p className="voyage-telemetry-note">走势为第 1 轮至当前轮的非缓存输入（含写入），按已上报请求累加；缺失轮次处断开，单轮显示光点。合计另含缓存读取与输出（含思考）。步数仅计可见请求；耗时覆盖 {process.timedTurns} 轮，排除空闲。{metrics.streaming ? "生成中用量为估算，结束后校准。" : process.reportedSteps < process.steps ? "用量仅含已上报请求。" : ""}</p>
 			</>}>
@@ -139,8 +139,8 @@ export function VoyageBento({ metrics }: { metrics: VoyageMetrics }) {
 				<ContextCapacity value={contextKnown ? shownContext.ratio : undefined} />
 			</WeatherCard>
 			<WeatherCard name="cache" icon="refresh" label="缓存" value={cachePreparing ? "写入准备" : shownHit === undefined ? "—" : `${(shownHit * 100).toFixed(1)}%`} unit={cachePreparing ? undefined : "命中"} summary={cacheSummary} description={cachePreparing ? `已上报缓存写入 ${tokens(shownCache.write)} tok，等待后续请求复用；当前尚无缓存读取。` : undefined} tone={cachePreparing ? "is-building" : shownHit === undefined || shownHit === 0 ? "is-quiet" : shownHit > .7 ? "is-saving" : ""} retained={display.retained.cache} detailTitle="本轮缓存账单" details={<>
-				<Ledger rows={[["输入总量（含缓存）", exact(totalInput)], ["缓存读取 / 复用", exact(cacheRead)], ["缓存创建", exact(cacheWrite)], ["非缓存输入（含写入）", exact(fresh)], ["缓存命中率", hit === undefined ? "—" : `${(hit * 100).toFixed(2)}%`], ["预估费用", formatCosts(cost, 6)], ["费用节省", savings === undefined ? "—" : `${(savings * 100).toFixed(2)}%`], ["会话累计费用", formatCosts(metrics.sessionCost, 6)]]} />
-				<div className="voyage-telemetry-subhead">会话缓存</div>
+				<Ledger rows={[["输入总量（含缓存）", exact(totalInput)], ["缓存读取 / 复用", exact(cacheRead)], ["缓存创建", exact(cacheWrite)], ["非缓存输入（含写入）", exact(fresh)], ["缓存命中率", hit === undefined ? "—" : `${(hit * 100).toFixed(2)}%`], ["预估费用", formatCosts(cost, 6)], ["费用节省", savings === undefined ? "—" : `${(savings * 100).toFixed(2)}%`], ["对话累计费用", formatCosts(metrics.sessionCost, 6)]]} />
+				<div className="voyage-telemetry-subhead">对话缓存</div>
 				<Ledger rows={[["累计缓存读取", exact(telemetry.usageKnown ? usage.cacheRead : undefined)], ["累计命中率", telemetry.usageKnown && usage.inputTotal > 0 ? `${(usage.hitRate * 100).toFixed(2)}%` : "—"], ["累计费用节省", telemetry.sessionCacheSavings === undefined ? "—" : `${(telemetry.sessionCacheSavings * 100).toFixed(2)}%`]]} />
 				<p className="voyage-telemetry-note">{costTooltip(cost)}。命中率 = 缓存读取 / 输入总量。节省对比缓存按原价计费的完整账单，含输出。{savings === undefined ? "定价不全、生成中或多币种时不估算节省。" : ""}</p>
 			</>}>

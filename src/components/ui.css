@@ -71,9 +71,9 @@
 	.drawer-workbench > .sidebar { min-width: 0; width: auto; height: 100%; flex: 1 1 auto; padding: var(--space-2) var(--space-3) 0; }
 	.drawer-workbench > .workbench-panel { min-width: 0; width: auto; height: 100%; flex: 1 1 auto; }
 	.ui-popover { position: fixed; z-index: 30; width: min(360px, calc(100vw - 24px)); padding: var(--space-2); border: 1px solid var(--boundary); border-radius: var(--radius-lg); background: var(--surface); color: var(--foreground); overflow: auto; box-shadow: var(--shadow-elevation-3); animation: ui-enter var(--transition-fast) var(--easing-default); }
-	.ui-segmented { display: inline-flex; gap: var(--space-1); padding: var(--space-0-5); border: 1px solid var(--boundary); border-radius: var(--radius-lg); background: var(--subtle); }
+	.ui-segmented { display: inline-flex; gap: var(--space-0-5); padding: var(--space-0-5); border: 0; border-radius: var(--radius-lg); background: var(--segmented-track); }
 	.ui-segmented .ui-button { border: 0; }
-	.ui-segmented .ui-button[aria-pressed=true] { background: var(--surface); color: var(--accent); box-shadow: var(--shadow-xs); }
+	.ui-segmented .ui-button[aria-pressed=true], .ui-segmented .ui-button[aria-pressed=true]:hover:not(:disabled) { background: var(--segmented-selected); color: var(--text); box-shadow: var(--shadow-xs); }
 	.ui-tooltip-wrap { display: inline-flex; position: relative; }
 	/* A solid dark bubble reads as a hint; a bordered surface bubble reads as a control. */
 	/* A hairline highlight keeps the bubble's edge readable over dark backdrops. */

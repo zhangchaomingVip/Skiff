@@ -6,7 +6,7 @@ import { Button, Dialog } from "./ui";
 export function ProjectRemovalChoices({ projects, count, selected, onChange, disabled = false }: { projects: Project[]; count: number; selected: string[]; onChange: (ids: string[]) => void; disabled?: boolean }) {
 	return <fieldset className="project-removal-choices" disabled={disabled}>
 		<legend>最多保留 {MAX_PROJECTS} 个项目，请选择 {count} 个移出列表</legend>
-		<p>聊天记录和本地文件会保留，重新添加文件夹即可恢复。</p>
+		<p>对话记录和本地文件会保留，重新添加文件夹即可恢复。</p>
 		<div>{projects.map((project) => <label key={project.id} title={project.path}>
 			<input type={count === 1 ? "radio" : "checkbox"} name="remove-project" checked={selected.includes(project.id)} disabled={!selected.includes(project.id) && selected.length >= count && count > 1} onChange={(event) => onChange(count === 1 ? [project.id] : event.target.checked ? [...selected, project.id] : selected.filter((id) => id !== project.id))} />
 			<Icon name="folder" /><span><strong>{project.name}</strong><small>{project.path}</small></span>

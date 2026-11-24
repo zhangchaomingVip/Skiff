@@ -10,7 +10,7 @@ const chat = (id: string): Conversation => ({ id, projectId: "p", title: "你好
 test("titles normalize prose, count Unicode and keep display labels free of metadata", () => {
 	assert.equal(deriveTitle([{ id: "u", role: "user", blocks: [{ kind: "text", text: "  你好\n\t世界  " }] }]), "你好 世界");
 	assert.equal(Array.from(deriveTitle([{ id: "u", role: "user", blocks: [{ kind: "text", text: "😀".repeat(40) }] }])).length, 32);
-	assert.equal(deriveTitle([{ id: "u", role: "user", blocks: [{ kind: "image", data: "", mimeType: "image/png" }] }]), "图片聊天");
+	assert.equal(deriveTitle([{ id: "u", role: "user", blocks: [{ kind: "image", data: "", mimeType: "image/png" }] }]), "图片对话");
 	const peers = [chat("first-111111"), chat("second-222222")];
 	assert.deepEqual(peers.map(conversationLabel), ["你好", "你好"]);
 	assert.equal(conversationLabel({ ...peers[0], createdAt: 1000, updatedAt: 9999 }), "你好");

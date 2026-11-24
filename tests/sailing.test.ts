@@ -121,12 +121,12 @@ test("history restores the average from usage and timing without inventing a pea
 test("context reminders use actual ratios and retain 80/95 color semantics", () => {
 	assert.equal(contextReminder(899, 1000), undefined);
 	assert.equal(contextReminder(899.99, 1000), undefined);
-	assert.equal(contextReminder(900, 1000), "上下文已使用 90.0%，建议新开会话。");
-	assert.equal(contextReminder(950, 1000), "上下文已使用 95.0%，建议新开会话。");
+	assert.equal(contextReminder(900, 1000), "上下文已使用 90.0%，建议新开对话。");
+	assert.equal(contextReminder(950, 1000), "上下文已使用 95.0%，建议新开对话。");
 	assert.equal(contextPressure(.95), "warning");
-	assert.equal(contextReminder(1000, 1000), "上下文已达到上限，建议新开会话。");
-	assert.equal(contextReminder(1000.01, 1000), "上下文已超出上限（100.0%），建议新开会话。");
-	assert.equal(contextReminder(1100, 1000), "上下文已超出上限（110.0%），建议新开会话。");
+	assert.equal(contextReminder(1000, 1000), "上下文已达到上限，建议新开对话。");
+	assert.equal(contextReminder(1000.01, 1000), "上下文已超出上限（100.0%），建议新开对话。");
+	assert.equal(contextReminder(1100, 1000), "上下文已超出上限（110.0%），建议新开对话。");
 	assert.equal(contextReminder(900, 2000), undefined);
 	for (const invalid of [undefined, NaN, Infinity, -1]) assert.equal(contextReminder(invalid, 1000), undefined);
 	for (const invalid of [undefined, NaN, Infinity, -1, 0]) assert.equal(contextReminder(1000, invalid), undefined);

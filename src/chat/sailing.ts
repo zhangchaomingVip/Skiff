@@ -128,9 +128,9 @@ export function contextReminder(context?: number, limit?: number, estimated = fa
 	if (context === undefined || limit === undefined || !Number.isFinite(context) || context < 0 || !Number.isFinite(limit) || limit <= 0) return undefined;
 	const ratio = context / limit;
 	if (ratio < .9) return undefined;
-	if (ratio === 1) return `${estimated ? "估算上下文已达到" : "上下文已达到"}上限，建议新开会话。`;
-	if (ratio > 1) return `${estimated ? "估算上下文已超出" : "上下文已超出"}上限（${(ratio * 100).toFixed(1)}%），建议新开会话。`;
-	return `${estimated ? "估算上下文已使用" : "上下文已使用"} ${(ratio * 100).toFixed(1)}%，建议新开会话。`;
+	if (ratio === 1) return `${estimated ? "估算上下文已达到" : "上下文已达到"}上限，建议新开对话。`;
+	if (ratio > 1) return `${estimated ? "估算上下文已超出" : "上下文已超出"}上限（${(ratio * 100).toFixed(1)}%），建议新开对话。`;
+	return `${estimated ? "估算上下文已使用" : "上下文已使用"} ${(ratio * 100).toFixed(1)}%，建议新开对话。`;
 }
 
 export function contextPressure(ratio: number): "normal" | "warning" | "critical" {

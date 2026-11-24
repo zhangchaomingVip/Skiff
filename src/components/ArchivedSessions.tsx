@@ -32,9 +32,9 @@ export function ArchivedSessions({ chats, projects, busy, canClose, onRestore, o
 		setDeleting(undefined);
 	};
 
-	return <section aria-label="归档会话内容" className="archive-sessions">
-		<div className="archive-search"><Icon name="search" size={14} /><Input aria-label="搜索归档会话和项目" placeholder="搜索标题或项目" value={query} onChange={(event) => setQuery(event.target.value)} /></div>
-		<div className="archive-session-list" aria-label="归档会话列表">
+	return <section aria-label="已归档对话内容" className="archive-sessions">
+		<div className="archive-search"><Icon name="search" size={14} /><Input aria-label="搜索已归档对话和项目" placeholder="搜索标题或项目" value={query} onChange={(event) => setQuery(event.target.value)} /></div>
+		<div className="archive-session-list" aria-label="已归档对话列表">
 			{filtered.map((chat) => <article className="archive-session-row" key={chat.id}>
 				<button type="button" className="archive-session-open" onClick={() => setPreview(chat)} title={chat.title}>
 					<strong>{chat.title}</strong>
@@ -43,11 +43,11 @@ export function ArchivedSessions({ chats, projects, busy, canClose, onRestore, o
 				</button>
 				<div className="archive-session-actions">
 					<Button type="button" size="compact" variant="ghost" disabled={busy} onClick={() => setPreview(chat)}><Icon name="eye" size={14} />查看</Button>
-					<Button type="button" size="compact" variant="ghost" disabled={busy || canClose?.(chat.id) === false} title={canClose?.(chat.id) === false ? "会话正在运行或等待确认" : undefined} onClick={() => onRestore(chat.id)}><Icon name="refresh" size={14} />恢复</Button>
-					<Button type="button" size="compact" variant="ghost" disabled={busy || canClose?.(chat.id) === false} aria-label={`删除归档 ${chat.title}`} title={canClose?.(chat.id) === false ? "会话正在运行或等待确认" : "删除索引记录"} onClick={() => setDeleting(chat)}><Icon name="trash" size={14} /></Button>
+					<Button type="button" size="compact" variant="ghost" disabled={busy || canClose?.(chat.id) === false} title={canClose?.(chat.id) === false ? "对话正在运行或等待确认" : undefined} onClick={() => onRestore(chat.id)}><Icon name="refresh" size={14} />恢复</Button>
+					<Button type="button" size="compact" variant="ghost" disabled={busy || canClose?.(chat.id) === false} aria-label={`删除归档 ${chat.title}`} title={canClose?.(chat.id) === false ? "对话正在运行或等待确认" : "删除索引记录"} onClick={() => setDeleting(chat)}><Icon name="trash" size={14} /></Button>
 				</div>
 			</article>)}
-			{!filtered.length && <p className="archive-empty-list">{query ? "没有匹配的归档会话" : "没有归档会话"}</p>}
+			{!filtered.length && <p className="archive-empty-list">{query ? "没有匹配的已归档对话" : "没有已归档对话"}</p>}
 		</div>
 		{deleting && <ConfirmDialog title="删除归档记录" description={`删除「${deleting.title}」的应用索引和专用浏览器登录数据？原 pi 会话文件会保留。`} onConfirm={remove} onClose={() => setDeleting(undefined)} />}
 		{preview && <ArchivePreviewDialog chat={preview} project={projects.find((project) => project.id === preview.projectId)} busy={busy || canClose?.(preview.id) === false} onRestore={() => onRestore(preview.id)} onDelete={() => setDeleting(preview)} onClose={() => setPreview(undefined)} />}

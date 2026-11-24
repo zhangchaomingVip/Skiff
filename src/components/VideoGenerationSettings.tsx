@@ -17,7 +17,7 @@ export const VideoGenerationSettings = forwardRef<SettingsEditorHandle, { videos
 	};
 	const patch = (input: Partial<VideoServiceInput>) => setDraft((current) => current && ({ ...current, input: { ...current.input, ...input } }));
 	return <section ref={contentRef} className="settings-page image-generation-settings" aria-labelledby="video-generation-title">
-		<h2 id="video-generation-title">视频生成</h2><p className="muted">通过 Muse 视频接口创作，支持文生视频与单张首帧参考图。任务与作品保存在本机，独立于聊天模型。</p>
+		<h2 id="video-generation-title">视频生成</h2><p className="muted">使用 Muse 视频接口生成视频，支持首帧参考图。</p>
 		{!draft ? <>
 			<div className="image-settings-actions"><Button onClick={() => edit()} disabled={videos.loading || !videos.config}><Icon name="plus" />添加视频服务</Button><Button onClick={() => void videos.refresh()} disabled={videos.loading} loading={videos.loading}>重新读取</Button></div>
 			{videos.config?.services.map((service) => <div className="settings-group" key={service.id}><div className="settings-row"><div className="settings-row-text"><strong className="settings-row-title">{service.name}{videos.config?.defaultServiceId === service.id ? " · 默认" : ""}</strong><span className="settings-row-hint">{service.baseUrl} · {service.models.map((model) => model.id).join("、")} · Key {service.keyHint}</span></div><Button onClick={() => edit(service)} aria-label={`编辑视频服务 ${service.name}`}>编辑</Button><Button onClick={() => setRemoving(service)} aria-label={`删除视频服务 ${service.name}`}>删除</Button></div></div>)}

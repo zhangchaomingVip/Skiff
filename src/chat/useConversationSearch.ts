@@ -40,7 +40,7 @@ export function useConversationSearch(chats: Conversation[], projects: Project[]
 		void (async () => {
 			const { location } = pending;
 			const chat = live.current.chats.find((chat) => chat.id === location.chatId);
-			if (!chat || chat.sessionFile !== location.sessionFile) { setNotice("会话文件已变化，请重新搜索。"); setPending(undefined); return; }
+			if (!chat || chat.sessionFile !== location.sessionFile) { setNotice("对话文件已变化，请重新搜索。"); setPending(undefined); return; }
 			try {
 				const history = chat.sessionFile ? await engine.history(chat, true) : { version: "runtime", messages: [] };
 				if (cancelled) return;

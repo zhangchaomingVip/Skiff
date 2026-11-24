@@ -180,7 +180,7 @@ export function Composer({
 				rows={1}
 				value={text}
 				placeholder="描述任务… / 命令 · @文件路径"
-				aria-label="聊天消息"
+				aria-label="对话消息"
 				onChange={(event) => onTextChange(event.target.value)}
 				onKeyDown={onKeyDown}
 				onPaste={(event) => { const selected = Array.from(event.clipboardData.files); if (selected.length) { event.preventDefault(); void addAttachments(selected); } }}

@@ -43,7 +43,7 @@ export function ProviderModelConfigDialog({ model, familyId, families, providerE
 						{([["reasoning", "推理支持"], ["vision", "图片输入"], ["tools", "工具调用"], ["streaming", "流式输出"]] as const).map(([key, label]) => <label className="provider-model-config-capability" data-disabled={disabled || undefined} key={key}><span>{label}</span><span className="switch"><input type="checkbox" role="switch" checked={model[key] ?? key !== "vision"} disabled={disabled} onChange={(event) => onPatch({ [key]: event.target.checked })} /><span className="slider" /></span></label>)}
 					</div>
 					{reasoning && <div className="provider-model-config-thinking" role="group" aria-labelledby={`${id}-thinking`}>
-						<span id={`${id}-thinking`}>可用推理等级（在聊天中可调）</span>
+						<span id={`${id}-thinking`}>可用推理等级（在对话中可调）</span>
 						<div className="provider-model-config-levels">{THINKING_LEVELS.map((level) => <label key={level}><input type="checkbox" checked={thinkingLevels.includes(level)} disabled={disabled} onChange={(event) => onPatch({ thinkingLevels: THINKING_LEVELS.filter((item) => item === level ? event.target.checked : thinkingLevels.includes(item)) })} /><span>{thinkingLevels.includes(level) && <Icon name="check" size={12} />}{level}</span></label>)}</div>
 					</div>}
 				</section>

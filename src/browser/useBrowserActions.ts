@@ -21,7 +21,7 @@ export function useBrowserActions(chatId: string | undefined, controls: BrowserP
 		let succeeded = false;
 		try {
 			if (kind === "continue") {
-				if (!await send(BROWSER_CONTINUE_PROMPT)) throw new Error("未能启动续跑，请在聊天中重新发送任务");
+				if (!await send(BROWSER_CONTINUE_PROMPT)) throw new Error("未能启动续跑，请在对话中重新发送任务");
 				succeeded = true;
 				return controls.status ?? undefined;
 			}

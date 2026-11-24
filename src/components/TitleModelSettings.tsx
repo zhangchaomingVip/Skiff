@@ -47,8 +47,8 @@ export function TitleModelSettings({ onManage }: { onManage: () => void }) {
 		</div>;
 	};
 	return <div className="settings-group">
-		{row("primary", "主模型", "新开对话首轮回复完成后，用该模型生成会话标题。")}
-		{row("fallback", "备用模型", "主模型不可用或生成失败时自动改用备用模型；建议选标注免费的模型。")}
+		{row("primary", "主模型", "新对话首轮回复后，用它生成标题；首条消息较短时直接用作标题。")}
+		{row("fallback", "备用模型", "主模型不可用或生成失败时使用。")}
 		{picking && <Dialog className="model-catalog-dialog" aria-label="选择标题模型" onClose={() => setPicking(undefined)}>
 			<ModelPicker
 				models={catalog}

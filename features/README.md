@@ -55,6 +55,7 @@
 | 019 | [设置信息整理（一期）](019-settings-information-redesign/task.md)；含模型家族设置截图（原 027） | 已完成 |
 | 020 | [设置批量管理（二期）](020-settings-management-tools/task.md) | 已完成 |
 | 033 | [会话统计](033-session-statistics/README.md)：项目、提供商、模型与生成记录 | 已完成 |
+| 034 | [设置页视觉与信息整理](034-settings-visual-polish/task.md)：圆角内容卡片、字体并入外观、关于页、活动栏选中态，全应用统一「对话」 | 已完成 |
 
 ## 项目工作台
 
