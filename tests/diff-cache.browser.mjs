@@ -60,7 +60,7 @@ try {
 		await waitDiff("src/App.tsx");
 		assert.equal(await calls(), 2, "Cached tab switches must not invoke Git");
 		assert.equal(await page.getByText("正在读取…", { exact: true }).count(), 0);
-		await page.getByRole("button", { name: "返回聊天", exact: true }).click();
+		await page.getByRole("button", { name: "返回对话", exact: true }).click();
 		await page.getByRole("navigation", { name: "工作区工具" }).getByRole("button", { name: "文件", exact: true }).click();
 		await openDiff("src/App.tsx");
 		await waitDiff("src/App.tsx");

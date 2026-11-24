@@ -200,15 +200,15 @@ try {
 		await page.keyboard.press("Tab");
 		assert.equal(await catalog.getByRole("button", { name: "管理提供商", exact: true }).evaluate((element) => element === document.activeElement), true, "Tab stays inside the catalog");
 		await page.keyboard.press("Enter");
-		const settings = page.getByRole("dialog", { name: "设置", exact: true });
+		const settings = page.locator(".settings-workspace");
 		await settings.getByRole("heading", { name: "供应商", exact: true }).waitFor();
 		assert.equal(await catalog.count(), 0);
-		await settings.getByRole("button", { name: "关闭设置", exact: true }).click();
+		await page.getByRole("button", { name: "返回工作区", exact: true }).click();
 		const collapseSidebar = page.getByRole("button", { name: "收起侧栏", exact: true });
 		if (await collapseSidebar.count()) await collapseSidebar.click();
 		for (const [width, height] of [[1200, 900], [900, 700], [600, 400], [360, 700], [320, 640]]) {
 			await page.setViewportSize({ width, height });
-			if (await page.getByRole("dialog", { name: "项目与聊天导航", exact: true }).count()) await page.keyboard.press("Escape");
+			if (await page.getByRole("dialog", { name: "项目与对话导航", exact: true }).count()) await page.keyboard.press("Escape");
 			await trigger.click();
 			await assertFits(".model-popover");
 			await page.screenshot({ path: `dist/model-picker/quick-${theme}-${width}.png` });

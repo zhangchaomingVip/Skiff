@@ -33,9 +33,9 @@ export async function verifySessionStatistics(page, root, artifacts) {
 		return chat?.sessionFile && chat.routeSnapshots?.some(Boolean);
 	});
 	await page.keyboard.press("Control+Comma");
-	const settings = page.getByRole("dialog", { name: "设置", exact: true });
-	await settings.getByRole("button", { name: "会话统计", exact: true }).click();
-	const stats = settings.getByRole("region", { name: "会话统计", exact: true });
+	const settings = page.locator(".settings-workspace");
+	await page.getByRole("button", { name: "对话统计", exact: true }).click();
+	const stats = settings.getByRole("region", { name: "对话统计", exact: true });
 	// The app opens on the Code workspace, so the panel starts on the code slice.
 	await stats.getByRole("group", { name: "统计模式" }).getByRole("button", { name: /全部汇总/ }).click();
 	const label = (text) => stats.getByLabel(text, { exact: true });

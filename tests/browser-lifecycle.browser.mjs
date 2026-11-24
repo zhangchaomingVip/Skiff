@@ -42,7 +42,7 @@ try {
 		await page.waitForFunction(() => !!JSON.parse(localStorage.getItem("skiff.workspace.v1")).chats.find((chat) => chat.id === "browser-a").archivedAt);
 		assert.equal(await page.evaluate(() => window.skiffPreview.browser.entries.has("browser-a")), false);
 		assert.equal(await page.evaluate(() => window.skiffPreview.browser.entries.get("browser-b").control), "human");
-		await page.keyboard.press("Control+Comma"); await page.getByRole("button", { name: "归档会话", exact: true }).click();
+		await page.keyboard.press("Control+Comma"); await page.getByRole("button", { name: "已归档对话", exact: true }).click();
 		await page.locator(".archive-session-row").filter({ hasText: "浏览任务 A" }).getByRole("button", { name: "恢复", exact: true }).click();
 		await page.waitForFunction(() => JSON.parse(localStorage.getItem("skiff.workspace.v1")).activeId === "browser-a" && document.querySelector(".sidebar")?.dataset.connected === "true");
 		assert.equal(await page.locator(".browser-panel").count(), 0, "Archive restore never starts or reopens old viewer");
@@ -50,7 +50,7 @@ try {
 		await page.evaluate(() => window.skiffPreview.browser.set("browser-a", { generation: "restored-a" }));
 		await page.waitForFunction(() => document.querySelector(".browser-panel")?.dataset.generation === "restored-a");
 		await archive(); await page.waitForFunction(() => !!JSON.parse(localStorage.getItem("skiff.workspace.v1")).chats.find((chat) => chat.id === "browser-a").archivedAt);
-		await page.keyboard.press("Control+Comma"); await page.getByRole("button", { name: "归档会话", exact: true }).click();
+		await page.keyboard.press("Control+Comma"); await page.getByRole("button", { name: "已归档对话", exact: true }).click();
 		await page.getByRole("button", { name: "删除归档 浏览任务 A", exact: true }).click();
 		await page.getByRole("button", { name: "确认删除", exact: true }).click();
 		await page.waitForFunction(() => !JSON.parse(localStorage.getItem("skiff.workspace.v1")).chats.some((chat) => chat.id === "browser-a"));

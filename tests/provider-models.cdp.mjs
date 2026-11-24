@@ -18,14 +18,14 @@ export async function verifyProviderModels(page, agentDir, requests, modelId, re
 	};
 	const editModel = async (provider, enabled) => {
 		await page.keyboard.press("Control+Comma");
-		const settings = page.getByRole("dialog", { name: "设置", exact: true });
-		await settings.getByRole("button", { name: "供应商", exact: true }).click();
+		const settings = page.locator(".settings-workspace");
+		await page.getByRole("button", { name: "供应商", exact: true }).click();
 		assert.equal(await settings.getByRole("button", { name: "路线", exact: true }).count(), 0);
 		await settings.getByRole("button", { name: `编辑 ${provider}`, exact: true }).click();
 		await settings.getByRole("checkbox", { name: `启用模型 ${modelId}`, exact: true }).setChecked(enabled);
 		await settings.getByRole("button", { name: "保存", exact: true }).click();
 		await settings.getByRole("heading", { name: "供应商", exact: true }).waitFor();
-		await settings.getByRole("button", { name: "关闭设置", exact: true }).click();
+		await page.getByRole("button", { name: "返回工作区", exact: true }).click();
 	};
 	const blocked = async (reason, provider) => {
 		await page.getByText(reason, { exact: false }).first().waitFor();
@@ -69,8 +69,8 @@ export async function verifyProviderModels(page, agentDir, requests, modelId, re
 	// save immediately, then the latest projection loads once after closing.
 	await waitIdle();
 	await page.keyboard.press("Control+Comma");
-	const toggleSettings = page.getByRole("dialog", { name: "设置", exact: true });
-	await toggleSettings.getByRole("button", { name: "供应商", exact: true }).click();
+	const toggleSettings = page.locator(".settings-workspace");
+	await page.getByRole("button", { name: "供应商", exact: true }).click();
 	await toggleSettings.getByRole("button", { name: "启用 2", exact: true }).click();
 	const startsBeforeToggle = runtimeStarts();
 	await page.evaluate(() => {
@@ -78,14 +78,14 @@ export async function verifyProviderModels(page, agentDir, requests, modelId, re
 		window.providerToggleObserver = new MutationObserver(() => {
 			for (const node of document.querySelectorAll(".settings-restriction")) window.providerToggleRestrictions.push(node.textContent);
 		});
-		window.providerToggleObserver.observe(document.querySelector(".settings-dialog"), { subtree: true, childList: true, attributes: true });
+		window.providerToggleObserver.observe(document.querySelector(".settings-workspace"), { subtree: true, childList: true, attributes: true });
 	});
 	try {
 		for (const provider of ["CDP 本地验证", "CDP 另一供应商"]) {
 			for (const enabled of [false, true]) {
 				await toggleSettings.getByRole("checkbox", { name: `${enabled ? "启用" : "停用"} ${provider}`, exact: true }).locator("..").click();
 				await toggleSettings.getByRole("checkbox", { name: `${enabled ? "停用" : "启用"} ${provider}`, exact: true }).waitFor();
-				await page.waitForFunction(() => !document.querySelector('[aria-label="关闭设置"]')?.disabled);
+				await page.waitForFunction(() => !document.querySelector('.settings-back')?.disabled);
 				assert.equal((await invoke("list_model_families")).relays.find((relay) => relay.name === provider).enabled, enabled);
 				await page.waitForTimeout(100);
 				assert.equal(runtimeStarts(), startsBeforeToggle, "Settings switches do not restart real pi");
@@ -94,7 +94,7 @@ export async function verifyProviderModels(page, agentDir, requests, modelId, re
 			}
 		}
 		await page.screenshot({ path: join(artifacts, "provider-toggle-stable.png") });
-		await toggleSettings.getByRole("button", { name: "关闭设置", exact: true }).click();
+		await page.getByRole("button", { name: "返回工作区", exact: true }).click();
 		await waitIdle();
 		assert.equal(runtimeStarts(), startsBeforeToggle + 1, "Closing settings reloads real pi once");
 		console.log("供应商开关全链路通过：连续开关无会话重启或设置页加载提示，关闭设置后统一重启一次。");
@@ -121,11 +121,11 @@ export async function verifyProviderModels(page, agentDir, requests, modelId, re
 	finally { await writeFile(configPath, original); }
 	// Repair and select in place, even when the failed startup left pi disconnected.
 	await page.keyboard.press("Control+Comma");
-	const settings = page.getByRole("dialog", { name: "设置", exact: true });
-	await settings.getByRole("button", { name: "供应商", exact: true }).click();
+	const settings = page.locator(".settings-workspace");
+	await page.getByRole("button", { name: "供应商", exact: true }).click();
 	await settings.getByRole("button", { name: "重新读取配置", exact: true }).click();
 	await settings.getByRole("button", { name: "重新读取配置", exact: true }).waitFor({ state: "hidden" });
-	await settings.getByRole("button", { name: "关闭设置", exact: true }).click();
+	await page.getByRole("button", { name: "返回工作区", exact: true }).click();
 	await choose("CDP 本地验证"); await waitIdle();
 	assert.deepEqual((await workspace()).routeSnapshots.slice(0, oldSnapshots.length), oldSnapshots);
 	console.log("供应商模型全链路通过：v5 备份迁移、同名模型精确选择、逐模型工具/流式/输出、手动选择重开、停用/恢复、删除及配置加载失败保持选择并阻止发送；历史价格快照未变。");

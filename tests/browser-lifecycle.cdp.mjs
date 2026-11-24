@@ -52,7 +52,7 @@ export async function verifyBrowserLifecycle(page, scenario, requests, artifacts
 	const profile = (id) => join(root, "browsers/profiles", createHash("sha256").update(id).digest("hex"));
 	const exists = (path) => access(path).then(() => true, () => false);
 	await page.keyboard.press("Control+Comma"); await page.getByRole("button", { name: "AI 浏览器", exact: true }).click(); await page.locator("#browser-enabled").click();
-	await page.getByRole("dialog", { name: "设置", exact: true }).waitFor({ state: "detached" });
+	await page.locator(".settings-workspace").waitFor({ state: "detached" });
 	await page.waitForFunction(() => document.querySelector(".sidebar")?.dataset.connected === "true");
 	const a = await active();
 	await send("[F A set] 浏览 A 并在后台等待。");
@@ -96,7 +96,7 @@ export async function verifyBrowserLifecycle(page, scenario, requests, artifacts
 	await page.waitForFunction((a) => !!JSON.parse(localStorage.getItem("skiff.workspace.v1")).chats.find((chat) => chat.id === a)?.archivedAt, a);
 	assert.equal(await invoke("browser_find", { chatId: a }), null); assert.equal(await exists(profile(a)), true);
 	assert.equal((await invoke("browser_find", { chatId: b })).generation, second.generation);
-	await page.keyboard.press("Control+Comma"); await page.getByRole("button", { name: "归档会话", exact: true }).click();
+	await page.keyboard.press("Control+Comma"); await page.getByRole("button", { name: "已归档对话", exact: true }).click();
 	await page.locator(".archive-session-row").filter({ hasText: "[F A set]" }).getByRole("button", { name: "恢复", exact: true }).click();
 	await page.waitForFunction((a) => JSON.parse(localStorage.getItem("skiff.workspace.v1")).activeId === a && document.querySelector(".sidebar")?.dataset.connected === "true", a);
 	assert.equal(await invoke("browser_find", { chatId: a }), null, "Restore is lazy");

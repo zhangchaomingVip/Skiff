@@ -8,7 +8,7 @@ const browser = await chromium.launch({ headless: true, channel: "msedge" });
 const page = await browser.newPage({ viewport: { width: 1440, height: 960 } });
 page.setDefaultTimeout(15000);
 const errors = []; page.on("pageerror", (error) => errors.push(String(error)));
-const settings = () => page.getByRole("dialog", { name: "设置", exact: true });
+const settings = () => page.locator(".settings-workspace");
 try {
 	for (const theme of ["light", "dark"]) {
 		await page.setViewportSize({ width: 1440, height: 960 });
@@ -18,7 +18,7 @@ try {
 		await settings().getByRole("button", { name: "添加生成服务", exact: true }).click();
 		await settings().getByRole("textbox", { name: "API Key", exact: true }).fill("dummy-key");
 		await settings().getByRole("button", { name: "保存生成服务", exact: true }).click();
-		await settings().getByRole("button", { name: "关闭设置", exact: true }).click();
+		await page.getByRole("button", { name: "返回工作区", exact: true }).click();
 		const sizes = imageSizeMenu(page);
 		await sizes.open();
 		assert.equal(await sizes.resolutions.getByRole("button", { name: "配置 2K 尺寸", exact: true }).isEnabled(), true);
@@ -35,7 +35,7 @@ try {
 		assert.equal(await settings().getByRole("textbox", { name: "API Key", exact: true }).inputValue(), "");
 		await page.screenshot({ path: `dist/image-resolution/${theme}-presets.png` });
 		await settings().getByRole("button", { name: "保存生成服务", exact: true }).click();
-		await settings().getByRole("button", { name: "关闭设置", exact: true }).click();
+		await page.getByRole("button", { name: "返回工作区", exact: true }).click();
 		await sizes.open();
 		const ratios = sizes.ratios;
 		await ratios.getByRole("button", { name: "16:9", exact: true }).click();

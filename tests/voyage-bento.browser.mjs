@@ -286,7 +286,7 @@ try {
 	assert.match(sessionLedger, /Token 合计47,800/);
 	await page.keyboard.press("Escape");
 	await page.getByRole("button", { name: "缓存明细", exact: true }).click();
-	assert.match(await page.locator(".voyage-telemetry-ledger").first().textContent(), /会话累计费用\$0\.029400/);
+	assert.match(await page.locator(".voyage-telemetry-ledger").first().textContent(), /对话累计费用\$0\.029400/);
 	assert.match(await page.locator(".voyage-telemetry-ledger").nth(1).textContent(), /累计缓存读取41,000累计命中率93\.18%/);
 	await page.keyboard.press("Escape");
 	assert.equal(await page.locator(".voyage-weather-tokens strong").textContent(), "+2k");

@@ -69,8 +69,8 @@ try {
 		assert.equal(await page.locator(".web-search-footer .ui-button[data-variant=primary]").count(), 1, `${theme}: clearing returns to setup`);
 		assert.ok(await settings.locator(".web-search-chip").filter({ hasText: "服务未配置" }).count(), `${theme}: health follows the cleared key`);
 
-		await page.getByRole("button", { name: "关闭设置", exact: true }).click();
-		await page.locator(".settings-dialog").waitFor({ state: "detached" });
+		await page.getByRole("button", { name: "返回工作区", exact: true }).click();
+		await page.locator(".settings-workspace").waitFor({ state: "detached" });
 		assert.deepEqual(errors, [], `${theme}: no browser errors`);
 		console.log(`PASS ${theme}: masked key view, edit/cancel/clear, dividers, right-side switches, runtime chips`);
 		await page.close();

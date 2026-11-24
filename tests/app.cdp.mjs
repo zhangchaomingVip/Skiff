@@ -356,8 +356,8 @@ try {
 	// Save through the real settings UI and restart the session. Both the built-in
 	// identity and user-authored multiline text must reach the next provider request.
 	await page.keyboard.press("Control+Comma");
-	const settings = page.getByRole("dialog", { name: "设置", exact: true });
-	await settings.getByRole("button", { name: "系统提示词", exact: true }).click();
+	const settings = page.locator(".settings-workspace");
+	await page.getByRole("button", { name: "系统提示词", exact: true }).click();
 	const editor = settings.getByRole("textbox", { name: "附加指令" });
 	assert.equal(await editor.inputValue(), "", "The editor must not contain built-in instructions");
 	const customPrompt = "自定义验证指令：用简洁中文回答。\n保留用户的第二行指令。";

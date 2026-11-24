@@ -33,11 +33,11 @@ try {
 		await page.evaluate(() => { window.revoked = []; const revoke = URL.revokeObjectURL.bind(URL); URL.revokeObjectURL = (url) => { window.revoked.push(url); revoke(url); }; });
 		await tool("生图").click();
 		await page.getByRole("button", { name: "配置生成服务", exact: true }).click();
-		const settings = page.getByRole("dialog", { name: "设置", exact: true });
+		const settings = page.locator(".settings-workspace");
 		await settings.getByRole("button", { name: "添加生成服务", exact: true }).click();
 		await settings.getByRole("textbox", { name: "API Key", exact: true }).fill("dummy-key");
 		await settings.getByRole("button", { name: "保存生成服务", exact: true }).click();
-		await settings.getByRole("button", { name: "关闭设置", exact: true }).click();
+		await page.getByRole("button", { name: "返回工作区", exact: true }).click();
 		await prompt().fill("保留主体，背景改为清晨的花园");
 		await reference().setInputFiles(original);
 		let imageUrl = await page.locator(".generation-reference-image img").getAttribute("src");

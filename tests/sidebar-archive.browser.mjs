@@ -23,7 +23,7 @@ const countPreviewListeners = () => page.evaluate(() => window.skiffPreview.list
 const commandTypes = (prefix) => page.evaluate((prefix) => window.skiffPreview.commands.filter((item) => item.command === "rpc_send" && item.args.instanceId.startsWith(prefix)).map((item) => JSON.parse(item.args.message).type), prefix);
 const openSettings = async () => {
 	await page.getByRole("button", { name: "设置" }).click();
-	await page.getByRole("button", { name: "归档会话", exact: true }).click();
+	await page.getByRole("button", { name: "已归档对话", exact: true }).click();
 };
 const title = () => page.locator(".header-title-row > span:first-child").textContent();
 
@@ -45,10 +45,10 @@ try {
 	await projectMark.hover();
 	assert.equal(await page.locator(".chat-header .ui-tooltip").evaluate((node) => getComputedStyle(node).opacity), "1", "Hovering the folder mark reveals the project name");
 	const beforeArchiveSearch = await page.locator(".sidebar-scroll .chat-row").count();
-	await page.getByRole("button", { name: "搜索项目与聊天" }).click();
-	await page.getByRole("textbox", { name: "搜索项目与聊天" }).fill("已归档会话");
+	await page.getByRole("button", { name: "搜索项目与对话" }).click();
+	await page.getByRole("textbox", { name: "搜索项目与对话" }).fill("已归档会话");
 	assert.equal(await page.locator(".sidebar-scroll .chat-row").count(), 0, "Archived chats must not appear in sidebar search");
-	await page.getByRole("textbox", { name: "搜索项目与聊天" }).press("Escape");
+	await page.getByRole("textbox", { name: "搜索项目与对话" }).press("Escape");
 	assert.ok(beforeArchiveSearch > 0);
 	await page.locator(".project-chats .chat-row").filter({ hasText: "当前会话" }).click({ button: "right" });
 	const chatMenu = page.getByRole("menu");
@@ -93,7 +93,7 @@ try {
 
 	await openSettings();
 	assert.equal(await page.locator(".archive-session-row").count(), 3);
-	const archiveSearch = page.getByRole("textbox", { name: "搜索归档会话和项目" });
+	const archiveSearch = page.getByRole("textbox", { name: "搜索已归档对话和项目" });
 	await archiveSearch.fill("Other Project");
 	assert.equal(await page.locator(".archive-session-row").count(), 1, "Archive list should search project names");
 	await archiveSearch.fill("已归档会话");
@@ -139,9 +139,9 @@ try {
 	await waitUntil(() => document.querySelector(".header-title-row > span:first-child")?.textContent?.trim().startsWith("已归档会话"), "Restore did not enter the conversation");
 	assert.equal(await page.locator("dialog[open]").count(), 0, "Restore should close settings");
 	assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem("skiff.workspace.v1")).chats.find((chat) => chat.id === "archive-record").archivedAt), undefined);
-	const activeArchiveButton = page.locator(".project-chats").getByRole("button", { name: "归档聊天 已归档会话" });
+	const activeArchiveButton = page.locator(".project-chats").getByRole("button", { name: "归档对话 已归档会话" });
 	const activeChatRow = page.locator(".project-chats .chat-row").filter({ hasText: "已归档会话" });
-	await waitUntil(() => !document.querySelector(".project-chats .chat-row.selected .sidebar-row-actions button[aria-label='归档聊天 已归档会话']")?.disabled, "Active archive action remained disabled after session restore");
+	await waitUntil(() => !document.querySelector(".project-chats .chat-row.selected .sidebar-row-actions button[aria-label='归档对话 已归档会话']")?.disabled, "Active archive action remained disabled after session restore");
 	await activeArchiveButton.scrollIntoViewIfNeeded();
 	await activeChatRow.hover();
 	await waitUntil(() => getComputedStyle(document.querySelector(".project-chats .chat-row.selected .sidebar-row-actions")).pointerEvents === "auto", "Recent row actions did not become interactive");
@@ -156,7 +156,7 @@ try {
 	await page.getByRole("button", { name: "确认删除" }).click();
 	await waitUntil(() => ![...document.querySelectorAll(".archive-session-row")].some((row) => row.textContent.includes("已归档会话")), "Archive index entry was not deleted");
 	assert.ok(await page.evaluate(() => JSON.parse(localStorage.getItem("skiff.test.sessions"))["archive-record.jsonl"]), "Deleting the archive must retain its pi session file");
-	await page.getByRole("button", { name: "关闭设置", exact: true }).click();
+	await page.getByRole("button", { name: "返回工作区", exact: true }).click();
 
 	await page.locator(".project-chats .chat-link[title^='同项目候选']").click({ position: { x: 20, y: 16 } });
 	await waitUntil(() => document.querySelector(".voyage-rail.expanded"), "Desktop rail did not expand");
@@ -173,7 +173,7 @@ try {
 	await page.getByRole("textbox", { name: "DeepSeek 新模型 ID" }).fill("deepseek-chat");
 	await deepseekSettings.getByRole("button", { name: "添加", exact: true }).click();
 	await page.getByRole("button", { name: "返回", exact: true }).click();
-	await page.getByRole("button", { name: "关闭设置", exact: true }).click();
+	await page.getByRole("button", { name: "返回工作区", exact: true }).click();
 	await waitUntil(() => !document.querySelector(".model-trigger")?.disabled, "Model menu remained disabled after chat selection");
 	await modelTrigger.press("Enter");
 	await waitUntil(() => document.querySelector(".model-trigger")?.getAttribute("aria-expanded") === "true", "Keyboard did not open the model menu");
@@ -190,16 +190,16 @@ try {
 	assert.equal(await page.locator(".model-trigger-label").evaluate((element) => getComputedStyle(element).textOverflow), "ellipsis", "Long model aliases should truncate without changing the trigger layout");
 	await page.keyboard.press("Control+Comma");
 	await page.getByRole("button", { name: "深色", exact: true }).click();
-	await page.getByRole("button", { name: "关闭设置", exact: true }).click();
+	await page.getByRole("button", { name: "返回工作区", exact: true }).click();
 	await waitUntil(() => document.documentElement.dataset.theme === "dark", "Dark theme did not apply");
 	assert.ok(await modelTrigger.isVisible(), "Model selector should remain visible in dark theme");
 
-	await page.getByRole("textbox", { name: "聊天消息" }).fill("检查生成期间归档限制");
+	await page.getByRole("textbox", { name: "对话消息" }).fill("检查生成期间归档限制");
 	await page.getByRole("button", { name: "发送消息" }).click();
 	await page.getByRole("button", { name: "停止生成" }).waitFor();
-	await waitUntil(() => document.querySelector(".project-chats .chat-row.selected .sidebar-row-actions button[aria-label^='归档聊天']")?.disabled === true, "Archive action should be disabled while generating");
+	await waitUntil(() => document.querySelector(".project-chats .chat-row.selected .sidebar-row-actions button[aria-label^='归档对话']")?.disabled === true, "Archive action should be disabled while generating");
 	await page.getByRole("button", { name: "停止生成" }).click();
-	await waitUntil(() => document.querySelector(".project-chats .chat-row.selected .sidebar-row-actions button[aria-label^='归档聊天']")?.disabled === false, "Archive action did not re-enable after generation stopped");
+	await waitUntil(() => document.querySelector(".project-chats .chat-row.selected .sidebar-row-actions button[aria-label^='归档对话']")?.disabled === false, "Archive action did not re-enable after generation stopped");
 
 	const leftSeparator = page.getByRole("separator", { name: "调整左侧导航宽度" });
 	const drag = async (separator, deltaX) => {

@@ -14,13 +14,13 @@ const page = await browser.newPage({ viewport: { width: 1100, height: 750 } });
 page.setDefaultTimeout(10000);
 const errors = [];
 page.on("pageerror", (error) => errors.push(String(error)));
-const dialog = () => page.getByRole("dialog", { name: "设置", exact: true });
-const button = (name) => dialog().getByRole("button", { name, exact: true });
+const dialog = () => page.locator(".settings-workspace");
+const button = (name) => page.locator(".settings-workspace, .settings-nav").getByRole("button", { name, exact: true });
 const loose = (pattern) => dialog().getByRole("button", { name: pattern });
 const shot = (name) => page.screenshot({ animations: "disabled", path: new URL(`providers-settings-${name}.png`, output).pathname.replace(/^\/([A-Z]:)/, "$1") });
 const pressed = (name) => button(name).getAttribute("aria-pressed");
 const open = async () => { await page.keyboard.press("Control+Comma"); await dialog().waitFor(); };
-const close = async () => { await button("关闭设置").click(); await dialog().waitFor({ state: "detached" }); };
+const close = async () => { await button("返回工作区").click(); await dialog().waitFor({ state: "detached" }); };
 const removeProvider = async (name) => {
 	await button(`编辑 ${name}`).click();
 	await button("删除").click();

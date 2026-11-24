@@ -11,7 +11,7 @@ const page = await browser.newPage({ viewport: { width: 1440, height: 960 } });
 page.setDefaultTimeout(15000);
 const errors = []; page.on("pageerror", (error) => errors.push(String(error)));
 const tool = (name) => workbenchTool(page, name);
-const settings = () => page.getByRole("dialog", { name: "设置", exact: true });
+const settings = () => page.locator(".settings-workspace");
 const prompt = () => page.getByRole("textbox", { name: "提示词 Prompt", exact: true });
 const generate = () => page.locator(".generation-controls").getByRole("button", { name: "生成视频", exact: true });
 const setMode = (mode) => page.evaluate((mode) => window.skiffPreview.videos.setMode(mode), mode);
@@ -34,7 +34,7 @@ try {
 		assert.equal(await settings().getByRole("textbox", { name: "API Key", exact: true }).inputValue(), "");
 		assert.equal(await page.evaluate(() => window.skiffPreview.videos.calls.length), 0);
 		await settings().getByRole("button", { name: "取消编辑", exact: true }).click();
-		await settings().getByRole("button", { name: "关闭设置", exact: true }).click();
+		await page.getByRole("button", { name: "返回工作区", exact: true }).click();
 		await prompt().fill("蓝色纸船，海面波光，缓慢推进");
 		await page.locator('input[aria-label="上传首帧参考图"]').setInputFiles({ name: "boat.png", mimeType: "image/png", buffer: testImage() });
 		await setMode("pending"); await generate().click();

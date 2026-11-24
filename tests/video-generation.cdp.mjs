@@ -40,7 +40,7 @@ export function createVideoGenerationScenario() {
 export async function verifyVideoGeneration(page, scenario, baseUrl, dir, artifacts, restartDesktop) {
 	await page.setViewportSize({ width: 1600, height: 1000 });
 	const tool = (name) => workbenchTool(page, name);
-	const settings = () => page.getByRole("dialog", { name: "设置", exact: true });
+	const settings = () => page.locator(".settings-workspace");
 	const generate = () => page.locator(".generation-controls").getByRole("button", { name: "生成视频", exact: true });
 	const invoke = (command, args) => page.evaluate(({ command, args }) => window.__TAURI_INTERNALS__.invoke(command, args), { command, args });
 	await tool("生成视频").click();
@@ -57,7 +57,7 @@ export async function verifyVideoGeneration(page, scenario, baseUrl, dir, artifa
 	const config = await invoke("get_video_generation_config"); assert.equal("apiKey" in config.services[0], false);
 	const exposed = await page.evaluate(async (paths) => Promise.all(paths.map(async (path) => (await fetch(window.__TAURI__.core.convertFileSrc(path))).status)), [join(dir, "video-config.json")]);
 	assert.deepEqual(exposed, [403]);
-	await settings().getByRole("button", { name: "关闭设置", exact: true }).click();
+	await page.getByRole("button", { name: "返回工作区", exact: true }).click();
 	await page.getByRole("textbox", { name: "提示词 Prompt" }).fill("CDP 视频：蓝色纸船，波光缓慢移动"); await generate().click();
 	await page.getByText("生成作品", { exact: true }).waitFor({ timeout: 30000 });
 	let jobs = await invoke("list_video_generation_jobs"); const first = jobs[0];

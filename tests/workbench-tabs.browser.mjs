@@ -176,7 +176,7 @@ try {
 	assert.equal(await page.locator(".workbench-panel").evaluate((element) => element.scrollWidth <= element.clientWidth), true);
 	await page.screenshot({ path: "dist/workbench-tabs/narrow.png", animations: "disabled" });
 	await page.getByRole("button", { name: "HEAD · 当前提交", exact: true }).click();
-	await page.getByRole("dialog", { name: "项目与聊天导航", exact: true }).waitFor({ state: "hidden" });
+	await page.getByRole("dialog", { name: "项目与对话导航", exact: true }).waitFor({ state: "hidden" });
 	await page.locator(".commit-metadata h2").waitFor();
 	await page.getByRole("button", { name: "分支", exact: true }).click();
 	await tab("文件").click();

@@ -187,10 +187,10 @@ try {
 		// Widening then narrowing keeps the two-layer header intact.
 		await page.evaluate(() => window.skiffPreview.browser.set("browser-a", { generation: "replacement-narrow", url: "https://example.test/typed", control: "human", controlVersion: 3 }));
 		await page.setViewportSize({ width: 600, height: 400 });
-		await page.getByRole("button", { name: "返回聊天", exact: true }).waitFor();
+		await page.getByRole("button", { name: "返回对话", exact: true }).waitFor();
 		assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
 		await page.screenshot({ path: join(output, `${theme}-narrow.png`), animations: "disabled" });
-		await page.getByRole("button", { name: "返回聊天", exact: true }).click();
+		await page.getByRole("button", { name: "返回对话", exact: true }).click();
 		assert.equal(await page.evaluate(() => window.skiffPreview.browser.entries.get("browser-a").control), "human", "Collapse preserves ownership");
 		await page.getByRole("button", { name: "浏览器", exact: true }).click();
 		await page.locator('.browser-screen[data-phase="live"]').waitFor();

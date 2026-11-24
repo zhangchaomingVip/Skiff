@@ -7,7 +7,7 @@ export async function verifyImageConcurrency(page, scenario, serviceId, dir, art
 	const prompt = () => page.getByRole("textbox", { name: "提示词 Prompt" });
 	const generate = () => page.getByRole("button", { name: "生成图片", exact: true });
 	const cards = () => page.locator(".generation-pending-card");
-	const settings = () => page.getByRole("dialog", { name: "设置", exact: true });
+	const settings = () => page.locator(".settings-workspace");
 	const limit = () => settings().getByRole("combobox", { name: "同时生成任务数", exact: true });
 	const list = () => page.evaluate(() => window.__TAURI_INTERNALS__.invoke("list_image_generation_jobs"));
 	const nativeStart = (input) => page.evaluate(async (input) => {
@@ -18,7 +18,7 @@ export async function verifyImageConcurrency(page, scenario, serviceId, dir, art
 		await page.getByRole("button", { name: "管理生成服务", exact: true }).click();
 		await limit().selectOption(String(value));
 		await page.waitForFunction(async (expected) => (await window.__TAURI_INTERNALS__.invoke("get_image_generation_config")).concurrencyLimit === expected, value);
-		await settings().getByRole("button", { name: "关闭设置", exact: true }).click();
+		await page.getByRole("button", { name: "返回工作区", exact: true }).click();
 	};
 	const submit = async (index) => {
 		await prompt().fill(`并行任务 ${index}`);
@@ -31,7 +31,7 @@ export async function verifyImageConcurrency(page, scenario, serviceId, dir, art
 	await page.getByRole("button", { name: "管理生成服务", exact: true }).click();
 	assert.equal(await limit().inputValue(), "5");
 	await page.screenshot({ path: join(artifacts, "image-concurrency-settings-cdp.png"), animations: "disabled" });
-	await settings().getByRole("button", { name: "关闭设置", exact: true }).click();
+	await page.getByRole("button", { name: "返回工作区", exact: true }).click();
 	// Each parallel edit owns a durable reference snapshot, even after replacement.
 	const firstReference = testImage();
 	await page.locator('input[aria-label="上传图生图参考图"]').setInputFiles({ name: "并行参考一.png", mimeType: "image/png", buffer: firstReference });

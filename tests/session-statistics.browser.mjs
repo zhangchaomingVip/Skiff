@@ -14,7 +14,7 @@ try {
 		const shot = (suffix) => page.screenshot({ animations: "disabled", path: new URL(`${theme}-${suffix}.png`, output).pathname.replace(/^\/([A-Z]:)/, "$1") });
 		// Tooltip edge clamping reacts to the new width in a layout effect, so let the resize settle first.
 		const settle = () => page.waitForTimeout(300);
-		const stats = page.getByRole("region", { name: "会话统计", exact: true });
+		const stats = page.getByRole("region", { name: "对话统计", exact: true });
 		const search = (label) => stats.getByLabel(label, { exact: true });
 		const button = (name) => stats.getByRole("button", { name, exact: true });
 		const scene = (name) => stats.getByRole("group", { name: "统计模式" }).getByRole("button", { name });
@@ -22,11 +22,11 @@ try {
 		const kpi = async (label, value) => assert.equal(await stats.locator(".statistics-stat").filter({ has: page.getByText(label, { exact: true }) }).locator("dd").textContent(), value);
 		await page.goto(`${origin}/tests/preview.html?fixture=statistics&theme=${theme}`);
 		await page.locator(".settings-trigger").first().click();
-		await page.getByRole("button", { name: "会话统计", exact: true }).click();
-		await stats.getByText("另有 1 个会话未能读取。", { exact: false }).waitFor();
+		await page.getByRole("button", { name: "对话统计", exact: true }).click();
+		await stats.getByText("另有 1 个对话未能读取。", { exact: false }).waitFor();
 		// The Code workspace opens the developer slice, and the switch stays inside the page.
 		assert.equal(await scene(/代码工程/).getAttribute("aria-pressed"), "true", "The active workspace picks the first scene");
-		assert.deepEqual(await kpiLabels(), ["会话请求", "消耗 Tokens", "已知费用", "缓存命中率"]);
+		assert.deepEqual(await kpiLabels(), ["对话请求", "消耗 Tokens", "已知费用", "缓存命中率"]);
 		assert.deepEqual(await stats.getByRole("group", { name: "趋势指标" }).getByRole("button").allInnerTexts(), ["Tokens", "请求"]);
 		assert.ok(!(await stats.getByRole("table").innerText()).includes("图片"), "The code log hides generation rows");
 		await shot("code");
@@ -43,7 +43,7 @@ try {
 		assert.equal(await stats.getByRole("row", { name: /视频工作室/ }).count(), 1);
 		await shot("design");
 		await scene(/全部汇总/).click();
-		await kpi("会话请求", "29");
+		await kpi("对话请求", "29");
 		await kpi("生成图片", "2");
 		await kpi("生成视频", "1");
 		assert.equal((await kpiLabels()).length, 6);
@@ -55,14 +55,14 @@ try {
 		await stats.getByRole("row", { name: /Project Alpha/ }).waitFor();
 		assert.equal(await stats.getByRole("row", { name: /Project Beta/ }).locator("td").first().textContent(), "26");
 		await stats.getByRole("button", { name: "筛选项目：Project Alpha" }).click();
-		await kpi("会话请求", "3");
+		await kpi("对话请求", "3");
 		await kpi("生成视频", "0");
 		await button("按提供商").click();
 		assert.equal(await stats.getByRole("row", { name: /图像工作室/ }).locator("td").nth(4).textContent(), "2");
 		await search("提供商").selectOption({ label: "视频工作室 · 视频" });
 		await stats.getByText("当前筛选没有记录。").waitFor();
 		await search("项目").selectOption("");
-		await kpi("会话请求", "0");
+		await kpi("对话请求", "0");
 		await kpi("生成视频", "1");
 		// The type dropdown is gone, so the video view comes from the metric switch.
 		await stats.getByRole("group", { name: "趋势指标" }).getByRole("button", { name: "视频", exact: true }).click();
@@ -71,7 +71,7 @@ try {
 		await stats.getByRole("row", { name: /video-1/ }).waitFor();
 		await search("提供商").selectOption("");
 		await search("时间范围").selectOption("all");
-		await kpi("会话请求", "30");
+		await kpi("对话请求", "30");
 		await stats.getByRole("group", { name: "趋势指标" }).getByRole("button", { name: "Tokens" }).click();
 		const chart = stats.getByRole("img", { name: /^Tokens趋势/ });
 		const trendValue = stats.locator(".statistics-chart-value");
@@ -107,7 +107,7 @@ try {
 		await page.evaluate(() => { window.skiffStatisticsReadFailure = true; });
 		await button("刷新").click();
 		await stats.getByRole("alert").waitFor();
-		await kpi("会话请求", "30");
+		await kpi("对话请求", "30");
 		await page.evaluate(() => { window.skiffStatisticsReadFailure = false; });
 		await button("刷新").click();
 		await stats.getByRole("alert").waitFor({ state: "detached" });
@@ -115,17 +115,17 @@ try {
 		const result = await stats.getByRole("row", { name: /视频工作室/ }).locator("td").last().textContent();
 		assert.equal(result, "1");
 		await shot("providers");
-		const dialog = page.locator(".settings-dialog");
+		const dialog = page.locator(".settings-workspace");
 		const shell = await dialog.boundingBox();
 		await page.getByRole("button", { name: "外观", exact: true }).click();
 		await stats.waitFor({ state: "detached" });
 		const other = await dialog.boundingBox();
 		assert.deepEqual([Math.round(other.width), Math.round(other.height)], [Math.round(shell.width), Math.round(shell.height)], "Leaving statistics must not resize the dialog");
-		await page.getByRole("button", { name: "会话统计", exact: true }).click();
-		await stats.getByRole("heading", { name: "会话统计" }).waitFor();
+		await page.getByRole("button", { name: "对话统计", exact: true }).click();
+		await stats.getByRole("heading", { name: "对话统计" }).waitFor();
 		const back = await dialog.boundingBox();
 		assert.deepEqual([Math.round(back.width), Math.round(back.height)], [Math.round(shell.width), Math.round(shell.height)], "Returning to statistics must not resize the dialog");
-		await stats.getByText("另有 1 个会话未能读取。", { exact: false }).waitFor();
+		await stats.getByText("另有 1 个对话未能读取。", { exact: false }).waitFor();
 		await page.setViewportSize({ width: 390, height: 810 });
 		await settle();
 		await search("时间范围").scrollIntoViewIfNeeded();
@@ -141,7 +141,7 @@ try {
 	const empty = await browser.newPage({ viewport: { width: 900, height: 700 } });
 	await empty.goto(`${origin}/tests/preview.html?theme=light`);
 	await empty.locator(".settings-trigger").first().click();
-	await empty.getByRole("button", { name: "会话统计", exact: true }).click();
-	await empty.getByText("暂无会话或生成记录。").waitFor();
+	await empty.getByRole("button", { name: "对话统计", exact: true }).click();
+	await empty.getByText("暂无对话或生成记录。").waitFor();
 	console.log("Session statistics: light/dark scenes, filters, groups, media, pagination, refresh and narrow layout verified.");
 } finally { await browser.close(); }

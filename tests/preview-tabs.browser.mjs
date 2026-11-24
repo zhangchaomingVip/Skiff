@@ -45,9 +45,9 @@ try {
 		await page.screenshot({ path: `dist/preview-tabs/${theme}-diff.png`, animations: "disabled" });
 		await tab(names[2]).locator(".preview-tab-open").click();
 		await page.setViewportSize({ width: 600, height: 680 });
-		await page.getByRole("dialog", { name: "项目与聊天导航" }).waitFor();
+		await page.getByRole("dialog", { name: "项目与对话导航" }).waitFor();
 		await page.keyboard.press("Escape");
-		await page.getByRole("dialog", { name: "项目与聊天导航" }).waitFor({ state: "hidden" });
+		await page.getByRole("dialog", { name: "项目与对话导航" }).waitFor({ state: "hidden" });
 		await tab(names[0]).locator(".preview-tab-open").click();
 		await tab(names[2]).locator(".preview-tab-open").click();
 		assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);

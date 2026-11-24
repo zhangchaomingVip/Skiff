@@ -15,7 +15,7 @@ try {
 	await page.goto(`${origin}/tests/preview.html?fixture=title-generation&theme=light`);
 	await page.waitForFunction(() => document.querySelector(".sidebar")?.dataset.connected === "true");
 	await page.locator(".composer-input").waitFor();
-	assert.equal(await page.locator(".sidebar .chat-title").first().innerText(), "新聊天");
+	assert.equal(await page.locator(".sidebar .chat-title").first().innerText(), "新对话");
 	await page.locator(".composer-input").fill("帮我给 Skiff 加一个对话标题提取功能，要求能在设置里选择主模型和备用模型，并且尽量使用免费的模型来生成标题");
 	await page.locator(".composer-input").press("Enter");
 	// The mock answers the summarisation request with a fixed title on a dedicated pi instance.

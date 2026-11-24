@@ -185,7 +185,7 @@ try {
 	await page.getByRole("button", { name: "复制本轮费用", exact: true }).click();
 	assert.equal(await page.evaluate(() => window.copiedVoyageCost), "¥0.088000");
 	assert.equal(await page.locator(".voyage-turn [role=status]").first().textContent(), "本轮费用已复制");
-	await page.getByRole("button", { name: "复制会话累计费用", exact: true }).click();
+	await page.getByRole("button", { name: "复制对话累计费用", exact: true }).click();
 	assert.equal(await page.evaluate(() => window.copiedVoyageCost), "¥0.088000 + $0.012000");
 	for (const theme of ["light", "dark"]) {
 		await page.evaluate((theme) => { document.documentElement.dataset.theme = theme; }, theme);

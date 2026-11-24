@@ -78,11 +78,11 @@ try {
 		assert.equal(await panel.getAttribute("data-chat-id"), "browser-a", "Late old-chat query cannot replace active owner");
 		assert.equal(await page.inputValue(".composer-input"), "保留浏览草稿 A");
 		await page.setViewportSize({ width: 600, height: 400 });
-		await page.getByRole("button", { name: "返回聊天", exact: true }).waitFor();
+		await page.getByRole("button", { name: "返回对话", exact: true }).waitFor();
 		assert.equal(await page.locator(".composer-input").isVisible(), false);
 		assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
 		await page.screenshot({ animations: "disabled", path: join(output, `${theme}-narrow.png`) });
-		await page.getByRole("button", { name: "返回聊天", exact: true }).click(); await noSockets();
+		await page.getByRole("button", { name: "返回对话", exact: true }).click(); await noSockets();
 		assert.equal(await page.inputValue(".composer-input"), "保留浏览草稿 A");
 		await trigger.click(); await live(); await page.keyboard.press("Escape"); await noSockets();
 		await page.setViewportSize({ width: 1440, height: 900 });
@@ -119,7 +119,7 @@ try {
 	assert.equal(await cli.inputValue(), "C:/test/agent-browser.exe");
 	await cli.fill(""); await page.getByRole("button", { name: "保存路径", exact: true }).click();
 	await page.waitForFunction(() => window.skiffPreview.browser.calls.some((call) => call.command === "browser_configure" && call.args.settings.cliPath === null));
-	await page.getByRole("button", { name: "关闭设置", exact: true }).click();
+	await page.getByRole("button", { name: "返回工作区", exact: true }).click();
 	await page.evaluate(() => window.skiffPreview.browser.setReady(true));
 	await page.getByRole("button", { name: "重新检测", exact: true }).click();
 	await page.getByText("AI 浏览器尚未启用", { exact: true }).waitFor();

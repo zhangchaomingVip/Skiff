@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 
 /** Run in the harness's isolated WebView profile, before its first model request. */
 export async function verifyDraftAttachments(page) {
-	const input = page.getByRole("textbox", { name: "聊天消息", exact: true });
+	const input = page.getByRole("textbox", { name: "对话消息", exact: true });
 	await input.fill("CDP 附件草稿恢复验证");
 	const [chooser] = await Promise.all([page.waitForEvent("filechooser"), page.getByRole("button", { name: "添加图片、文本或 Word 文件", exact: true }).click()]);
 	await chooser.setFiles({ name: "cdp-draft.txt", mimeType: "text/plain", buffer: Buffer.alloc(512 * 1024, 92) });

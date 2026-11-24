@@ -11,8 +11,8 @@ const browser = await chromium.launch({ headless: true, channel: "msedge" });
 const page = await browser.newPage({ viewport: { width: 1100, height: 750 } });
 page.setDefaultTimeout(10000);
 const errors = []; page.on("pageerror", (error) => errors.push(String(error)));
-const settings = () => page.getByRole("dialog", { name: "设置", exact: true });
-const button = (name) => settings().getByRole("button", { name, exact: true });
+const settings = () => page.locator(".settings-workspace");
+const button = (name) => page.locator(".settings-workspace, .settings-nav").getByRole("button", { name, exact: true });
 const bridge = (command, args) => page.evaluate(({ command, args }) => window.__TAURI_INTERNALS__.invoke(command, args), { command, args });
 const config = () => bridge("list_model_families");
 const metadata = () => bridge("list_settings_metadata");
@@ -88,7 +88,7 @@ try {
 	await select("官方直连").check(); await select("自定义端点").check();
 	await button("批量停用").click(); const disable = confirm("批量停用供应商");
 	await disable.getByRole("button", { name: "确认操作" }).waitFor();
-	assert.match(await disable.textContent(), /影响 2 条关联路线/); assert.match(await disable.textContent(), /官方直连.*自定义端点/);
+	assert.match(await disable.textContent(), /影响 2 个模型/); assert.match(await disable.textContent(), /官方直连.*自定义端点/);
 	await shot("batch-impact-light");
 	await page.evaluate(() => window.skiffPreview.failNextBatch()); await disable.getByRole("button", { name: "确认操作" }).click();
 	await disable.getByRole("alert").waitFor(); assert.match(await disable.textContent(), /整批未提交/);
@@ -101,7 +101,7 @@ try {
 	await select("官方直连").check(); await select("自定义端点").check(); await button("批量删除").click();
 	const blocked = confirm("批量删除供应商");
 	assert.equal(await blocked.getByRole("button", { name: "确认操作" }).isDisabled(), false);
-	assert.match(await blocked.textContent(), /影响 \d+ 条关联路线/);
+	assert.match(await blocked.textContent(), /影响 \d+ 个模型/);
 	await shot("batch-delete-preview-light"); await page.keyboard.press("Escape");
 	await button("批量启用").click(); const enable = confirm("批量启用供应商");
 	await enable.getByRole("button", { name: "确认操作" }).waitFor();
@@ -179,7 +179,7 @@ try {
 
 	await button("供应商").click(); await button("批量管理").click();
 	await select("本机服务").check(); await select("自定义端点").check(); await button("批量删除").click();
-	let deletion = confirm("批量删除供应商"); assert.match(await deletion.textContent(), /影响 2 条关联路线/);
+	let deletion = confirm("批量删除供应商"); assert.match(await deletion.textContent(), /影响 2 个模型/);
 	await page.keyboard.press("Escape"); assert.equal((await config()).relays.length, 5);
 	await button("批量删除").click(); deletion = confirm("批量删除供应商"); await deletion.getByRole("button", { name: "确认操作" }).click(); await deletion.waitFor({ state: "detached" });
 	assert.equal((await config()).relays.length, 3);

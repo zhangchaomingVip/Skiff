@@ -59,7 +59,7 @@ test("archive, restore, active fallback and empty archived persistence retain se
 
 	const blank: Conversation = { id: "blank", projectId: "p", title: "空白", updatedAt: 50, hasMessages: false };
 	const onlyBlank = { ...workspace, chats: [blank], activeId: blank.id };
-	const withDraft = archiveConversation(onlyBlank, blank.id, 200, (projectId) => ({ id: "replacement", projectId, title: "新聊天", updatedAt: 201, hasMessages: false }));
+	const withDraft = archiveConversation(onlyBlank, blank.id, 200, (projectId) => ({ id: "replacement", projectId, title: "新对话", updatedAt: 201, hasMessages: false }));
 	assert.equal(withDraft.activeId, "replacement");
 	assert.deepEqual(persistableConversations(withDraft.chats, withDraft.activeId).map((item) => item.id).sort(), ["blank", "replacement"]);
 	assert.equal(isArchived(withDraft.chats.find((item) => item.id === "blank")!), true);

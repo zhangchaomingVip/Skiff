@@ -45,7 +45,7 @@ export function createImageGenerationScenario() {
 export async function verifyImageGeneration(page, scenario, baseUrl, dir, artifacts) {
 	await page.setViewportSize({ width: 1600, height: 1000 });
 	const tool = (name) => workbenchTool(page, name);
-	const settings = () => page.getByRole("dialog", { name: "设置", exact: true });
+	const settings = () => page.locator(".settings-workspace");
 	const generate = () => page.getByRole("button", { name: "生成图片", exact: true });
 	await tool("生图").click();
 	await page.getByRole("button", { name: "配置生成服务", exact: true }).click();
@@ -67,7 +67,7 @@ export async function verifyImageGeneration(page, scenario, baseUrl, dir, artifa
 	assert.ok(config.services[0].models[0].sizes.includes("3840x2160"));
 	const configStatus = await page.evaluate(async (path) => (await fetch(window.__TAURI__.core.convertFileSrc(path))).status, join(dir, "config.json"));
 	assert.equal(configStatus, 403, "Asset protocol must not expose stored credentials or metadata");
-	await settings().getByRole("button", { name: "关闭设置", exact: true }).click();
+	await page.getByRole("button", { name: "返回工作区", exact: true }).click();
 	const sizes = imageSizeMenu(page);
 	await sizes.open();
 	await sizes.resolutions.getByRole("button", { name: "4K", exact: true }).click();

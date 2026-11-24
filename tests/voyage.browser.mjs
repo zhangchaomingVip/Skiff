@@ -130,8 +130,8 @@ try {
 	for (const fixture of ["voyage-fishing", "voyage-tool", "voyage-thinking", "voyage-output"]) {
 		await page.setViewportSize({ width: 1200, height: 800 });
 		await page.goto(`${base}/tests/preview.html?fixture=${fixture}&theme=dark`);
-		await page.locator('[aria-label="聊天消息"]').fill("航行台预览");
-		await page.locator('[aria-label="聊天消息"]').press("Enter");
+		await page.locator('[aria-label="对话消息"]').fill("航行台预览");
+		await page.locator('[aria-label="对话消息"]').press("Enter");
 		const activity = fixture === "voyage-output" ? "sailing" : "fishing";
 		await page.locator(`.voyage-rail.voyage-${activity}`).waitFor();
 		await page.waitForTimeout(350);

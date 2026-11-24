@@ -38,7 +38,15 @@ export function SettingsWorkspace({ initialCategory, restrictions, prompt, provi
 	const [category, setCategoryRaw] = useState(initialCategory);
 	const [navigationHost, setNavigationHost] = useState<HTMLElement | null>(null);
 	const [narrow, setNarrow] = useState(() => window.innerWidth <= 760);
-	useEffect(() => { const host = document.getElementById("settings-sidebar-navigation"); setNavigationHost(host); const query = window.matchMedia("(max-width: 760px)"); const update = () => setNarrow(query.matches); update(); query.addEventListener("change", update); return () => query.removeEventListener("change", update); }, []);
+	useEffect(() => {
+		const query = window.matchMedia("(max-width: 760px)");
+		// Narrow layouts drop the settings sidebar, so the navigation falls back
+		// into the workspace and the stale portal host must be released.
+		const update = () => { setNarrow(query.matches); setNavigationHost(document.getElementById("settings-sidebar-navigation")); };
+		update();
+		query.addEventListener("change", update);
+		return () => query.removeEventListener("change", update);
+	}, []);
 	useEffect(() => { onCategoryChange?.(category); }, [category, onCategoryChange]);
 	const [{ locked, pending }, setInteraction] = useState({ locked: false, pending: false });
 	const setCategory = useCallback((next: SettingsCategory) => { setInteraction({ locked: false, pending: false }); setCategoryRaw(next); }, []);
@@ -59,6 +67,33 @@ export function SettingsWorkspace({ initialCategory, restrictions, prompt, provi
 	const darkActive = useResolvedTheme() === "dark";
 	const close = () => { if (!editor.current?.pending) onClose(); };
 	const escape = () => { if (editor.current?.pending) return; if (editor.current?.editing) editor.current.back(); else close(); };
+	const escapeRef = useRef(escape);
+	escapeRef.current = escape;
+	// Settings replaces the workspace instead of living in a <dialog>, so the
+	// global Escape and the return focus that the dialog used to provide are
+	// handled here. Nested dialogs get the key first and close themselves.
+	useEffect(() => {
+		const parts = () => [...document.querySelectorAll<HTMLElement>(".settings-workspace, .settings-nav")];
+		const tabbable = () => parts().flatMap((part) => [...part.querySelectorAll<HTMLElement>('a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])')]).filter((element) => element.getClientRects().length > 0);
+		const onKeyDown = (event: KeyboardEvent) => {
+			if (event.defaultPrevented || document.querySelector("dialog[open]")) return;
+			if (event.key === "Escape") { event.preventDefault(); escapeRef.current(); return; }
+			// Settings is not a modal dialog any more, so keep Tab inside the
+			// navigation and the content the same way the dialog used to.
+			if (event.key !== "Tab") return;
+			const items = tabbable();
+			if (!items.length) return;
+			const active = document.activeElement;
+			if (!parts().some((part) => part.contains(active))) { event.preventDefault(); (event.shiftKey ? items[items.length - 1] : items[0]).focus(); return; }
+			if (event.shiftKey && active === items[0]) { event.preventDefault(); items[items.length - 1].focus(); }
+			else if (!event.shiftKey && active === items[items.length - 1]) { event.preventDefault(); items[0].focus(); }
+		};
+		window.addEventListener("keydown", onKeyDown);
+		return () => {
+			window.removeEventListener("keydown", onKeyDown);
+			queueMicrotask(() => document.querySelector<HTMLElement>(".settings-trigger")?.focus());
+		};
+	}, []);
 	const navigation = <nav className="settings-nav" aria-label="设置分类"><Button className="settings-back" variant="ghost" onClick={close} disabled={pending}><Icon name="arrowLeft" size={16} />返回工作区</Button><h1 className="settings-nav-title" id="settings-title">设置</h1>{([
 				["通用", ["appearance", "chat"]],
 				["模型与能力", ["providers", "prompt", "websearch", "browser", "images", "videos"]],

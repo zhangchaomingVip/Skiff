@@ -15,10 +15,10 @@ const errors = [], evidence = { mode: "Vite development; headless Edge; no CPU t
 page.on("pageerror", (error) => errors.push(error.message));
 const wait = (fn, arg) => page.waitForFunction(fn, arg, { timeout: 20000 });
 const active = () => page.evaluate(() => JSON.parse(localStorage.getItem("skiff.workspace.v1")).activeId);
-const message = () => page.getByRole("textbox", { name: "聊天消息" });
+const message = () => page.getByRole("textbox", { name: "对话消息" });
 const ready = () => wait(() => !!document.querySelector(".composer") && !document.querySelector(".session-loading") && document.querySelector(".sidebar")?.dataset.connected === "true");
 const select = async (id) => { await page.locator(".project-chats .chat-link").filter({ has: page.locator(".chat-title", { hasText: new RegExp(`^Session ${id}$`) }) }).click({ position: { x: 24, y: 16 } }); await ready(); };
-const searchInput = () => page.getByRole("textbox", { name: "搜索项目与聊天" });
+const searchInput = () => page.getByRole("textbox", { name: "搜索项目与对话" });
 const search = async (text) => { await searchInput().fill(text); await wait(() => document.querySelector(".sidebar-search-results [role=status]")?.textContent.includes("已搜索")); };
 const persisted = (id) => page.evaluate(async (id) => {
 	const db = await new Promise((resolve, reject) => { const r = indexedDB.open("skiff-drafts"); r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error); });
@@ -48,7 +48,7 @@ try {
 	assert.equal(await page.locator(".project-chats .chat-row").count(), 100);
 	assert.ok((await page.locator(".chat-group-label").allTextContents()).every((label) => /· \d+$/.test(label)));
 	const processes = await page.evaluate(() => window.retrievalFixture.mock.processes.size);
-	await page.getByRole("button", { name: "搜索项目与聊天", exact: true }).click();
+	await page.getByRole("button", { name: "搜索项目与对话", exact: true }).click();
 	await search("unique conclusion s99");
 	evidence.coldUiScanMs = await page.evaluate(() => performance.now() - window.retrievalFixture.stats().firstRead);
 	assert.equal(await page.locator(".body-search-match").count(), 1);
@@ -138,7 +138,7 @@ try {
 	await select(0);
 	await page.locator(".route-authorization").waitFor();
 	await page.screenshot({ path: fileURLToPath(new URL("screenshots/authorization-light.png", output)) });
-	assert.equal(await page.getByRole("button", { name: /^后台会话/ }).count(), 0, "Header must not expose background sessions");
+	assert.equal(await page.getByRole("button", { name: /^后台对话/ }).count(), 0, "Header must not expose background sessions");
 	await page.getByRole("button", { name: "同意", exact: true }).click();
 	await wait(() => !document.querySelector(".route-authorization"));
 	await wait(() => !document.querySelector('.chat-row.selected [aria-label="需要确认"]'));
@@ -150,12 +150,12 @@ try {
 	// Application actions must clear drafts before a pending debounce can write again.
 	await message().fill("归档清理草稿");
 	const activeRow = page.locator('.project-chats .chat-row').filter({ has: page.locator('.chat-title', { hasText: /^Session 0$/ }) });
-	await activeRow.hover(); await activeRow.getByRole("button", { name: "归档聊天 Session 0", exact: true }).click();
+	await activeRow.hover(); await activeRow.getByRole("button", { name: "归档对话 Session 0", exact: true }).click();
 	await page.evaluate(() => window.retrievalFixture.drafts.flush()); assert.equal(await persisted("s0"), undefined);
-	await page.getByRole("button", { name: "设置", exact: true }).click(); await page.getByRole("button", { name: "归档会话", exact: true }).click();
+	await page.getByRole("button", { name: "设置", exact: true }).click(); await page.getByRole("button", { name: "已归档对话", exact: true }).click();
 	await page.locator(".archive-session-row").filter({ hasText: "Session 0" }).getByRole("button", { name: "恢复", exact: true }).click(); await ready();
 	assert.equal(await message().inputValue(), "");
-	const draftRow = page.locator('.project-chats .chat-row').filter({ has: page.locator('.chat-draft') }).filter({ hasText: "新聊天" });
+	const draftRow = page.locator('.project-chats .chat-row').filter({ has: page.locator('.chat-draft') }).filter({ hasText: "新对话" });
 	await draftRow.click({ button: "right" }); await page.getByRole("menu").getByRole("button", { name: "从侧栏移除", exact: true }).click(); await page.getByRole("button", { name: "确认删除", exact: true }).click();
 	await page.evaluate(() => window.retrievalFixture.drafts.flush()); assert.equal(await persisted(draftId), undefined);
 	evidence.checks.push("archive/restore and delete UI clear pending drafts without resurrection");
@@ -215,7 +215,7 @@ try {
 	evidence.performance.hotP50 = [...evidence.performance.samples].sort((a,b) => a-b)[9];
 	evidence.performance.hotP95 = p95(evidence.performance.samples);
 	assert.ok(evidence.performance.hotP95 <= 200, `hot p95 ${evidence.performance.hotP95}`);
-	await page.getByRole("button", { name: "搜索项目与聊天", exact: true }).click();
+	await page.getByRole("button", { name: "搜索项目与对话", exact: true }).click();
 	await page.evaluate(() => window.retrievalFixture.setDelay(20)); await searchInput().fill("cold latency");
 	await wait(() => window.retrievalFixture.stats().active > 0);
 	const latencies = [];

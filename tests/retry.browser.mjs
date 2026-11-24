@@ -17,7 +17,7 @@ try {
 		await wait(() => !!window.skiffPreview);
 		await page.goto(`${base}/tests/retry.html?theme=${theme}`);
 		await wait(() => window.retryFixture?.currentSession?.connected);
-		const input = page.getByRole("textbox", { name: "聊天消息", exact: true });
+		const input = page.getByRole("textbox", { name: "对话消息", exact: true });
 		await input.fill("测试自动重连"); await input.press("Enter");
 		await wait(() => window.retryFixture.currentSession.state.isStreaming);
 		await page.evaluate(() => { const f = window.retryFixture; const process = [...f.mock.processes.values()].find((p) => p.file === f.currentSession.sessionFile); clearTimeout(process.timer); process.isStreaming = false; });

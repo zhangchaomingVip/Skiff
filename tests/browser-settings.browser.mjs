@@ -18,7 +18,7 @@ try {
 		await page.waitForFunction(() => document.querySelector(".sidebar")?.dataset.connected === "true");
 		const open = async () => {
 			await page.keyboard.press("Control+Comma");
-			await page.getByRole("dialog", { name: "设置", exact: true }).getByRole("button", { name: "AI 浏览器", exact: true }).click();
+			await page.getByRole("button", { name: "AI 浏览器", exact: true }).click();
 			await page.locator("#browser-enabled").waitFor();
 		};
 		await open();
@@ -26,13 +26,13 @@ try {
 		assert.equal(await page.locator("#browser-enabled").isChecked(), false);
 		await page.locator("#browser-enabled").focus();
 		await page.keyboard.press("Space");
-		await page.getByRole("dialog", { name: "设置", exact: true }).waitFor({ state: "detached" });
+		await page.locator(".settings-workspace").waitFor({ state: "detached" });
 		await page.waitForFunction(() => document.querySelector(".sidebar")?.dataset.connected === "true");
 		await open();
 		assert.equal(await page.locator("#browser-enabled").isChecked(), true);
 		await page.screenshot({ path: join(output, `${theme}.png`) });
 		await page.setViewportSize({ width: 600, height: 400 });
-		assert.equal(await page.getByRole("dialog", { name: "设置", exact: true }).evaluate((el) => el.scrollWidth > el.clientWidth), false);
+		assert.equal(await page.locator(".settings-workspace").evaluate((el) => el.scrollWidth > el.clientWidth), false);
 		await page.screenshot({ path: join(output, `${theme}-narrow.png`) });
 		assert.deepEqual(errors, []);
 		await page.close();

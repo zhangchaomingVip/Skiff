@@ -12,8 +12,8 @@ const page = await browser.newPage({ viewport: { width: 1200, height: 800 } });
 page.setDefaultTimeout(10000);
 const errors = [];
 page.on("pageerror", (error) => errors.push(String(error)));
-const dialog = () => page.getByRole("dialog", { name: "设置", exact: true });
-const button = (name) => dialog().getByRole("button", { name, exact: true });
+const dialog = () => page.locator(".settings-workspace");
+const button = (name) => page.locator(".settings-workspace, .settings-nav").getByRole("button", { name, exact: true });
 const ready = () => page.waitForFunction(() => document.querySelector(".sidebar")?.dataset.connected === "true");
 const open = async () => {
 	await page.locator(".settings-trigger").click();
@@ -21,7 +21,7 @@ const open = async () => {
 	await dialog().waitFor();
 };
 const close = async () => {
-	await button("关闭设置").click();
+	await button("返回工作区").click();
 	await dialog().waitFor({ state: "detached" });
 };
 const shot = (name) => page.screenshot({ animations: "disabled", path: new URL(`${name}.png`, output).pathname.replace(/^\/([A-Z]:)/, "$1") });
@@ -59,9 +59,13 @@ try {
 	for (const theme of ["light", "dark"]) {
 		await button(theme === "light" ? "浅色" : "深色").click();
 		await button("暖杏米").click();
+		// Settings replaces the conversation instead of floating above it, so the
+		// baseline has to be read after returning to the workspace.
+		await close();
 		const baseline = await conversation();
 		if (theme === "light") assert.equal(baseline[".workspace"][0], "rgb(255, 255, 255)");
 		else assert.match(baseline[".workspace"][1], /stars\.svg/);
+		await open();
 		const accents = new Set();
 		const settingsAccents = new Set();
 		const selections = new Set();
@@ -72,26 +76,6 @@ try {
 			assert.equal(await page.locator("html").getAttribute("data-theme-color"), color);
 			assert.equal(await page.evaluate(() => localStorage.getItem("skiff.themeColor")), color);
 			assert.equal(await button(label).getAttribute("aria-pressed"), "true");
-			const presentation = await page.evaluate(() => ({
-				accent: getComputedStyle(document.documentElement).getPropertyValue("--color-accent").trim(),
-				workspace: getComputedStyle(document.querySelector(".workspace")).backgroundImage,
-				selection: getComputedStyle(document.querySelector(".chat-row.selected")).backgroundColor,
-				sidebar: getComputedStyle(document.querySelector(".sidebar")).backgroundImage,
-				titlebar: getComputedStyle(document.querySelector(".titlebar")).backgroundImage,
-			}));
-			if (theme === "light") assert.equal(presentation.workspace, "none");
-			else assert.match(presentation.workspace, /stars\.svg/);
-			assert.deepEqual(await conversation(), baseline, `${theme}/${color}: color selection must not tint the conversation`);
-			if (theme === "dark") assert.match(presentation.sidebar, /gradient/);
-			if (theme === "light") {
-				const surfaces = await page.evaluate(() => [".sidebar", ".msg.user .message-bubble"].map((selector) => getComputedStyle(document.querySelector(selector)).backgroundColor));
-				assert.equal(surfaces[0], surfaces[1], "User bubbles must echo the pale sidebar");
-			}
-			if (theme === "light") assert.ok(!presentation.sidebar.includes("rgb(255, 255, 255)"), "Sidebar gradient must stay tinted across its full height");
-			assert.match(presentation.titlebar, /gradient/);
-			accents.add(presentation.accent);
-			backdrops.add(presentation.titlebar);
-			selections.add(presentation.selection);
 			const palette = await page.evaluate(() => {
 				const style = getComputedStyle(document.documentElement);
 				const names = ["--color-text-primary", "--color-text-secondary", "--color-text-tertiary", "--color-accent", "--color-bg-primary", "--color-bg-secondary", "--color-bg-tertiary", "--color-bg-hover", "--color-sidebar-bg", "--selected", "--action-foreground", "--action", "--action-hover", "--action-active"];
@@ -109,6 +93,30 @@ try {
 			settingsAccents.add(settingsPalette["--accent"]);
 			for (const background of ["--surface", "--selected"]) assert.ok(contrast(settingsPalette["--accent"], settingsPalette[background]) >= 4.5, `${theme}/${color}: settings selection text contrast`);
 			for (const background of ["--action", "--action-hover", "--action-active"]) assert.ok(contrast("#ffffff", settingsPalette[background]) >= 4.5, `${theme}/${color}: settings action contrast`);
+			await button("外观").click();
+			await close();
+			const presentation = await page.evaluate(() => ({
+				accent: getComputedStyle(document.documentElement).getPropertyValue("--color-accent").trim(),
+				workspace: getComputedStyle(document.querySelector(".workspace")).backgroundImage,
+				selection: getComputedStyle(document.querySelector(".chat-row.selected")).backgroundColor,
+				sidebar: getComputedStyle(document.querySelector(".sidebar")).backgroundImage,
+				titlebar: getComputedStyle(document.querySelector(".titlebar")).backgroundImage,
+			}));
+			if (theme === "light") assert.equal(presentation.workspace, "none");
+			else assert.match(presentation.workspace, /stars\.svg/);
+			assert.deepEqual(await conversation(), baseline, `${theme}/${color}: color selection must not tint the conversation`);
+			if (theme === "dark") assert.match(presentation.sidebar, /gradient/);
+			if (theme === "light") {
+				// Color themes tint the shell; the user bubble keeps the neutral surface.
+				assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector(".msg.user .message-bubble")).backgroundColor), "rgb(243, 245, 248)", "User bubbles must stay neutral");
+			}
+			if (theme === "light") assert.ok(!presentation.sidebar.includes("rgb(255, 255, 255)"), "Sidebar gradient must stay tinted across its full height");
+			assert.match(presentation.titlebar, /gradient/);
+			accents.add(presentation.accent);
+			backdrops.add(presentation.titlebar);
+			selections.add(presentation.selection);
+			await shot(`homepage-${theme}-${color}`);
+			await open();
 			await button("供应商").click();
 			const activeFilter = dialog().locator(".provider-status-filter[aria-pressed=true]");
 			if (await activeFilter.count()) await activeFilter.click();
@@ -116,16 +124,13 @@ try {
 			await toggle.waitFor();
 			await toggle.check();
 			const expectedTrack = settingsPalette["--action"].match(/[a-f\d]{2}/gi).map((value) => parseInt(value, 16));
-			await page.waitForFunction((rgb) => getComputedStyle(document.querySelector(".settings-dialog .switch input:checked + .slider")).backgroundColor === `rgb(${rgb.join(", ")})`, expectedTrack);
+			await page.waitForFunction((rgb) => getComputedStyle(document.querySelector(".settings-workspace .switch input:checked + .slider")).backgroundColor === `rgb(${rgb.join(", ")})`, expectedTrack);
 			await shot(`switches-${theme}-${color}`);
 			await toggle.uncheck();
 			assert.equal(await toggle.isChecked(), false);
 			await toggle.check();
 			assert.equal(await toggle.isChecked(), true);
 			await button("外观").click();
-			await close();
-			await shot(`homepage-${theme}-${color}`);
-			await open();
 		}
 		assert.equal(accents.size, 1, `${theme}: blue accents must stay stable`);
 		assert.equal(settingsAccents.size, theme === "light" ? 4 : 1, `${theme}: controls follow the active mode's palette`);

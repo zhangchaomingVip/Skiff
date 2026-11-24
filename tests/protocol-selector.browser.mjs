@@ -14,8 +14,8 @@ const page = await browser.newPage({ viewport: { width: 1100, height: 900 } });
 page.setDefaultTimeout(10000);
 const errors = [];
 page.on("pageerror", (error) => errors.push(String(error)));
-const dialog = () => page.getByRole("dialog", { name: "设置", exact: true });
-const button = (name) => dialog().getByRole("button", { name, exact: true });
+const dialog = () => page.locator(".settings-workspace");
+const button = (name) => page.locator(".settings-workspace, .settings-nav").getByRole("button", { name, exact: true });
 const loose = (pattern) => dialog().getByRole("button", { name: pattern });
 const shot = (name) => page.screenshot({ animations: "disabled", path: new URL(`${name}.png`, output).pathname.replace(/^\/([A-Z]:)/, "$1") });
 
@@ -80,7 +80,7 @@ try {
 	assert.equal(await page.locator("#relay-protocol").inputValue(), "kimi");
 	await button("返回列表").click();
 
-	await button("关闭设置").click();
+	await button("返回工作区").click();
 	await dialog().waitFor({ state: "detached" });
 	assert.deepEqual(errors, []);
 	console.log("PASS protocol selector: options, default, hint, persistence, row label and Kimi preset");

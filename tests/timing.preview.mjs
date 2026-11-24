@@ -100,7 +100,7 @@ async function finishReply(held, text = "回复完成") {
 	await until(() => !latest.pending && !latest.state.isStreaming, "Reply did not settle");
 }
 function setDraft(text) {
-	const input = document.querySelector('[aria-label="聊天消息"]');
+	const input = document.querySelector('[aria-label="对话消息"]');
 	Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value").set.call(input, text);
 	input.dispatchEvent(new Event("input", { bubbles: true }));
 }
@@ -142,7 +142,7 @@ try {
 	await until(() => heldPrompts.length > 0 && waiting(), "Failed send placeholder missing");
 	answer(heldPrompts.shift(), false);
 	await until(() => !latest.pending && !latest.state.isStreaming, "Failure did not clear state");
-	assert(!waiting() && intervals.size === 0 && document.querySelector('[aria-label="聊天消息"]').value === "失败后保留草稿", "Failure leaked placeholder or lost draft");
+	assert(!waiting() && intervals.size === 0 && document.querySelector('[aria-label="对话消息"]').value === "失败后保留草稿", "Failure leaked placeholder or lost draft");
 	record("发送拒绝清理占位、停止计时并保留草稿");
 	const cancelled = await takePrompt(() => latest.actions.prompt("开始前中止"));
 	await until(waiting, "Abort placeholder missing");

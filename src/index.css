@@ -1090,7 +1090,8 @@ body.scrollbar-frozen .messages:hover::-webkit-scrollbar-thumb:hover { backgroun
 @media (max-width: 760px) {
 	.settings-workspace { overflow: auto; }
 	.settings-nav { display: flex; flex-wrap: wrap; gap: var(--space-1); flex-shrink: 0; max-height: 38dvh; border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent); }
-	.settings-workspace > .settings-nav { padding: var(--space-2); background: var(--sidebar-backdrop); }
+	.settings-workspace > .settings-nav { position: sticky; top: 0; z-index: 2; padding: var(--space-2); background: var(--sidebar-backdrop); }
+	.settings-nav .settings-back { position: sticky; top: 0; z-index: 1; background: var(--sidebar-backdrop); }
 	.settings-nav .ui-button { width: auto; margin: 0; padding-inline: var(--space-2); }
 	.settings-nav-title { flex-basis: 100%; }
 	.workbench-shell > .settings-active { margin: 0; border-radius: 0; border-width: 1px 0 0; }

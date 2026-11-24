@@ -87,7 +87,7 @@ async function regressions() {
 		await page.evaluate(() => window.switchFixture.release("fixture initialization failed"));
 		await page.getByRole("button", { name: "重新连接", exact: true }).waitFor();
 		check((await page.getByRole("alert").innerText()).includes("fixture initialization failed"), `${type} 初始化失败展示当前错误与重试入口`);
-		check(await page.locator('[aria-label="正在加载会话"]').count() === 0, `${type} 失败不永久 loading`);
+		check(await page.locator('[aria-label="正在加载对话"]').count() === 0, `${type} 失败不永久 loading`);
 		const failedGeneration = await page.evaluate(() => window.switchFixture.renders.at(-1).owner.generation);
 		await page.getByRole("button", { name: "重新连接", exact: true }).click(); await ready("s1");
 		check((await data()).renders.at(-1).owner.generation !== failedGeneration, `${type} 同 ID 重试建立独立批次`);
@@ -154,13 +154,13 @@ async function regressions() {
 	}), "重载后模型与会话归属元数据仍正确");
 	await clean();
 	await open();
-	await page.getByRole("textbox", { name: "聊天消息", exact: true }).fill("local draft");
+	await page.getByRole("textbox", { name: "对话消息", exact: true }).fill("local draft");
 	await page.locator('input[type="file"]').setInputFiles({ name: "draft.txt", mimeType: "text/plain", buffer: Buffer.from("local fixture attachment") });
 	await page.waitForFunction(() => document.querySelector('.composer')?.textContent.includes("draft.txt"));
 	await page.evaluate(() => window.switchFixture.currentSession.reconnect()); await ready("s0");
-	check(await page.getByRole("textbox", { name: "聊天消息", exact: true }).inputValue() === "local draft", "同会话重连保留草稿");
+	check(await page.getByRole("textbox", { name: "对话消息", exact: true }).inputValue() === "local draft", "同会话重连保留草稿");
 	await select(1); await ready("s1");
-	check(await page.getByRole("textbox", { name: "聊天消息", exact: true }).inputValue() === "" && !await page.locator('.composer').innerText().then((text) => text.includes("draft.txt")), "不同会话子树隔离草稿与附件");
+	check(await page.getByRole("textbox", { name: "对话消息", exact: true }).inputValue() === "" && !await page.locator('.composer').innerText().then((text) => text.includes("draft.txt")), "不同会话子树隔离草稿与附件");
 	await page.locator('.msg.user').first().hover();
 	const edit = page.getByRole("button", { name: "编辑并重发", exact: true }).first();
 	if (await edit.count()) {
@@ -180,7 +180,7 @@ async function regressions() {
 	check(await page.getByRole("button", { name: "收起本轮执行过程", exact: true }).count() === 0 && await page.getByRole("button", { name: "展开本轮执行过程", exact: true }).count() > 0 && await page.getByRole("button", { name: "回到底部", exact: true }).count() === 0, "跨会话执行折叠与滚动跟随状态隔离");
 	await clean();
 	await open("empty=1"); await select(1); await ready("s1");
-	check(await page.locator('.empty').count() === 1 && await page.locator('[aria-label="正在加载会话"]').count() === 0, "空历史成功后展示空会话，结束加载");
+	check(await page.locator('.empty').count() === 1 && await page.locator('[aria-label="正在加载对话"]').count() === 0, "空历史成功后展示空会话，结束加载");
 	await clean();
 	// Hook-level supplements cover transitions absent from ordinary navigation.
 	await open();
@@ -215,7 +215,7 @@ try {
 	try { await select(2); } catch (error) { if (!baseline) throw error; }
 	check((await page.locator('.project-chats .selected .chat-link').getAttribute("title")).startsWith("Session 2\n"), "A 启动未释放即可真实点击选中 B");
 	check((await data()).clicks.some((event) => event.title.startsWith("Session 2\n") && event.trusted), "B 点击进入真实事件处理入口");
-	check(await page.locator('[aria-label="正在加载会话"]').count() === 1 || await page.evaluate(() => window.switchFixture.currentSession?.owner.id === "s2" && window.switchFixture.currentSession.connected), "目标会话立即显示加载反馈或已完成加载");
+	check(await page.locator('[aria-label="正在加载对话"]').count() === 1 || await page.evaluate(() => window.switchFixture.currentSession?.owner.id === "s2" && window.switchFixture.currentSession.connected), "目标会话立即显示加载反馈或已完成加载");
 	await page.screenshot({ path: destination.replace(/\.json$/, ".loading.png"), fullPage: true });
 	await page.evaluate(() => window.switchFixture.release());
 	await ready(baseline ? "s1" : "s2");
@@ -240,7 +240,7 @@ try {
 				if (!result.start) return;
 				const selected = document.querySelector('.project-chats .selected .chat-link')?.title.startsWith(`Session ${id}\n`);
 				if (selected && result.highlight === undefined) { result.highlight = performance.now() - result.start; result.mountedAtHighlight = document.querySelectorAll('.msg').length; requestAnimationFrame(() => requestAnimationFrame(() => { result.paintOpportunity = performance.now() - result.start; })); }
-				if (selected && document.querySelector('[aria-label="正在加载会话"]') && result.loading === undefined) result.loading = performance.now() - result.start;
+				if (selected && document.querySelector('[aria-label="正在加载对话"]') && result.loading === undefined) result.loading = performance.now() - result.start;
 				const snapshot = window.switchFixture.renders.at(-1);
 				if (snapshot?.id === `s${id}` && snapshot?.connected && document.querySelector('.msg') && result.history === undefined) result.history = performance.now() - result.start;
 				if (snapshot?.id === `s${id}` && snapshot?.sendable) { result.ready = performance.now() - result.start; result.mountedReady = document.querySelectorAll('.msg').length; observer.disconnect(); }

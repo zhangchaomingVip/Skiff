@@ -11,7 +11,7 @@ try {
 		const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
 		const showChat = async () => {
 			await page.getByRole("navigation", { name: "工作区工具" }).getByRole("button", { name: "对话", exact: true }).click();
-			const drawer = page.getByRole("dialog", { name: "项目与聊天导航", exact: true });
+			const drawer = page.getByRole("dialog", { name: "项目与对话导航", exact: true });
 			if (await drawer.isVisible()) { await page.keyboard.press("Escape"); await drawer.waitFor({ state: "hidden" }); }
 		};
 		const errors = [];
@@ -77,16 +77,16 @@ try {
 		};
 		assert.equal(await deleted.locator(".result-card-file").count(), 0, "Deleted files have no content to open");
 		await openFile("src/App.tsx", "App.tsx", true);
-		await page.getByRole("button", { name: "返回聊天", exact: true }).click();
+		await page.getByRole("button", { name: "返回对话", exact: true }).click();
 		await openFile("src/App.tsx", "App.tsx");
 		assert.equal(await page.locator(".preview-tab").count(), 1, "Repeated card clicks reuse the file tab");
-		await page.getByRole("button", { name: "返回聊天", exact: true }).click();
+		await page.getByRole("button", { name: "返回对话", exact: true }).click();
 		await openFile("docs/preview.md", "preview.md");
 		assert.equal(await page.locator(".preview-tab").count(), 2);
-		await page.getByRole("button", { name: "返回聊天", exact: true }).click();
+		await page.getByRole("button", { name: "返回对话", exact: true }).click();
 		assert.equal(await page.locator(".composer-input").inputValue(), "保留这条草稿");
 		await page.setViewportSize({ width: 600, height: 800 });
-		const dialog = page.getByRole("dialog", { name: "项目与聊天导航", exact: true });
+		const dialog = page.getByRole("dialog", { name: "项目与对话导航", exact: true });
 		await dialog.waitFor();
 		await page.keyboard.press("Escape");
 		await dialog.waitFor({ state: "hidden" });
@@ -130,14 +130,14 @@ try {
 		await openFile("src/App.tsx", "App.tsx");
 		await page.mouse.move(1300, 500);
 		await page.screenshot({ path: `dist/result-cards/${theme}-file-open.png` });
-		await page.getByRole("button", { name: "返回聊天", exact: true }).click();
+		await page.getByRole("button", { name: "返回对话", exact: true }).click();
 		await page.setViewportSize({ width: 600, height: 800 });
 		await dialog.waitFor();
 		await page.keyboard.press("Escape");
 		await dialog.waitFor({ state: "hidden" });
 		await openFile("src/components/MessageItem.tsx", "MessageItem.tsx");
 		assert.equal(await dialog.isVisible(), false, "File content stays visible on narrow screens");
-		await page.getByRole("button", { name: "返回聊天", exact: true }).click();
+		await page.getByRole("button", { name: "返回对话", exact: true }).click();
 		assert.equal(await page.locator(".composer-input").inputValue(), "保留这条草稿");
 		assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem("skiff.workspace.v1")).activeId), chatId);
 

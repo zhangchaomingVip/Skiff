@@ -22,7 +22,6 @@
 | `npm run check:ui` | 通过 |
 | `npm run test:styles` | 通过：244 个 token，0 个样式错误，126 组对比度全部通过 |
 | `npm run test:cdp` | 未运行 |
-| 设置相关的浏览器测试（`tests/*settings*.browser.mjs`） | 未运行 |
 
 已同步的单元测试断言：
 
@@ -30,10 +29,25 @@
 - `tests/retrievability.test.ts`：只有图片时派生的标题由「图片聊天」改为「图片对话」。
 - `tests/sailing.test.ts`：上下文提醒的「建议新开会话」改为「建议新开对话」。
 
-没有同步的测试：
+## 浏览器模拟测试
 
-- 浏览器模拟和 CDP 脚本里仍按旧文案断言，包括 `tests/settings.browser.mjs`（已删除的「快捷键」分类）、`tests/sidebar-archive.browser.mjs`、`tests/session-statistics.browser.mjs`、`tests/sidebar-recent.browser.mjs`、`tests/result-cards.browser.mjs`、`tests/browser-panel.browser.mjs` 等，「归档会话」「返回聊天」「新聊天」「会话统计」这些文字需要改成新文案后才能运行。
-- 这些脚本不在 `npm test` 的范围内，本次提交没有运行它们。
+`tests/*.browser.mjs` 里的旧文案已按新界面同步：设置从对话框变成工作区（`.settings-workspace`，导航在独立容器里），「关闭设置」改为「返回工作区」，并去掉了已删除的「快捷键」「路线」「默认主题色」等断言。
+
+在本地 Vite 预览（Edge 无头，模拟 Tauri 桥）上运行并通过：
+
+- 设置：`settings`、`prompt-settings`、`web-search-settings`、`browser-settings`、`theme-colors`、`star-themes`。
+- 侧栏与检索：`sidebar-bulk`、`sidebar-recent`、`result-cards`、`file-workspace`、`diff-cache`、`resize-separator`、`preview-tabs`、`workbench-tabs`、`project-picker`、`title-generation`、`draft-recovery`、`retry`、`session-statistics`。
+- 其他：`browser-panel`、`provider-toolbar`、`provider-model-config`、`provider-discovery-pricing`、`model-picker`、`image-edit`、`image-resolution`、`image-concurrency`、`video-generation`、`voyage-bento`。
+
+没有通过、且用上一提交（5bde9ed）的临时工作树复跑确认同样失败的用例（与本次改动无关）：`settings-information`、`settings-management`、`sidebar-archive`、`browser-lifecycle`、`interactions`、`session-switch`、`providers-settings`、`provider-toggle`、`provider-reply`、`protocol-selector`、`retrievability`、`voyage`、`image-generation`。主要原因是更早的「家族 → 供应商模型」重构留下的断言（路线、来源筛选、保存载荷）还没跟上。`browser-control` 偶发超时，重跑通过。
+
+## 本次补丁带来的界面修正
+
+同步测试时发现三处只有移出对话框才暴露的问题，已一并修复：
+
+- 设置不再是对话框后，Escape 关闭、Tab 焦点循环和关闭后的焦点恢复都失效了。现在由 `SettingsWorkspace` 在窗口级处理，嵌套对话框打开时让位给对话框。
+- 窄屏（≤760px）下设置侧栏被移除，导航落在一个已经脱离文档的 portal 里，整块消失。现在切换断点时重新寻找挂载点，窄屏把导航放回工作区，并让「返回工作区」在导航滚动时保持可见。
+
 
 ## 人工验收
 

@@ -28,8 +28,8 @@ try {
 			};
 		});
 		await page.keyboard.press("Control+Comma");
-		const settings = page.getByRole("dialog", { name: "设置", exact: true });
-		await settings.getByRole("button", { name: "供应商", exact: true }).click();
+		const settings = page.locator(".settings-workspace");
+		await page.getByRole("button", { name: "供应商", exact: true }).click();
 		const row = settings.locator(".provider-relay-row").filter({ hasText: "官方直连" }).first();
 		await row.getByText("· 需重新测试", { exact: true }).waitFor();
 		assert.equal(await row.locator(".provider-row-test-status.is-success").count(), 0);

@@ -14,11 +14,11 @@ const browser = await chromium.launch({ headless: true, channel: "msedge" });
 const page = await browser.newPage({ viewport: { width: 1100, height: 750 } });
 const errors = [];
 page.on("pageerror", (error) => errors.push(String(error)));
-const dialog = page.getByRole("dialog", { name: "设置", exact: true });
+const dialog = page.locator(".settings-workspace");
 const editor = dialog.getByRole("textbox", { name: "附加指令" });
 const open = async () => {
 	await page.keyboard.press("Control+Comma");
-	await dialog.getByRole("button", { name: "系统提示词", exact: true }).click();
+	await page.getByRole("button", { name: "系统提示词", exact: true }).click();
 	await editor.waitFor();
 };
 const save = async () => {

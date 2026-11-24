@@ -14,14 +14,14 @@ page.setDefaultTimeout(10000);
 const errors = [];
 page.on("pageerror", (error) => errors.push(String(error)));
 const ready = () => page.waitForFunction(() => document.querySelector(".sidebar")?.dataset.connected === "true");
-const dialog = () => page.getByRole("dialog", { name: "设置", exact: true });
-const button = (name) => dialog().getByRole("button", { name, exact: true });
+const dialog = () => page.locator(".settings-workspace");
+const button = (name) => page.locator(".settings-workspace, .settings-nav").getByRole("button", { name, exact: true });
 const open = async () => {
 	await page.locator(".settings-trigger").click();
 	await page.getByRole("button", { name: "外观", exact: true }).click();
 	await dialog().waitFor();
 };
-const close = () => button("关闭设置").click();
+const close = () => button("返回工作区").click();
 const shot = (name) => page.screenshot({ path: fileURLToPath(new URL(`${name}.png`, output)) });
 const background = () => page.locator(".workspace").evaluate((element) => getComputedStyle(element).backgroundImage);
 const stars = () => dialog().getByRole("checkbox", { name: "显示星星", exact: true });

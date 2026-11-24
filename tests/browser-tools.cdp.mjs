@@ -134,10 +134,10 @@ export async function verifyBrowserTools(page, scenario, requests, artifacts) {
 		while (requests.length === previous) { assert.ok(Date.now() < deadline, "Composer must reach real provider"); await new Promise((done) => setTimeout(done, 50)); }
 	};
 	const idle = () => page.getByRole("button", { name: "停止生成", exact: true }).waitFor({ state: "hidden", timeout: 90000 });
-	const settings = page.getByRole("dialog", { name: "设置", exact: true });
+	const settings = page.locator(".settings-workspace");
 	const toggle = async () => {
 		await page.keyboard.press("Control+Comma");
-		await settings.getByRole("button", { name: "AI 浏览器", exact: true }).click();
+		await page.getByRole("button", { name: "AI 浏览器", exact: true }).click();
 		await settings.locator("#browser-enabled").click();
 		await settings.waitFor({ state: "detached" });
 		await page.waitForFunction(() => document.querySelector(".sidebar")?.dataset.connected === "true");

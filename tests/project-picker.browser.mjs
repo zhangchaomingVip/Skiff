@@ -99,7 +99,7 @@ try {
 	assert.equal(await trigger().innerText(), "cc-switch");
 	await trigger().click();
 	await search().press("Escape");
-	assert.equal(await page.getByRole("dialog", { name: "项目与聊天导航" }).count(), 1, "Escape closes the picker without closing the drawer");
+	assert.equal(await page.getByRole("dialog", { name: "项目与对话导航" }).count(), 1, "Escape closes the picker without closing the drawer");
 	assert.deepEqual(errors, []);
 	console.log("Project picker: light/dark, search, keyboard, selection, follow, new project, dismissal and narrow drawer passed.");
 } finally {

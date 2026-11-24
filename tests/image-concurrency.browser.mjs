@@ -14,13 +14,13 @@ const generate = () => page.getByRole("button", { name: "生成图片", exact: t
 const prompt = () => page.getByRole("textbox", { name: "提示词 Prompt" });
 const cards = () => page.locator(".generation-pending-card");
 const task = (text) => page.locator(".design-turn").filter({ hasText: text }).locator(".generation-pending-card");
-const settings = () => page.getByRole("dialog", { name: "设置", exact: true });
+const settings = () => page.locator(".settings-workspace");
 const limit = () => settings().getByRole("combobox", { name: "同时生成任务数", exact: true });
 async function setLimit(value) {
 	await page.getByRole("button", { name: "管理生成服务", exact: true }).click();
 	await limit().selectOption(String(value));
 	await page.waitForFunction((expected) => JSON.parse(localStorage.getItem("skiff.test.images.config")).concurrencyLimit === expected, value);
-	await settings().getByRole("button", { name: "关闭设置", exact: true }).click();
+	await page.getByRole("button", { name: "返回工作区", exact: true }).click();
 }
 async function submit(text) {
 	await openCanvasComposer(page);
@@ -47,7 +47,7 @@ try {
 		assert.equal(await limit().inputValue(), "5", "Legacy configuration defaults to five");
 		assert.deepEqual(await limit().locator("option").allTextContents(), ["3 个", "5 个", "10 个", "不限"]);
 		await page.screenshot({ path: `dist/image-concurrency/${theme}-settings.png`, animations: "disabled" });
-		await settings().getByRole("button", { name: "关闭设置", exact: true }).click();
+		await page.getByRole("button", { name: "返回工作区", exact: true }).click();
 		await prompt().fill("任务 1");
 		// Two synchronous submit events must still create only one billable task.
 		await prompt().evaluate((input) => { input.form.requestSubmit(); input.form.requestSubmit(); });
@@ -98,7 +98,7 @@ try {
 		assert.equal(await limit().inputValue(), "0", "Preference survives reload");
 		await page.setViewportSize({ width: 600, height: 800 });
 		await page.screenshot({ path: `dist/image-concurrency/${theme}-settings-narrow.png`, animations: "disabled" });
-		await settings().getByRole("button", { name: "关闭设置", exact: true }).click();
+		await page.getByRole("button", { name: "返回工作区", exact: true }).click();
 		await page.setViewportSize({ width: 1440, height: 1000 });
 	}
 	assert.deepEqual(errors, []);

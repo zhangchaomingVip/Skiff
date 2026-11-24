@@ -46,7 +46,7 @@ try {
 		await tool("文件").click();
 		await page.locator(".source-preview").waitFor();
 		assert.equal(await page.locator(".preview-tab.active .preview-tab-open > span").innerText(), "README.md");
-		await page.getByRole("button", { name: "返回聊天", exact: true }).click();
+		await page.getByRole("button", { name: "返回对话", exact: true }).click();
 		await chat.waitFor({ state: "visible" });
 		assert.equal(await tool("对话").getAttribute("aria-pressed"), "true");
 		await tool("文件").click();
@@ -62,7 +62,7 @@ try {
 		await empty.waitFor();
 		assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem("skiff.workspace.v1")).activeId), chatId);
 		await page.setViewportSize({ width: 390, height: 760 });
-		const drawer = page.getByRole("dialog", { name: "项目与聊天导航", exact: true });
+		const drawer = page.getByRole("dialog", { name: "项目与对话导航", exact: true });
 		await drawer.waitFor();
 		await page.keyboard.press("Escape");
 		await drawer.waitFor({ state: "hidden" });

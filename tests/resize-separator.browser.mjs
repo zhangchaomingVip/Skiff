@@ -59,9 +59,9 @@ try {
 		await page.reload();
 		await ready();
 		assert.equal(await handle().getAttribute("aria-valuenow"), "420");
-		await page.getByRole("button", { name: "搜索项目与聊天", exact: true }).click();
-		await page.getByRole("textbox", { name: "搜索项目与聊天", exact: true }).fill("当前会话");
-		await page.getByRole("textbox", { name: "搜索项目与聊天", exact: true }).press("Escape");
+		await page.getByRole("button", { name: "搜索项目与对话", exact: true }).click();
+		await page.getByRole("textbox", { name: "搜索项目与对话", exact: true }).fill("当前会话");
+		await page.getByRole("textbox", { name: "搜索项目与对话", exact: true }).press("Escape");
 		await page.getByRole("button", { name: "航行台", exact: true }).click();
 		const right = page.getByRole("separator", { name: "调整右侧航行台宽度" });
 		await right.waitFor();

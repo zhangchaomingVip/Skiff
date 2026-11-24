@@ -13,7 +13,7 @@ await fs.mkdir(new URL("screenshots/", output), { recursive: true });
 const errors = [], evidence = { browser: browser.version(), mode: "Vite, headless Edge, simulated Tauri bridge; real pi verified separately", checks: [] };
 page.on("pageerror", (error) => errors.push(error.message));
 const wait = (fn, arg) => page.waitForFunction(fn, arg, { timeout: 20000 });
-const input = () => page.getByRole("textbox", { name: "聊天消息" });
+const input = () => page.getByRole("textbox", { name: "对话消息" });
 const ready = () => wait(() => window.switchFixture?.currentSession?.connected && !window.switchFixture.currentSession.loading);
 const commands = () => page.evaluate(() => window.switchFixture.mock.commands.filter((item) => item.command === "rpc_send").map((item) => JSON.parse(item.args.message)));
 const select = async (id) => { await page.locator(".chat-link").filter({ has: page.locator(".chat-title", { hasText: new RegExp(`^Session ${id}$`) }) }).click({ position: { x: 24, y: 16 } }); await wait((id) => window.switchFixture.currentSession?.owner.id === `s${id}` && window.switchFixture.currentSession.connected, id); };
@@ -86,7 +86,7 @@ try {
 	assert.match(await page.locator('[aria-label="已撤回输入"]').innerText(), /follow later/);
 	await page.getByRole("button", { name: "追加到草稿" }).click(); assert.match(await input().inputValue(), /^keep my current draft/);
 	const userCount = await page.locator(".msg.user").count();
-	await input().fill("/review now"); await input().press("Enter"); await wait(() => document.querySelector('[aria-label="聊天消息"]').value === "");
+	await input().fill("/review now"); await input().press("Enter"); await wait(() => document.querySelector('[aria-label="对话消息"]').value === "");
 	assert.equal((await commands()).findLast((command) => command.message === "/review now").type, "prompt"); assert.equal(await page.locator(".msg.user").count(), userCount);
 	await input().fill("/plan now"); await input().press("Enter"); await wait(() => window.switchFixture.currentSession.state.queue?.followUp.length === 1);
 	assert.equal((await commands()).findLast((command) => command.message === "/plan now").type, "follow_up");

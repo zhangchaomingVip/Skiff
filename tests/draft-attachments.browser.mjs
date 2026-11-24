@@ -21,7 +21,7 @@ try {
 				await page.evaluate((theme) => { localStorage.setItem("skiff.theme", theme); document.documentElement.dataset.theme = theme; }, theme);
 			};
 			await page.goto(`${base}/tests/retrievability.html`); await ready();
-			const input = page.getByRole("textbox", { name: "聊天消息", exact: true });
+			const input = page.getByRole("textbox", { name: "对话消息", exact: true });
 			const add = page.getByRole("button", { name: "添加图片、文本或 Word 文件", exact: true });
 			const send = page.getByRole("button", { name: "发送消息", exact: true });
 			assert.equal(await input.inputValue(), "保留的草稿");

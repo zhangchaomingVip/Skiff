@@ -13,7 +13,7 @@ page.on("pageerror", (error) => errors.push(String(error)));
 const tool = (name) => workbenchTool(page, name);
 const generate = () => page.getByRole("button", { name: "生成图片", exact: true });
 const prompt = () => page.getByRole("textbox", { name: "提示词 Prompt" });
-const setting = () => page.getByRole("dialog", { name: "设置", exact: true });
+const setting = () => page.locator(".settings-workspace");
 await page.context().grantPermissions(["clipboard-read", "clipboard-write"], { origin });
 
 try {
@@ -34,13 +34,13 @@ try {
 		await setting().getByRole("button", { name: "编辑生成服务 本地图片验证" }).click();
 		assert.equal(await setting().getByRole("textbox", { name: "API Key", exact: true }).inputValue(), "");
 		await setting().getByRole("textbox", { name: "服务名称", exact: true }).fill("图片验证");
-		await setting().getByRole("button", { name: "外观", exact: true }).click();
+		await page.getByRole("button", { name: "外观", exact: true }).click();
 		await page.getByRole("button", { name: "继续编辑", exact: true }).click();
 		await setting().getByRole("button", { name: "保存生成服务" }).click();
 		await setting().getByRole("button", { name: "编辑生成服务 图片验证" }).waitFor();
 		assert.match(await setting().innerText(), /1234/);
 		assert.equal(await page.evaluate(() => JSON.stringify(localStorage).includes("dummy-generation-secret")), false);
-		await setting().getByRole("button", { name: "关闭设置" }).click();
+		await page.getByRole("button", { name: "返回工作区" }).click();
 		await prompt().fill("可清空的草稿");
 		await page.getByRole("button", { name: "清空提示词", exact: true }).click();
 		assert.equal(await prompt().inputValue(), "");

@@ -15,7 +15,7 @@ try {
 		page.on("pageerror", (error) => errors.push(String(error)));
 		await page.goto(`${origin}/tests/preview.html?fixture=archive&theme=${theme}`);
 		await page.waitForFunction(() => document.querySelector(".sidebar")?.dataset.connected === "true");
-		const recent = page.getByRole("region", { name: "最近会话", exact: true });
+		const recent = page.getByRole("region", { name: "最近对话", exact: true });
 		const recentTitles = async () => (await recent.locator(".chat-title").allTextContents()).map((title) => title.split(" · ")[0]);
 		const expected = ["同项目候选", "其他项目会话", "当前会话"];
 		assert.deepEqual(await recentTitles(), expected, "Expanded projects retain every recent chat in timestamp order");
@@ -76,12 +76,12 @@ try {
 		await page.locator(".project-chats .chat-title").filter({ hasText: /^重命名后的会话$/ }).waitFor();
 		assert.ok((await recentTitles()).includes("重命名后的会话"));
 
-		await page.getByRole("button", { name: "批量选择会话", exact: true }).click();
-		await recent.getByRole("checkbox", { name: "选择会话 重命名后的会话", exact: true }).click();
-		assert.equal(await page.locator(".project-chats").getByRole("checkbox", { name: "取消选择会话 重命名后的会话", exact: true }).getAttribute("aria-checked"), "true");
+		await page.getByRole("button", { name: "批量选择对话", exact: true }).click();
+		await recent.getByRole("checkbox", { name: "选择对话 重命名后的会话", exact: true }).click();
+		assert.equal(await page.locator(".project-chats").getByRole("checkbox", { name: "取消选择对话 重命名后的会话", exact: true }).getAttribute("aria-checked"), "true");
 		assert.match(await page.locator(".sidebar-bulk-count").textContent(), /已选 1 \/ 3/);
 		await page.keyboard.press("Escape");
-		await recent.getByRole("button", { name: "归档聊天 重命名后的会话", exact: true }).click();
+		await recent.getByRole("button", { name: "归档对话 重命名后的会话", exact: true }).click();
 		await page.waitForFunction(() => ![...document.querySelectorAll(".sidebar .chat-title")].some((element) => element.textContent === "重命名后的会话"));
 		assert.deepEqual(await recentTitles(), ["其他项目会话", "当前会话"], "Archiving removes the chat from both views");
 		await page.screenshot({ path: `dist/sidebar-recent-${theme}.png` });

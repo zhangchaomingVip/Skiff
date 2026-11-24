@@ -11,7 +11,7 @@ try {
 	await page.clock.pauseAt(new Date("2026-10-22T00:00:01Z"));
 	await page.goto(`${process.argv[2] || "http://localhost:1421"}/tests/draft-recovery.html`);
 	const notice = page.locator(".draft-restored");
-	const input = page.getByRole("textbox", { name: "聊天消息", exact: true });
+	const input = page.getByRole("textbox", { name: "对话消息", exact: true });
 	await notice.waitFor();
 	assert.equal(await notice.textContent(), "已恢复上次输入");
 	assert.equal(await input.inputValue(), "first restored");

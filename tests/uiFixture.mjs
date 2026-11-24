@@ -81,7 +81,7 @@ export function preparePreview(target) {
 		storage.setItem("skiff.workspace.v1", JSON.stringify({ version: 1, projects: [project, otherProject], chats, activeId: chats[2].id }));
 	} else if (fixture === "title-generation") {
 		const project = { id: "title-project", name: "Skiff", path: "D:\\workspace\\Skiff" };
-		const chat = { id: "title-chat", projectId: project.id, title: "新聊天", createdAt: now, updatedAt: now, hasMessages: false, selectedModel: { provider: "skiff-relay-r1-deepseek", id: "deepseek-chat", modelId: "deepseek-chat", routeId: "route-deepseek-r1", offerId: "route-deepseek-r1/deepseek-chat" } };
+		const chat = { id: "title-chat", projectId: project.id, title: "新对话", createdAt: now, updatedAt: now, hasMessages: false, selectedModel: { provider: "skiff-relay-r1-deepseek", id: "deepseek-chat", modelId: "deepseek-chat", routeId: "route-deepseek-r1", offerId: "route-deepseek-r1/deepseek-chat" } };
 		storage.setItem("skiff.workspace.v1", JSON.stringify({ version: 1, projects: [project], chats: [chat], activeId: chat.id }));
 		storage.setItem("skiff.titleModel.v1", JSON.stringify({ primary: { provider: "skiff-relay-r3", id: "kimi-k2" }, fallback: { provider: "skiff-relay-r1", id: "deepseek-chat" } }));
 	} else if (fixture === "statistics") {
@@ -352,7 +352,7 @@ export function preparePreview(target) {
 		] }));
 		storage.setItem("skiff.workspace.v1", JSON.stringify({ version: 1, projects: [project], chats: [chat], activeId: chat.id }));
 	} else {
-		storage.setItem("skiff.workspace.v1", JSON.stringify({ version: 1, projects: [{ id: "preview-project", name: "Skiff 示例项目", path: "D:\\workspace\\demo" }], chats: [{ id: "preview-chat", projectId: "preview-project", title: "新聊天", hasMessages: false, updatedAt: now }], activeId: "preview-chat" }));
+		storage.setItem("skiff.workspace.v1", JSON.stringify({ version: 1, projects: [{ id: "preview-project", name: "Skiff 示例项目", path: "D:\\workspace\\demo" }], chats: [{ id: "preview-chat", projectId: "preview-project", title: "新对话", hasMessages: false, updatedAt: now }], activeId: "preview-chat" }));
 	}
 	return fixture;
 }

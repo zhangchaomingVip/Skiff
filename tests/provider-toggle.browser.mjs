@@ -12,8 +12,8 @@ const browser = await chromium.launch({ headless: true, channel: "msedge" });
 const page = await browser.newPage({ viewport: { width: 1100, height: 750 } });
 const errors = [];
 page.on("pageerror", (error) => errors.push(String(error)));
-const settings = () => page.getByRole("dialog", { name: "设置", exact: true });
-const button = (name) => settings().getByRole("button", { name, exact: true });
+const settings = () => page.locator(".settings-workspace");
+const button = (name) => page.locator(".settings-workspace, .settings-nav").getByRole("button", { name, exact: true });
 const ready = () => page.waitForFunction(() => document.querySelector(".sidebar")?.dataset.connected === "true");
 const starts = () => page.evaluate(() => window.skiffPreview.commands.filter((entry) => entry.command === "rpc_start").length);
 
@@ -30,14 +30,14 @@ try {
 			window.toggleObserver = new MutationObserver(() => {
 				for (const node of document.querySelectorAll(".settings-restriction")) window.toggleRestrictions.push(node.textContent);
 			});
-			window.toggleObserver.observe(document.querySelector(".settings-dialog"), { subtree: true, childList: true, attributes: true });
+			window.toggleObserver.observe(document.querySelector(".settings-workspace"), { subtree: true, childList: true, attributes: true });
 		});
 		const bounds = await settings().boundingBox();
 		for (const name of ["官方直连", "硅基低价"]) {
 			for (const enabled of [false, true]) {
 				await settings().getByRole("checkbox", { name: `${enabled ? "启用" : "停用"} ${name}`, exact: true }).locator("..").click();
 				await page.waitForFunction(({ name, enabled }) => window.skiffPreview.relays.find((relay) => relay.name === name)?.enabled === enabled, { name, enabled });
-				await page.waitForFunction(() => !document.querySelector('[aria-label="关闭设置"]')?.disabled);
+				await page.waitForFunction(() => !document.querySelector('.settings-back')?.disabled);
 				// Give startup/reconciliation effects time to expose a reconnect.
 				await page.waitForTimeout(100);
 				assert.equal(await starts(), before, "Saving a switch must not restart pi while settings is open");
@@ -50,7 +50,7 @@ try {
 		await button("供应商").click();
 		assert.equal(await starts(), before, "Changing settings categories must not release the pending reload");
 		await page.screenshot({ path: new URL(`${theme}.png`, output).pathname.replace(/^\/([A-Z]:)/, "$1") });
-		await button("关闭设置").click();
+		await button("返回工作区").click();
 		await page.waitForFunction((before) => window.skiffPreview.commands.filter((entry) => entry.command === "rpc_start").length === before + 1, before);
 		await ready();
 		await page.waitForTimeout(100);

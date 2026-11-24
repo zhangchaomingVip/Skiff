@@ -11,9 +11,9 @@ const page = await browser.newPage({ viewport: { width: 1200, height: 900 }, red
 page.setDefaultTimeout(10000);
 const errors = [];
 page.on("pageerror", (error) => errors.push(error.message));
-const settings = page.getByRole("dialog", { name: "设置", exact: true });
+const settings = page.locator(".settings-workspace");
 const config = page.locator(".provider-model-config-dialog");
-const button = (name) => settings.getByRole("button", { name, exact: true });
+const button = (name) => page.locator(".settings-workspace, .settings-nav").getByRole("button", { name, exact: true });
 const modelRow = (modelId) => settings.locator(`[data-model-id="${modelId}"]`);
 const saved = () => page.evaluate(() => structuredClone(window.skiffPreview.relays.find((relay) => relay.id === "r1").models));
 const saveCount = () => page.evaluate(() => window.skiffPreview.commands.filter((entry) => entry.command === "save_relay").length);
