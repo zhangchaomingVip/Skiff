@@ -218,7 +218,7 @@ try {
 	await close();
 	assert.equal(await page.locator(".settings-trigger").evaluate((el) => el === document.activeElement), true);
 	await page.setViewportSize({ width: 1100, height: 750 });
-	await page.getByRole("button", { name: "展开侧栏", exact: true }).click();
+	await page.getByRole("navigation", { name: "工作区工具" }).getByRole("button", { name: "对话", expanded: false, exact: true }).click();
 	await page.keyboard.press("Control+k");
 	assert.equal(await input.evaluate((el) => el === document.activeElement), true);
 	await input.evaluate((el) => el.dispatchEvent(new KeyboardEvent("keydown", { key: ",", ctrlKey: true, isComposing: true, bubbles: true })));
@@ -234,7 +234,7 @@ try {
 	await page.getByRole("button", { name: /管理提供商/ }).click();
 	await button("编辑 官方直连").waitFor();
 	await close();
-	await page.getByRole("button", { name: "收起侧栏", exact: true }).click();
+	await page.getByRole("navigation", { name: "工作区工具" }).getByRole("button", { name: "对话", expanded: true, exact: true }).click();
 	await page.locator(".settings-trigger").click();
 	await page.getByRole("button", { name: "外观", exact: true }).click();
 	await button("跟随系统").waitFor();
@@ -244,7 +244,7 @@ try {
 	// Minimum window and the layout equivalent of 200% at 1100x750.
 	for (const [width, height, name] of [[600, 400, "minimum"], [550, 375, "zoom-200-layout"]]) {
 		await page.setViewportSize({ width, height });
-		await page.getByRole("button", { name: "展开侧栏", exact: true }).click();
+		await page.getByRole("navigation", { name: "工作区工具" }).getByRole("button", { name: "对话", expanded: false, exact: true }).click();
 		await page.locator(".settings-trigger").click();
 		await page.getByRole("button", { name: "外观", exact: true }).click();
 		assert.equal(await page.locator("dialog[open]").count(), 0, "Drawer must yield before settings");

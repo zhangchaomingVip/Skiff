@@ -79,7 +79,7 @@ try {
 		assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
 		await page.screenshot({ path: join(output, `${theme}-narrow.png`) });
 		await page.setViewportSize({ width: 1440, height: 900 });
-		await page.getByRole("button", { name: "展开侧栏", exact: true }).click();
+		await page.getByRole("navigation", { name: "工作区工具" }).getByRole("button", { name: "对话", expanded: false, exact: true }).click();
 		await page.evaluate(() => { window.skiffPreview.browser.set("browser-b", { control: "human" }); window.releaseTab = window.skiffPreview.browser.deferTab(); });
 		await page.getByRole("button", { name: "新建标签页", exact: true }).click();
 		await page.locator(".sidebar .chat-link").filter({ hasText: "浏览任务 B" }).first().click();

@@ -118,7 +118,6 @@ try {
 	}
 	await page.setViewportSize({ width: 600, height: 680 });
 	await page.goto(`${origin}/tests/preview.html?fixture=sidebar&theme=light`);
-	await page.getByRole("button", { name: "展开侧栏", exact: true }).click();
 	await page.getByRole("navigation", { name: "工作区工具" }).getByRole("button", { name: "文件", exact: true }).click();
 	await page.getByRole("tab", { name: "Commit", exact: true }).click();
 	await selectAll(); await message().fill("narrow layout");

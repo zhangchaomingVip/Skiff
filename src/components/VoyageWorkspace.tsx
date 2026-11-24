@@ -16,7 +16,7 @@ import { ResizeSeparator } from "./ResizeSeparator";
 const StableChatView = memo(ChatView);
 
 /**
- * Voyage rail visibility. The dashboard stays closed until the title bar
+ * Voyage rail visibility. The dashboard stays closed until the chat header
  * toggle opens it; crossing the desktop breakpoint still collapses and
  * restores the rail so it never squeezes a narrow workspace.
  */
@@ -80,6 +80,6 @@ export function VoyageWorkspace({ draftTarget, revealMessage, state, loading = f
 			<ContextUsage notice={modelNotice} metrics={metrics} />
 		</div>
 		{visibleExpanded && !narrow && onRailWidth && onRailWidthCommit && <ResizeSeparator label="调整右侧航行台宽度" value={shownRailWidth} bounds={railBounds} direction={-1} onResize={onRailWidth} onCommit={onRailWidthCommit} />}
-		{narrow && expanded ? <Dialog className="voyage-dialog" aria-label="航行台详情" returnFocusSelector=".titlebar-tools button" onClose={toggle}><VoyageRail metrics={metrics} onCollapse={toggle} /></Dialog> : visibleExpanded && <VoyageRail metrics={metrics} />}
+		{narrow && expanded ? <Dialog className="voyage-dialog" aria-label="航行台详情" returnFocusSelector=".voyage-trigger" onClose={toggle}><VoyageRail metrics={metrics} onCollapse={toggle} /></Dialog> : visibleExpanded && <VoyageRail metrics={metrics} />}
 	</div>;
 }

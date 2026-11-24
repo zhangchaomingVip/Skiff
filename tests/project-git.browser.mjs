@@ -131,7 +131,7 @@ try {
 	await timed.waitForFunction(() => window.skiffPreview?.commands.filter((item) => item.command === "get_project_git_status").length >= 3);
 	await timed.waitForFunction(() => document.querySelector(".sidebar")?.dataset.connected === "true");
 	await timed.clock.fastForward(1500);
-	await timed.getByRole("button", { name: "收起侧栏", exact: true }).click();
+	await timed.getByRole("navigation", { name: "工作区工具" }).getByRole("button", { name: "对话", expanded: true, exact: true }).click();
 	const initial = await timed.evaluate(() => window.skiffPreview.commands.filter((item) => item.command === "get_project_git_status").length);
 	await timed.clock.fastForward(4 * 60_000);
 	assert.equal(await timed.evaluate(() => window.skiffPreview.commands.filter((item) => item.command === "get_project_git_status").length), initial);

@@ -204,7 +204,7 @@ try {
 		await settings.getByRole("heading", { name: "供应商", exact: true }).waitFor();
 		assert.equal(await catalog.count(), 0);
 		await page.getByRole("button", { name: "返回工作区", exact: true }).click();
-		const collapseSidebar = page.getByRole("button", { name: "收起侧栏", exact: true });
+		const collapseSidebar = page.getByRole("navigation", { name: "工作区工具" }).getByRole("button", { name: "对话", expanded: true, exact: true });
 		if (await collapseSidebar.count()) await collapseSidebar.click();
 		for (const [width, height] of [[1200, 900], [900, 700], [600, 400], [360, 700], [320, 640]]) {
 			await page.setViewportSize({ width, height });

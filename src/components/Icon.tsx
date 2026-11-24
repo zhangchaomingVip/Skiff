@@ -35,6 +35,7 @@ const paths = {
 	folderPlus: "M3 7V5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7ZM12 11v6M9 14h6",
 	chevron: "m9 5 7 7-7 7",
 	panel: "M9 3v18M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z",
+	panelRight: "M15 3v18M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z",
 	arrow: "M12 19V5m-6 6 6-6 6 6",
 	stop: "M6 6h12v12H6Z",
 	close: "m6 6 12 12M6 18 18 6",
@@ -45,6 +46,7 @@ const paths = {
 	file: "M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2ZM14 2v5.5h6",
 	fileChanges: "M7 3h10a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3ZM12 7v6m-3-3h6m-6 7h6",
 	message: "M21 15a3 3 0 0 1-3 3H7l-4 4V5a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3ZM8 8h8M8 12h5",
+	chatBubble: "M14 9a2 2 0 0 1-2 2H6l-4 4V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2ZM18 9h2a2 2 0 0 1 2 2v11l-4-4h-6a2 2 0 0 1-2-2v-1",
 	files: "M20 7h-3a2 2 0 0 1-2-2V2M9 18a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h7l4 4v10a2 2 0 0 1-2 2ZM3 7.6v12.8A1.6 1.6 0 0 0 4.6 22h9.8",
 	folderTree: "M20 10a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-2.5a1 1 0 0 1-.8-.4l-.9-1.2A1 1 0 0 0 15 3h-2a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1ZM20 21a1 1 0 0 0 1-1v-3a1 1 0 0 0-1-1h-2.9a1 1 0 0 1-.88-.55l-.42-.85a1 1 0 0 0-.92-.6H13a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1ZM3 5a2 2 0 0 0 2 2h3M3 3v13a2 2 0 0 0 2 2h3",
 	home: "m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1Z",
@@ -85,5 +87,6 @@ export type IconName = keyof typeof paths;
 
 export function Icon({ name, size = 16 }: { name: IconName; size?: number }) {
 	const opticalSize = size <= 17 ? 16 : size <= 21 ? 20 : 24;
-	return <svg width={opticalSize} height={opticalSize} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={paths[name]} /></svg>;
+	const filled = false;
+	return <svg width={opticalSize} height={opticalSize} viewBox="0 0 24 24" fill={filled ? "currentColor" : "none"} stroke={filled ? "none" : "currentColor"} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={paths[name]} fillRule={filled ? "evenodd" : undefined} /></svg>;
 }

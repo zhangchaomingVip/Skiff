@@ -9,5 +9,5 @@ export function SidebarPresentation({ children, activityBar, onClose, label = "�
 		query.addEventListener("change", change);
 		return () => query.removeEventListener("change", change);
 	}, []);
-	return narrow ? active ? <Dialog variant="drawer" onClose={onClose} returnFocusSelector=".titlebar-nav button[aria-label='展开侧栏']" aria-label={label}><div className="drawer-workbench">{activityBar}{children}</div></Dialog> : null : <>{children}</>;
+	return narrow ? active ? <Dialog variant="drawer" onClose={onClose} returnFocusSelector=".activity-bar button[aria-current='page']" aria-label={label}><div className="drawer-workbench">{activityBar}{children}</div></Dialog> : null : <>{children}</>;
 }

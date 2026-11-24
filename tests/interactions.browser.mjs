@@ -206,7 +206,7 @@ try {
 	await page.goto(`${base}/tests/session-switch.html?messages=4&chats=3&expanded=1&theme=dark`); await ready();
 	await page.evaluate(async () => { const { drafts } = await import("/src/chat/drafts.ts"); drafts.save({ chatId: "s0", cwd: "D:\\workspace\\Skiff", sessionFile: window.switchFixture.currentSession.sessionFile, text: "", attachments: [] }); });
 	await emit({ type: "extension_ui_request", id: "dark", method: "confirm", title: "扩展确认", message: "是否继续处理当前任务？" }); await screenshot("dialog-dark");
-	await page.keyboard.press("Escape"); await page.getByRole("button", { name: "收起侧栏", exact: true }).click(); await page.setViewportSize({ width: 390, height: 844 }); await emit({ type: "extension_ui_request", id: "narrow", method: "confirm", title: "扩展确认", message: "是否继续处理当前任务？" }); await page.getByRole("dialog", { name: "扩展确认" }).waitFor(); await screenshot("dialog-narrow");
+	await page.keyboard.press("Escape"); await page.getByRole("navigation", { name: "工作区工具" }).getByRole("button", { name: "对话", expanded: true, exact: true }).click(); await page.setViewportSize({ width: 390, height: 844 }); await emit({ type: "extension_ui_request", id: "narrow", method: "confirm", title: "扩展确认", message: "是否继续处理当前任务？" }); await page.getByRole("dialog", { name: "扩展确认" }).waitFor(); await screenshot("dialog-narrow");
 	assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
 	assert.deepEqual(errors, []); evidence.checks.push("light/dark/narrow visual evidence; no horizontal overflow or browser exceptions");
 	await fs.writeFile(new URL("browser-verification.json", output), JSON.stringify(evidence, null, 2) + "\n");

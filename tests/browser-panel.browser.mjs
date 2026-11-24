@@ -16,11 +16,28 @@ try {
 		await page.waitForFunction(() => document.querySelector(".sidebar")?.dataset.connected === "true");
 		const panel = page.getByRole("region", { name: "浏览器画面", exact: true });
 		const live = () => page.locator('.browser-screen[data-phase="live"]').waitFor();
-		const trigger = page.getByRole("button", { name: "浏览器", exact: true });
+		const actions = page.locator(".chat-header .header-actions");
+		const trigger = actions.getByRole("button", { name: "浏览器", exact: true });
+		const voyage = actions.getByRole("button", { name: "航行台", exact: true });
+		for (const button of [trigger, voyage]) {
+			await button.hover();
+			await page.waitForFunction((element) => getComputedStyle(element).backgroundColor !== "rgba(0, 0, 0, 0)", await button.elementHandle());
+			const colors = await button.evaluate((element) => {
+				const probe = document.createElement("span");
+				probe.style.cssText = "position: fixed; color: var(--foreground)";
+				document.body.append(probe);
+				const actual = getComputedStyle(element);
+				const result = { foreground: actual.color, hover: actual.backgroundColor, expectedForeground: getComputedStyle(probe).color };
+				probe.remove();
+				return result;
+			});
+			assert.equal(colors.foreground, colors.expectedForeground, "Header icon hover uses the theme foreground");
+			assert.notEqual(colors.hover, "rgba(0, 0, 0, 0)", `Header icon hover has a visible theme surface: ${await button.getAttribute("aria-label")}`);
+		}
 		const set = (chatId, patch = {}) => page.evaluate(({ chatId, patch }) => window.skiffPreview.browser.set(chatId, patch), { chatId, patch });
 		const noSockets = () => page.waitForFunction(() => window.skiffPreview.browser.sockets.size === 0);
 		await page.fill(".composer-input", "保留浏览草稿 A");
-		await page.getByRole("button", { name: "航行台", exact: true }).click();
+		await voyage.click();
 		await set("browser-a", { control: "starting", url: null });
 		await panel.waitFor(); await page.getByText("正在启动浏览器…", { exact: true }).waitFor();
 		assert.equal(await page.locator(".voyage-rail").count(), 0);
@@ -62,8 +79,8 @@ try {
 		await page.evaluate(() => { Object.defineProperty(document, "hidden", { configurable: true, value: true }); document.dispatchEvent(new Event("visibilitychange")); });
 		await noSockets(); await page.getByText("画面已暂停", { exact: true }).waitFor();
 		await page.evaluate(() => { Object.defineProperty(document, "hidden", { configurable: true, value: false }); document.dispatchEvent(new Event("visibilitychange")); }); await live();
-		await page.getByRole("button", { name: "航行台", exact: true }).click(); await noSockets();
-		assert.equal(await page.getByRole("button", { name: "航行台", exact: true }).getAttribute("aria-pressed"), "true");
+		await voyage.click(); await noSockets();
+		assert.equal(await voyage.getAttribute("aria-pressed"), "true");
 		await trigger.click(); await live();
 		await set("browser-b", { url: "https://other.test/b" });
 		await page.locator('.sidebar .chat-link').filter({ hasText: "浏览任务 B" }).first().click();

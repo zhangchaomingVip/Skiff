@@ -120,7 +120,6 @@ try {
 	}
 	await page.setViewportSize({ width: 600, height: 680 });
 	await page.goto(`${origin}/tests/preview.html?fixture=sidebar&theme=dark`);
-	await page.getByRole("button", { name: "展开侧栏", exact: true }).click();
 	await tool("文件").click();
 		await page.getByRole("tab", { name: "Commit", exact: true }).click();
 	await all("Unversioned Files").check();

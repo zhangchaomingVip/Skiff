@@ -50,11 +50,10 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .titlebar { flex: 0 0 40px; height: 40px; display: flex; align-items: stretch; background: var(--app-backdrop); }
 /* The corner holds only the mark, in a box exactly as wide as the activity rail, so
    the logo and the 💬/📁/Git column share one vertical axis by construction. */
-.titlebar-nav { display: flex; align-items: center; gap: var(--space-1); flex: none; padding: 0 var(--space-2) 0 0; }
+.titlebar-nav { display: flex; align-items: center; flex: none; }
 .titlebar-mark { display: flex; flex: 0 0 var(--activity-width); align-items: center; justify-content: center; }
 .titlebar-mark .brand-mark { width: 22px; height: 22px; flex: 0 0 22px; }
 .titlebar-spacer { flex: 1; min-width: 0; }
-.titlebar-tools { display: flex; align-items: center; gap: var(--space-1); flex: none; padding-right: var(--space-2); }
 .titlebar-controls { display: flex; }
 .titlebar-btn { width: 46px; border: 0; background: transparent; color: var(--secondary); display: grid; place-items: center; cursor: pointer; }
 .titlebar-btn:hover { background: var(--hover); color: var(--text); }
@@ -266,7 +265,10 @@ body.scrollbar-frozen .messages:hover::-webkit-scrollbar-thumb:hover { backgroun
 .header-title { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; flex: 1; font-weight: var(--font-weight-medium); }
 .header-title-row { max-width: 100%; display: flex; gap: var(--space-4); align-items: center; min-width: 0; }
 .header-title-row > span:first-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 440px; }
-.header-actions { margin-left: auto; display: flex; align-items: center; gap: var(--space-2); }
+.header-actions { margin-left: auto; display: flex; flex: none; align-items: center; gap: var(--space-1); }
+.chat-header .header-actions .ui-icon-button:hover:not(:disabled), .chat-header .header-actions .ui-icon-button:focus-visible { background: var(--hover); color: var(--foreground); }
+/* Header toggles share the rail's selected tile, so "open" reads the same everywhere. */
+.chat-header .header-actions .ui-icon-button[aria-pressed="true"] { background: color-mix(in srgb, var(--settings-accent) 14%, transparent); color: var(--settings-accent); }
 .working { display: flex; align-items: center; gap: var(--space-2); color: var(--muted); font-size: var(--font-size-sm); white-space: nowrap; }
 .body { flex: 1; min-height: 0; display: flex; position: relative; }
 .messages { flex: 1; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; padding: var(--space-8) var(--chat-gutter) var(--space-6); overscroll-behavior: contain; }
@@ -1243,8 +1245,6 @@ body.scrollbar-frozen .messages:hover::-webkit-scrollbar-thumb:hover { backgroun
 .provider-level-option input { width: auto; margin: 0; }
 .provider-model-levels.route-levels { margin-top: var(--space-3); }
 @media (max-width: 560px) {
-	.chat-header { flex: none; min-height: 60px; flex-wrap: wrap; gap: var(--space-2) var(--space-4); padding-block: var(--space-2); }
-	.header-actions { flex-basis: 100%; justify-content: flex-end; }
 	.composer-bottom { flex-wrap: wrap; }
 	.composer-context { flex: 1 0 100%; }
 	.composer-actions { margin-left: auto; }

@@ -34,10 +34,12 @@ try {
 		assert.deepEqual(await page.locator(".activity-bar").first().locator("button").evaluateAll((buttons) => buttons.map((button) => button.getAttribute("aria-label"))), ["对话", "文件", "设置"], "The rail keeps only first-level views");
 		assert.equal(await page.locator(".titlebar .workspace-mode-switcher").count(), 1, "The segmented mode switch sits in the title bar");
 		assert.deepEqual(await page.locator(".titlebar .workspace-mode-switcher button").evaluateAll((buttons) => buttons.map((button) => button.innerText.trim())), ["Code", "Design"], "Each tab pairs its icon with a text label");
+		assert.deepEqual(await page.locator(".titlebar button").evaluateAll((buttons) => buttons.map((button) => button.getAttribute("aria-label"))), ["Code 工作区", "Design 设计室", "最小化", "最大化或还原", "关闭"]);
 		const processes = await page.evaluate(() => [...window.skiffPreview.processes.keys()]);
 		assert.equal(await page.getByRole("navigation", { name: "工作区工具", exact: true }).getByRole("button", { name: "生图", exact: true }).count(), 0);
 		await mode("design").click();
 		assert.equal(await page.locator(".code-workspace").isVisible(), false);
+		assert.equal(await page.locator(".header-actions button").count(), 0, "Design does not mount chat panel toggles");
 		assert.equal(await page.getByRole("navigation", { name: "工作区工具", exact: true }).getByRole("button", { name: "对话", exact: true }).count(), 0);
 		assert.equal(await page.getByRole("button", { name: "返回对话", exact: true }).count(), 0);
 

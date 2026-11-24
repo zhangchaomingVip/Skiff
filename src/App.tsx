@@ -342,6 +342,9 @@ export default function App() {
 				event.preventDefault(); openSettings(); return;
 			}
 			if (settingsCategory || document.querySelector("dialog[open]")) return;
+			if ((isMacPlatform() ? event.metaKey : event.ctrlKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "b") {
+				event.preventDefault(); setSidebarOpen((value) => !value); return;
+			}
 			if (workspaceMode === "code" && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "n") {
 				event.preventDefault();
 				newDraft();
@@ -349,7 +352,7 @@ export default function App() {
 		};
 		window.addEventListener("keydown", onKeyDown);
 		return () => window.removeEventListener("keydown", onKeyDown);
-	}, [newDraft, openSettings, settingsCategory, workspaceMode]);
+	}, [newDraft, openSettings, settingsCategory, workspaceMode, setSidebarOpen]);
 
 	const send = async (text: string, images?: ImageAttachment[], delivery?: Delivery) => {
 		if (!activeChat || lifecycleLock.current) return false;
@@ -419,13 +422,20 @@ export default function App() {
 	// The header belongs to the chat column so the rail divider can run from the
 	// title bar to the bottom edge, the way Codex splits its panes. The folder mark
 	// names the owning project only on hover, so the title line stays short.
+	const voyageOpen = workspaceMode === "code" && voyageExpanded && !browserPanel.expanded;
 	const chatHeader = (
 		<header className="chat-header">
 			{activeProject && <Tooltip text={activeProject.name} align="start"><span className="header-project" role="img" aria-label={`所属项目：${activeProject.name}`}><Icon name="folder" size={16} /></span></Tooltip>}
 			<div className="header-title">
 				<div className="header-title-row"><span title={activeChat ? conversationTooltip(activeChat) : undefined}>{activeChat ? conversationLabel(activeChat) : "新对话"}</span></div>
 			</div>
-			<div className="header-actions">{busy && <span className="working"><span className="dot busy" />{state.isStreaming ? "运行中" : "等待响应"}</span>}</div>
+			<div className="header-actions">
+				{busy && <span className="working"><span className="dot busy" />{state.isStreaming ? "运行中" : "等待响应"}</span>}
+				{workspaceMode === "code" && activeChat && <>
+					<Tooltip text="浏览器"><IconButton className="browser-trigger" size="compact" aria-label="浏览器" aria-pressed={browserPanel.expanded} onClick={toggleBrowser}><Icon name="globe" /></IconButton></Tooltip>
+					<Tooltip text="航行台"><IconButton className="voyage-trigger" size="compact" aria-label="航行台" aria-pressed={voyageOpen} onClick={toggleVoyage}><Icon name="gauge" /></IconButton></Tooltip>
+				</>}
+			</div>
 		</header>
 	);
 	const workspaceAlerts = <>
@@ -441,7 +451,7 @@ export default function App() {
 		<ModelFamilyContext.Provider value={familyContext}>
 		{pool.runtimes}
 		<div className={`app ${sidebarOpen || settingsCategory ? "with-sidebar" : ""} ${settingsCategory ? "settings-open" : ""}`} data-workspace-mode={workspaceMode}>
-			<TitleBar nav={<><TitleBarNav sidebarOpen={sidebarOpen} onToggleSidebar={settingsCategory ? undefined : () => setSidebarOpen((value) => !value)} />{!settingsCategory && <WorkspaceModeSwitcher mode={workspaceMode} onChange={switchWorkspaceMode} />}</>} voyageOpen={voyageExpanded && !browserPanel.expanded} onToggleVoyage={workspaceMode === "code" && !settingsCategory ? toggleVoyage : undefined}>{workspaceMode === "code" && activeChat && !settingsCategory && <IconButton className="browser-trigger" size="compact" aria-label="浏览器" aria-pressed={browserPanel.expanded} title={browserPanel.expanded ? "收起浏览器" : "展开浏览器"} onClick={toggleBrowser}><Icon name="monitor" /></IconButton>}</TitleBar>
+			<TitleBar nav={<TitleBarNav>{!settingsCategory && <WorkspaceModeSwitcher mode={workspaceMode} onChange={switchWorkspaceMode} />}</TitleBarNav>} />
 			<div className="app-body" style={{ "--sidebar-width": `${shownSidebarWidth}px` } as CSSProperties}>
 			{(!narrowViewport || !sidebarOpen) && <ActivityBar mode={workspaceMode} active={activeTool} panelOpen={sidebarOpen} settingsOpen={!!settingsCategory} onSelect={selectTool} onOpenSettings={() => openSettings()} />}
 			<WorkspaceRoute className="workbench-shell code-workspace" active={workspaceMode === "code"} label="Code 工作区">
@@ -450,7 +460,7 @@ export default function App() {
 			<ProjectChangesNavigationContext.Provider value={resultNavigation}>
 			<main className={`workspace ${settingsCategory ? "settings-active" : ""}`}>
 				{settingsCategory ? settingsWorkspace : <>
-				<div className={`primary-view ${codeTool !== "chats" ? "preview-hidden" : ""}`}>{<BrowserWorkspace chatId={activeChat?.id} controls={browserPanel} browserActions={browserActions} availableWidth={workspaceWidth} width={browserWidth} onWidth={setBrowserWidth} onWidthCommit={commitBrowserWidth} focusRequest={browserFocus.chatId === activeChat?.id ? browserFocus.version : 0} busy={busy || session.loading} onSettings={() => openSettings("browser")} onReconnect={session.reconnect}><VoyageWorkspace topBar={<>{chatHeader}{workspaceAlerts}</>} draftTarget={activeChat && activeProject ? { chatId: activeChat.id, cwd: activeProject.path, sessionFile: activeChat.hasMessages ? activeChat.sessionFile : undefined } : undefined} revealMessage={retrieval.reveal} modelNotice={modelNotice} key={`${session.owner.id ?? "loading"}:${session.owner.cwd ?? ""}`} state={displayState} loading={session.loading} connected={connected && !lifecyclePending} pending={session.pending || lifecyclePending} actions={actions} onSend={send} onReconnect={session.reconnect} projectName={activeProject?.name} railWidth={shownVoyageWidth} availableWidth={workspaceWidth} onRailWidth={setVoyageWidthFromDrag} onRailWidthCommit={commitVoyageWidth} expanded={workspaceMode === "code" && voyageExpanded && !browserPanel.expanded} onToggle={toggleVoyage} /></BrowserWorkspace>}</div>
+				<div className={`primary-view ${codeTool !== "chats" ? "preview-hidden" : ""}`}>{<BrowserWorkspace chatId={activeChat?.id} controls={browserPanel} browserActions={browserActions} availableWidth={workspaceWidth} width={browserWidth} onWidth={setBrowserWidth} onWidthCommit={commitBrowserWidth} focusRequest={browserFocus.chatId === activeChat?.id ? browserFocus.version : 0} busy={busy || session.loading} onSettings={() => openSettings("browser")} onReconnect={session.reconnect}><VoyageWorkspace topBar={<>{chatHeader}{workspaceAlerts}</>} draftTarget={activeChat && activeProject ? { chatId: activeChat.id, cwd: activeProject.path, sessionFile: activeChat.hasMessages ? activeChat.sessionFile : undefined } : undefined} revealMessage={retrieval.reveal} modelNotice={modelNotice} key={`${session.owner.id ?? "loading"}:${session.owner.cwd ?? ""}`} state={displayState} loading={session.loading} connected={connected && !lifecyclePending} pending={session.pending || lifecyclePending} actions={actions} onSend={send} onReconnect={session.reconnect} projectName={activeProject?.name} railWidth={shownVoyageWidth} availableWidth={workspaceWidth} onRailWidth={setVoyageWidthFromDrag} onRailWidthCommit={commitVoyageWidth} expanded={voyageOpen} onToggle={toggleVoyage} /></BrowserWorkspace>}</div>
 				<GitTreeWorkspace key={browse.project?.path} project={browse.project} history={gitHistory} branchesOpen={sidebarOpen} hidden={codeTool !== "git-tree"} onBack={() => setActiveTool("chats")} onBranches={() => setSidebarOpen((value) => !value)} />
 				{/* Keep previews mounted while another tool owns the workspace so returning restores their scroll position. */}
 				{(previewTabs.length > 0 || isFileWorkbenchTab(codeTool)) && <div className={`file-workspace-view ${codeTool !== "files" && codeTool !== "git" ? "preview-hidden" : ""}`}>{activePreviewId ? <ProjectPreview tabs={previewTabs} activeId={activePreviewId} revision={workbenchRevision} onActivate={setActivePreviewId} onClose={closeProjectPreview} onMode={(id, mode) => setPreviewTabs((current) => current.map((tab) => tab.id === id ? { ...tab, mode } : tab))} onBack={() => setActiveTool("chats")} /> : <FileWorkspaceEmpty project={browse.project} tool={codeTool === "git" ? "git" : "files"} />}</div>}
