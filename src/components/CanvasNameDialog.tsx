@@ -16,9 +16,9 @@ export function CanvasNameDialog({ title, initial = "", confirmText, onConfirm, 
 	const valid = name.trim().length > 0;
 	return <Dialog className="project-dialog canvas-name-dialog" aria-label={title} initialFocus={input} onClose={onClose}>
 		<form onSubmit={(event) => { event.preventDefault(); if (!valid) return; onConfirm(name.trim()); onClose(); }}>
-			<div className="dialog-heading"><h2>{title}</h2><IconButton aria-label="关闭画布命名" onClick={onClose}><Icon name="close" /></IconButton></div>
-			<p>画布把图片和视频收在同一组里，删除画布只会让作品回到未分组。</p>
-			<label className="canvas-name-field"><span>画布名称</span><Input ref={input} value={name} maxLength={maxCanvasNameLength} aria-label="画布名称" placeholder="例如：夏日短片" onChange={(event) => setName(event.target.value)} /></label>
+			<div className="dialog-heading"><h2>{title}</h2><IconButton aria-label="关闭对话命名" onClick={onClose}><Icon name="close" /></IconButton></div>
+			<p>给这个对话起个好认的名字，里面的作品不受影响。</p>
+			<label className="canvas-name-field"><span>对话名称</span><Input ref={input} value={name} maxLength={maxCanvasNameLength} aria-label="对话名称" placeholder="例如：夏日短片" onChange={(event) => setName(event.target.value)} /></label>
 			<div className="dialog-actions"><Button type="submit" variant="primary" disabled={!valid} aria-label={confirmText}>{confirmText}</Button></div>
 		</form>
 	</Dialog>;

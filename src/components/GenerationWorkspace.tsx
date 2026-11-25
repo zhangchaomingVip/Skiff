@@ -1,10 +1,9 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { VideoControls, reuseVideo } from "./VideoGenerationWorkspace";
 import { createPortal } from "react-dom";
 import type { GenerationAsset, GenerationKind, GenerationStudio } from "../workbench/useGenerationStudio";
 import { Icon } from "./Icon";
-import { CanvasPicker } from "./CanvasPicker";
-import { GenerationPicker } from "./GenerationPicker";
+import { GenerationPicker, ReferenceAddMenu, canvasTarget, modelKey, modelOptions, splitModelKey } from "./GenerationPicker";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { CopyButton } from "./CopyButton";
 import { ImageLightbox } from "./ImageLightbox";
@@ -33,8 +32,10 @@ function RatioBox({ size }: { size: string }) {
 
 /** Ratio and resolution share one chip so the composer stays on a single row;
  *  the panel follows the reference picker instead of two always-open chip rows. */
-function ImageSizeMenu({ size, sizes, onChange, onConfigure }: { size: string; sizes: string[]; onChange: (size: string) => void; onConfigure: () => void }) {
+function ImageSizeMenu({ size, sizes, quality, onQuality, onChange, onConfigure }: { size: string; sizes: string[]; quality?: string; onQuality: (quality: string) => void; onChange: (size: string) => void; onConfigure: () => void }) {
+	const qualityLabel = quality && quality !== "auto" ? qualityOptions.find((option) => option.value === quality)?.label : undefined;
 	const [open, setOpen] = useState(false);
+	const [pointer, setPointer] = useState(false);
 	const trigger = useRef<HTMLButtonElement>(null);
 	const menu = useRef<HTMLDivElement>(null);
 	const configured = sizes.length > 0;
@@ -47,13 +48,13 @@ function ImageSizeMenu({ size, sizes, onChange, onConfigure }: { size: string; s
 		(menu.current?.querySelector<HTMLElement>('[aria-pressed="true"]') ?? menu.current?.querySelector<HTMLElement>("button"))?.focus();
 	}, [open]);
 	return <>
-		<button type="button" ref={trigger} className="generation-picker-trigger generation-size-trigger" disabled={!configured} aria-haspopup="dialog" aria-expanded={open} aria-label={configured ? `画面尺寸：${ratio} ${resolution}` : "画面尺寸"} title={size ? `${ratio} · ${size.replace("x", " × ")}` : undefined} onClick={() => setOpen((value) => !value)}>
+		<button type="button" ref={trigger} className="generation-picker-trigger generation-size-trigger" disabled={!configured} aria-haspopup="dialog" aria-expanded={open} aria-label={configured ? `画面参数：${ratio} ${resolution}${qualityLabel ? ` ${qualityLabel}质量` : ""}` : "画面参数"} title={size ? `${ratio} · ${size.replace("x", " × ")}` : undefined} onClick={(event) => { setPointer(event.detail > 0); setOpen((value) => !value); }}>
 			{configured && size ? <RatioBox size={size} /> : <Icon name="image" size={13} />}
-			<span className="generation-picker-value">{configured ? `${ratio} · ${resolution}` : "选择尺寸"}</span>
+			<span className="generation-picker-value">{configured ? `${ratio} · ${resolution}${qualityLabel ? ` · ${qualityLabel}` : ""}` : "选择尺寸"}</span>
 			<span className="chev-caret" aria-hidden="true"><Icon name="chevron" size={11} /></span>
 		</button>
 		{open && createPortal(<Popover anchor={trigger} className="generation-size-menu" aria-label="选择画面尺寸" onClose={() => setOpen(false)}>
-			<div ref={menu}>
+			<div ref={menu} data-pointer={pointer || undefined} onKeyDown={() => setPointer(false)}>
 				<p className="generation-picker-title">画面比例</p>
 				<div className="generation-size-ratios" role="group" aria-label="画面比例">{ratios.map((option) => {
 					const match = available.find((value) => imageRatio(value) === option);
@@ -64,6 +65,8 @@ function ImageSizeMenu({ size, sizes, onChange, onConfigure }: { size: string; s
 					const matches = sizes.filter((value) => imageResolution(value) === option);
 					return <Button key={option} size="compact" variant="ghost" className="generation-size-option" aria-label={matches.length ? option : `配置 ${option} 尺寸`} aria-pressed={resolution === option && sizes.length > 0} title={matches.length ? matches.map((value) => value.replace("x", " × ")).join("、") : `当前未配置 ${option} 尺寸，点击配置；这不代表模型不支持`} onClick={() => { if (matches.length) onChange(matches.find((value) => imageRatio(value) === ratio) ?? matches[0]); else { setOpen(false); onConfigure(); } }}>{option}{!matches.length && <small>待配置</small>}</Button>;
 				})}</div>
+				{quality !== undefined && <><p className="generation-picker-title">质量</p>
+				<div className="generation-size-resolutions" role="group" aria-label="质量">{qualityOptions.map((option) => <Button key={option.value} size="compact" variant="ghost" className="generation-size-option" aria-pressed={quality === option.value} onClick={() => onQuality(option.value)}>{option.label}</Button>)}</div></>}
 				<p className="generation-size-output">{size ? `输出尺寸：${size.replace("x", " × ")}` : "配置生成服务后，选择模型支持的分辨率与比例。"}</p>
 			</div>
 		</Popover>, trigger.current?.closest("dialog") ?? document.body)}
@@ -106,11 +109,13 @@ export interface ComposerProps {
 	variant?: "hero" | "panel";
 	/** Image/video switch, rendered as the first chip of the launcher toolbar. */
 	modeSwitch?: ReactNode;
+	/** Opens the history drawer so a past work can fill the reference slot. */
+	onOpenHistory?: () => void;
 }
 export function GenerationControls({ kind, ...props }: ComposerProps & { kind: GenerationKind }) {
 	return kind === "video" ? <VideoControls {...props} /> : <ImageGenerationControls {...props} />;
 }
-function ImageGenerationControls({ studio, onConfigure, onSubmitted, variant, modeSwitch }: ComposerProps) {
+function ImageGenerationControls({ studio, onConfigure, onSubmitted, variant, onOpenHistory }: ComposerProps) {
 	const id = useId();
 	const promptInput = useRef<HTMLTextAreaElement>(null);
 	const referenceInput = useRef<HTMLInputElement>(null);
@@ -118,7 +123,8 @@ function ImageGenerationControls({ studio, onConfigure, onSubmitted, variant, mo
 	const draft = studio.drafts.image;
 	const update = (patch: Partial<typeof draft>) => studio.updateDraft("image", patch);
 	const { images } = studio;
-	const service = images.config?.services.find((item) => item.id === draft.serviceId);
+	const services = images.config?.services ?? [];
+	const service = services.find((item) => item.id === draft.serviceId);
 	const model = service?.models.find((item) => item.id === draft.modelId);
 	const configured = !!service?.configured && !!model;
 	const canGenerate = configured && !images.loading && !images.atCapacity && !images.submitting && !!draft.prompt.trim() && !!model?.sizes.includes(draft.size);
@@ -129,17 +135,17 @@ function ImageGenerationControls({ studio, onConfigure, onSubmitted, variant, mo
 	// then scrolls inside the same box instead of pushing the works away.
 	useEffect(() => {
 		const input = promptInput.current;
-		if (variant !== "panel" || !input) return;
+		if (!input) return;
 		input.style.height = "auto";
-		input.style.height = `${Math.min(200, input.scrollHeight)}px`;
+		input.style.height = `${Math.min(variant === "hero" ? 168 : 200, input.scrollHeight)}px`;
 	}, [draft.prompt, variant]);
 	return <aside className="generation-controls" data-kind="image" data-variant={variant} aria-label="生图参数">
 		<header className="generation-controls-header"><span className="generation-mode-icon"><Icon name="imageSpark" size={20} /></span><div><h1>生图</h1><p>让想象，慢慢成形</p></div></header>
-		<form className="generation-form" onSubmit={(event) => { event.preventDefault(); if (!canGenerate) return; void images.generate({ serviceId: draft.serviceId, modelId: draft.modelId, prompt: draft.prompt, size: draft.size, quality: draft.quality, projectRoot: studio.project?.path, canvasId: studio.canvasId || undefined }, studio.imageReference); update({ prompt: "" }); onSubmitted?.(); }} {...drop.handlers}>
+		<form className="generation-form" onSubmit={(event) => { event.preventDefault(); if (!canGenerate) return; void images.generate({ serviceId: draft.serviceId, modelId: draft.modelId, prompt: draft.prompt, size: draft.size, quality: draft.quality, projectRoot: studio.project?.path, canvasId: studio.prepareSubmitCanvas(draft.prompt) || undefined }, studio.imageReference); update({ prompt: "" }); onSubmitted?.(); }} {...drop.handlers}>
 			<div className="generation-fields">
 				<div className="generation-field generation-field-prompt">
 					<div className="generation-field-heading"><label htmlFor={`${id}-prompt`}>提示词 <span>Prompt</span></label>{draft.prompt && <Tooltip text="清空提示词"><IconButton size="compact" variant="ghost" aria-label="清空提示词" onClick={() => { update({ prompt: "" }); promptInput.current?.focus(); }}><Icon name="close" size={14} /></IconButton></Tooltip>}</div>
-					<TextArea ref={promptInput} id={`${id}-prompt`} rows={variant === "panel" ? 2 : 4} maxLength={32000} value={draft.prompt} aria-keyshortcuts="Control+Enter Meta+Enter" placeholder="描述你想看到的画面：窗边的一束花、午后的柔光、温暖的胶片质感…" onChange={(event) => update({ prompt: event.target.value })} onPaste={(event) => { const file = Array.from(event.clipboardData.files).find((item) => item.type.startsWith("image/")); if (!file) return; event.preventDefault(); studio.uploadImageReference(file); }} onKeyDown={(event) => {
+					<TextArea ref={promptInput} id={`${id}-prompt`} rows={variant === "panel" ? 2 : 1} maxLength={32000} value={draft.prompt} aria-keyshortcuts="Control+Enter Meta+Enter" placeholder={canvasTarget(studio) ? "接着描述：换个角度、调整光线、再来一张…" : "描述你想看到的画面：窗边的一束花、午后的柔光、温暖的胶片质感…"} onChange={(event) => update({ prompt: event.target.value })} onPaste={(event) => { const file = Array.from(event.clipboardData.files).find((item) => item.type.startsWith("image/")); if (!file) return; event.preventDefault(); studio.uploadImageReference(file); }} onKeyDown={(event) => {
 						if (event.key === "Enter" && (event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && !event.nativeEvent.isComposing && event.nativeEvent.keyCode !== 229) {
 							event.preventDefault(); event.stopPropagation();
 							if (canGenerate && !event.repeat) event.currentTarget.form?.requestSubmit();
@@ -160,18 +166,14 @@ function ImageGenerationControls({ studio, onConfigure, onSubmitted, variant, mo
 					{studio.imageReferenceError && <div className="generation-error" role="alert"><span>{studio.imageReferenceError}</span><IconButton size="compact" variant="ghost" aria-label="关闭参考图提示" onClick={studio.clearImageReferenceError}><Icon name="close" /></IconButton></div>}
 				</div>
 				<div className="generation-settings">
-					{modeSwitch && <div className="generation-field generation-field-mode">{modeSwitch}</div>}
-					<CanvasPicker studio={studio} id={`${id}-canvas`} />
-					{variant === "hero" && <span className="design-composer-divider" aria-hidden="true" />}
-					<div className="generation-field generation-field-service"><label htmlFor={`${id}-provider`}>生成服务</label><div className="generation-service-control"><GenerationPicker id={`${id}-provider`} label="生成服务" icon="layers" value={draft.serviceId} disabled={!images.config?.services.length} placeholder={images.config?.services.length ? "选择一个服务" : "先配置一个生成服务"} options={(images.config?.services ?? []).map((item) => ({ value: item.id, label: item.name, hint: `${item.models.length} 个模型${item.configured ? "" : " · 未配置密钥"}` }))} onChange={(serviceId) => { const next = images.config?.services.find((item) => item.id === serviceId); const first = next?.models.find((item) => item.id === next.defaultModel) ?? next?.models[0]; update({ serviceId, modelId: first?.id ?? "", size: first?.sizes[0] ?? "" }); }} /></div></div>
-					<div className="generation-field generation-field-model"><label htmlFor={`${id}-model`}>模型</label><GenerationPicker id={`${id}-model`} label="模型" icon="spark" value={configured ? draft.modelId : ""} disabled={!configured} placeholder={configured ? "选择模型" : "连接生成服务后选择模型"} options={configured ? (service?.models ?? []).map((item) => ({ value: item.id, label: item.id, hint: `${item.sizes.length} 种尺寸` })) : []} onChange={(modelId) => { const next = service?.models.find((item) => item.id === modelId); update({ modelId, size: next?.sizes[0] ?? "" }); }} /></div>
-					{configured && <div className="generation-field generation-field-quality"><label htmlFor={`${id}-quality`}>质量</label><GenerationPicker id={`${id}-quality`} label="质量" icon="sliders" value={draft.quality} placeholder="自动" options={qualityOptions} onChange={(quality) => update({ quality: quality as typeof draft.quality })} /><p className="generation-field-hint">更大的尺寸和更高的质量可能增加耗时与费用。</p></div>}
-					<ImageSizeMenu size={draft.size} sizes={model?.sizes ?? []} onChange={(size) => update({ size })} onConfigure={onConfigure} />
-					<div className="generation-field generation-field-configure"><Tooltip text={configured ? "管理生成服务" : "配置生成服务"}><IconButton variant="ghost" aria-label={configured ? "管理生成服务" : "配置生成服务"} onClick={onConfigure}><Icon name="settings" size={16} /></IconButton></Tooltip></div>
+					<ReferenceAddMenu label={studio.imageReference ? "替换参考图" : "添加参考图"} onUpload={() => referenceInput.current?.click()} onHistory={onOpenHistory} />
+					{services.length ? <div className="generation-field generation-field-model"><label htmlFor={`${id}-model`}>模型</label><GenerationPicker id={`${id}-model`} label="模型" icon="spark" value={service && model ? modelKey(service.id, model.id) : ""} placeholder="选择模型" options={modelOptions(services)} onChange={(value) => { const [serviceId, modelId] = splitModelKey(value); const next = services.find((item) => item.id === serviceId)?.models.find((item) => item.id === modelId); update({ serviceId, modelId, size: next?.sizes.includes(draft.size) ? draft.size : next?.sizes[0] ?? "" }); }} />{!configured && <Button size="compact" variant="ghost" className="generation-configure-link" onClick={onConfigure}>去配置</Button>}</div>
+						: <div className="generation-field generation-field-model"><Button size="compact" variant="ghost" className="generation-configure-link" onClick={onConfigure}><Icon name="plus" size={13} />配置生成服务</Button></div>}
+					<ImageSizeMenu size={draft.size} sizes={model?.sizes ?? []} quality={configured ? draft.quality : undefined} onQuality={(quality) => update({ quality: quality as typeof draft.quality })} onChange={(size) => update({ size })} onConfigure={onConfigure} />
 				</div>
 			</div>
 			{variant !== "hero" && status && <p className="generation-service-status" id={`${id}-service`} role="status">{status}</p>}
-			<footer className="generation-submit"><Button type="submit" variant="primary" size="primary" disabled={!canGenerate} aria-describedby={variant !== "hero" && status ? `${id}-service` : undefined} loading={images.submitting}><Icon name="spark" />生成图片</Button></footer>
+			<footer className="generation-submit"><Button type="submit" variant="primary" size="primary" title={variant === "hero" ? "生成图片（Ctrl+Enter）" : undefined} aria-label="生成图片" disabled={!canGenerate} aria-describedby={variant !== "hero" && status ? `${id}-service` : undefined} loading={images.submitting}><Icon name={variant === "hero" ? "arrow" : "spark"} /><span className="generation-submit-label">生成图片</span></Button></footer>
 		</form>
 		{drop.dragging && <div className="generation-dropzone" aria-hidden="true"><span className="generation-dropzone-icon"><Icon name="image" size={20} /></span><strong>松开图片，作为参考图</strong><small>PNG、JPG、WebP、GIF · 最大 20 MB</small></div>}
 	</aside>;
@@ -269,8 +271,11 @@ function videoUsage(usage: Record<string, unknown>) {
 /** The breathing placeholder a running generation shows in the answer slot. */
 function PendingImageCard({ job, studio }: { job?: ImageJob; studio: GenerationStudio }) {
 	const label = !job ? "正在提交创作…" : job.status === "saving" ? "正在保存图片…" : "正在生成图片…";
+	// The placeholder takes the requested ratio, so the finished image replaces it in place without a jump.
+	const [width, height] = (job?.size ?? studio.drafts.image.size).split(/[x:]/).map(Number);
+	const ratio = width > 0 && height > 0 ? width / height : 1;
 	return <article className="generation-card generation-pending-card" data-status={job?.status ?? "submitting"} aria-busy="true" aria-label="图片生成中">
-		<div className="generation-pending-preview" aria-hidden="true"><span className="generation-pending-glow" /><span className="generation-pending-icon"><Icon name="imageSpark" size={28} /></span><span className="generation-pending-caption">让想象，慢慢成形</span></div>
+		<div className="generation-pending-preview" aria-hidden="true" style={{ "--pending-ratio": ratio } as CSSProperties}><span className="generation-pending-glow" /><span className="generation-pending-icon"><Icon name="imageSpark" size={28} /></span><span className="generation-pending-caption">让想象，慢慢成形</span></div>
 		<div className="design-result-meta"><strong role="status">{label}</strong>{job && <Button size="compact" variant="ghost" onClick={() => void studio.images.cancel(job.id)}><Icon name="stop" size={12} />停止等待</Button>}</div>
 	</article>;
 }
@@ -338,8 +343,41 @@ export interface GenerationThreadProps {
 /** One prompt bubble on the right, its work on the left, newest at the bottom.
  *  Canvases scope the flow and in-flight jobs join the timeline in place, so the
  *  studio reads as a conversation instead of a management dashboard. */
+/** Long prompts fold to four lines so every turn keeps a similar footprint in the flow. */
+function BubblePrompt({ text }: { text: string }) {
+	const ref = useRef<HTMLParagraphElement>(null);
+	const [expanded, setExpanded] = useState(false);
+	const [overflowing, setOverflowing] = useState(false);
+	useEffect(() => {
+		const node = ref.current;
+		if (!node || expanded) return;
+		const check = () => setOverflowing(node.scrollHeight - node.clientHeight > 2);
+		check();
+		const observer = new ResizeObserver(check);
+		observer.observe(node);
+		return () => observer.disconnect();
+	}, [text, expanded]);
+	return <>
+		<p ref={ref} className="design-bubble-prompt" data-collapsed={!expanded || undefined}>{text}</p>
+		{(overflowing || expanded) && <button type="button" className="design-bubble-toggle" aria-expanded={expanded} onClick={() => setExpanded((value) => !value)}>{expanded ? "收起" : "展开"}</button>}
+	</>;
+}
+
 export function GenerationThread({ studio, kind, canvasId, active, onKind, onImageToVideo, onImageToImage, onSaveToProject, saving }: GenerationThreadProps) {
 	const feed = useRef<HTMLDivElement>(null);
+	// Shown only after the reader scrolls up: the flow otherwise stays pinned to the newest turn.
+	const [away, setAway] = useState(false);
+	// Edges fade only where works actually continue past them, so nothing is ever hard-cut by the composer.
+	const [edges, setEdges] = useState({ top: false, bottom: false });
+	const trackScroll = () => {
+		const node = feed.current;
+		if (!node) return;
+		const below = node.scrollHeight - node.scrollTop - node.clientHeight;
+		setAway(below > 240);
+		const next = { top: node.scrollTop > 2, bottom: below > 2 };
+		setEdges((current) => current.top === next.top && current.bottom === next.bottom ? current : next);
+	};
+	const toLatest = () => feed.current?.scrollTo({ top: feed.current.scrollHeight, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
 	const [selected, setSelected] = useState<GenerationAsset>();
 	const [abandoning, setAbandoning] = useState<VideoJob>();
 	const allCanvases = canvasId === undefined;
@@ -351,34 +389,36 @@ export function GenerationThread({ studio, kind, canvasId, active, onKind, onIma
 	const turns: ThreadTurn[] = [];
 	for (const asset of scoped) {
 		// Keep images available in video mode so its reference action can select a first frame.
-		if ((kind === "image" && asset.kind !== "image") || isRemoved(asset)) continue;
+		if (isRemoved(asset)) continue;
 		turns.push({
 			key: asset.id, kind: asset.kind, status: "done", asset, createdAt: asset.createdAt,
 			prompt: asset.prompt ?? "",
 		});
 	}
-	if (kind === "image") {
+	// One conversation holds both kinds: image and video turns share a single timeline.
+	{
 		const jobs = studio.images.jobs.filter(inScope);
 		const pending = jobs.filter(imageJobPending);
-		for (const job of pending) turns.push({ key: job.id, kind, status: "pending", imageJob: job, prompt: job.prompt, createdAt: job.createdAt });
+		for (const job of pending) turns.push({ key: job.id, kind: "image", status: "pending", imageJob: job, prompt: job.prompt, createdAt: job.createdAt });
 		if (studio.images.submitting && !pending.length) {
 			const draft = studio.drafts.image;
-			turns.push({ key: "image-submitting", kind, status: "submitting", prompt: draft.prompt, createdAt: Date.now() });
+			turns.push({ key: "image-submitting", kind: "image", status: "submitting", prompt: draft.prompt, createdAt: Date.now() });
 		}
 		for (const job of jobs.filter((item) => !imageJobPending(item) && item.status !== "completed" && !item.removed).sort((before, after) => after.createdAt - before.createdAt).slice(0, 6)) {
-			turns.push({ key: job.id, kind, status: "failed", imageJob: job, prompt: job.prompt, createdAt: job.createdAt, label: job.status === "cancelled" ? "已停止等待" : job.status === "interrupted" ? "生成已中断" : "生成失败", message: job.message });
+			turns.push({ key: job.id, kind: "image", status: "failed", imageJob: job, prompt: job.prompt, createdAt: job.createdAt, label: job.status === "cancelled" ? "已停止等待" : job.status === "interrupted" ? "生成已中断" : "生成失败", message: job.message });
 		}
-	} else {
+	}
+	{
 		const jobs = studio.videos.jobs.filter(inScope);
 		// download_failed keeps its download retry, so it stays in the live group.
 		const live = jobs.filter((job) => videoJobActive(job) || job.status === "paused" || job.status === "submission_unknown" || job.status === "download_failed");
-		for (const job of live) turns.push({ key: job.id, kind, status: "pending", videoJob: job, prompt: job.prompt, createdAt: job.createdAt });
+		for (const job of live) turns.push({ key: job.id, kind: "video", status: "pending", videoJob: job, prompt: job.prompt, createdAt: job.createdAt });
 		if (studio.videos.submitting && !live.length) {
 			const draft = studio.drafts.video;
-			turns.push({ key: "video-submitting", kind, status: "submitting", prompt: draft.prompt, createdAt: Date.now() });
+			turns.push({ key: "video-submitting", kind: "video", status: "submitting", prompt: draft.prompt, createdAt: Date.now() });
 		}
 		for (const job of jobs.filter((item) => item.status === "failed" || item.status === "abandoned").sort((before, after) => after.createdAt - before.createdAt).slice(0, 6)) {
-			turns.push({ key: job.id, kind, status: "failed", videoJob: job, prompt: job.prompt, createdAt: job.createdAt, label: videoJobLabels[job.status], message: job.message });
+			turns.push({ key: job.id, kind: "video", status: "failed", videoJob: job, prompt: job.prompt, createdAt: job.createdAt, label: videoJobLabels[job.status], message: job.message });
 		}
 	}
 	turns.sort((before, after) => before.createdAt - after.createdAt);
@@ -390,7 +430,7 @@ export function GenerationThread({ studio, kind, canvasId, active, onKind, onIma
 	useEffect(() => {
 		const node = feed.current;
 		if (!node) return;
-		const frame = requestAnimationFrame(() => { node.scrollTop = node.scrollHeight; });
+		const frame = requestAnimationFrame(() => { node.scrollTop = node.scrollHeight; setAway(false); trackScroll(); });
 		return () => cancelAnimationFrame(frame);
 	}, [signature, kind, canvasId]);
 	useEffect(() => { if (!active) { setSelected(undefined); setAbandoning(undefined); } }, [active]);
@@ -426,12 +466,12 @@ export function GenerationThread({ studio, kind, canvasId, active, onKind, onIma
 	// A dead service or an exhausted concurrency cap has no turn of its own, so
 	// the flow keeps the one banner that explains why nothing is moving.
 	const failure = kind === "image" ? studio.images.error : studio.videos.error;
-	return <section className="design-thread" aria-label={allCanvases ? "全部生成记录" : "画布生成记录"}>
+	return <section className="design-thread" aria-label="对话记录">
 		{failure && <p className="design-thread-error" role="alert"><Icon name="alert" size={14} /><span>{failure}</span><Button size="compact" variant="ghost" onClick={() => void (kind === "image" ? studio.images.refresh() : studio.videos.refresh())}>重新读取状态</Button></p>}
-		<div ref={feed} className="design-thread-feed">
+		<div ref={feed} className="design-thread-feed" onScroll={trackScroll} data-fade-top={edges.top || undefined} data-fade-bottom={edges.bottom || undefined}>
 			{turns.length ? <ol className="design-thread-list">{turns.map((turn) => <li className="design-turn" key={turn.key} data-status={turn.status}>
 				<div className="design-user-message">
-					<div className="design-bubble"><p className="design-bubble-prompt">{turn.prompt || (turn.asset ? `本地导入 · ${turn.asset.name}` : "（未填写提示词）")}</p></div>
+					<div className="design-bubble"><BubblePrompt text={turn.prompt || (turn.asset ? `本地导入 · ${turn.asset.name}` : "（未填写提示词）")} /></div>
 					<div className="design-prompt-actions">
 						{turn.prompt && <Tooltip text="使用提示词"><IconButton size="compact" variant="ghost" aria-label="使用提示词" onClick={() => reuse(turn)}><Icon name="edit" size={14} /></IconButton></Tooltip>}
 						{turn.prompt && <CopyButton text={turn.prompt} label="复制提示词" iconOnly />}
@@ -478,6 +518,7 @@ export function GenerationThread({ studio, kind, canvasId, active, onKind, onIma
 				<Button size="compact" variant="ghost" disabled={!!studio.images.mutatingId} onClick={() => { void studio.setAssetRemoved(selected, true); setSelected(undefined); }}><Icon name="archive" size={14} />从作品流移除</Button>
 			</footer>
 		</Dialog>}
+		{away && <Tooltip text="回到最新"><IconButton size="compact" variant="ghost" className="design-thread-latest" aria-label="回到最新" onClick={toLatest}><Icon name="down" size={16} /></IconButton></Tooltip>}
 		{abandoning && <ConfirmDialog title="结束本地任务跟踪？" description="请先核对服务端记录。此操作不会取消远端任务，服务端可能继续生成并计费；结束后可提交新视频。" confirmText="已核对，结束跟踪" onClose={() => setAbandoning(undefined)} onConfirm={() => { void studio.videos.control(abandoning.id, "abandon"); }} />}
 	</section>;
 }

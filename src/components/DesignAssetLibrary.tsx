@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useEffect, useState, type ReactNode } from "react";
 import { assetCanvasId, canvasLabel } from "../workbench/designCanvases";
 import type { GenerationAsset, GenerationKind, GenerationStudio } from "../workbench/useGenerationStudio";
 import { MediaView } from "./GenerationWorkspace";
@@ -61,13 +61,13 @@ function AssetPreview({ asset, studio, onClose, onUseImage, onUseVideo }: {
 				{asset.prompt && <p>{asset.prompt}</p>}
 				{asset.job && <small>{asset.job.serviceName} · {asset.job.modelId} · {(asset.job.actualSize ?? asset.job.size).replace("x", " × ")} · {new Date(asset.createdAt).toLocaleString()}</small>}
 				{asset.videoJob && <small>{asset.videoJob.serviceName} · {asset.videoJob.modelId} · {asset.videoJob.duration} 秒 · {new Date(asset.createdAt).toLocaleString()}</small>}
-				<small>画布：{canvasLabel(studio.canvases, assetCanvasId(asset, studio.canvases))}</small>
+				<small>对话：{canvasLabel(studio.canvases, assetCanvasId(asset, studio.canvases))}</small>
 			</div>
 			<footer>
 				{isRemoved(asset) && <Button size="compact" onClick={() => { onClose(); void studio.setAssetRemoved(asset, false); }}><Icon name="refresh" size={14} />恢复到作品流</Button>}
 				{asset.kind === "image" && <><Button size="compact" onClick={() => { onClose(); onUseImage(asset); }}><Icon name="imageSpark" />用作参考图</Button>
 					<Button size="compact" onClick={() => { onClose(); onUseVideo(asset); }}><Icon name="video" />用作首帧</Button></>}
-				<Button size="compact" variant="ghost" onClick={() => setMoving(asset)}><Icon name="layers" size={14} />移到画布…</Button>
+				<Button size="compact" variant="ghost" onClick={() => setMoving(asset)}><Icon name="message" size={14} />移到对话…</Button>
 			</footer>
 		</Dialog>
 		{moving && <MoveAssetDialog asset={moving} canvases={studio.canvases} onMove={(target) => { void studio.moveAsset(moving, target); setMoving(undefined); }} onClose={() => setMoving(undefined)} />}
@@ -77,7 +77,32 @@ function AssetPreview({ asset, studio, onClose, onUseImage, onUseVideo }: {
 /** The visual timeline shared by the asset library and the history drawer: date
  *  groups of bare thumbnails, with a duration badge for video and an optional
  *  detail affordance. */
-function TimelineGrid({ assets, onPick, onPreview, selectedId, emptyTitle, emptyText }: {
+/** Grid masonry: each tile spans as many small row tracks as its rendered height needs,
+ *  so tiles flow left to right like a normal grid while keeping their natural ratio. */
+function TimelineRow({ masonry, children }: { masonry?: boolean; children: ReactNode }) {
+	const grid = useRef<HTMLDivElement>(null);
+	useEffect(() => {
+		const node = grid.current;
+		if (!masonry || !node) return;
+		const fit = (item: HTMLElement) => {
+			const style = getComputedStyle(node);
+			const unit = parseFloat(style.gridAutoRows) || 4;
+			const gap = parseFloat(style.columnGap) || 12;
+			item.style.gridRowEnd = `span ${Math.max(1, Math.ceil((item.getBoundingClientRect().height + gap) / unit))}`;
+		};
+		const sizes = new ResizeObserver((entries) => { for (const entry of entries) fit(entry.target as HTMLElement); });
+		const watch = () => { sizes.disconnect(); for (const item of Array.from(node.children) as HTMLElement[]) sizes.observe(item); };
+		watch();
+		const items = new MutationObserver(watch);
+		items.observe(node, { childList: true });
+		return () => { sizes.disconnect(); items.disconnect(); };
+	}, [masonry]);
+	return <div ref={grid} className="asset-timeline-grid" data-masonry={masonry || undefined}>{children}</div>;
+}
+
+function TimelineGrid({ assets, onPick, onPreview, selectedId, emptyTitle, emptyText, masonry }: {
+	/** Row-order masonry: works keep their own shape and still read left to right. */
+	masonry?: boolean;
 	assets: GenerationAsset[];
 	onPick: (asset: GenerationAsset) => void;
 	onPreview?: (asset: GenerationAsset) => void;
@@ -90,34 +115,23 @@ function TimelineGrid({ assets, onPick, onPreview, selectedId, emptyTitle, empty
 	return <div className="asset-timeline">
 		{groups.map(([label, items]) => <section className="asset-timeline-group" key={label}>
 			<h3 className="asset-timeline-date">{label}<span>{items.length}</span></h3>
-			<div className="asset-timeline-grid">
+			<TimelineRow masonry={masonry}>
 				{items.map((asset) => <div className="asset-thumb" key={asset.id} data-kind={asset.kind} data-selected={selectedId === asset.id || undefined}>
 					<button type="button" className="asset-thumb-main" aria-label={`预览作品：${asset.name}`} onClick={() => onPick(asset)}><MediaView asset={asset} />{asset.kind === "video" && <span className="asset-thumb-duration">{durationLabel(asset)}</span>}</button>
 					{onPreview && <button type="button" className="asset-thumb-preview" aria-label={`查看详情：${asset.name}`} onClick={() => onPreview(asset)}><Icon name="eye" size={14} /></button>}
 				</div>)}
-			</div>
+			</TimelineRow>
 		</section>)}
 	</div>;
 }
 
-function counts(assets: GenerationAsset[]) {
-	const live = assets.filter((asset) => !isRemoved(asset));
-	return { live: live.length, imported: live.filter((asset) => asset.imported).length };
-}
-
 /** The full-width asset library: a header, a light filter, then the timeline. */
-function AssetBoard({ eyebrow, title, ariaLabel, description, note, emptyTitle, emptyText, assets, onCreate, onBack, createLabel, studio, onImageToImage, onImageToVideo }: {
-	eyebrow: string;
+function AssetBoard({ title, ariaLabel, emptyTitle, emptyText, assets, studio, onImageToImage, onImageToVideo }: {
 	title: string;
 	ariaLabel: string;
-	description: string;
-	note: string;
 	emptyTitle: string;
 	emptyText: string;
 	assets: GenerationAsset[];
-	onCreate: () => void;
-	onBack: () => void;
-	createLabel: string;
 	studio: GenerationStudio;
 	onImageToImage: (asset: GenerationAsset) => void;
 	onImageToVideo: (asset: GenerationAsset) => void;
@@ -134,24 +148,17 @@ function AssetBoard({ eyebrow, title, ariaLabel, description, note, emptyTitle, 
 		{ value: "all", label: `全部 ${live.length}` },
 		{ value: "image", label: `图片 ${images}` },
 		{ value: "video", label: `视频 ${videos}` },
-		...(removed.length ? [{ value: "removed" as const, label: `已移除 ${removed.length}` }] : []),
 	];
 	return <section className="asset-library design-canvas" aria-label={ariaLabel}>
 		<div className="asset-library-scroll">
-			<div className="generation-gallery-heading">
-				<div>
-					<span className="generation-eyebrow">{eyebrow}</span>
-					<h2>{title}<span>{live.length.toString().padStart(2, "0")}</span></h2>
-					<p>{description}</p>
-				</div>
-				<div className="generation-gallery-heading-actions">
-					<Button className="generation-back" size="compact" variant="ghost" onClick={onBack}><Icon name="arrowLeft" size={14} />返回创作</Button>
-					<SegmentedControl label="画布筛选" value={filter} onChange={setFilter} options={filters} />
-					<Button size="compact" onClick={onCreate}><Icon name="spark" size={14} />{createLabel}</Button>
-				</div>
+			{/* One quiet row: the title, the kind filter, and the bin set apart at the end. */}
+			<div className="generation-gallery-heading asset-library-heading">
+				<h2>{title}</h2>
+				<SegmentedControl label="作品筛选" value={filter} onChange={setFilter} options={filters} />
+				{removed.length > 0 && <Button size="compact" variant="ghost" className="asset-library-removed" aria-pressed={filter === "removed"} onClick={() => setFilter(filter === "removed" ? "all" : "removed")}><Icon name="archive" size={14} />已移除 {removed.length}</Button>}
 			</div>
-			<p className="design-canvas-note">{note}</p>
 			<TimelineGrid
+				masonry
 				assets={sorted}
 				onPick={setSelected}
 				selectedId={selected?.id}
@@ -164,26 +171,18 @@ function AssetBoard({ eyebrow, title, ariaLabel, description, note, emptyTitle, 
 }
 
 /** Every generated or imported work, across canvases. */
-export function DesignAssetLibrary({ studio, assets, onCreate, onImageToImage, onImageToVideo }: {
+export function DesignAssetLibrary({ studio, assets, onImageToImage, onImageToVideo }: {
 	studio: GenerationStudio;
 	assets: GenerationAsset[];
-	onCreate: () => void;
 	onImageToImage: (asset: GenerationAsset) => void;
 	onImageToVideo: (asset: GenerationAsset) => void;
 }) {
-	const { live, imported } = counts(assets);
 	return <AssetBoard
 		ariaLabel="资产库"
-		eyebrow="ASSETS"
 		title="资产库"
-		description={`${live} 件素材 · 导入 ${imported} 件 · 跨画布共用`}
-		note="按时间回溯每件作品，点击即可预览并复用为参考图、首帧或移到画布。"
 		emptyTitle="还没有素材"
 		emptyText="生成或导入作品后，会在这里按日期集中展示。"
 		assets={assets}
-		onCreate={onCreate}
-		onBack={studio.openGallery}
-		createLabel="去创作"
 		studio={studio}
 		onImageToImage={onImageToImage}
 		onImageToVideo={onImageToVideo}

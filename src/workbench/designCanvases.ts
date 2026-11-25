@@ -17,7 +17,7 @@ export interface DesignCanvasState {
 export const designCanvasKey = "skiff.design.canvases.v1";
 /** Empty id is the virtual "ungrouped" canvas; it never appears in the index. */
 export const ungroupedCanvasId = "";
-export const maxDesignCanvases = 50;
+export const maxDesignCanvases = 500;
 export const maxCanvasNameLength = 40;
 
 const cleanName = (name: string) => name.trim().slice(0, maxCanvasNameLength);
@@ -47,7 +47,7 @@ export function readDesignCanvases(storage: Pick<Storage, "getItem">): DesignCan
 }
 
 export function addDesignCanvas(state: DesignCanvasState, name: string, id = crypto.randomUUID()): DesignCanvasState {
-	const canvas: DesignCanvas = { id, name: cleanName(name) || "未命名画布", createdAt: Date.now(), updatedAt: Date.now() };
+	const canvas: DesignCanvas = { id, name: cleanName(name) || "新对话", createdAt: Date.now(), updatedAt: Date.now() };
 	return { ...state, canvases: [...state.canvases, canvas].slice(0, maxDesignCanvases), activeId: canvas.id };
 }
 
@@ -68,5 +68,18 @@ export function assetCanvasId(asset: { canvasId?: string }, canvases: readonly D
 }
 
 export function canvasLabel(canvases: readonly DesignCanvas[], id: string): string {
-	return canvases.find((canvas) => canvas.id === id)?.name ?? "未分组";
+	return canvases.find((canvas) => canvas.id === id)?.name ?? "早期作品";
+}
+
+/** Conversations name themselves after their first prompt: the opening clause, capped short. */
+export function conversationName(prompt: string): string {
+	const text = prompt.replace(/\s+/g, " ").trim();
+	const clause = text.split(/[，。,.!！？?；;：:\n]/)[0]?.trim() ?? "";
+	const base = Array.from(clause.length >= 4 ? clause : text);
+	return base.length > 16 ? `${base.slice(0, 16).join("")}…` : base.join("") || "新对话";
+}
+
+/** A new turn moves its conversation to the top of the list. */
+export function touchDesignCanvas(state: DesignCanvasState, id: string): DesignCanvasState {
+	return { ...state, canvases: state.canvases.map((canvas) => canvas.id === id ? { ...canvas, updatedAt: Date.now() } : canvas) };
 }

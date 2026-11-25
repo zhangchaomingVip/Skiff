@@ -1,4 +1,18 @@
-import { memo, useRef, useState, type ReactNode } from "react";
+import { memo, useEffect, useRef, useState, type ReactNode } from "react";
+
+const narrowQuery = "(max-width: 760px)";
+/** Tracks the drawer breakpoint live, so resizing the window re-decides how the sidebar presents. */
+function useNarrowViewport() {
+	const [narrow, setNarrow] = useState(() => window.matchMedia(narrowQuery).matches);
+	useEffect(() => {
+		const query = window.matchMedia(narrowQuery);
+		const update = () => setNarrow(query.matches);
+		update();
+		query.addEventListener("change", update);
+		return () => query.removeEventListener("change", update);
+	}, []);
+	return narrow;
+}
 import type { Project } from "../chat/workspace";
 import type { GenerationAsset, GenerationKind, GenerationStudio } from "../workbench/useGenerationStudio";
 import { DesignAssetLibrary, HistoryDrawer } from "./DesignAssetLibrary";
@@ -23,16 +37,17 @@ export const DesignWorkspace = memo(function DesignWorkspace({ active, kind, stu
 	const [historyOpen, setHistoryOpen] = useState(false);
 	const host = useRef<HTMLDivElement>(null);
 	const saveLock = useRef(false);
+	const narrow = useNarrowViewport();
+	// A success note clears itself; an error stays until it is dismissed or replaced.
+	useEffect(() => {
+		if (!saved) return;
+		const timer = window.setTimeout(() => setSaved(undefined), 5000);
+		return () => window.clearTimeout(timer);
+	}, [saved]);
+	const dismissNotice = () => { setSaved(undefined); setSaveError(undefined); };
 	const home = !studio.canvasView && !studio.assetView;
-	const closeSidebar = () => { if (window.innerWidth <= 760) onCloseSidebar(); };
-	/** Selecting a canvas should never land on an empty view when that canvas
-	 *  already holds works: adopt the other creation mode if it is the only one. */
-	const openCanvas = (id: string) => {
-		const canvasAssets = studio.assets.filter((asset) => assetCanvasId(asset, studio.canvases) === id);
-		if (canvasAssets.length && !canvasAssets.some((asset) => asset.kind === kind)) onKind(canvasAssets[0].kind);
-		studio.openCanvas(id);
-		closeSidebar();
-	};
+	const closeSidebar = () => { if (narrow) onCloseSidebar(); };
+	const openCanvas = (id: string) => { studio.openCanvas(id); closeSidebar(); };
 	/** The composer owns focus across the whole studio: reusing a work never
 	 *  scrolls away, it fills the dock that waits at the foot of the flow. */
 	const focusPrompt = () => requestAnimationFrame(() => {
@@ -44,12 +59,6 @@ export const DesignWorkspace = memo(function DesignWorkspace({ active, kind, stu
 	 *  media lands in the composer slot and the mode follows the chosen slot. */
 	const fillImage = (asset: GenerationAsset) => { studio.useImageForImage(asset); onKind("image"); focusPrompt(); };
 	const fillVideo = (asset: GenerationAsset) => { studio.useImageForVideo(asset); onKind("video"); focusPrompt(); };
-	/** Every "去创作" entry point lands on the launcher with a clean reference,
-	 *  so the dock stays the single place where a draft begins. */
-	const create = (next: GenerationKind) => {
-		onKind(next); studio.openGallery(); studio.removeImageReference();
-		closeSidebar(); focusPrompt();
-	};
 	const saveToProject = async (asset: Parameters<typeof studio.saveToProject>[0]) => {
 		if (!project || saveLock.current) return;
 		saveLock.current = true; setSaving(true); setSaveError(undefined); setSaved(undefined);
@@ -59,31 +68,30 @@ export const DesignWorkspace = memo(function DesignWorkspace({ active, kind, stu
 	};
 	/** Reusing a work as a reference keeps the current route: the dock receives
 	 *  the image, and the draft never travels between pages. */
-	const imageToImage = (asset: GenerationAsset) => { studio.useImageForImage(asset); onKind("image"); if (studio.assetView) studio.openCanvas(studio.canvasId); focusPrompt(); closeSidebar(); };
-	const imageToVideo = (asset: GenerationAsset) => { studio.useImageForVideo(asset); onKind("video"); if (studio.assetView) studio.openCanvas(studio.canvasId); focusPrompt(); closeSidebar(); };
+	const imageToImage = (asset: GenerationAsset) => { studio.useImageForImage(asset); onKind("image"); if (studio.assetView) studio.openGallery(); focusPrompt(); closeSidebar(); };
+	const imageToVideo = (asset: GenerationAsset) => { studio.useImageForVideo(asset); onKind("video"); if (studio.assetView) studio.openGallery(); focusPrompt(); closeSidebar(); };
 	return <div className="workbench-shell design-workspace" hidden={!active} aria-label="Design 工作区">
-		{sidebarOpen && (active || window.innerWidth > 760) && <SidebarPresentation active={active} label="Design 导航" activityBar={activityBar} onClose={onCloseSidebar}><DesignSidebar studio={studio} onOpenCanvas={openCanvas} onCollapse={onCloseSidebar} /></SidebarPresentation>}
+		{sidebarOpen && (active || !narrow) && <SidebarPresentation active={active} label="Design 导航" activityBar={activityBar} onClose={onCloseSidebar}><DesignSidebar studio={studio} onOpenCanvas={openCanvas} onCollapse={onCloseSidebar} /></SidebarPresentation>}
 		{sidebarResize}
 		<main className="design-main" ref={host}>
 			<div className="design-results">
-				{(saved || saveError) && <div className="design-asset-notice" role={saveError ? "alert" : "status"}>{saveError ?? `已保存到 ${saved?.project.name}：${saved?.path}`}{saved && <Button size="compact" variant="ghost" onClick={() => onOpenCodeFile(saved.project, saved.path)}>在 Code 中查看</Button>}</div>}
+				{(saved || saveError) && <div className="design-asset-notice" role={saveError ? "alert" : "status"}>{saveError ?? `已保存到 ${saved?.project.name}：${saved?.path}`}{saved && <Button size="compact" variant="ghost" onClick={() => onOpenCodeFile(saved.project, saved.path)}>在 Code 中查看</Button>}<IconButton size="compact" variant="ghost" aria-label="关闭提示" onClick={dismissNotice}><Icon name="close" size={14} /></IconButton></div>}
 				{studio.assetView
-					? <DesignAssetLibrary studio={studio} assets={studio.assets} onCreate={() => create(kind)} onImageToImage={imageToImage} onImageToVideo={imageToVideo} />
-					: <section className={`design-stage${studio.canvasView ? " design-canvas-scene" : ""}`} aria-label="生图工作台">
+					? <DesignAssetLibrary studio={studio} assets={studio.assets} onImageToImage={imageToImage} onImageToVideo={imageToVideo} />
+					: <section className={`design-stage${studio.canvasView ? " design-canvas-scene" : ""}${home ? " design-home" : ""}`} aria-label={home ? "新对话" : "对话"}>
 						{!sidebarOpen && <div className="design-stage-expand"><Tooltip text="展开导航"><IconButton size="compact" variant="ghost" aria-label="展开导航" onClick={onOpenSidebar}><Icon name="panel" size={16} /></IconButton></Tooltip></div>}
-						<Tooltip text="历史垫图"><IconButton size="compact" variant="ghost" className="design-history-trigger" aria-label="历史垫图" aria-expanded={historyOpen} onClick={() => setHistoryOpen((value) => !value)}><Icon name="layers" size={16} /></IconButton></Tooltip>
-						<GenerationThread
+						{home ? <h1 className="design-home-title">今天想创作什么？</h1> : <GenerationThread
 							studio={studio}
 							kind={kind}
-							canvasId={home ? undefined : studio.canvasId}
+							canvasId={studio.canvasId}
 							active={active}
 							onKind={onKind}
 							onImageToImage={imageToImage}
 							onImageToVideo={imageToVideo}
 							onSaveToProject={(asset) => void saveToProject(asset)}
 							saving={saving}
-						/>
-						<div className="design-dock"><StudioPromptHero kind={kind} studio={studio} onKind={onKind} onConfigure={() => onConfigure(kind)} /></div>
+						/>}
+						<div className="design-dock"><StudioPromptHero kind={kind} studio={studio} onConfigure={() => onConfigure(kind)} onOpenHistory={() => setHistoryOpen(true)} /></div>
 					</section>}
 			</div>
 			{historyOpen && !studio.assetView && <HistoryDrawer studio={studio} assets={studio.assets} kind={kind} onFillImage={fillImage} onFillVideo={fillVideo} onClose={() => setHistoryOpen(false)} />}

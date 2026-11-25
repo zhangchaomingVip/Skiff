@@ -3,7 +3,7 @@ import { useImageGeneration } from "./useImageGeneration";
 import { useVideoGeneration } from "./useVideoGeneration";
 import { videoGenerationNative, type VideoJob } from "./videoGeneration";
 import { imageAssetUrl, imageGenerationNative, sizeRatio, type ImageJob } from "./imageGeneration";
-import { addDesignCanvas, designCanvasKey, readDesignCanvases, removeDesignCanvas, renameDesignCanvas, ungroupedCanvasId, type DesignCanvasState } from "./designCanvases";
+import { addDesignCanvas, conversationName, touchDesignCanvas, designCanvasKey, readDesignCanvases, removeDesignCanvas, renameDesignCanvas, ungroupedCanvasId, type DesignCanvasState } from "./designCanvases";
 import { designAssetsNative, fileToDataUrl, type DesignAssetRecord } from "./designAssets";
 import { invoke } from "@tauri-apps/api/core";
 import type { Project } from "../chat/workspace";
@@ -93,7 +93,7 @@ export function useGenerationStudio(project?: Project) {
 	}, [videos.config]);
 	// Canvases only scope the gallery: the studio still submits through the same
 	// queues, and deleting a canvas never touches the generated files.
-	const [canvasState, setCanvasState] = useState<DesignCanvasState>(() => readDesignCanvases(localStorage));
+	const [canvasState, setCanvasState] = useState<DesignCanvasState>(() => ({ ...readDesignCanvases(localStorage), activeId: ungroupedCanvasId }));
 	const [canvasView, setCanvasView] = useState(false);
 	const [assetView, setAssetView] = useState(false);
 	useEffect(() => { try { localStorage.setItem(designCanvasKey, JSON.stringify(canvasState)); } catch { /* Canvases stay usable for this run. */ } }, [canvasState]);
@@ -102,10 +102,23 @@ export function useGenerationStudio(project?: Project) {
 	const selectCanvas = (id: string) => setCanvasState((current) => ({ ...current, activeId: current.canvases.some((canvas) => canvas.id === id) ? id : ungroupedCanvasId }));
 	const openCanvas = (id: string) => { selectCanvas(id); setCanvasView(true); setAssetView(false); };
 	const openAssets = useCallback(() => { setCanvasView(false); setAssetView(true); }, []);
-	const openGallery = useCallback(() => { setCanvasView(false); setAssetView(false); }, []);
+	// Home is a blank launcher: sending from it starts a new conversation (see prepareSubmitCanvas).
+	const openGallery = useCallback(() => { setCanvasView(false); setAssetView(false); setCanvasState((current) => current.activeId === ungroupedCanvasId ? current : { ...current, activeId: ungroupedCanvasId }); }, []);
 	const createCanvas = (name: string) => {
 		const id = crypto.randomUUID();
 		setCanvasState((current) => addDesignCanvas(current, name, id));
+		return id;
+	};
+	/** Where a submit lands: the open conversation, or a new one named after the prompt
+	 *  when sending from home. Sending from home also opens that conversation. */
+	const prepareSubmitCanvas = (prompt: string) => {
+		if (canvasView && !assetView) {
+			if (canvasId) setCanvasState((current) => touchDesignCanvas(current, canvasId));
+			return canvasId;
+		}
+		const id = createCanvas(conversationName(prompt));
+		setCanvasView(true);
+		setAssetView(false);
 		return id;
 	};
 	const renameCanvas = (id: string, name: string) => setCanvasState((current) => renameDesignCanvas(current, id, name));
@@ -202,7 +215,7 @@ export function useGenerationStudio(project?: Project) {
 		const path = await invoke<string>("save_design_asset_to_project", { root: target.path, source, name: asset.name });
 		invalidateProjectFiles(target.id); void projectGitCache.refreshChanged(target.path); return path;
 	};
-	return { project, drafts, updateDraft, assets: [...generatedVideos, ...generated, ...importedAssets].map((asset) => ({ ...asset, favorite: favorites.has(favoriteKey(asset)) })), importAssets, reference, uploadReference, removeReference: () => replaceReference(), useImageForVideo, referenceError, clearReferenceError: () => setReferenceError(undefined), imageReference, uploadImageReference, removeImageReference: () => replaceImageReference(), useImageForImage, imageReferenceError, clearImageReferenceError: () => setImageReferenceError(undefined), errors, clearError, images, videos, setAssetRemoved, setAssetFavorite, moveAsset, saveToProject, canvases, canvasId, canvasView, assetView, selectCanvas, openCanvas, openAssets, openGallery, createCanvas, renameCanvas, deleteCanvas, refreshImported };
+	return { project, drafts, updateDraft, assets: [...generatedVideos, ...generated, ...importedAssets].map((asset) => ({ ...asset, favorite: favorites.has(favoriteKey(asset)) })), importAssets, reference, uploadReference, removeReference: () => replaceReference(), useImageForVideo, referenceError, clearReferenceError: () => setReferenceError(undefined), imageReference, uploadImageReference, removeImageReference: () => replaceImageReference(), useImageForImage, imageReferenceError, clearImageReferenceError: () => setImageReferenceError(undefined), errors, clearError, images, videos, setAssetRemoved, setAssetFavorite, moveAsset, saveToProject, canvases, canvasId, canvasView, assetView, selectCanvas, openCanvas, openAssets, openGallery, createCanvas, prepareSubmitCanvas, renameCanvas, deleteCanvas, refreshImported };
 }
 
 export type GenerationStudio = ReturnType<typeof useGenerationStudio>;

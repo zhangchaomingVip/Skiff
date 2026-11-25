@@ -64,6 +64,8 @@
 	/* Ratio and resolution live in one chip that opens this panel, so the composer
 	   never carries two always-visible rows of size options. */
 	.generation-size-trigger .generation-ratio-glyph { width: var(--space-3); height: var(--space-3); }
+	/* In the launcher toolbar the ratio reads as text; the outline glyph sat too close to the "+" and looked like a second button. The menu keeps its shapes. */
+	.design-composer[data-variant=hero] .generation-size-trigger .generation-ratio-glyph { display: none; }
 	.ui-popover.generation-size-menu { width: min(320px, calc(100vw - 24px)); padding: var(--space-3); border-color: var(--border); border-radius: var(--radius-xl); box-shadow: var(--shadow-elevation-3); }
 	.generation-size-ratios { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-1); margin-bottom: var(--space-3); }
 	.generation-size-resolutions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-1); }
@@ -298,6 +300,17 @@
 	.design-composer .generation-settings .generation-picker { flex: 0 1 auto; max-width: 200px; }
 	.design-composer .generation-settings .generation-picker-trigger { width: auto; gap: var(--space-1); height: var(--control-compact); padding: 0 var(--space-2-5); background: var(--subtle); font-size: var(--font-size-xs); }
 	.design-composer .generation-settings .generation-service-control { gap: var(--space-0-5); }
+	.generation-picker-prefix { flex: none; color: var(--muted); }
+	.generation-picker-group { margin: 0; padding: var(--space-2) var(--space-2-5) var(--space-0-5); color: var(--muted); font-size: var(--font-size-xs); }
+	.generation-picker-group:not(:first-child) { margin-top: var(--space-1); border-top: 1px solid var(--border); }
+	.design-composer .generation-field-model { display: flex; align-items: center; gap: var(--space-1); }
+	.design-composer .generation-configure-link { color: var(--accent); }
+	.design-composer .generation-settings > .generation-reference-add { order: 1; }
+	.design-composer .generation-settings .generation-reference-add-trigger { justify-content: center; width: var(--control-compact); padding: 0; }
+	/* Toolbar chips read as quiet text until hovered or open; only the send button stays solid. */
+	.design-composer[data-variant=hero] .generation-settings .generation-picker-trigger { border-color: transparent; background: transparent; color: var(--secondary); }
+	.design-composer[data-variant=hero] .generation-settings .generation-picker-trigger:hover:not(:disabled), .design-composer[data-variant=hero] .generation-settings .generation-picker-trigger[aria-expanded=true] { background: var(--hover); color: var(--text); }
+	.generation-picker-prefix::after { content: "·"; margin-inline: var(--space-1) 0; opacity: .6; }
 	.design-composer .generation-settings .generation-service-control .ui-icon-button { width: var(--control-compact); height: var(--control-compact); color: var(--muted); }
 	.design-composer .generation-settings .generation-field-hint { display: none; }
 	/* The panel's four-column ratio grid is sized for many options; in the flat
@@ -321,11 +334,16 @@
 	/* Hero variant: the prompt owns the full first row, so the card keeps one
 	   wide input and pushes every control into a grouped bottom toolbar. It sits
 	   in the dock now, so the input stays short like a chat composer. */
-	.design-composer[data-variant=hero] { padding: var(--space-2) var(--space-3) var(--space-3); border-radius: var(--radius-2xl); box-shadow: var(--shadow-elevation-2); }
-	.design-composer[data-variant=hero] .generation-field-prompt { padding-bottom: var(--space-1); border-bottom: 1px solid color-mix(in srgb, var(--border) 64%, transparent); }
-	.design-composer[data-variant=hero] .generation-controls .generation-field-prompt .ui-textarea { height: 56px; min-height: 56px; padding: var(--space-2) var(--space-6) var(--space-2) var(--space-2); font-size: var(--font-size-md); }
+	.design-composer[data-variant=hero] { padding: var(--space-2) var(--space-3) var(--space-2); border-radius: var(--radius-2xl); box-shadow: var(--shadow-elevation-2); }
+	.design-composer[data-variant=hero] .generation-field-prompt { padding-bottom: 0; border-bottom: 0; }
+	/* One line at rest: the box is exactly its text plus a little air, and grows from there. */
+	.design-composer[data-variant=hero] .generation-controls .generation-field-prompt .ui-textarea { height: auto; min-height: 0; max-height: 168px; overflow-y: auto; resize: none; padding: var(--space-2) var(--space-6) var(--space-1) var(--space-2); font-size: var(--font-size-md); line-height: var(--line-height-normal, 1.5); }
 	.design-composer[data-variant=hero] .generation-settings > .generation-field.generation-ratios { display: none; }
 	.design-composer[data-variant=hero] .generation-submit > .ui-button { height: var(--control-primary); padding-inline: var(--space-4); }
+	/* Hero submit sits on the toolbar row as a round send button, so the composer stays two rows tall. */
+	.design-composer[data-variant=hero] .generation-submit { margin-left: auto; }
+	.design-composer[data-variant=hero] .generation-submit > .ui-button { width: var(--control-primary); min-width: var(--control-primary); padding-inline: 0; border-radius: var(--radius-full); }
+	.design-composer[data-variant=hero] .generation-submit-label { position: absolute; width: 1px; height: 1px; margin: 0; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 	.design-composer[data-variant=hero] .generation-dropzone { border-radius: var(--radius-2xl); }
 	.design-composer:has(.generation-dropzone) { border-color: var(--accent); box-shadow: var(--shadow-elevation-2), 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent); }
 	/* The video duration folds ratio and seconds into the one chip that is left. */
@@ -366,7 +384,6 @@
 	.asset-thumb:hover .asset-thumb-preview, .asset-thumb:focus-within .asset-thumb-preview { opacity: 1; }
 	.asset-thumb-preview:hover { background: var(--overlay-image); }
 	/* The history drawer floats over the flow and never rewrites the route. */
-	.design-history-trigger { position: absolute; top: var(--space-2); right: var(--space-2); z-index: 3; color: var(--secondary); }
 	.design-history-drawer { position: absolute; top: 0; right: 0; bottom: 0; z-index: 5; display: flex; flex-direction: column; width: min(380px, calc(100vw - 48px)); border-left: 1px solid var(--sidebar-border); background: var(--sidebar-backdrop); box-shadow: var(--shadow-elevation-3); animation: design-history-reveal var(--transition-base) var(--easing-default) both; }
 	.design-history-drawer > header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-2); padding: var(--space-4); border-bottom: 1px solid var(--sidebar-border); }
 	.design-history-drawer > header h2 { margin: var(--space-1) 0 0; color: var(--text); font-size: var(--font-size-md); font-weight: var(--font-weight-semibold); }
@@ -389,4 +406,94 @@
 		color: var(--secondary);
 		box-shadow: none;
 	}
+	/* The send button waits in a neutral grey until there is a prompt to send. */
+	.design-composer[data-variant=hero] .generation-submit > .ui-button[data-variant=primary]:disabled { border-color: var(--border); background: var(--subtle); color: var(--muted); box-shadow: none; opacity: 1; cursor: not-allowed; }
+}
+
+/* Conversation flow overrides, kept together and last so they win within the layer. */
+@layer components {
+	/* Rhythm does the grouping: a prompt hugs its image, separate turns breathe apart. */
+	.design-thread-list { gap: var(--space-12); }
+	.design-turn { gap: var(--space-3); }
+	/* Prompt actions float beside the bubble instead of reserving a row under it. */
+	.design-user-message { position: relative; }
+	.design-prompt-actions { position: absolute; top: 50%; right: 100%; z-index: 1; min-height: 0; margin: 0 var(--space-2) 0 0; white-space: nowrap; transform: translateY(-50%); }
+	/* Results use the full flow width, so a landscape image lines up with the bubble and the composer. */
+	.design-result { width: 100%; }
+	/* Pure artwork: no frame, no tint, no hover ring. The "···" button is the only hover cue. */
+	.design-result-card.generation-card, .design-result-card.generation-card:hover { border: 0; background: transparent; box-shadow: none; }
+	.design-result-card .generation-card-preview { background: transparent; }
+	/* Jump back to the newest turn, only while reading older ones. */
+	.design-thread { position: relative; }
+	.design-thread-latest.ui-icon-button { position: absolute; right: var(--space-6); bottom: var(--space-3); z-index: 3; width: var(--control-primary); height: var(--control-primary); border: 1px solid var(--border); border-radius: var(--radius-full); background: var(--surface); color: var(--secondary); box-shadow: var(--shadow-elevation-2); animation: design-latest-reveal var(--transition-base) var(--easing-default) both; }
+	.design-thread-latest.ui-icon-button:hover { background: var(--hover); color: var(--text); }
+	@keyframes design-latest-reveal { from { opacity: 0; transform: translateY(var(--space-2)); } to { opacity: 1; transform: none; } }
+	/* The prompt sizes to its own text: one line at rest, no reserved second line. */
+	.design-composer[data-variant=hero] .generation-controls .generation-field-prompt .ui-textarea { field-sizing: content; min-height: calc(1lh + var(--space-2) + var(--space-1)); }
+	.design-composer[data-variant=hero] .generation-form { row-gap: var(--space-1); }
+	@media (prefers-reduced-motion: reduce) { .design-thread-latest.ui-icon-button { animation: none; } }
+}
+
+/* Result column: works size to themselves, never to the column. */
+@layer components {
+	/* The full-width column is only an alignment track; every card inside hugs its own media. */
+	.design-result > .generation-card { align-self: flex-start; width: fit-content; max-width: 100%; }
+	/* The shared image-card cap (48vh) clipped portrait works under the taller flow cap: the image alone sets the height here. */
+	.design-result-card.generation-card[data-kind] .generation-card-preview { max-height: none; background: transparent; }
+	.design-result-card.generation-card[data-kind] .generation-card-preview > img { max-height: min(560px, 56vh); object-fit: contain; }
+	/* Pending: the same height and ratio as the work it becomes, so nothing is drawn beside it. */
+	.design-result > .generation-pending-card { border: 0; background: transparent; box-shadow: none; }
+	.design-result > .generation-pending-card .generation-pending-preview { width: min(100%, calc(min(560px, 56vh) * var(--pending-ratio, 1))); max-height: none; aspect-ratio: var(--pending-ratio, 1); border-radius: var(--radius-2xl); }
+	.design-result > .generation-pending-card .design-result-meta { padding-inline: var(--space-1); }
+}
+
+/* Round 7: menus, prompts and the asset library. */
+@layer components {
+	/* Prompt actions sit tight beside the bubble as one group. */
+	.design-prompt-actions { gap: var(--space-0-5); margin-right: var(--space-1); }
+	.design-prompt-actions time { margin-left: var(--space-1); }
+	/* Long prompts fold to four lines. */
+	.design-bubble-prompt[data-collapsed] { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 4; }
+	.design-bubble-toggle { margin-top: var(--space-1); padding: 0; border: 0; background: transparent; color: var(--accent); font-size: var(--font-size-xs); cursor: pointer; }
+	.design-bubble-toggle:hover { text-decoration: underline; }
+	/* Size menu: compact cells, every group on one row. */
+	.generation-size-option.ui-button { min-height: 0; }
+	.generation-size-ratios .generation-size-option.ui-button { min-height: 48px; padding-block: var(--space-1); }
+	.generation-size-ratios .generation-size-option .generation-ratio-glyph { width: var(--space-4); height: var(--space-4); }
+	.generation-size-ratios .generation-size-option .ui-button-content { gap: var(--space-0-5); }
+	.generation-size-resolutions { grid-template-columns: none; grid-auto-columns: minmax(0, 1fr); grid-auto-flow: column; margin-bottom: var(--space-3); }
+	.generation-size-resolutions .generation-size-option.ui-button { min-height: var(--control-compact); padding-block: var(--space-1); }
+	.generation-size-resolutions .generation-size-option .ui-button-content { flex-direction: row; gap: var(--space-1); }
+	.ui-popover.generation-size-menu .generation-picker-title { padding-inline: 0; padding-top: 0; }
+	/* Video duration chip matches the image parameters chip. */
+	.design-composer .generation-settings > .generation-field-params { order: 5; }
+	/* Asset library: one header row, masonry that keeps every work whole. */
+	.asset-library-heading { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); margin-bottom: var(--space-2); }
+	.asset-library-heading > h2 { margin: 0; color: var(--text); font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold); }
+	.asset-library-heading > .asset-library-removed { margin-left: auto; color: var(--muted); }
+	.asset-library-heading > .asset-library-removed[aria-pressed=true] { color: var(--accent); background: var(--selected); }
+	.asset-library .asset-thumb-main { height: auto; }
+	.asset-library .asset-thumb-main > img, .asset-library .asset-thumb-main > video { height: auto; object-fit: contain; }
+}
+@layer accessibility {
+	/* Unavailable ratios fade back instead of drawing the strongest border in the menu. */
+	.generation-size-option.ui-button:disabled { border-color: transparent; background: transparent; color: var(--muted); opacity: .45; }
+	/* Menus opened with the mouse keep focus for arrow keys but skip the keyboard ring. */
+	[data-pointer] .generation-picker-option:focus-visible, [data-pointer] .generation-size-option:focus-visible { outline: none; }
+}
+/* Round 8: row-order masonry, feathered flow edges, room for a twin model name. */
+@layer components {
+	.asset-library .asset-timeline-grid[data-masonry] { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(200px, 100%), 1fr)); grid-auto-rows: 4px; row-gap: 0; column-gap: var(--space-3); align-items: start; }
+	.asset-library .asset-timeline-grid[data-masonry] > .asset-thumb { aspect-ratio: auto; min-height: 96px; }
+	.design-thread-feed { --fade-top: 0px; --fade-bottom: 0px; mask-image: linear-gradient(to bottom, transparent 0, #000 var(--fade-top), #000 calc(100% - var(--fade-bottom)), transparent 100%); }
+	.design-thread-feed[data-fade-top] { --fade-top: 32px; }
+	.design-thread-feed[data-fade-bottom] { --fade-bottom: 56px; }
+	.design-composer .generation-settings .generation-field-model .generation-picker { max-width: 300px; }
+}
+
+/* Round 9: conversations replace canvases; home is a blank launcher. */
+@layer components {
+	.design-stage.design-home { justify-content: center; padding-bottom: 10vh; }
+	.design-home-title { width: 100%; max-width: var(--design-flow-width); margin: 0 auto var(--space-5); padding: 0 var(--design-flow-padding); color: var(--text); font-size: var(--font-size-2xl, 1.5rem); font-weight: var(--font-weight-semibold); text-align: center; }
+	.design-home .design-dock { padding-bottom: 0; }
 }

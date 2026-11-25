@@ -1,61 +1,71 @@
-import { useState } from "react";
-import type { GenerationStudio } from "../workbench/useGenerationStudio";
-import { assetCanvasId, type DesignCanvas } from "../workbench/designCanvases";
+import { useState, type ReactNode } from "react";
+import type { GenerationAsset, GenerationStudio } from "../workbench/useGenerationStudio";
+import { assetCanvasId, ungroupedCanvasId, type DesignCanvas } from "../workbench/designCanvases";
 import { CanvasNameDialog } from "./CanvasNameDialog";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { Icon } from "./Icon";
 import { IconButton, Tooltip } from "./ui";
 
-/** Studio navigation owns the workspace, not the creation mode: canvases scope
- *  the flow and the chat keeps the single creation surface at its foot. Text-to-
- *  image, image-to-image and the reference slot all live in the composer. */
+const visibleCount = 8;
+const earlyName = "早期作品";
+
+/** Studio navigation: a blank launcher, the library, then conversations newest first.
+ *  Conversations are created by sending from the launcher, never by an empty "new" button. */
 export function DesignSidebar({ studio, onOpenCanvas, onCollapse }: { studio: GenerationStudio; onOpenCanvas: (id: string) => void; onCollapse?: () => void }) {
-	const [naming, setNaming] = useState(false);
 	const [renaming, setRenaming] = useState<DesignCanvas>();
 	const [removing, setRemoving] = useState<DesignCanvas>();
+	const [showAll, setShowAll] = useState(false);
 	const canvasId = studio.canvasId;
-	// Highlight belongs to the visible route: the launcher owns "首页" even when
-	// the draft already targets a canvas, and a canvas row only lights up in the
-	// canvas route. Otherwise two rows claim the same page.
 	const home = !studio.canvasView && !studio.assetView;
-	const canvasScene = studio.canvasView;
+	const inConversation = studio.canvasView;
 	const counts = new Map<string, number>();
-	let live = 0;
+	const latest = new Map<string, number>();
+	const covers = new Map<string, GenerationAsset>();
 	for (const asset of studio.assets) {
 		if (asset.job?.removed ?? asset.removed) continue;
 		const id = assetCanvasId(asset, studio.canvases);
 		counts.set(id, (counts.get(id) ?? 0) + 1);
-		live++;
+		latest.set(id, Math.max(latest.get(id) ?? 0, asset.createdAt));
+		const cover = covers.get(id);
+		if (asset.kind === "image" && (!cover || asset.createdAt > cover.createdAt)) covers.set(id, asset);
 	}
+	const conversations = [...studio.canvases].sort((before, after) => Math.max(after.updatedAt, latest.get(after.id) ?? 0) - Math.max(before.updatedAt, latest.get(before.id) ?? 0));
+	// Keep the open conversation visible even when it would fall under "更多".
+	const openIndex = conversations.findIndex((canvas) => canvas.id === canvasId);
+	const shown = showAll || openIndex >= visibleCount ? conversations : conversations.slice(0, visibleCount);
+	const early = counts.get(ungroupedCanvasId) ?? 0;
+	const row = (id: string, name: string, extra?: ReactNode, system = false) => {
+		const active = inConversation && canvasId === id;
+		const cover = covers.get(id);
+		return <div key={id || "early"} className={`design-canvas-row${system ? " design-canvas-row-system" : ""}`} data-active={active || undefined}>
+			<button type="button" className="design-canvas-row-main" aria-current={active ? "page" : undefined} onClick={() => onOpenCanvas(id)}>
+				<span className="design-conversation-thumb" aria-hidden="true">{cover ? <img src={cover.url} alt="" loading="lazy" decoding="async" /> : <Icon name={system ? "archive" : "message"} size={13} />}</span>
+				<span title={name}>{name}</span>
+			</button>
+			{extra}
+		</div>;
+	};
 	return <aside className="design-sidebar" aria-label="Design 导航">
-		<header>
-			<span className="generation-eyebrow">DESIGN WORKSPACE</span>
-			<div className="design-sidebar-title">
-				<h1>Studio</h1>
-				{onCollapse && <Tooltip text="收起导航"><IconButton className="design-sidebar-collapse" size="compact" variant="ghost" aria-label="收起导航" onClick={onCollapse}><Icon name="panel" size={16} /></IconButton></Tooltip>}
-			</div>
-			<p>首页汇总作品，画布负责分组</p>
+		<header className="design-sidebar-title">
+			<h1>Studio</h1>
+			{onCollapse && <Tooltip text="收起导航"><IconButton className="design-sidebar-collapse" size="compact" variant="ghost" aria-label="收起导航" onClick={onCollapse}><Icon name="panel" size={16} /></IconButton></Tooltip>}
 		</header>
 		<nav className="design-canvases" aria-label="创作">
-			<div className="design-canvas-row" data-active={home || undefined}><button type="button" className="design-canvas-row-main" aria-current={home ? "page" : undefined} onClick={studio.openGallery}><Icon name="spark" size={15} /><span>首页</span><small>{live}</small></button></div>
+			<div className="design-canvas-row" data-active={home || undefined}><button type="button" className="design-canvas-row-main" aria-current={home ? "page" : undefined} onClick={studio.openGallery}><Icon name="squarePen" size={15} /><span>新对话</span></button></div>
+			<div className="design-canvas-row" data-active={studio.assetView || undefined}><button type="button" className="design-canvas-row-main" aria-current={studio.assetView ? "page" : undefined} onClick={studio.openAssets}><Icon name="grid" size={15} /><span title="按网格浏览、筛选和整理全部作品">资产库</span></button></div>
 		</nav>
-		<nav className="design-canvases" aria-label="画布">
-			<div className="design-sidebar-heading"><h2>画布</h2><Tooltip text="新建画布"><IconButton size="compact" variant="ghost" aria-label="新建画布" onClick={() => setNaming(true)}><Icon name="plus" size={14} /></IconButton></Tooltip></div>
-			<div className="design-canvas-row" data-active={(canvasScene && canvasId === "") || undefined}><button type="button" className="design-canvas-row-main" aria-current={canvasScene && canvasId === "" ? "page" : undefined} onClick={() => onOpenCanvas("")}><Icon name="archive" size={15} /><span>未分组</span><small>{counts.get("") ?? 0}</small></button></div>
-			{studio.canvases.map((canvas) => <div key={canvas.id} className="design-canvas-row" data-active={(canvasScene && canvasId === canvas.id) || undefined}>
-				<button type="button" className="design-canvas-row-main" aria-current={canvasScene && canvasId === canvas.id ? "page" : undefined} onClick={() => onOpenCanvas(canvas.id)}><Icon name="layers" size={15} /><span title={canvas.name}>{canvas.name}</span><small>{counts.get(canvas.id) ?? 0}</small></button>
-				<span className="design-canvas-row-actions">
-					<Tooltip text="重命名画布"><IconButton size="compact" variant="ghost" aria-label={`重命名画布：${canvas.name}`} onClick={() => setRenaming(canvas)}><Icon name="edit" size={14} /></IconButton></Tooltip>
-					<Tooltip text="删除画布"><IconButton size="compact" variant="ghost" aria-label={`删除画布：${canvas.name}`} onClick={() => setRemoving(canvas)}><Icon name="close" size={14} /></IconButton></Tooltip>
-				</span>
-			</div>)}
+		<nav className="design-canvases" aria-label="对话">
+			<div className="design-sidebar-heading"><h2>对话</h2></div>
+			{shown.map((canvas) => row(canvas.id, canvas.name, <span className="design-canvas-row-actions">
+				<Tooltip text="重命名"><IconButton size="compact" variant="ghost" aria-label={`重命名对话：${canvas.name}`} onClick={() => setRenaming(canvas)}><Icon name="edit" size={14} /></IconButton></Tooltip>
+				<Tooltip text="删除对话"><IconButton size="compact" variant="ghost" aria-label={`删除对话：${canvas.name}`} onClick={() => setRemoving(canvas)}><Icon name="close" size={14} /></IconButton></Tooltip>
+			</span>))}
+			{conversations.length > shown.length && <button type="button" className="design-canvas-more" onClick={() => setShowAll(true)}>更多</button>}
+			{showAll && conversations.length > visibleCount && <button type="button" className="design-canvas-more" onClick={() => setShowAll(false)}>收起</button>}
+			{!conversations.length && !early && <p className="design-canvas-empty">在新对话里发送第一条描述，对话会出现在这里</p>}
+			{early > 0 && row(ungroupedCanvasId, earlyName, undefined, true)}
 		</nav>
-		<nav className="design-canvases" aria-label="素材">
-			<div className="design-sidebar-heading"><h2>素材</h2></div>
-			<div className="design-canvas-row" data-active={studio.assetView || undefined}><button type="button" className="design-canvas-row-main" aria-current={studio.assetView ? "page" : undefined} onClick={studio.openAssets}><Icon name="layers" size={15} /><span>资产库</span><small>{live}</small></button></div>
-		</nav>
-		{naming && <CanvasNameDialog title="新建画布" confirmText="创建画布" onConfirm={(name) => onOpenCanvas(studio.createCanvas(name))} onClose={() => setNaming(false)} />}
-		{renaming && <CanvasNameDialog title="重命名画布" initial={renaming.name} confirmText="保存名称" onConfirm={(name) => studio.renameCanvas(renaming.id, name)} onClose={() => setRenaming(undefined)} />}
-		{removing && <ConfirmDialog title="删除画布" description={`“${removing.name}”只会被删除分组，里面的 ${counts.get(removing.id) ?? 0} 件作品会回到未分组，原文件不受影响。`} confirmText="删除画布" onConfirm={() => { studio.deleteCanvas(removing.id); if (canvasId === removing.id) studio.openGallery(); }} onClose={() => setRemoving(undefined)} />}
+		{renaming && <CanvasNameDialog title="重命名对话" initial={renaming.name} confirmText="保存名称" onConfirm={(name) => studio.renameCanvas(renaming.id, name)} onClose={() => setRenaming(undefined)} />}
+		{removing && <ConfirmDialog title="删除对话" description={`“${removing.name}”会从列表里移除，里面的 ${counts.get(removing.id) ?? 0} 件作品会移到「${earlyName}」，原文件不受影响。`} confirmText="删除对话" onConfirm={() => { studio.deleteCanvas(removing.id); if (canvasId === removing.id) studio.openGallery(); }} onClose={() => setRemoving(undefined)} />}
 	</aside>;
 }
