@@ -96,7 +96,7 @@ export function SettingsWorkspace({ initialCategory, restrictions, prompt, provi
 	}, []);
 	const navigation = <nav className="settings-nav" aria-label="设置分类"><Button className="settings-back" variant="ghost" onClick={close} disabled={pending}><Icon name="arrowLeft" size={16} />返回工作区</Button><h1 className="settings-nav-title" id="settings-title">设置</h1>{([
 				["通用", ["appearance", "chat"]],
-				["模型与能力", ["providers", "prompt", "websearch", "browser", "images", "videos"]],
+				["模型与能力", ["providers", "websearch", "browser", "images", "videos"]],
 				["数据", ["statistics", "archives"]],
 				// An untitled trailing group: one entry needs no heading of its own.
 				["", ["about"]],
@@ -140,12 +140,11 @@ export function SettingsWorkspace({ initialCategory, restrictions, prompt, provi
 					<FontSettings />
 				</section>}
 				{category === "websearch" && <section className="settings-page" aria-labelledby="websearch-title"><h2 id="websearch-title">联网搜索</h2><WebSearchSettings search={search} /></section>}
-			{category === "chat" && <section className="settings-page" aria-labelledby="chat-settings-title"><h2 id="chat-settings-title">对话</h2><TitleModelSettings onManage={() => setCategory("providers")} /></section>}
-				{category === "prompt" && <section className="settings-page" aria-labelledby="prompt-title"><h2 id="prompt-title">系统提示词</h2><p className="muted">追加到系统提示词末尾，保存后当前对话会重启。</p><fieldset className="settings-config" disabled={!!restrictions.prompt}><PromptSettings {...prompt} /></fieldset>{restrictions.prompt && <p className="settings-restriction">{restrictions.prompt}</p>}</section>}
+				{category === "chat" && <section className="settings-page" aria-labelledby="chat-settings-title"><h2 id="chat-settings-title">对话</h2><TitleModelSettings onManage={() => setCategory("providers")} /><fieldset className="settings-config" disabled={!!restrictions.prompt}><PromptSettings {...prompt} /></fieldset>{restrictions.prompt && <p className="settings-restriction">{restrictions.prompt}</p>}</section>}
 				{category === "providers" && <><fieldset className="settings-config" disabled={!!restrictions.providers}><ProvidersSettingsContent {...providers} ref={editor} onLockChange={updateInteraction} /></fieldset>{providers.configError && !locked && <Button disabled={!!restrictions.providers} onClick={onRetryModels}>重新读取配置</Button>}</>}
 				{category === "about" && <AboutSettings />}
 				{category === "archives" && <section className="settings-page" aria-labelledby="archives-title"><h2 id="archives-title">已归档对话</h2><ArchivedSessions {...archives} busy={archives.busy || !!restrictions.archives} /></section>}
-				{Object.entries(restrictions).map(([id, reason]) => reason && <p className="settings-restriction" key={id}>{settingsCategories.find((item) => item.id === id)?.label}：{reason}</p>)}
+				{Object.entries(restrictions).map(([id, reason]) => reason && <p className="settings-restriction" key={id}>{id === "prompt" ? "系统提示词" : settingsCategories.find((item) => item.id === id)?.label}：{reason}</p>)}
 			</div>
 		</div>
 		{switchTarget && <Dialog className="project-dialog" aria-labelledby="settings-discard-title" initialFocus={switchCancel} onClose={() => setSwitchTarget(undefined)}>

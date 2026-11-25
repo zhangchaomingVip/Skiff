@@ -300,8 +300,46 @@ body.scrollbar-frozen .messages:hover::-webkit-scrollbar-thumb:hover { backgroun
 .typing { color: var(--muted); }
 .msg-time { margin-left: auto; color: var(--chat-meta); font-size: var(--font-size-sm); font-weight: var(--font-weight-regular); white-space: nowrap; }
 .md a { color: var(--accent); }
-.md a.citation-chip { display: inline-flex; max-width: min(100%, 420px); align-items: center; vertical-align: baseline; overflow: hidden; padding: 1px 8px; border: 1px solid var(--border); border-radius: var(--radius-full); background: var(--panel-2); color: var(--secondary); font-size: .88em; text-decoration: none; text-overflow: ellipsis; white-space: nowrap; }
-.md a.citation-chip:hover { border-color: var(--accent); color: var(--accent); }
+.md a.citation-badge { display: inline-flex; align-items: center; justify-content: center; position: relative; top: -.2em; vertical-align: baseline; min-width: 18px; height: 18px; line-height: 1; margin: 0 2px; padding: 0 5px; border-radius: var(--radius-full); background: color-mix(in srgb, var(--text) 8%, var(--surface)); color: var(--secondary); font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); font-variant-numeric: tabular-nums; text-decoration: none; cursor: pointer; transition: background-color var(--transition-fast), color var(--transition-fast); }
+.md a.citation-badge:hover, .md a.citation-badge:focus-visible, .md a.citation-badge[aria-expanded=true] { background: color-mix(in srgb, var(--accent) 14%, var(--surface)); color: var(--accent); }
+.md .sources-bento { display: block; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border); }
+.md .sources-pill { display: inline-flex; align-items: center; gap: var(--space-2); min-height: 34px; padding: var(--space-1) var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-full); background: color-mix(in srgb, var(--text) 4%, var(--surface)); color: var(--secondary); font-size: var(--font-size-sm); cursor: pointer; transition: border-color var(--transition-fast), background-color var(--transition-fast), color var(--transition-fast); }
+.md .sources-pill:hover, .md .sources-pill:focus-visible, .md .sources-pill[aria-expanded=true] { border-color: color-mix(in srgb, var(--accent) 42%, var(--border)); background: color-mix(in srgb, var(--accent) 7%, var(--surface)); color: var(--accent); }
+.sources-pill > svg { flex: none; color: var(--accent); }
+.md .sources-pill { max-width: 100%; }
+.sources-pill-label { overflow: hidden; min-width: 0; text-overflow: ellipsis; white-space: nowrap; }
+.md .citation-nowrap { white-space: nowrap; }
+.sources-pill-chevron { display: inline-flex; color: var(--muted); transform: rotate(90deg); transition: transform var(--transition-fast); }
+.md .sources-pill[aria-expanded=true] .sources-pill-chevron { color: currentColor; transform: rotate(-90deg); }
+/* Sources expand under their reply instead of covering it. */
+.md .sources-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0; max-width: 640px; margin-top: var(--space-2); animation: sources-list-in var(--transition-base) var(--easing-default) both; }
+.md a.source-card { display: flex; align-items: center; gap: var(--space-2-5, 10px); min-width: 0; min-height: 40px; padding: var(--space-1) var(--space-2); border-radius: var(--radius-md); color: var(--text); text-decoration: none; transition: background-color var(--transition-fast); }
+.md a.source-card:hover, .md a.source-card:focus-visible { background: var(--hover); outline: none; }
+.md a.source-card:focus-visible { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 50%, transparent); }
+.source-card-number { display: grid; flex: none; place-items: center; width: 18px; height: 18px; border: 1px solid var(--border); border-radius: var(--radius-full); color: var(--muted); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); font-variant-numeric: tabular-nums; transition: border-color var(--transition-fast), color var(--transition-fast); }
+.source-card:hover .source-card-number, .source-card:focus-visible .source-card-number { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); color: var(--accent); }
+.source-card-copy { display: flex; flex: 1; flex-direction: column; gap: 0; min-width: 0; line-height: 1.35; }
+/* `.md strong` inherits the body size; the source title stays a notch below it. */
+.md .source-card-copy strong { overflow: hidden; line-height: 1.35; -webkit-text-stroke: 0; color: var(--text); font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); text-overflow: ellipsis; white-space: nowrap; }
+.md .source-card-copy small { overflow: hidden; line-height: 1.3; color: var(--muted); font-size: var(--font-size-xs); text-overflow: ellipsis; white-space: nowrap; }
+.source-card-copy small:empty { display: none; }
+.source-card-external { display: inline-flex; flex: none; opacity: 0; color: var(--accent); transition: opacity var(--transition-fast); }
+.source-card:hover .source-card-external, .source-card:focus-visible .source-card-external { opacity: 1; }
+.md .sources-more { justify-self: start; margin: var(--space-0-5, 2px) 0 0 calc(var(--space-2) + 18px + var(--space-2-5, 10px)); padding: var(--space-1) 0; border: 0; background: transparent; color: var(--accent); font-size: var(--font-size-sm); cursor: pointer; }
+.md .sources-more:hover, .md .sources-more:focus-visible { text-decoration: underline; }
+/* Citation preview: one source, next to the words that cite it. */
+.citation-popover { position: fixed; z-index: 130; display: flex; flex-direction: column; gap: var(--space-1); width: 320px; max-width: calc(100vw - 16px); padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--shadow-elevation-3); color: var(--text); font-size: var(--font-size-sm); animation: citation-popover-in var(--transition-fast) var(--easing-default) both; }
+.citation-popover.is-above { transform: translateY(-100%); }
+.citation-popover-title { display: flex; align-items: flex-start; gap: var(--space-2); }
+.citation-popover-title strong { display: -webkit-box; overflow: hidden; font-weight: var(--font-weight-medium); line-height: 1.45; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.citation-popover-index { display: grid; flex: none; place-items: center; min-width: 20px; height: 20px; margin-top: 1px; padding: 0 4px; border-radius: var(--radius-full); background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); font-variant-numeric: tabular-nums; }
+.citation-popover-url, .citation-popover-open { margin-left: 28px; }
+.citation-popover-url { display: -webkit-box; overflow: hidden; color: var(--muted); font-size: var(--font-size-xs); word-break: break-all; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.citation-popover-open { display: inline-flex; align-items: center; align-self: flex-start; gap: var(--space-1); margin-top: var(--space-1); padding: var(--space-1) var(--space-2); border: 1px solid var(--border); border-radius: var(--radius-md); background: transparent; color: var(--text); font-size: var(--font-size-xs); cursor: pointer; transition: border-color var(--transition-fast), color var(--transition-fast), background-color var(--transition-fast); }
+.citation-popover-open:hover, .citation-popover-open:focus-visible { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); background: color-mix(in srgb, var(--accent) 6%, var(--surface)); color: var(--accent); outline: none; }
+@keyframes sources-list-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes citation-popover-in { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .md .sources-list, .citation-popover { animation: none; } }
 /* A URL someone typed reads as their own words: the address itself, not a citation chip. */
 .md a.message-link { color: inherit; font-weight: var(--font-weight-semibold); text-decoration: none; }
 .md a.message-link:hover, .md a.message-link:focus-visible { color: var(--accent); text-decoration: underline; }
@@ -488,12 +526,13 @@ body.scrollbar-frozen .messages:hover::-webkit-scrollbar-thumb:hover { backgroun
 .prompt-input { display: block; width: 100%; resize: vertical; min-height: 160px; border: 1px solid var(--border); border-radius: var(--radius-md); padding: var(--space-3); color: var(--text); background: var(--panel-2); font: inherit; font-size: var(--font-size-sm); line-height: 1.7; }
 .prompt-input:focus { outline: none; border-color: var(--accent); }
 .prompt-hint { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-top: var(--space-2); color: var(--muted); font-size: var(--font-size-sm); }
-.prompt-settings { display: flex; flex-direction: column; gap: var(--space-2); }
-.prompt-settings > label { font-size: var(--font-size-sm); color: var(--secondary); }
+.prompt-settings { display: flex; flex-direction: column; gap: var(--space-3); }
+.prompt-settings h3 { display: flex; align-items: center; gap: var(--space-2); margin: 0; color: var(--text); font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); }
+.prompt-card-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.prompt-custom > p { margin: var(--space-1) 0 var(--space-2); }
+.prompt-custom .prompt-input { min-height: 112px; max-height: 260px; }
 .prompt-settings .dialog-actions { position: sticky; bottom: calc(-1 * var(--space-5)); z-index: 1; margin-top: var(--space-4); padding-block: var(--space-3); background: var(--surface); }
-.prompt-system { margin-top: var(--space-4); padding-top: var(--space-3); border-top: 1px solid var(--border); }
-.prompt-system > summary { display: flex; align-items: center; gap: 6px; cursor: pointer; color: var(--secondary); font-size: var(--font-size-sm); list-style: none; }
-.prompt-system > summary::-webkit-details-marker { display: none; }
+.prompt-system { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3); }
 .prompt-section { margin-top: var(--space-2); border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--panel-2); }
 .prompt-section > summary { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: 6px 10px; cursor: pointer; font-size: var(--font-size-sm); color: var(--secondary); }
 .prompt-section-name { font-family: var(--font-family-mono); }
