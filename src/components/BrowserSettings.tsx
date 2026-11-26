@@ -113,17 +113,17 @@ export function BrowserSettings({ onSaved }: { onSaved: () => void }) {
 		</div>
 
 		<div className="settings-group">
-			<div className="settings-row web-search-status-row">
+			<div className="settings-row browser-status-row">
 				<div className="settings-row-text">
 					<span className="settings-row-title">运行状态</span>
-					<div className="web-search-status" aria-live="polite">
+					<div className="browser-status-chips" aria-live="polite">
 						<span className="web-search-chip" data-state={cliState.tone}><span className="web-search-dot" aria-hidden="true" />{cliState.label}</span>
 						<span className="web-search-chip" data-state={kernelState.tone}><span className="web-search-dot" aria-hidden="true" />{kernelState.label}</span>
 						<span className="web-search-chip" data-state={capabilityState.tone}><span className="web-search-dot" aria-hidden="true" />{capabilityState.label}</span>
 					</div>
 					<span className="settings-row-hint" role="status">{status?.message ?? (error ? "无法读取浏览器设置" : "正在读取浏览器设置…")}</span>
 				</div>
-				<div className="web-search-status-actions">
+				<div className="browser-status-actions">
 					<Button type="button" variant="ghost" size="compact" disabled={pending || checking} onClick={() => recheck((value) => value + 1)}>
 						<Icon name="refresh" size={14} />重新检测依赖
 					</Button>
@@ -133,7 +133,7 @@ export function BrowserSettings({ onSaved }: { onSaved: () => void }) {
 			{status?.cliPath && <div className="settings-row">
 				<div className="settings-row-text">
 					<span className="settings-row-title">当前可执行文件</span>
-					<code className="web-search-path">{status.cliPath}</code>
+					<code className="browser-settings-path">{status.cliPath}</code>
 				</div>
 				<CopyButton text={status.cliPath} label="复制可执行文件路径" iconOnly />
 			</div>}

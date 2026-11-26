@@ -139,7 +139,7 @@ export function SettingsWorkspace({ initialCategory, restrictions, prompt, provi
 					</div>
 					<FontSettings />
 				</section>}
-				{category === "websearch" && <section className="settings-page" aria-labelledby="websearch-title"><h2 id="websearch-title">联网搜索</h2><WebSearchSettings search={search} /></section>}
+				{category === "websearch" && <section className="settings-page" aria-labelledby="websearch-title"><WebSearchSettings search={search} /></section>}
 				{category === "chat" && <section className="settings-page" aria-labelledby="chat-settings-title"><h2 id="chat-settings-title">对话</h2><TitleModelSettings onManage={() => setCategory("providers")} /><PromptSettings {...prompt} editRestricted={restrictions.prompt} /></section>}
 				{category === "providers" && <><fieldset className="settings-config" disabled={!!restrictions.providers}><ProvidersSettingsContent {...providers} ref={editor} onLockChange={updateInteraction} /></fieldset>{providers.configError && !locked && <Button disabled={!!restrictions.providers} onClick={onRetryModels}>重新读取配置</Button>}</>}
 				{category === "about" && <AboutSettings />}

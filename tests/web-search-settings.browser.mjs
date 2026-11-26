@@ -1,85 +1,191 @@
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { mkdir } from "node:fs/promises";
+
 const require = createRequire(import.meta.url);
 const { chromium } = require(process.env.SKIFF_PLAYWRIGHT_DIR || "../.playwright-cli/node_modules/playwright-core");
 const browser = await chromium.launch({ headless: true, channel: "msedge" });
 const base = process.argv[2] || "http://localhost:1421";
 await mkdir("dist", { recursive: true });
+
 try {
 	for (const theme of ["light", "dark"]) {
 		const page = await browser.newPage({ viewport: { width: 1100, height: 820 }, reducedMotion: "reduce" });
+		page.setDefaultTimeout(10000);
 		const errors = [];
 		page.on("pageerror", (error) => errors.push(error.message));
-		await page.goto(`${base}/tests/preview.html?theme=${theme}`, { waitUntil: "domcontentloaded" });
-		await page.locator(".settings-trigger").waitFor();
-		await page.locator(".settings-trigger").click();
-		await page.getByRole("button", { name: "联网搜索", exact: true }).click();
-		const settings = page.locator(".web-search-settings");
-		await settings.waitFor();
-		const key = page.locator("#web-search-key");
-
-		assert.equal(await settings.locator(".settings-group").count(), 3, `${theme}: switch, engine/key and folded diagnostics read as three cards`);
-		assert.equal(await settings.locator(".settings-row-title", { hasText: "联网搜索" }).count(), 1, `${theme}: the feature row keeps its title`);
-		const switches = settings.locator(".settings-row .switch");
-		assert.equal(await switches.count(), 1, `${theme}: read_url has no switch of its own`);
-		assert.equal(await settings.getByText("读取网页（read_url）").count(), 0, `${theme}: the read_url row is gone`);
-		assert.equal(await settings.getByText("配置目录").count(), 0, `${theme}: the pi directory is not shown`);
-		const alignment = await settings.locator(".settings-row").first().evaluate((row) => {
-			const toggle = row.querySelector(".switch").getBoundingClientRect(), box = row.getBoundingClientRect();
-			return { distance: box.right - toggle.right - parseFloat(getComputedStyle(row).paddingRight), centered: (toggle.top + toggle.bottom) / 2 - (box.top + box.bottom) / 2 };
+		await page.addInitScript(() => {
+			const fixture = window.webSearchFixture = { validationCalls: 0, installCalls: 0, validationError: undefined };
+			let provider = "tavily";
+			let configured = false;
+			let installed = false;
+			let enabled = false;
+			const status = () => ({
+				provider, configured, enabled, extensionInstalled: installed, validated: null,
+				keyHint: configured ? "…6d93" : null, configuredProviders: configured ? [provider] : [],
+			});
+			// Install the mock before React mounts so status loading and verification can be counted independently.
+			Object.defineProperty(window, "__TAURI_INTERNALS__", {
+				configurable: true,
+				set(bridge) {
+					Object.defineProperty(window, "__TAURI_INTERNALS__", { value: bridge, writable: true, configurable: true });
+					const invoke = bridge.invoke;
+					bridge.invoke = async (command, args, ...rest) => {
+						switch (command) {
+							case "get_web_search_status": return status();
+							case "set_web_search_provider": provider = args.provider; return;
+							case "save_web_search_key": configured = true; return;
+							case "clear_web_search_key": configured = false; return;
+							case "install_web_search_extension": fixture.installCalls++; installed = true; return true;
+							case "validate_web_search": {
+								fixture.validationCalls++;
+								await new Promise((resolve) => { fixture.finishValidation = resolve; });
+								return { ...status(), validated: !fixture.validationError, validationMessage: fixture.validationError };
+							}
+							case "rpc_send": {
+								const request = JSON.parse(args.message);
+								const respond = (data) => window.skiffPreview.emit(args.instanceId, { type: "response", id: request.id, success: true, data });
+								if (installed && request.type === "get_commands") { respond({ commands: [{ name: "web", source: "extension" }] }); return; }
+								if (request.type === "prompt" && ["/web on", "/web off"].includes(request.message)) {
+									enabled = request.message === "/web on";
+									respond({ disposition: "handled" });
+									return;
+								}
+								break;
+							}
+						}
+						return invoke(command, args, ...rest);
+					};
+				},
+			});
 		});
-		assert.ok(Math.abs(alignment.distance) < 1, `${theme}: switches sit on the row's right edge, not inline with the title`);
-		assert.ok(Math.abs(alignment.centered) < 1, `${theme}: switches stay vertically centered`);
-		const divider = await settings.locator(".settings-group").nth(1).locator(".settings-row").nth(1).evaluate((row) => getComputedStyle(row).borderTopWidth);
-		assert.equal(divider, "1px", `${theme}: a hairline separates the rows inside a card`);
+		await page.goto(`${base}/tests/preview.html?theme=${theme}`, { waitUntil: "domcontentloaded" });
+		await page.waitForFunction(() => document.querySelector(".sidebar")?.dataset.connected === "true");
+		const open = async () => {
+			await page.locator(".settings-trigger").click();
+			await page.getByRole("button", { name: "联网搜索", exact: true }).click();
+		};
+		await open();
 
-		const engine = page.locator("#web-search-engine");
-		assert.equal(await engine.locator("option").count(), 2, `${theme}: engines are offered in a dropdown`);
-		assert.match(await engine.locator("option[value=exa]").textContent(), /^Exa（.+） · 未配置 Key$/, `${theme}: each option names its niche and key state`);
-		await engine.selectOption("exa");
-		await page.getByText("Exa API Key", { exact: true }).waitFor();
-		assert.equal(await key.getAttribute("placeholder"), "exa-…", `${theme}: switching engine re-labels the key field`);
-		assert.equal(await key.getAttribute("readonly"), null, `${theme}: an unconfigured key stays editable`);
-		assert.equal(await page.locator(".web-search-badge").count(), 0, `${theme}: no status badge before a key exists`);
-		assert.equal(await page.locator(".web-search-footer .ui-button[data-variant=primary]").count(), 1, `${theme}: setup keeps one save action`);
-		assert.equal(await page.getByText("删除已保存的 Key", { exact: true }).count(), 0, `${theme}: clearing moved inline, not into the footer`);
-		const diagnostics = settings.locator(".web-search-diagnostics");
-		assert.equal(await diagnostics.evaluate((node) => node.open), false, `${theme}: diagnostics start folded`);
-		await diagnostics.locator("summary .web-search-chip").filter({ hasText: "扩展未安装" }).waitFor();
-		await diagnostics.locator("summary").click();
-		await diagnostics.locator(".web-search-status-actions").getByRole("button", { name: "安装扩展", exact: true }).waitFor();
+		const settings = page.locator(".web-search-settings");
+		const groups = settings.locator(".settings-group");
+		const key = settings.locator("#web-search-key");
+		const setup = settings.getByRole("button", { name: "保存", exact: true });
+		const cancel = settings.getByRole("button", { name: "取消", exact: true });
+		const test = settings.getByRole("button", { name: "测试已保存的 Key", exact: true });
+		const clear = settings.locator(".web-search-key-field").getByRole("button", { name: "清除已保存的 Key" });
+		const toggle = settings.getByRole("checkbox", { name: "联网搜索" });
+		const engine = settings.getByRole("group", { name: "搜索引擎" });
+		const chip = groups.first().locator(".web-search-chip");
+		const link = settings.getByRole("link", { name: "获取 Key（含免费额度）↗" });
+		const install = groups.first().getByRole("button", { name: "安装扩展", exact: true });
+		const validationCalls = () => page.evaluate(() => window.webSearchFixture.validationCalls);
+		const finishValidation = () => page.evaluate(() => window.webSearchFixture.finishValidation());
 
-		await key.fill("exa-0123456789abcdef");
-		await page.getByRole("button", { name: "保存并验证", exact: true }).click();
-		await page.locator(".web-search-badge").filter({ hasText: "验证通过" }).waitFor({ timeout: 10000 });
-		assert.equal(await key.getAttribute("readonly"), "", `${theme}: a saved key renders as a read-only mask`);
-		assert.equal(await key.inputValue(), "••••••••••••6d93", `${theme}: the mask keeps only the trailing hint`);
-		assert.equal(await page.locator(".web-search-footer").count(), 0, `${theme}: a saved key needs no footer save action`);
-		await settings.getByRole("button", { name: "测试已保存的 Key", exact: true }).waitFor();
-		await settings.getByRole("button", { name: "修改已保存的 Key", exact: true }).waitFor();
-		await settings.getByRole("button", { name: "清除已保存的 Key", exact: true }).waitFor();
-		assert.doesNotMatch(await engine.locator("option[value=exa]").textContent(), /未配置 Key/, `${theme}: a saved key clears the option's setup hint`);
+		await install.waitFor();
+		assert.equal(await groups.count(), 2);
+		assert.equal(await groups.first().getByRole("button").count(), 1);
+		assert.equal(await chip.innerText(), "扩展未安装");
+		assert.equal(await chip.getAttribute("data-state"), "missing");
+		assert.equal(await toggle.isChecked(), false);
+		assert.doesNotMatch(await settings.innerText(), /诊断|允许模型在回答时检索网页|按量计费|X 原帖|待验证|刷新状态/);
+		assert.equal(await settings.locator("details, select").count(), 0);
+		assert.deepEqual(await engine.getByRole("button").allTextContents(), ["Tavily · 通用检索", "Exa · 语义检索"]);
+		assert.equal(await link.getAttribute("href"), "https://app.tavily.com");
+		assert.equal(await link.getAttribute("target"), "_blank");
+		assert.equal(await link.getAttribute("rel"), "noreferrer");
+		assert.equal(await key.getAttribute("placeholder"), "tvly-…");
+		assert.equal(await validationCalls(), 0, "Mounting only reads saved status");
+		await engine.getByRole("button", { name: "Exa · 语义检索" }).click();
+		await settings.getByText("Exa API Key", { exact: true }).waitFor();
+		assert.equal(await key.getAttribute("placeholder"), "exa-…");
+		assert.equal(await link.getAttribute("href"), "https://dashboard.exa.ai/api-keys");
+		assert.equal(await setup.count(), 1);
+		assert.equal(await setup.isDisabled(), true);
+		assert.equal(await clear.count(), 0);
+		assert.equal(await test.count(), 0);
+		assert.equal(await validationCalls(), 0, "Changing engines does not validate");
+		await page.screenshot({ path: `dist/web-search-setup-${theme}.png` });
+
+		await install.click();
+		await page.waitForFunction(() => window.webSearchFixture.installCalls === 1);
+		if (!await settings.isVisible()) {
+			await page.waitForFunction(() => document.querySelector(".sidebar")?.dataset.connected === "true");
+			await open();
+		}
+		await chip.getByText("运行正常", { exact: true }).waitFor();
+		assert.equal(await groups.first().getByRole("button").count(), 0);
+		assert.equal(await validationCalls(), 0, "Installing the extension does not validate");
+
+		await key.fill("exa-placeholder-for-tests");
+		await setup.click();
+		await settings.getByRole("button", { name: "保存中…", exact: true }).waitFor();
+		assert.equal(await validationCalls(), 1, "Saving validates exactly once");
+		await finishValidation();
+		await engine.waitFor({ state: "detached" });
+		assert.equal(await groups.count(), 1, "The saved configuration collapses while search is off");
+		assert.equal(await key.count(), 0);
+		await toggle.check();
+		await settings.getByText("✓ 有效", { exact: true }).waitFor();
+		assert.equal(await key.getAttribute("readonly"), "");
+		assert.equal(await key.inputValue(), "••••••••••••6d93");
+		await test.waitFor();
+		await clear.waitFor();
+		assert.equal(await settings.getByRole("button", { name: /修改|重新测试/ }).count(), 0);
+		const positions = await settings.evaluate((node) => {
+			const toggleRect = node.querySelector(".switch").getBoundingClientRect();
+			const chipRect = node.querySelector(".web-search-chip").getBoundingClientRect();
+			const keyRect = node.querySelector("#web-search-key").getBoundingClientRect();
+			const clearRect = node.querySelector(".web-search-key-clear").getBoundingClientRect();
+			return { chipBeforeToggle: chipRect.right <= toggleRect.left, clearInsideKey: clearRect.left > keyRect.left && clearRect.right < keyRect.right };
+		});
+		assert.deepEqual(positions, { chipBeforeToggle: true, clearInsideKey: true });
 		await page.screenshot({ path: `dist/web-search-settings-${theme}.png` });
 
-		await settings.getByRole("button", { name: "修改已保存的 Key", exact: true }).click();
-		await page.locator("#web-search-key:not([readonly])").waitFor();
-		assert.equal(await key.inputValue(), "", `${theme}: editing starts from an empty replacement field`);
-		assert.equal(await page.locator(".web-search-footer .ui-button[data-variant=primary]").count(), 1, `${theme}: the save action returns while editing`);
-		await settings.getByRole("button", { name: "取消", exact: true }).click();
-		await page.locator("#web-search-key[readonly]").waitFor();
-		assert.equal(await key.inputValue(), "••••••••••••6d93", `${theme}: cancelling restores the mask`);
+		await key.click();
+		assert.equal(await key.getAttribute("readonly"), null);
+		assert.equal(await key.inputValue(), "");
+		assert.equal(await key.evaluate((input) => input === document.activeElement), true);
+		await setup.waitFor();
+		await cancel.click();
+		await settings.locator("#web-search-key[readonly]").waitFor();
+		assert.equal(await key.inputValue(), "••••••••••••6d93");
+		await key.focus();
+		await cancel.waitFor();
+		await cancel.click();
+		assert.equal(await validationCalls(), 1, "Editing and cancelling do not validate");
 
-		await settings.getByRole("button", { name: "清除已保存的 Key", exact: true }).click();
-		await page.locator("#web-search-key:not([readonly])").waitFor();
-		assert.equal(await page.locator(".web-search-badge").count(), 0, `${theme}: clearing removes the key badge`);
-		assert.equal(await page.locator(".web-search-footer .ui-button[data-variant=primary]").count(), 1, `${theme}: clearing returns to setup`);
-		assert.match(await engine.locator("option[value=exa]").textContent(), /未配置 Key/, `${theme}: the option follows the cleared key`);
+		await page.evaluate(() => { window.webSearchFixture.validationError = "API Key 无效"; });
+		await test.click();
+		await settings.locator('button[aria-busy="true"]').getByText("测试中…", { exact: true }).waitFor();
+		assert.equal(await validationCalls(), 2);
+		await finishValidation();
+		await settings.getByText("✗ API Key 无效", { exact: true }).waitFor();
+		assert.equal(await chip.innerText(), "当前对话未生效");
+		await groups.first().getByRole("button", { name: "重新加载扩展", exact: true }).waitFor();
+		await page.evaluate(() => { window.webSearchFixture.validationError = undefined; });
+		await test.click();
+		await page.waitForFunction(() => window.webSearchFixture.validationCalls === 3);
+		await finishValidation();
+		await chip.getByText("运行正常", { exact: true }).waitFor();
+		assert.equal(await groups.first().getByRole("button").count(), 0);
 
-		await page.getByRole("button", { name: "返回工作区", exact: true }).click();
-		await page.locator(".settings-workspace").waitFor({ state: "detached" });
+		await toggle.uncheck();
+		await engine.waitFor({ state: "detached" });
+		assert.equal(await key.count(), 0);
+		await toggle.check();
+		await clear.click();
+		await setup.waitFor();
+		assert.equal(await key.inputValue(), "");
+		assert.equal(await clear.count(), 0);
+		assert.equal(await test.count(), 0);
+		assert.equal(await settings.locator(".web-search-message").count(), 0);
+		assert.equal(await validationCalls(), 3, "Toggling and clearing do not validate");
+
+		await page.setViewportSize({ width: 600, height: 400 });
+		assert.equal(await settings.evaluate((node) => node.scrollWidth > node.clientWidth), false);
 		assert.deepEqual(errors, [], `${theme}: no browser errors`);
-		console.log(`PASS ${theme}: engine dropdown, masked key view, edit/cancel/clear, dividers, single switch, folded diagnostics`);
+		console.log(`PASS ${theme}: switch and repair, segmented engine, inline key actions, validation count and collapsed configuration`);
 		await page.close();
 	}
 } finally {
