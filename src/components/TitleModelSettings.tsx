@@ -40,9 +40,9 @@ export function TitleModelSettings({ onManage }: { onManage: () => void }) {
 		const model = catalog.find((item) => matchesRef(item, selection[slot]));
 		return <div className="settings-row">
 			<div className="settings-row-text"><span className="settings-row-title">{label}</span><span className="settings-row-hint">{hint}</span></div>
-			<div className="title-model-actions">
-				<Button variant="setting" disabled={!catalog.length} onClick={() => setPicking(slot)}>{model ? pickerModelName(model) : catalog.length ? "未设置" : "暂无可用模型"}</Button>
-				{model && <IconButton aria-label={`清除${label}`} title="不用于标题生成" onClick={() => clear(slot)}><Icon name="close" size={14} /></IconButton>}
+			<div className={`title-model-actions${model ? " has-value" : ""}`}>
+				<Button variant="ghost" className="title-model-trigger" disabled={!catalog.length} onClick={() => setPicking(slot)}>{model ? pickerModelName(model) : catalog.length ? "未设置" : "暂无可用模型"}</Button>
+				{model && <IconButton variant="ghost" size="compact" className="title-model-clear" aria-label={`清除${label}`} title="不用于标题生成" onClick={() => clear(slot)}><Icon name="close" size={12} /></IconButton>}
 			</div>
 		</div>;
 	};

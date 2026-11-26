@@ -15,10 +15,11 @@ const prompt = () => page.getByRole("textbox", { name: "提示词 Prompt" });
 const cards = () => page.locator(".generation-pending-card");
 const task = (text) => page.locator(".design-turn").filter({ hasText: text }).locator(".generation-pending-card");
 const settings = () => page.locator(".settings-workspace");
-const limit = () => settings().getByRole("combobox", { name: "同时生成任务数", exact: true });
+const limitGroup = () => settings().getByRole("group", { name: "同时生成任务数", exact: true });
+const limitLabel = (value) => value === 0 ? "不限" : `${value} 个`;
 async function setLimit(value) {
 	await page.getByRole("button", { name: "管理生成服务", exact: true }).click();
-	await limit().selectOption(String(value));
+	await limitGroup().getByRole("button", { name: limitLabel(value), exact: true }).click();
 	await page.waitForFunction((expected) => JSON.parse(localStorage.getItem("skiff.test.images.config")).concurrencyLimit === expected, value);
 	await page.getByRole("button", { name: "返回工作区", exact: true }).click();
 }
@@ -44,8 +45,8 @@ try {
 		await prompt().waitFor();
 		await page.evaluate(() => window.skiffPreview.generation.setMode("pending"));
 		await page.getByRole("button", { name: "管理生成服务", exact: true }).click();
-		assert.equal(await limit().inputValue(), "5", "Legacy configuration defaults to five");
-		assert.deepEqual(await limit().locator("option").allTextContents(), ["3 个", "5 个", "10 个", "不限"]);
+		assert.equal(await limitGroup().getByRole("button", { name: "5 个", exact: true }).getAttribute("aria-pressed"), "true", "Legacy configuration defaults to five");
+		assert.deepEqual(await limitGroup().getByRole("button").allTextContents(), ["3 个", "5 个", "10 个", "不限"]);
 		await page.screenshot({ path: `dist/image-concurrency/${theme}-settings.png`, animations: "disabled" });
 		await page.getByRole("button", { name: "返回工作区", exact: true }).click();
 		await prompt().fill("任务 1");
@@ -95,7 +96,7 @@ try {
 		await page.waitForFunction(() => document.querySelectorAll(".generation-pending-card").length === 12);
 		await openCanvasComposer(page);
 		await page.getByRole("button", { name: "管理生成服务", exact: true }).click();
-		assert.equal(await limit().inputValue(), "0", "Preference survives reload");
+		assert.equal(await limitGroup().getByRole("button", { name: "不限", exact: true }).getAttribute("aria-pressed"), "true", "Preference survives reload");
 		await page.setViewportSize({ width: 600, height: 800 });
 		await page.screenshot({ path: `dist/image-concurrency/${theme}-settings-narrow.png`, animations: "disabled" });
 		await page.getByRole("button", { name: "返回工作区", exact: true }).click();

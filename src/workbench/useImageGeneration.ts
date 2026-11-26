@@ -6,7 +6,8 @@ export function useImageGeneration() {
 	const [jobs, setJobs] = useState<ImageJob[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string>();
-	const [submitting, setSubmitting] = useState(false);
+	const [submission, setSubmission] = useState<{ canvasId?: string; prompt: string }>();
+	const [jobsLoaded, setJobsLoaded] = useState(false);
 	const [mutatingId, setMutatingId] = useState<string>();
 	const mutationPending = useRef(false);
 	const jobRevision = useRef(0);
@@ -16,18 +17,17 @@ export function useImageGeneration() {
 	const refreshJobs = useCallback(async () => {
 		const revision = jobRevision.current;
 		const next = await imageGenerationNative.jobs();
-		if (mounted.current && revision === jobRevision.current) setJobs(next);
+		if (mounted.current && revision === jobRevision.current) { setJobs(next); setJobsLoaded(true); }
 		return next;
 	}, []);
 	const refresh = useCallback(async () => {
 		setLoading(true); setError(undefined);
-		const revision = jobRevision.current;
 		try {
-			const [next, list] = await Promise.all([imageGenerationNative.config(), imageGenerationNative.jobs()]);
-			if (mounted.current) { setConfig(next); if (revision === jobRevision.current) setJobs(list); }
+			const [next] = await Promise.all([imageGenerationNative.config(), refreshJobs()]);
+			if (mounted.current) setConfig(next);
 		} catch (reason) { if (mounted.current) setError(String(reason)); }
 		finally { if (mounted.current) setLoading(false); }
-	}, []);
+	}, [refreshJobs]);
 	useEffect(() => { void refresh(); }, [refresh]);
 	const runningCount = jobs.filter(imageJobPending).length;
 	const running = runningCount > 0;
@@ -57,7 +57,7 @@ export function useImageGeneration() {
 		if (!fresh.length) return;
 		for (const job of fresh) completedSeen.current.add(job.id);
 		const superseded = new Set(["failed", "cancelled", "interrupted"]);
-		const stale = jobs.filter((item) => superseded.has(item.status) && !item.removed && fresh.some((done) => done.prompt === item.prompt && done.createdAt > item.createdAt));
+		const stale = jobs.filter((item) => superseded.has(item.status) && !item.removed && fresh.some((done) => done.canvasId === item.canvasId && done.prompt === item.prompt && done.createdAt > item.createdAt));
 		if (!stale.length) return;
 		void (async () => {
 			try {
@@ -72,7 +72,7 @@ export function useImageGeneration() {
 		if (requestPending.current || atCapacity || loading) return;
 		// Polls taken before or during submission may omit the new task. Invalidate
 		// both sets of snapshots when submission starts and when its reply settles.
-		requestPending.current = true; jobRevision.current++; setSubmitting(true); setError(undefined);
+		requestPending.current = true; jobRevision.current++; setSubmission({ canvasId: input.canvasId, prompt: input.prompt }); setError(undefined);
 		try {
 			const reference = source ? await prepareImageReference(source) : undefined;
 			const job = await imageGenerationNative.start({ ...input, id: crypto.randomUUID(), ...(reference ? { reference } : {}) });
@@ -82,7 +82,7 @@ export function useImageGeneration() {
 			// An IPC reply may be lost after the native task was accepted. Read its
 			// durable status before allowing a new submission; never retry the POST.
 			try { await refreshJobs(); } catch { if (mounted.current) setLoading(true); }
-		} finally { jobRevision.current++; requestPending.current = false; if (mounted.current) setSubmitting(false); }
+		} finally { jobRevision.current++; requestPending.current = false; if (mounted.current) setSubmission(undefined); }
 	};
 	const cancel = async (id: string) => {
 		try { await imageGenerationNative.cancel(id); await refreshJobs(); }
@@ -103,5 +103,5 @@ export function useImageGeneration() {
 		} catch (reason) { if (mounted.current) setError(String(reason)); return false; }
 		finally { mutationPending.current = false; jobRevision.current++; if (mounted.current) setMutatingId(undefined); }
 	};
-	return { config, setConfig, jobs, loading, error, refresh, generate, running, runningCount, concurrencyLimit, atCapacity, submitting, cancel, assetAction, setRemoved, mutatingId };
+	return { config, setConfig, jobs, jobsLoaded, loading, error, refresh, generate, running, runningCount, concurrencyLimit, atCapacity, submitting: !!submission, submission, cancel, assetAction, setRemoved, mutatingId };
 }

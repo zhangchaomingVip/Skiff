@@ -78,8 +78,24 @@
 	.generation-size-option small { color: var(--muted); font-size: var(--font-size-xs); }
 	.generation-size-output { margin: 0; padding-top: var(--space-2); border-top: 1px solid var(--border); color: var(--muted); font-size: var(--font-size-xs); font-variant-numeric: tabular-nums; }
 	.image-settings-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); padding-block: var(--space-3); }
+	.image-settings-section-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-5); }
+	.image-settings-section-head > h3 { display: inline-flex; align-items: center; gap: var(--space-2); margin: 0; font-size: var(--font-size-md); font-weight: var(--font-weight-semibold); color: var(--text); }
+	.image-settings-count { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding-inline: var(--space-1-5); border-radius: var(--radius-full); background: var(--panel-2); color: var(--muted); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); font-variant-numeric: tabular-nums; }
+	.image-default-tag { border-color: color-mix(in srgb, var(--accent) 32%, transparent); background: color-mix(in srgb, var(--accent) 12%, var(--surface)); color: var(--accent); font-weight: var(--font-weight-medium); }
+	.image-set-default-button:hover:not(:disabled) { color: var(--accent); }
+	.image-settings-error { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); margin-top: var(--space-3); }
+	.image-settings-error > .generation-gallery-error { margin: 0; }
+	.image-sizes-label-row { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); width: 100%; }
+	.image-size-chips { display: flex; flex-wrap: wrap; gap: var(--space-1-5); width: 100%; }
+	.image-size-chip { display: inline-flex; align-items: center; gap: var(--space-1); padding: 2px var(--space-1-5) 2px var(--space-2); border: 1px solid var(--border); border-radius: var(--radius-full); background: var(--panel-2); color: var(--text); font-family: var(--font-family-mono); font-size: var(--font-size-xs); font-variant-numeric: tabular-nums; }
+	.image-size-chip-remove { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; padding: 0; border: 0; border-radius: var(--radius-full); background: transparent; color: var(--muted); cursor: pointer; transition: background-color var(--transition-fast), color var(--transition-fast); }
+	.image-size-chip-remove:hover, .image-size-chip-remove:focus-visible { background: var(--hover); color: var(--text); }
+	.image-size-input-row { display: flex; align-items: center; gap: var(--space-2); width: 100%; }
+	.image-size-input-row > .ui-input { flex: 1; min-width: 0; }
 	.image-generation-settings .settings-row-hint { overflow-wrap: anywhere; }
-	.image-generation-settings .settings-row.is-stacked > .ui-input:not([type=checkbox]) { width: 100%; }
+	.image-generation-settings .settings-row.is-stacked > .ui-input:not([type=checkbox]),
+	.image-generation-settings .settings-row.is-stacked > .ui-select { width: 100%; }
+	.image-generation-settings .settings-row > .ui-segmented { flex: none; }
 	.generation-saved-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 	.generation-asset-info { display: flex; justify-content: space-between; gap: var(--space-2); margin: 0; padding: 0 var(--space-3) var(--space-3); color: var(--muted); font-size: var(--font-size-xs); }
 	.generation-asset-info > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -87,6 +103,8 @@
 	.generation-actions-menu { display: flex; flex-direction: column; gap: var(--space-0-5); width: min(220px, calc(100vw - 24px)); padding: var(--space-1); }
 	.generation-actions-menu > .ui-button { justify-content: flex-start; width: 100%; min-height: var(--control-primary); padding-inline: var(--space-3); }
 	.generation-actions-menu > .ui-button .ui-button-content { justify-content: flex-start; }
+	.generation-actions-menu > .ui-button[aria-disabled="true"] { color: var(--muted); cursor: default; }
+	.design-archive-reason { padding: 0 var(--space-3) var(--space-2); color: var(--muted); font-size: var(--font-size-xs); }
 	.generation-menu-divider { height: 1px; flex: none; margin: var(--space-1) var(--space-2); background: var(--border); }
 	.generation-actions-menu .generation-menu-remove { color: color-mix(in srgb, var(--danger) 72%, var(--secondary)); }
 	.generation-actions-menu .generation-menu-remove:hover:not(:disabled), .generation-actions-menu .generation-menu-remove:focus-visible { color: var(--danger); background: color-mix(in srgb, var(--danger) 9%, transparent); }
@@ -172,7 +190,7 @@
 	.generation-preview-dialog > footer { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-2); padding: var(--space-3) var(--space-4); border-top: 1px solid var(--border); }
 	@keyframes generation-shimmer { 0%, 100% { background-position: 160% 0; } 50% { background-position: -60% 0; } }
 	@media (prefers-reduced-motion: reduce) {
-		.generation-pending-glow, .design-stage-expand { animation: none; }
+		.generation-pending-glow { animation: none; }
 	}
 	@media (pointer: coarse) {
 		.generation-actions-menu > .ui-button { min-height: 44px; }
@@ -190,7 +208,20 @@
 	/* Studio: a conversation of prompts and works with the composer pinned to the
 	   foot. Nothing above the flow manages the gallery any more. */
 	.design-stage { --design-flow-width: 1040px; --design-flow-padding: var(--space-6); position: relative; display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; }
-	.design-stage-expand { position: absolute; top: var(--space-2); left: var(--space-2); z-index: 2; color: var(--secondary); animation: design-stage-reveal var(--transition-base) var(--easing-default) both; }
+	.design-archives { display: flex; flex-direction: column; gap: var(--space-4); width: 100%; max-width: 720px; min-height: 0; margin-inline: auto; padding: var(--space-6) clamp(var(--space-3), 4vw, var(--space-6)); }
+	.design-archives h1, .design-archive-header h1 { margin: 0; color: var(--text); font-size: var(--font-size-xl); }
+	.design-archives > input { min-height: var(--control-regular); }
+	.design-archive-list { display: grid; gap: var(--space-2); margin: 0; padding: 0; overflow: auto; list-style: none; }
+	.design-archive-row { gap: var(--space-2); padding: var(--space-2) var(--space-3); }
+	.design-archive-row > svg { flex: none; color: var(--muted); }
+	.design-archive-row > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+	.design-archive-row > time { flex: none; color: var(--muted); font-size: var(--font-size-xs); }
+	.design-archive-empty, .design-canvas-limit { margin: 0; color: var(--muted); font-size: var(--font-size-sm); }
+	.design-archive-header { display: flex; align-items: center; gap: var(--space-2); width: 100%; max-width: var(--design-flow-width); margin-inline: auto; padding: var(--space-3) var(--design-flow-padding); border-bottom: 1px solid var(--border); }
+	.design-archive-header h1 { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+	.design-archive-header > button { flex: none; }
+	.design-archive-preview .design-prompt-actions { position: static; margin: var(--space-1) 0 0; opacity: 1; pointer-events: auto; transform: none; }
+	.design-canvas-limit { padding: var(--space-2) var(--design-flow-padding); text-align: center; }
 	.design-dock { flex: none; width: 100%; padding: var(--space-2) 0 var(--space-5); overflow: hidden; scrollbar-gutter: stable both-edges; }
 	.studio-home { flex: none; width: 100%; max-width: var(--design-flow-width); margin-inline: auto; padding-inline: var(--design-flow-padding); }
 	.design-thread { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; }
@@ -250,7 +281,6 @@
 	.design-thread-empty { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-2); padding: var(--space-8) var(--space-4); color: var(--muted); text-align: center; }
 	.design-thread-empty-icon { display: grid; place-items: center; width: var(--space-12); height: var(--space-12); border: 1px solid var(--border); border-radius: var(--radius-xl); background: var(--surface); color: var(--accent); }
 	.design-thread-empty > p { max-width: 320px; margin: 0; font-size: var(--font-size-sm); line-height: var(--line-height-relaxed); }
-	@keyframes design-stage-reveal { from { opacity: 0; transform: translateX(calc(-1 * var(--space-2))); } to { opacity: 1; transform: none; } }
 	/* The card is the input: one surface, one focus ring, no inner boxed fields. */
 	.design-composer { padding: var(--space-1) var(--space-2) var(--space-2); border: 1px solid var(--border); border-radius: var(--radius-xl); background: var(--surface); box-shadow: var(--shadow-elevation-1); transition: border-color var(--transition-fast), box-shadow var(--transition-fast); }
 	.design-composer:focus-within { border-color: color-mix(in srgb, var(--accent) 46%, var(--border)); box-shadow: var(--shadow-elevation-1), 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent); }
@@ -493,7 +523,10 @@
 
 /* Round 9: conversations replace canvases; home is a blank launcher. */
 @layer components {
-	.design-stage.design-home { justify-content: center; padding-bottom: 10vh; }
-	.design-home-title { width: 100%; max-width: var(--design-flow-width); margin: 0 auto var(--space-5); padding: 0 var(--design-flow-padding); color: var(--text); font-size: var(--font-size-2xl, 1.5rem); font-weight: var(--font-weight-semibold); text-align: center; }
-	.design-home .design-dock { padding-bottom: 0; }
+	.design-stage.design-home { --design-flow-width: 720px; justify-content: center; padding-bottom: 10vh; }
+	.design-home-title { width: 100%; max-width: var(--design-flow-width); margin: 0 auto var(--space-6); padding: 0 var(--design-flow-padding); color: var(--text); font-size: var(--font-size-3xl); font-weight: var(--font-weight-semibold); letter-spacing: -0.02em; text-align: center; }
+	.design-home .design-dock { padding-bottom: var(--space-4); }
+	.design-home .design-composer[data-variant=hero] { padding: var(--space-3) var(--space-4); }
+	.design-home .design-composer[data-variant=hero] .generation-form { row-gap: var(--space-2-5); }
+	.design-home .design-composer[data-variant=hero] .generation-controls .generation-field-prompt .ui-textarea { min-height: calc(3lh + var(--space-2) + var(--space-1)); padding: var(--space-1-5) var(--space-6) var(--space-1) var(--space-1); }
 }

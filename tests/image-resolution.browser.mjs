@@ -26,11 +26,12 @@ try {
 		await page.screenshot({ path: `dist/image-resolution/${theme}-unconfigured.png` });
 		await sizes.resolutions.getByRole("button", { name: "配置 2K 尺寸", exact: true }).click();
 		await settings().getByRole("button", { name: "编辑生成服务 OpenAI", exact: true }).click();
-		const original = await settings().getByRole("textbox", { name: "可用尺寸 1", exact: true }).inputValue();
+		const sizeList = settings().getByRole("list", { name: "已配置尺寸 1", exact: true });
+		const original = await sizeList.getByRole("listitem").allTextContents();
 		await settings().getByRole("button", { name: "添加 2K 尺寸", exact: true }).click();
 		await settings().getByRole("button", { name: "添加 4K 尺寸", exact: true }).click();
-		const configured = await settings().getByRole("textbox", { name: "可用尺寸 1", exact: true }).inputValue();
-		assert.ok(configured.startsWith(original)); assert.match(configured, /2880x2880/); assert.match(configured, /3840x2160/);
+		const configured = await sizeList.getByRole("listitem").allTextContents();
+		assert.deepEqual(configured.slice(0, original.length), original); assert.ok(configured.includes("2880x2880")); assert.ok(configured.includes("3840x2160"));
 		assert.equal(await settings().getByRole("button", { name: "添加 4K 尺寸", exact: true }).isDisabled(), true);
 		assert.equal(await settings().getByRole("textbox", { name: "API Key", exact: true }).inputValue(), "");
 		await page.screenshot({ path: `dist/image-resolution/${theme}-presets.png` });

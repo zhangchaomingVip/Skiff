@@ -5,18 +5,24 @@ export function useVideoGeneration() {
 	const [config, setConfig] = useState<VideoConfig>();
 	const [jobs, setJobs] = useState<VideoJob[]>([]);
 	const [loading, setLoading] = useState(true);
-	const [submitting, setSubmitting] = useState(false);
+	const [submission, setSubmission] = useState<{ canvasId?: string; prompt: string }>();
+	const [jobsLoaded, setJobsLoaded] = useState(false);
 	const [error, setError] = useState<string>();
 	const mounted = useRef(true);
 	const pending = useRef(false);
+	const jobRevision = useRef(0);
 	useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
-	const refreshJobs = useCallback(async () => { const next = await videoGenerationNative.jobs(); if (mounted.current) setJobs(next); return next; }, []);
+	const refreshJobs = useCallback(async () => {
+		const revision = jobRevision.current;
+		const next = await videoGenerationNative.jobs();
+		if (mounted.current && revision === jobRevision.current) { setJobs(next); setJobsLoaded(true); }
+	}, []);
 	const refresh = useCallback(async () => {
 		setLoading(true); setError(undefined);
-		try { const [next, list] = await Promise.all([videoGenerationNative.config(), videoGenerationNative.jobs()]); if (mounted.current) { setConfig(next); setJobs(list); } }
+		try { const [next] = await Promise.all([videoGenerationNative.config(), refreshJobs()]); if (mounted.current) setConfig(next); }
 		catch (reason) { if (mounted.current) setError(String(reason)); }
 		finally { if (mounted.current) setLoading(false); }
-	}, []);
+	}, [refreshJobs]);
 	useEffect(() => { void refresh(); }, [refresh]);
 	const active = jobs.some(videoJobActive);
 	const running = jobs.some(videoJobBlocks);
@@ -25,7 +31,11 @@ export function useVideoGeneration() {
 		let stopped = false;
 		let timer: ReturnType<typeof setTimeout>;
 		const poll = async () => {
-			try { const next = await videoGenerationNative.jobs(); if (!stopped) setJobs(next); }
+			try {
+				const revision = jobRevision.current;
+				const next = await videoGenerationNative.jobs();
+				if (!stopped && revision === jobRevision.current) setJobs(next);
+			}
 			catch (reason) { if (!stopped) setError(`无法读取视频状态：${String(reason)}`); }
 			if (!stopped) timer = setTimeout(() => void poll(), 1000);
 		};
@@ -34,7 +44,7 @@ export function useVideoGeneration() {
 	}, [active]);
 	const generate = async (input: Omit<Parameters<typeof videoGenerationNative.start>[0], "id" | "reference">, referenceUrl?: string) => {
 		if (pending.current || running || loading) return;
-		pending.current = true; setSubmitting(true); setError(undefined);
+		pending.current = true; jobRevision.current++; setSubmission({ canvasId: input.canvasId, prompt: input.prompt }); setError(undefined);
 		try {
 			const reference = referenceUrl ? await prepareVideoReference(referenceUrl) : undefined;
 			const job = await videoGenerationNative.start({ ...input, id: crypto.randomUUID(), reference });
@@ -42,20 +52,20 @@ export function useVideoGeneration() {
 		} catch (reason) {
 			if (mounted.current) setError(String(reason));
 			try { await refreshJobs(); } catch { if (mounted.current) setLoading(true); }
-		} finally { pending.current = false; if (mounted.current) setSubmitting(false); }
+		} finally { jobRevision.current++; pending.current = false; if (mounted.current) setSubmission(undefined); }
 	};
 	const [controlling, setControlling] = useState(false);
 	const actionPending = useRef(false);
 	const control = async (id: string, action: "pause" | "resume" | "abandon") => {
 		if (actionPending.current) return;
-		actionPending.current = true; setControlling(true); setError(undefined);
+		actionPending.current = true; jobRevision.current++; setControlling(true); setError(undefined);
 		try { await videoGenerationNative.control(id, action); await refreshJobs(); }
 		catch (reason) { if (mounted.current) setError(String(reason)); }
-		finally { actionPending.current = false; if (mounted.current) setControlling(false); }
+		finally { jobRevision.current++; actionPending.current = false; if (mounted.current) setControlling(false); }
 	};
 	const assetAction = async (action: "export" | "reveal", id: string) => {
 		setError(undefined);
 		try { await videoGenerationNative[action](id); } catch (reason) { if (mounted.current) setError(String(reason)); }
 	};
-	return { config, setConfig, jobs, loading, submitting, error, refresh, generate, running, active, control, controlling, assetAction };
+	return { config, setConfig, jobs, jobsLoaded, loading, submitting: !!submission, submission, error, refresh, generate, running, active, control, controlling, assetAction };
 }

@@ -80,7 +80,7 @@ export const modelKey = (serviceId: string, modelId: string) => `${serviceId}\u0
 export const splitModelKey = (value: string) => value.split("\u0000") as [string, string];
 /** The canvas new work lands in, named only inside a canvas route; home has no target until it sends. */
 export function canvasTarget(studio: GenerationStudio) {
-	if (!studio.canvasView) return undefined;
+	if (studio.view !== "canvas") return undefined;
 	return studio.canvases.find((canvas) => canvas.id === studio.canvasId)?.name ?? "早期作品";
 }
 

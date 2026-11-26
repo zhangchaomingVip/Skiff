@@ -109,7 +109,7 @@ export function SettingsWorkspace({ initialCategory, restrictions, prompt, provi
 			<div className="settings-content">
 				{category === "browser" && <fieldset className="settings-config" disabled={!!restrictions.browser}><BrowserSettings onSaved={prompt.onSaved} /></fieldset>}
 				{category === "statistics" && <SessionStatistics {...statistics} />}
-				{category === "images" && <ImageGenerationSettings images={images} ref={editor} onLockChange={updateInteraction} />}
+				{category === "images" && <ImageGenerationSettings images={images} relays={providers.relays} ref={editor} onLockChange={updateInteraction} />}
 				{category === "videos" && <VideoGenerationSettings videos={videos} ref={editor} onLockChange={updateInteraction} />}
 				{category === "appearance" && <section className="settings-page" aria-labelledby="appearance-title"><h2 id="appearance-title">外观</h2>
 					<div className="settings-group">

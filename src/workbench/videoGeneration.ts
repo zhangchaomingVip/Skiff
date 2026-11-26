@@ -16,6 +16,7 @@ export interface VideoJob {
 	canvasId?: string;
 }
 export const videoJobActive = (job: VideoJob) => ["submitting", "queued", "in_progress", "downloading"].includes(job.status);
+export const videoJobUnsettled = (job: VideoJob) => videoJobActive(job) || ["paused", "submission_unknown", "download_failed"].includes(job.status);
 export const videoJobBlocks = (job: VideoJob) => !["completed", "failed", "abandoned", "download_failed"].includes(job.status) && job.remoteStatus !== "completed";
 export const videoJobLabels: Record<VideoJob["status"], string> = {
 	submitting: "正在提交视频…", queued: "视频排队中…", in_progress: "正在生成视频…", downloading: "正在保存视频…", completed: "视频已保存",

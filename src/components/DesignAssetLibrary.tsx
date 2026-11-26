@@ -70,7 +70,7 @@ function AssetPreview({ asset, studio, onClose, onUseImage, onUseVideo }: {
 				<Button size="compact" variant="ghost" onClick={() => setMoving(asset)}><Icon name="message" size={14} />移到对话…</Button>
 			</footer>
 		</Dialog>
-		{moving && <MoveAssetDialog asset={moving} canvases={studio.canvases} onMove={(target) => { void studio.moveAsset(moving, target); setMoving(undefined); }} onClose={() => setMoving(undefined)} />}
+		{moving && <MoveAssetDialog asset={moving} canvases={studio.activeCanvases} onMove={(target) => void studio.moveAsset(moving, target)} onClose={() => setMoving(undefined)} />}
 	</>;
 }
 

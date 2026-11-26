@@ -18,7 +18,7 @@ export function VideoControls({ studio, onConfigure, onSubmitted, variant, onOpe
 	const model = service?.models.find((item) => item.id === draft.modelId);
 	const configured = !!service?.configured && !!model;
 	const update = (patch: Partial<typeof draft>) => studio.updateDraft("video", patch);
-	const canGenerate = configured && !videos.loading && !videos.submitting && !videos.running && !!draft.prompt.trim() && model.durations.includes(draft.duration) && model.ratios.includes(draft.ratio) && (!studio.reference || model.referenceEnabled);
+	const canGenerate = configured && !studio.canvasLimitReached && !videos.loading && !videos.submitting && !videos.running && !!draft.prompt.trim() && model.durations.includes(draft.duration) && model.ratios.includes(draft.ratio) && (!studio.reference || model.referenceEnabled);
 	const status = videos.loading ? "正在读取视频服务" : videos.running ? "已有视频任务，可在对话流中查看或继续查询" : configured ? "" : "尚未配置视频生成服务";
 	// Same growth rule as the image panel: a few lines at rest, capped and scrollable.
 	useEffect(() => {
@@ -29,7 +29,14 @@ export function VideoControls({ studio, onConfigure, onSubmitted, variant, onOpe
 	}, [draft.prompt, variant]);
 	return <aside className="generation-controls" data-kind="video" data-variant={variant} aria-label="生成视频参数">
 		<header className="generation-controls-header"><span className="generation-mode-icon"><Icon name="video" size={20} /></span><div><h1>生成视频</h1><p>让画面，多一点故事</p></div></header>
-		<form className="generation-form" onSubmit={(event) => { event.preventDefault(); if (!canGenerate) return; void videos.generate({ serviceId: draft.serviceId, modelId: draft.modelId, prompt: draft.prompt, duration: draft.duration, ratio: draft.ratio, projectRoot: studio.project?.path, canvasId: studio.prepareSubmitCanvas(draft.prompt) || undefined }, studio.reference?.url); update({ prompt: "" }); onSubmitted?.(); }} {...drop.handlers}>
+		<form className="generation-form" onSubmit={(event) => {
+			event.preventDefault();
+			if (!canGenerate) return;
+			const canvasId = studio.prepareSubmitCanvas(draft.prompt);
+			if (canvasId === undefined) return;
+			void videos.generate({ serviceId: draft.serviceId, modelId: draft.modelId, prompt: draft.prompt, duration: draft.duration, ratio: draft.ratio, projectRoot: studio.project?.path, canvasId: canvasId || undefined }, studio.reference?.url);
+			update({ prompt: "" }); onSubmitted?.();
+		}} {...drop.handlers}>
 			<div className="generation-fields">
 				<div className="generation-field generation-field-prompt"><div className="generation-field-heading"><label htmlFor={`${id}-prompt`}>提示词 <span>Prompt</span></label></div><TextArea ref={promptInput} id={`${id}-prompt`} rows={variant === "panel" ? 2 : 1} maxLength={32000} value={draft.prompt} aria-keyshortcuts="Control+Enter Meta+Enter" placeholder={canvasTarget(studio) ? "接着描述画面如何动起来…" : "描述画面如何动起来：镜头缓缓推进，微风拂过窗边的花…"} onChange={(event) => update({ prompt: event.target.value })} onPaste={(event) => { const file = Array.from(event.clipboardData.files).find((item) => item.type.startsWith("image/")); if (!file) return; event.preventDefault(); studio.uploadReference(file); }} onKeyDown={(event) => {
 						if (event.key === "Enter" && (event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && !event.nativeEvent.isComposing && event.nativeEvent.keyCode !== 229) {
@@ -49,7 +56,7 @@ export function VideoControls({ studio, onConfigure, onSubmitted, variant, onOpe
 					<fieldset className="generation-field generation-ratios"><legend>画面比例</legend><div role="group" aria-label="画面比例"><Button size="compact" variant="ghost" aria-pressed={draft.ratio === "9:16"} onClick={() => update({ ratio: "9:16" })}>9:16</Button></div></fieldset>
 					{variant === "hero"
 						? <div className="generation-field generation-field-params"><GenerationPicker id={`${id}-duration`} label="时长" value={String(draft.duration)} placeholder={`${draft.ratio} · ${draft.duration} 秒`} options={(model?.durations.length ? model.durations : [5]).map((duration) => ({ value: String(duration), label: `${duration} 秒`, display: `${draft.ratio} · ${duration} 秒` }))} onChange={(value) => update({ duration: Number(value) })} /></div>
-						: <div className="generation-field generation-field-duration"><label htmlFor={`${id}-duration`}>时长</label><Select id={`${id}-duration`} value={draft.duration} onChange={(event) => update({ duration: Number(event.target.value) })}>{(model?.durations.length ? model.durations : [5]).map((duration) => <option key={duration} value={duration}>{variant === "hero" ? `${draft.ratio} · ${duration} 秒` : `${duration} 秒`}</option>)}</Select><p className="generation-field-hint">支持 5 秒与 10 秒竖屏。实际分辨率以成片为准。</p></div>}
+						: <div className="generation-field generation-field-duration"><label htmlFor={`${id}-duration`}>时长</label><Select id={`${id}-duration`} value={draft.duration} onChange={(event) => update({ duration: Number(event.target.value) })}>{(model?.durations.length ? model.durations : [5]).map((duration) => <option key={duration} value={duration}>{duration} 秒</option>)}</Select><p className="generation-field-hint">支持 5 秒与 10 秒竖屏。实际分辨率以成片为准。</p></div>}
 				</div>
 				{studio.reference && !model?.referenceEnabled && <p className="generation-field-hint" role="status">当前模型未启用单图参考。请移除参考图使用文生视频，或在视频设置中启用实验性单图参考。</p>}
 				{studio.referenceError && <p className="generation-error" role="alert">{studio.referenceError}<IconButton size="compact" variant="ghost" aria-label="关闭文件提示" onClick={studio.clearReferenceError}><Icon name="close" /></IconButton></p>}

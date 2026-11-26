@@ -1,12 +1,13 @@
-/** Design canvases group image and video works under one named collection.
- *  They are deliberately not infinite boards: a canvas only scopes the gallery,
- *  so the studio keeps the same grid, previews and task history. */
+/** Design conversations group image and video jobs and imported works. */
 export interface DesignCanvas {
 	id: string;
 	name: string;
 	createdAt: number;
 	updatedAt: number;
+	archivedAt?: number;
 }
+
+export const isArchivedDesignCanvas = (canvas: DesignCanvas): canvas is DesignCanvas & { archivedAt: number } => canvas.archivedAt !== undefined;
 
 export interface DesignCanvasState {
 	version: 1;
@@ -32,23 +33,44 @@ export function readDesignCanvases(storage: Pick<Storage, "getItem">): DesignCan
 		const seen = new Set<string>();
 		const canvases: DesignCanvas[] = [];
 		for (const item of saved.canvases) {
-			if (!item || typeof item.id !== "string" || typeof item.name !== "string") continue;
+			if (!item || typeof item.id !== "string" || !item.id || typeof item.name !== "string") continue;
 			const name = cleanName(item.name);
 			if (!name || seen.has(item.id)) continue;
 			seen.add(item.id);
 			const createdAt = Number(item.createdAt) || Date.now();
-			canvases.push({ id: item.id, name, createdAt, updatedAt: Number(item.updatedAt) || createdAt });
+			const { archivedAt } = item;
+			const hasArchiveTime = typeof archivedAt === "number" && Number.isSafeInteger(archivedAt) && archivedAt > 0 && archivedAt <= 8.64e15;
+			canvases.push({ id: item.id, name, createdAt, updatedAt: Number(item.updatedAt) || createdAt, ...(hasArchiveTime ? { archivedAt } : {}) });
+			if (canvases.length === maxDesignCanvases) break;
 		}
-		const activeId = typeof saved.activeId === "string" && canvases.some((canvas) => canvas.id === saved.activeId) ? saved.activeId : ungroupedCanvasId;
-		return { version: 1, activeId, canvases: canvases.slice(0, maxDesignCanvases) };
+		const activeId = typeof saved.activeId === "string" && canvases.some((canvas) => canvas.id === saved.activeId && !isArchivedDesignCanvas(canvas)) ? saved.activeId : ungroupedCanvasId;
+		return { version: 1, activeId, canvases };
 	} catch {
 		return emptyCanvasState;
 	}
 }
 
 export function addDesignCanvas(state: DesignCanvasState, name: string, id = crypto.randomUUID()): DesignCanvasState {
+	if (state.canvases.length >= maxDesignCanvases) return state;
 	const canvas: DesignCanvas = { id, name: cleanName(name) || "新对话", createdAt: Date.now(), updatedAt: Date.now() };
-	return { ...state, canvases: [...state.canvases, canvas].slice(0, maxDesignCanvases), activeId: canvas.id };
+	return { ...state, canvases: [...state.canvases, canvas], activeId: canvas.id };
+}
+
+export function archiveDesignCanvas(state: DesignCanvasState, id: string, archivedAt = Date.now()): DesignCanvasState {
+	const target = state.canvases.find((canvas) => canvas.id === id);
+	if (!target || isArchivedDesignCanvas(target)) return state;
+	return {
+		...state,
+		activeId: state.activeId === id ? ungroupedCanvasId : state.activeId,
+		canvases: state.canvases.map((canvas) => canvas === target ? { ...canvas, archivedAt } : canvas),
+	};
+}
+
+export function restoreDesignCanvas(state: DesignCanvasState, id: string): DesignCanvasState {
+	const target = state.canvases.find((canvas) => canvas.id === id);
+	if (!target || !isArchivedDesignCanvas(target)) return state;
+	const { archivedAt, ...restored } = target;
+	return { ...state, activeId: id, canvases: state.canvases.map((canvas) => canvas === target ? restored : canvas) };
 }
 
 export function renameDesignCanvas(state: DesignCanvasState, id: string, name: string): DesignCanvasState {

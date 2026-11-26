@@ -14,18 +14,14 @@
 	.design-sidebar h1 { margin: var(--space-1) 0; color: var(--text); font-size: var(--font-size-xl); font-weight: var(--font-weight-semibold); }
 	.design-sidebar header p { margin: 0; color: var(--muted); font-size: var(--font-size-xs); }
 	.design-sidebar h2 { display: block; margin: 0 0 var(--space-2); padding-inline: var(--space-2); color: var(--muted); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); }
-	/* The title row owns the collapse affordance so the rail can hand its width
-	   back to the flow without reaching for the title bar. */
 	.design-sidebar-title { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
-	.design-sidebar-collapse { flex: none; color: var(--muted); }
 	@keyframes design-sidebar-reveal { from { opacity: 0; transform: translateX(calc(-1 * var(--space-2))); } to { opacity: 1; transform: none; } }
 	/* Section head pairs the label with one quiet icon action, so the sidebar
 	   lists canvases and assets only — no creation modes, no status filters. */
 	.design-sidebar-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); min-height: var(--control-compact); }
 	.design-sidebar-heading h2 { margin: 0; }
 	.design-sidebar-heading .ui-icon-button { color: var(--muted); }
-	/* Canvases read like the collection rows: one quiet list, no nested trees.
-	   Rename and delete only surface on hover, so the list stays a list. */
+	/* Conversation actions appear on hover and keyboard focus. */
 	.design-canvases { display: flex; flex-direction: column; gap: var(--space-1); }
 	.design-canvas-row { position: relative; display: flex; align-items: center; border-radius: var(--radius-md); background: transparent; transition: background-color var(--transition-fast); }
 	.design-canvas-row-main { display: flex; align-items: center; gap: var(--space-2); width: 100%; min-height: var(--control-primary); padding: var(--space-2); border: 0; border-radius: inherit; background: transparent; color: var(--secondary); text-align: left; font-size: var(--font-size-sm); }
@@ -47,6 +43,10 @@
 	.design-canvas-row[data-active] .design-canvas-row-actions { background: linear-gradient(to right, transparent, var(--selected) 36%); }
 	.design-canvas-row:hover .design-canvas-row-actions, .design-canvas-row:focus-within .design-canvas-row-actions { opacity: 1; pointer-events: auto; }
 	.design-canvas-row-actions .ui-icon-button { color: var(--secondary); }
+	.design-canvas-row:has(.design-canvas-row-actions) .design-canvas-row-main { padding-inline-end: var(--space-8); }
+	@media (hover: none), (max-width: 760px) {
+		.design-canvas-row .design-canvas-row-actions { opacity: 1; pointer-events: auto; background: transparent; }
+	}
 	/* 未分组 is the system fallback, not a user canvas: quieter text, set apart at the foot of the list. */
 	.design-canvas-row-system { margin-top: var(--space-1); }
 	.design-canvas-row-system::before { content: ""; position: absolute; top: calc(-1 * var(--space-1)); left: var(--space-2); right: var(--space-2); border-top: 1px dashed color-mix(in srgb, var(--border) 80%, transparent); }

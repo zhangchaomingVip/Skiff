@@ -8,7 +8,8 @@ export async function verifyImageConcurrency(page, scenario, serviceId, dir, art
 	const generate = () => page.getByRole("button", { name: "生成图片", exact: true });
 	const cards = () => page.locator(".generation-pending-card");
 	const settings = () => page.locator(".settings-workspace");
-	const limit = () => settings().getByRole("combobox", { name: "同时生成任务数", exact: true });
+	const limitGroup = () => settings().getByRole("group", { name: "同时生成任务数", exact: true });
+	const limitLabel = (value) => value === 0 ? "不限" : `${value} 个`;
 	const list = () => page.evaluate(() => window.__TAURI_INTERNALS__.invoke("list_image_generation_jobs"));
 	const nativeStart = (input) => page.evaluate(async (input) => {
 		try { return await window.__TAURI_INTERNALS__.invoke("start_image_generation", { input }); }
@@ -16,7 +17,7 @@ export async function verifyImageConcurrency(page, scenario, serviceId, dir, art
 	}, input);
 	const setLimit = async (value) => {
 		await page.getByRole("button", { name: "管理生成服务", exact: true }).click();
-		await limit().selectOption(String(value));
+		await limitGroup().getByRole("button", { name: limitLabel(value), exact: true }).click();
 		await page.waitForFunction(async (expected) => (await window.__TAURI_INTERNALS__.invoke("get_image_generation_config")).concurrencyLimit === expected, value);
 		await page.getByRole("button", { name: "返回工作区", exact: true }).click();
 	};
@@ -29,7 +30,7 @@ export async function verifyImageConcurrency(page, scenario, serviceId, dir, art
 	const before = scenario.requests.length;
 	const beforeCompleted = (await list()).filter((job) => job.status === "completed").length;
 	await page.getByRole("button", { name: "管理生成服务", exact: true }).click();
-	assert.equal(await limit().inputValue(), "5");
+	assert.equal(await limitGroup().getByRole("button", { name: "5 个", exact: true }).getAttribute("aria-pressed"), "true");
 	await page.screenshot({ path: join(artifacts, "image-concurrency-settings-cdp.png"), animations: "disabled" });
 	await page.getByRole("button", { name: "返回工作区", exact: true }).click();
 	// Each parallel edit owns a durable reference snapshot, even after replacement.

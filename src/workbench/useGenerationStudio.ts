@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useImageGeneration } from "./useImageGeneration";
 import { useVideoGeneration } from "./useVideoGeneration";
-import { videoGenerationNative, type VideoJob } from "./videoGeneration";
-import { imageAssetUrl, imageGenerationNative, sizeRatio, type ImageJob } from "./imageGeneration";
-import { addDesignCanvas, conversationName, touchDesignCanvas, designCanvasKey, readDesignCanvases, removeDesignCanvas, renameDesignCanvas, ungroupedCanvasId, type DesignCanvasState } from "./designCanvases";
+import { videoGenerationNative, videoJobLabels, videoJobUnsettled, type VideoJob } from "./videoGeneration";
+import { imageAssetUrl, imageGenerationNative, imageJobPending, sizeRatio, type ImageJob } from "./imageGeneration";
+import { addDesignCanvas, archiveDesignCanvas, conversationName, designCanvasKey, isArchivedDesignCanvas, maxDesignCanvases, readDesignCanvases, removeDesignCanvas, renameDesignCanvas, restoreDesignCanvas, touchDesignCanvas, ungroupedCanvasId, type DesignCanvasState } from "./designCanvases";
 import { designAssetsNative, fileToDataUrl, type DesignAssetRecord } from "./designAssets";
 import { invoke } from "@tauri-apps/api/core";
 import type { Project } from "../chat/workspace";
@@ -91,38 +91,77 @@ export function useGenerationStudio(project?: Project) {
 			return { ...current, video: { ...previous, serviceId: service?.id ?? "", modelId: model?.id ?? "", duration: model?.durations.includes(previous.duration) ? previous.duration : model?.durations[0] ?? 5, ratio: "9:16" } };
 		});
 	}, [videos.config]);
-	// Canvases only scope the gallery: the studio still submits through the same
-	// queues, and deleting a canvas never touches the generated files.
 	const [canvasState, setCanvasState] = useState<DesignCanvasState>(() => ({ ...readDesignCanvases(localStorage), activeId: ungroupedCanvasId }));
-	const [canvasView, setCanvasView] = useState(false);
-	const [assetView, setAssetView] = useState(false);
-	useEffect(() => { try { localStorage.setItem(designCanvasKey, JSON.stringify(canvasState)); } catch { /* Canvases stay usable for this run. */ } }, [canvasState]);
+	const canvasStateRef = useRef(canvasState);
+	const [view, setView] = useState<"home" | "canvas" | "assets" | "archives">("home");
+	const [canvasError, setCanvasError] = useState<string>();
+	const updateCanvasState = (next: DesignCanvasState, persist = true) => {
+		if (next === canvasStateRef.current) return false;
+		if (persist) {
+			try { localStorage.setItem(designCanvasKey, JSON.stringify(next)); }
+			catch { setCanvasError("无法保存对话记录，请重试。"); return false; }
+		}
+		canvasStateRef.current = next;
+		setCanvasState(next);
+		setCanvasError(undefined);
+		return true;
+	};
 	const canvases = canvasState.canvases;
+	const activeCanvases = canvases.filter((canvas) => !isArchivedDesignCanvas(canvas));
 	const canvasId = canvasState.activeId;
-	const selectCanvas = (id: string) => setCanvasState((current) => ({ ...current, activeId: current.canvases.some((canvas) => canvas.id === id) ? id : ungroupedCanvasId }));
-	const openCanvas = (id: string) => { selectCanvas(id); setCanvasView(true); setAssetView(false); };
-	const openAssets = useCallback(() => { setCanvasView(false); setAssetView(true); }, []);
-	// Home is a blank launcher: sending from it starts a new conversation (see prepareSubmitCanvas).
-	const openGallery = useCallback(() => { setCanvasView(false); setAssetView(false); setCanvasState((current) => current.activeId === ungroupedCanvasId ? current : { ...current, activeId: ungroupedCanvasId }); }, []);
-	const createCanvas = (name: string) => {
-		const id = crypto.randomUUID();
-		setCanvasState((current) => addDesignCanvas(current, name, id));
-		return id;
+	const canvasLimitReached = view === "home" && canvases.length >= maxDesignCanvases;
+	const openCanvas = (id: string) => {
+		const current = canvasStateRef.current;
+		if (id && !current.canvases.some((canvas) => canvas.id === id && !isArchivedDesignCanvas(canvas))) return;
+		updateCanvasState({ ...current, activeId: id }, false);
+		setView("canvas");
+	};
+	const openAssets = () => setView("assets");
+	const openArchives = () => setView("archives");
+	const openGallery = () => {
+		updateCanvasState({ ...canvasStateRef.current, activeId: ungroupedCanvasId }, false);
+		setView("home");
 	};
 	/** Where a submit lands: the open conversation, or a new one named after the prompt
 	 *  when sending from home. Sending from home also opens that conversation. */
 	const prepareSubmitCanvas = (prompt: string) => {
-		if (canvasView && !assetView) {
-			if (canvasId) setCanvasState((current) => touchDesignCanvas(current, canvasId));
-			return canvasId;
+		const current = canvasStateRef.current;
+		if (view === "canvas") {
+			const id = current.activeId;
+			if (!id) return ungroupedCanvasId;
+			if (current.canvases.some((canvas) => canvas.id === id && !isArchivedDesignCanvas(canvas)) && updateCanvasState(touchDesignCanvas(current, id))) return id;
+			return undefined;
 		}
-		const id = createCanvas(conversationName(prompt));
-		setCanvasView(true);
-		setAssetView(false);
-		return id;
+		if (view !== "home") return undefined;
+		const next = addDesignCanvas(current, conversationName(prompt));
+		if (!updateCanvasState(next)) return undefined;
+		setView("canvas");
+		return next.activeId;
 	};
-	const renameCanvas = (id: string, name: string) => setCanvasState((current) => renameDesignCanvas(current, id, name));
-	const deleteCanvas = (id: string) => setCanvasState((current) => removeDesignCanvas(current, id));
+	const renameCanvas = (id: string, name: string) => { updateCanvasState(renameDesignCanvas(canvasStateRef.current, id, name)); };
+	const deleteCanvas = (id: string) => {
+		const current = canvasStateRef.current;
+		if (updateCanvasState(removeDesignCanvas(current, id)) && view === "canvas" && current.activeId === id) setView("home");
+	};
+	const canvasArchiveReason = (id: string) => {
+		if (images.loading || videos.loading) return "正在确认生成任务状态";
+		if (!images.jobsLoaded || !videos.jobsLoaded) return "暂时无法确认生成任务状态";
+		if (images.submission?.canvasId === id) return "正在提交图片";
+		if (videos.submission?.canvasId === id) return "正在提交视频";
+		if (images.jobs.some((job) => job.canvasId === id && imageJobPending(job))) return "图片正在生成或保存";
+		const video = videos.jobs.find((job) => job.canvasId === id && videoJobUnsettled(job));
+		return video ? videoJobLabels[video.status] : undefined;
+	};
+	const archiveCanvas = (id: string) => {
+		if (!id || canvasArchiveReason(id)) return false;
+		const current = canvasStateRef.current;
+		if (!updateCanvasState(archiveDesignCanvas(current, id))) return false;
+		if (view === "canvas" && current.activeId === id) setView("home");
+		return true;
+	};
+	const restoreCanvas = (id: string) => {
+		if (updateCanvasState(restoreDesignCanvas(canvasStateRef.current, id))) setView("canvas");
+	};
 	const [imported, setImported] = useState<DesignAssetRecord[]>([]);
 	const refreshImported = useCallback(async () => {
 		try { setImported(await designAssetsNative.list()); }
@@ -199,6 +238,7 @@ export function useGenerationStudio(project?: Project) {
 	};
 	/** Moves a work between canvases; empty target means ungrouped. */
 	const moveAsset = async (asset: GenerationAsset, target: string) => {
+		if (target && !canvasStateRef.current.canvases.some((canvas) => canvas.id === target && !isArchivedDesignCanvas(canvas))) return;
 		if (asset.job) { await imageGenerationNative.setCanvas(asset.id, target || undefined); await images.refresh(); return; }
 		if (asset.videoJob) { await videoGenerationNative.setCanvas(asset.id, target || undefined); await videos.refresh(); return; }
 		if (asset.imported) {
@@ -215,7 +255,7 @@ export function useGenerationStudio(project?: Project) {
 		const path = await invoke<string>("save_design_asset_to_project", { root: target.path, source, name: asset.name });
 		invalidateProjectFiles(target.id); void projectGitCache.refreshChanged(target.path); return path;
 	};
-	return { project, drafts, updateDraft, assets: [...generatedVideos, ...generated, ...importedAssets].map((asset) => ({ ...asset, favorite: favorites.has(favoriteKey(asset)) })), importAssets, reference, uploadReference, removeReference: () => replaceReference(), useImageForVideo, referenceError, clearReferenceError: () => setReferenceError(undefined), imageReference, uploadImageReference, removeImageReference: () => replaceImageReference(), useImageForImage, imageReferenceError, clearImageReferenceError: () => setImageReferenceError(undefined), errors, clearError, images, videos, setAssetRemoved, setAssetFavorite, moveAsset, saveToProject, canvases, canvasId, canvasView, assetView, selectCanvas, openCanvas, openAssets, openGallery, createCanvas, prepareSubmitCanvas, renameCanvas, deleteCanvas, refreshImported };
+	return { project, drafts, updateDraft, assets: [...generatedVideos, ...generated, ...importedAssets].map((asset) => ({ ...asset, favorite: favorites.has(favoriteKey(asset)) })), importAssets, reference, uploadReference, removeReference: () => replaceReference(), useImageForVideo, referenceError, clearReferenceError: () => setReferenceError(undefined), imageReference, uploadImageReference, removeImageReference: () => replaceImageReference(), useImageForImage, imageReferenceError, clearImageReferenceError: () => setImageReferenceError(undefined), errors, clearError, images, videos, setAssetRemoved, setAssetFavorite, moveAsset, saveToProject, canvases, activeCanvases, canvasId, view, canvasLimitReached, canvasError, openCanvas, openAssets, openGallery, openArchives, prepareSubmitCanvas, renameCanvas, deleteCanvas, canvasArchiveReason, archiveCanvas, restoreCanvas, refreshImported };
 }
 
 export type GenerationStudio = ReturnType<typeof useGenerationStudio>;
