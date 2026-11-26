@@ -689,7 +689,7 @@ pub fn run() {
 			families::fetch_pricing_page, families::extract_pricing_table,
 		families::generate_chat_title,
 			families::fetch_public_catalog, families::set_usd_cny_rate, families::create_family,
-			search::get_web_search_status, search::validate_web_search, search::save_web_search_key, search::set_web_search_provider, search::set_web_search_read_url, search::clear_web_search_key, search::install_web_search_extension
+			search::get_web_search_status, search::validate_web_search, search::save_web_search_key, search::set_web_search_provider, search::clear_web_search_key, search::install_web_search_extension
 		])
 		.on_window_event(|window, event| {
 			if matches!(event, tauri::WindowEvent::Destroyed) {

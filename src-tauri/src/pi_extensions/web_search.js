@@ -8,8 +8,9 @@
  * 工具参数除 query / max_results 外，还支持限定域名（include_domains /
  * exclude_domains）与发布时间（time_range），两者按引擎翻译成各自的原生字段。
  *
- * 用户在设置里勾选「读取网页」时，额外注册 `read_url` 工具：Exa 走 Contents
- * 端点（可读缓存、可强制重抓），Tavily 走 Extract 端点（实时抓取）。
+ * 联网搜索开启时同时启用 `read_url` 工具（没有单独开关）：Exa 走 Contents
+ * 端点（可读缓存、可强制重抓），Tavily 走 Extract 端点（实时抓取）；引擎读不了
+ * （没配 key、key 失效、额度用完、页面抓不到）时自动退回本地直连抓取。
  *
  * 由 Skiff 写入 ~/.pi/agent/extensions/，升级时会被覆盖，请勿手改。
  *
@@ -30,6 +31,9 @@ const STATE_FILE = "skiff-web-search-state.json";
 /** read_url 的正文上限：Exa Contents 按页计费，20k 字符实测仍是 $0.001/页。 */
 const READ_MAX_CHARS = 12000;
 const READ_MAX_CHARS_LIMIT = 30000;
+/** 本地直连兜底：超时与读取上限，防止大文件或慢站点拖住对话。 */
+const LOCAL_TIMEOUT_MS = 15000;
+const LOCAL_MAX_CHARS = 2_000_000;
 
 /** time_range 取值到天数的映射；Tavily 直接收枚举值，Exa 需要换算成起始日期。 */
 const TIME_RANGES = { day: 1, week: 7, month: 30, year: 365 };
@@ -226,16 +230,6 @@ function readMaxResults() {
 	return Number.isFinite(value) && value > 0 ? value : 5;
 }
 
-/** 「读取网页」开关，由 Skiff 设置页写入；默认关闭。 */
-function readUrlEnabled() {
-	return readJson(KEY_FILE).readUrlEnabled === true;
-}
-
-/** read_url 两个引擎都有对应端点，只要有当前引擎的 key 且开关打开。 */
-function readUrlAvailable() {
-	return readUrlEnabled() && !!readApiKey();
-}
-
 /** 只接受 http/https，且拒绝带账号密码的地址。 */
 function normalizeUrl(input) {
 	let url;
@@ -325,6 +319,88 @@ async function readPage(provider, apiKey, url, options, signal) {
 	return provider === "exa" ? exaContents(apiKey, url, options, signal) : tavilyExtract(apiKey, url, signal);
 }
 
+function decodeEntities(text) {
+	const named = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " };
+	return String(text ?? "").replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (match, code) => {
+		if (code[0] === "#") {
+			const value = code[1].toLowerCase() === "x" ? parseInt(code.slice(2), 16) : parseInt(code.slice(1), 10);
+			return Number.isFinite(value) && value > 0 && value < 0x110000 ? String.fromCodePoint(value) : match;
+		}
+		return named[code.toLowerCase()] ?? match;
+	});
+}
+
+/**
+ * 本地兜底用的极简 HTML 转正文：优先取 <article>/<main>，去掉脚本、样式和导航，
+ * 段落与列表保留换行。页面标题降到四级，避免与结果分隔符「### 」同形。
+ */
+function htmlToPage(html, url) {
+	const title = decodeEntities(/<title[^>]*>([\s\S]*?)<\/title>/i.exec(html)?.[1] ?? "").replace(/\s+/g, " ").trim();
+	const main = /<(article|main)\b[^>]*>([\s\S]*?)<\/\1>/i.exec(html)?.[2] ?? /<body\b[^>]*>([\s\S]*?)<\/body>/i.exec(html)?.[1] ?? html;
+	const text = main
+		.replace(/<!--[\s\S]*?-->/g, "")
+		.replace(/<(script|style|noscript|template|svg|iframe|nav|footer|aside|form)\b[\s\S]*?<\/\1>/gi, "")
+		.replace(/<h([1-6])\b[^>]*>/gi, (_, level) => `\n\n${"#".repeat(Math.min(6, Number(level) + 3))} `)
+		.replace(/<li\b[^>]*>/gi, "\n- ")
+		.replace(/<br\s*\/?>/gi, "\n")
+		.replace(/<\/(p|div|section|article|main|li|tr|h[1-6]|pre|blockquote|table|ul|ol)>/gi, "\n\n")
+		.replace(/<[^>]+>/g, "");
+	const clean = decodeEntities(text)
+		.replace(/[ \t\f\v\u00a0]+/g, " ")
+		.replace(/ *\n */g, "\n")
+		.replace(/\n{3,}/g, "\n\n")
+		.trim();
+	return { url, title, text: clean };
+}
+
+/** 本地直连抓取：不经过任何引擎、不花额度，只作为引擎失败时的兜底。错误信息不带前缀，由调用方拼接。 */
+async function localFetch(url, signal) {
+	const timeout = typeof AbortSignal.timeout === "function" ? AbortSignal.timeout(LOCAL_TIMEOUT_MS) : undefined;
+	const combined = signal && timeout && typeof AbortSignal.any === "function" ? AbortSignal.any([signal, timeout]) : signal ?? timeout;
+	let response;
+	try {
+		response = await fetch(url, {
+			headers: { "user-agent": "Mozilla/5.0 (compatible; Skiff)", accept: "text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.5" },
+			redirect: "follow",
+			signal: combined,
+		});
+	} catch (error) {
+		if (signal?.aborted) throw error;
+		throw new Error(error?.name === "TimeoutError" ? "本地直连超时" : "本地直连无法访问该页面");
+	}
+	if (!response.ok) throw new Error(`本地直连返回 HTTP ${response.status}`);
+	const type = String(response.headers?.get?.("content-type") ?? "").toLowerCase();
+	if (type && !/text\/|html|xml|json/.test(type)) throw new Error(`页面不是文本内容（${type.split(";")[0]}）`);
+	const raw = String(await response.text()).slice(0, LOCAL_MAX_CHARS);
+	const finalUrl = response.url || url;
+	const page = /html|xml/.test(type) || /^\s*</.test(raw) ? htmlToPage(raw, finalUrl) : { url: finalUrl, title: "", text: raw.trim() };
+	if (!page.text) throw new Error("页面没有可读正文（可能需要登录或由脚本渲染）");
+	return { page, source: "local" };
+}
+
+/**
+ * 先走当前引擎；没配 key 或引擎失败（key 失效、额度用完、抓取失败）时退回本地直连。
+ * 用户主动取消（signal 中止）不兜底。两边都失败时把两个原因一起报给模型。
+ */
+async function readWithFallback(provider, apiKey, url, options, signal) {
+	let engineError;
+	if (apiKey) {
+		try {
+			return { ...(await readPage(provider, apiKey, url, options, signal)), fallback: "" };
+		} catch (error) {
+			if (signal?.aborted) throw error;
+			engineError = String(error?.message ?? error);
+		}
+	}
+	try {
+		return { ...(await localFetch(url, signal)), fallback: (engineError ?? "").replace(/^读取网页失败：/, "") };
+	} catch (error) {
+		if (signal?.aborted) throw error;
+		const local = String(error?.message ?? error);
+		throw new Error(engineError ? `${engineError}；本地直连也失败：${local}` : `读取网页失败：${local}`);
+	}
+}
+
 /** 把 `https://x.com/foo`、`www.x.com` 这类写法收敛成 `x.com`，并去重。 */
 function normalizeDomains(input) {
 	if (input == null) return [];
@@ -395,10 +471,8 @@ function readActive(pi) {
 
 /** 当前配置下应当处于激活状态的 Skiff 工具。 */
 function desiredTools() {
-	const tools = [];
-	if (desiredEnabled()) tools.push(TOOL);
-	if (readUrlAvailable()) tools.push(READ_TOOL);
-	return tools;
+	// read_url 不再单独开关：跟随联网搜索一起启用，没有 key 时也能靠本地直连读取。
+	return desiredEnabled() ? [TOOL, READ_TOOL] : [];
 }
 
 /** 把 activeTools 对齐到持久化状态；工具尚未注册或列表为空时不动作。 */
@@ -474,12 +548,12 @@ export default function setup(pi) {
 		},
 	});
 
-	// 「读取网页」：Exa 走 Contents（可读缓存），Tavily 走 Extract（实时抓取），由开关控制。
+	// 「读取网页」：Exa 走 Contents（可读缓存），Tavily 走 Extract（实时抓取），失败退回本地直连。
 	pi.registerTool({
 		name: READ_TOOL,
 		label: "读取网页",
 		description:
-			"读取一个网页的正文，按当前引擎选择 Exa Contents 或 Tavily Extract。用户给出链接并要求总结、核对或引用其中内容时使用；搜索结果里的链接也适合用它精读，避免再次搜索。",
+			"读取一个网页的正文。用户给出链接并要求总结、核对或引用其中内容时使用；搜索结果的摘要不足以回答时，再挑最相关的一两条链接精读，不要逐条读取全部结果，也不要为摘要已覆盖的内容重复读取。",
 		parameters: {
 			type: "object",
 			properties: {
@@ -494,12 +568,11 @@ export default function setup(pi) {
 			const provider = readProvider();
 			const spec = PROVIDERS[provider];
 			const apiKey = readApiKey(provider);
-			if (!apiKey) throw new Error(`读取网页无法使用：尚未配置 ${spec.label} API key，请先在 Skiff 的联网搜索设置中填写。`);
 			const url = normalizeUrl(params?.url);
 			const requested = Number(params?.max_chars);
 			const maxChars = Math.min(READ_MAX_CHARS_LIMIT, Math.max(500, Number.isFinite(requested) && requested > 0 ? requested : READ_MAX_CHARS));
-			const fresh = params?.fresh === true && provider === "exa";
-			const { page, source } = await readPage(provider, apiKey, url, { maxChars, fresh }, signal);
+			const fresh = params?.fresh === true && provider === "exa" && !!apiKey;
+			const { page, source, fallback } = await readWithFallback(provider, apiKey, url, { maxChars, fresh }, signal);
 
 			const title = String(page?.title ?? "").trim() || "(无标题)";
 			const date = page?.publishedDate ? ` · ${String(page.publishedDate).slice(0, 10)}` : "";
@@ -508,6 +581,7 @@ export default function setup(pi) {
 			const truncated = raw.length >= maxChars;
 			const body = demoteHeadings(raw.slice(0, maxChars).trim());
 			const meta = [
+				fallback ? `提示：${spec.label} 读取失败（${fallback}），已改用本地直连抓取，正文可能夹杂导航等内容。` : "",
 				typeof page?.author === "string" && page.author.trim() ? `作者：${page.author.trim()}` : "",
 				truncated ? `（正文已截断到 ${maxChars} 字符，可调大 max_chars）` : "",
 			].filter(Boolean).join("\n");
@@ -515,7 +589,7 @@ export default function setup(pi) {
 
 			return {
 				content: [{ type: "text", text: text || "页面没有正文内容。" }],
-				details: { url, provider, title: title === "(无标题)" ? "" : title, chars: body.length, truncated, fresh, source },
+				details: { url, provider, title: title === "(无标题)" ? "" : title, chars: body.length, truncated, fresh, source, fallback },
 			};
 		},
 	});
@@ -526,7 +600,7 @@ export default function setup(pi) {
 		description: "开关联网搜索：/web on 或 /web off",
 		async handler(args, ctx) {
 			const active = readActive(pi) ?? [];
-			const without = active.filter((name) => name !== TOOL);
+			const without = active.filter((name) => name !== TOOL && name !== READ_TOOL);
 			const arg = String(args ?? "").trim().toLowerCase();
 			const notify = (message, level = "info") => {
 				if (typeof ctx?.ui?.notify === "function") ctx.ui.notify(message, level);
@@ -546,12 +620,11 @@ export default function setup(pi) {
 					return;
 				}
 				writeJson(STATE_FILE, { enabled: true });
-				if (!active.includes(TOOL)) pi.setActiveTools([...without, TOOL]);
+				if (!active.includes(TOOL) || !active.includes(READ_TOOL)) pi.setActiveTools([...without, TOOL, READ_TOOL]);
 				notify(`已开启联网搜索（${label}）`);
 				return;
 			}
-			const readState = `，读取网页${active.includes(READ_TOOL) ? "开" : "关"}`;
-			notify(`联网搜索当前为「${active.includes(TOOL) ? "开" : "关"}」，引擎 ${label}${readState}，用 /web on 或 /web off 切换`);
+			notify(`联网搜索当前为「${active.includes(TOOL) ? "开" : "关"}」，引擎 ${label}，用 /web on 或 /web off 切换`);
 		},
 	});
 

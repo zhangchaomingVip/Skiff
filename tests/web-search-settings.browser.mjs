@@ -19,29 +19,36 @@ try {
 		await settings.waitFor();
 		const key = page.locator("#web-search-key");
 
-		assert.equal(await settings.locator(".settings-group").count(), 3, `${theme}: toggles, engine/key and runtime read as three cards`);
+		assert.equal(await settings.locator(".settings-group").count(), 3, `${theme}: switch, engine/key and folded diagnostics read as three cards`);
 		assert.equal(await settings.locator(".settings-row-title", { hasText: "联网搜索" }).count(), 1, `${theme}: the feature row keeps its title`);
 		const switches = settings.locator(".settings-row .switch");
-		assert.equal(await switches.count(), 2, `${theme}: both feature toggles remain reachable`);
+		assert.equal(await switches.count(), 1, `${theme}: read_url has no switch of its own`);
+		assert.equal(await settings.getByText("读取网页（read_url）").count(), 0, `${theme}: the read_url row is gone`);
+		assert.equal(await settings.getByText("配置目录").count(), 0, `${theme}: the pi directory is not shown`);
 		const alignment = await settings.locator(".settings-row").first().evaluate((row) => {
 			const toggle = row.querySelector(".switch").getBoundingClientRect(), box = row.getBoundingClientRect();
 			return { distance: box.right - toggle.right - parseFloat(getComputedStyle(row).paddingRight), centered: (toggle.top + toggle.bottom) / 2 - (box.top + box.bottom) / 2 };
 		});
 		assert.ok(Math.abs(alignment.distance) < 1, `${theme}: switches sit on the row's right edge, not inline with the title`);
 		assert.ok(Math.abs(alignment.centered) < 1, `${theme}: switches stay vertically centered`);
-		const divider = await settings.locator(".settings-row").nth(1).evaluate((row) => getComputedStyle(row).borderTopWidth);
+		const divider = await settings.locator(".settings-group").nth(1).locator(".settings-row").nth(1).evaluate((row) => getComputedStyle(row).borderTopWidth);
 		assert.equal(divider, "1px", `${theme}: a hairline separates the rows inside a card`);
 
-		const engine = page.getByRole("group", { name: "搜索引擎", exact: true });
-		assert.equal(await engine.getByRole("button").count(), 2, `${theme}: engine options become a segmented control`);
-		await engine.getByRole("button", { name: "Exa", exact: true }).click();
+		const engine = page.locator("#web-search-engine");
+		assert.equal(await engine.locator("option").count(), 2, `${theme}: engines are offered in a dropdown`);
+		assert.match(await engine.locator("option[value=exa]").textContent(), /^Exa（.+） · 未配置 Key$/, `${theme}: each option names its niche and key state`);
+		await engine.selectOption("exa");
 		await page.getByText("Exa API Key", { exact: true }).waitFor();
 		assert.equal(await key.getAttribute("placeholder"), "exa-…", `${theme}: switching engine re-labels the key field`);
 		assert.equal(await key.getAttribute("readonly"), null, `${theme}: an unconfigured key stays editable`);
 		assert.equal(await page.locator(".web-search-badge").count(), 0, `${theme}: no status badge before a key exists`);
 		assert.equal(await page.locator(".web-search-footer .ui-button[data-variant=primary]").count(), 1, `${theme}: setup keeps one save action`);
 		assert.equal(await page.getByText("删除已保存的 Key", { exact: true }).count(), 0, `${theme}: clearing moved inline, not into the footer`);
-		assert.equal(await page.locator(".web-search-status-actions").getByRole("button", { name: "安装扩展", exact: true }).count(), 1, `${theme}: extension install lives beside the runtime status`);
+		const diagnostics = settings.locator(".web-search-diagnostics");
+		assert.equal(await diagnostics.evaluate((node) => node.open), false, `${theme}: diagnostics start folded`);
+		await diagnostics.locator("summary .web-search-chip").filter({ hasText: "扩展未安装" }).waitFor();
+		await diagnostics.locator("summary").click();
+		await diagnostics.locator(".web-search-status-actions").getByRole("button", { name: "安装扩展", exact: true }).waitFor();
 
 		await key.fill("exa-0123456789abcdef");
 		await page.getByRole("button", { name: "保存并验证", exact: true }).click();
@@ -52,7 +59,7 @@ try {
 		await settings.getByRole("button", { name: "测试已保存的 Key", exact: true }).waitFor();
 		await settings.getByRole("button", { name: "修改已保存的 Key", exact: true }).waitFor();
 		await settings.getByRole("button", { name: "清除已保存的 Key", exact: true }).waitFor();
-		assert.ok(await settings.locator(".web-search-chip").filter({ hasText: "服务连通" }).count(), `${theme}: health reads as status chips`);
+		assert.doesNotMatch(await engine.locator("option[value=exa]").textContent(), /未配置 Key/, `${theme}: a saved key clears the option's setup hint`);
 		await page.screenshot({ path: `dist/web-search-settings-${theme}.png` });
 
 		await settings.getByRole("button", { name: "修改已保存的 Key", exact: true }).click();
@@ -67,12 +74,12 @@ try {
 		await page.locator("#web-search-key:not([readonly])").waitFor();
 		assert.equal(await page.locator(".web-search-badge").count(), 0, `${theme}: clearing removes the key badge`);
 		assert.equal(await page.locator(".web-search-footer .ui-button[data-variant=primary]").count(), 1, `${theme}: clearing returns to setup`);
-		assert.ok(await settings.locator(".web-search-chip").filter({ hasText: "服务未配置" }).count(), `${theme}: health follows the cleared key`);
+		assert.match(await engine.locator("option[value=exa]").textContent(), /未配置 Key/, `${theme}: the option follows the cleared key`);
 
 		await page.getByRole("button", { name: "返回工作区", exact: true }).click();
 		await page.locator(".settings-workspace").waitFor({ state: "detached" });
 		assert.deepEqual(errors, [], `${theme}: no browser errors`);
-		console.log(`PASS ${theme}: masked key view, edit/cancel/clear, dividers, right-side switches, runtime chips`);
+		console.log(`PASS ${theme}: engine dropdown, masked key view, edit/cancel/clear, dividers, single switch, folded diagnostics`);
 		await page.close();
 	}
 } finally {

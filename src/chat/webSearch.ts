@@ -13,7 +13,8 @@ interface Status {
 	keyHint?: string;
 	extensionInstalled: boolean;
 	enabled: boolean;
-	readUrlEnabled?: boolean;
+	/** Engines that already have a stored key. */
+	configuredProviders?: WebSearchProvider[];
 	validated: boolean | null;
 	validationMessage?: string;
 }
@@ -25,11 +26,11 @@ export interface WebSearchControls {
 	provider: WebSearchProvider;
 	configured: boolean;
 	keyHint?: string;
-	agentDir?: string;
+	/** Engines with a stored key, so the picker can tell which ones still need setup. */
+	configuredProviders: WebSearchProvider[];
 	extensionInstalled: boolean;
+	/** Also governs `read_url`, which has no switch of its own. */
 	enabled: boolean;
-	/** Exa-only `read_url` tool switch; ignored while another engine is active. */
-	readUrlEnabled: boolean;
 	validated?: boolean;
 	validationMessage?: string;
 	statusLoaded: boolean;
@@ -38,7 +39,6 @@ export interface WebSearchControls {
 	error?: string;
 	toggle: (next: boolean) => Promise<void>;
 	setProvider: (provider: WebSearchProvider) => Promise<void>;
-	setReadUrl: (next: boolean) => Promise<void>;
 	clearKey: () => Promise<void>;
 	install: () => Promise<void>;
 	refresh: () => Promise<void>;
@@ -55,7 +55,6 @@ export function useWebSearch(actions: PiSessionActions, connected: boolean, reco
 	const [status, setStatus] = useState<Status>();
 	const [provider, setProviderState] = useState<WebSearchProvider>("tavily");
 	const [enabled, setEnabled] = useState(false);
-	const [readUrlEnabled, setReadUrlState] = useState(false);
 	const [validating, setValidating] = useState(false);
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string>();
@@ -75,7 +74,6 @@ export function useWebSearch(actions: PiSessionActions, connected: boolean, reco
 			setStatus(next);
 			setProviderState(next.provider ?? "tavily");
 			setEnabled(next.enabled);
-			setReadUrlState(next.readUrlEnabled ?? false);
 		} catch (e) {
 			if (requestId === statusRequest.current) setError(String(e));
 		}
@@ -92,7 +90,6 @@ export function useWebSearch(actions: PiSessionActions, connected: boolean, reco
 			setStatus(next);
 			setProviderState(next.provider ?? "tavily");
 			setEnabled(next.enabled);
-			setReadUrlState(next.readUrlEnabled ?? false);
 		} catch (e) {
 			if (requestId === statusRequest.current) setStatus((current) => (current ? { ...current, validated: false, validationMessage: String(e) } : current));
 		} finally {
@@ -154,20 +151,6 @@ export function useWebSearch(actions: PiSessionActions, connected: boolean, reco
 		}
 	}, [provider, refresh, isCurrent, setBusy, setError]);
 
-	const setReadUrl = useCallback(async (next: boolean) => {
-		if (!isCurrent()) return;
-		setBusy(true);
-		setError(undefined);
-		try {
-			await invoke("set_web_search_read_url", { enabled: next });
-			setReadUrlState(next);
-		} catch (e) {
-			setError(String(e));
-		} finally {
-			setBusy(false);
-		}
-	}, [isCurrent, setBusy, setError]);
-
 	const clearKey = useCallback(async () => {
 		if (!isCurrent()) return;
 		setBusy(true);
@@ -204,10 +187,9 @@ export function useWebSearch(actions: PiSessionActions, connected: boolean, reco
 		provider,
 		configured: status?.configured ?? false,
 		keyHint: status?.keyHint,
-		agentDir: status?.agentDir,
+		configuredProviders: status?.configuredProviders ?? [],
 		extensionInstalled: status?.extensionInstalled ?? false,
 		enabled,
-		readUrlEnabled,
 		validated: status?.validated ?? undefined,
 		validationMessage: status?.validationMessage,
 		statusLoaded: status !== undefined,
@@ -216,7 +198,6 @@ export function useWebSearch(actions: PiSessionActions, connected: boolean, reco
 		error,
 		toggle,
 		setProvider,
-		setReadUrl,
 		clearKey,
 		install,
 		refresh,

@@ -7,8 +7,9 @@
 //!  - `<pi dir>/skiff-web-search.json` — the selected search engine
 //!    (`provider`: `tavily` | `exa`) plus one API key per engine, written by
 //!    Skiff. A legacy bare `apiKey` from before engines existed counts as the
-//!    Tavily key. `readUrlEnabled` switches the `read_url` tool on; the tool
-//!    itself reads through the active engine (Exa Contents or Tavily Extract).
+//!    Tavily key. The `read_url` tool has no switch of its own: it follows the
+//!    web search toggle, reads through the active engine (Exa Contents or
+//!    Tavily Extract) and falls back to a plain local fetch when that fails.
 //!  - `<pi dir>/skiff-web-search-state.json` — written by the extension; holds
 //!    whether the tool should be active so forks and restarts keep the choice.
 //!
@@ -37,8 +38,8 @@ pub struct WebSearchStatus {
 	extension_installed: bool,
 	/// Last value persisted by the extension through `/web on|off`.
 	enabled: bool,
-	/// Whether the `read_url` tool is switched on in settings.
-	read_url_enabled: bool,
+	/// Engines that have a stored key, so the engine picker can label each one.
+	configured_providers: Vec<String>,
 	/// Whether the stored key was validated against the selected engine.
 	validated: Option<bool>,
 	/// Human-readable validation message (error or success).
@@ -52,13 +53,16 @@ fn read_json(path: &Path) -> Value {
 }
 
 fn write_json(path: &Path, value: &Value) -> Result<(), String> {
-	let text = serde_json::to_string_pretty(value).map_err(|_| "序列化配置失败")?;
-	let parent = path.parent().ok_or("配置路径无效")?;
-	fs::create_dir_all(parent).map_err(|e| format!("无法创建配置目录：{e}"))?;
+	// The settings page no longer shows the pi directory, so every failure names
+	// the full path: a screenshot of the error is enough to locate the problem.
+	let shown = path.display();
+	let text = serde_json::to_string_pretty(value).map_err(|_| format!("序列化配置失败：{shown}"))?;
+	let parent = path.parent().ok_or_else(|| format!("配置路径无效：{shown}"))?;
+	fs::create_dir_all(parent).map_err(|e| format!("无法创建配置目录 {}：{e}", parent.display()))?;
 	// Write-then-rename so an interrupted write cannot leave a half-written file.
 	let temp = path.with_extension("json.tmp");
-	fs::write(&temp, format!("{text}\n")).map_err(|e| format!("写入临时文件失败：{e}"))?;
-	fs::rename(&temp, path).map_err(|e| format!("替换配置文件失败：{e}"))?;
+	fs::write(&temp, format!("{text}\n")).map_err(|e| format!("写入临时文件失败 {}：{e}", temp.display()))?;
+	fs::rename(&temp, path).map_err(|e| format!("替换配置文件失败 {shown}：{e}"))?;
 	Ok(())
 }
 
@@ -167,11 +171,6 @@ async fn validate_provider_key(provider: &str, api_key: &str) -> Result<(), Stri
 	if provider == "exa" { validate_exa_key(api_key).await } else { validate_tavily_key(api_key).await }
 }
 
-/// The `read_url` toggle; missing or malformed values mean off.
-fn read_read_url_flag(config: &Value) -> bool {
-	config.get("readUrlEnabled").and_then(Value::as_bool).unwrap_or(false)
-}
-
 /// The `/web on|off` switch; a missing state file means off, so a new install
 /// has to be switched on explicitly before the tool is exposed.
 fn read_enabled_flag(state: &Value) -> bool {
@@ -183,7 +182,11 @@ fn read_web_search_status() -> (WebSearchStatus, Option<String>) {
 	let config = agent_dir.as_ref().map(|dir| read_json(&dir.join(KEY_FILE))).unwrap_or_else(|| json!({}));
 	let provider = read_provider(&config);
 	let key = read_provider_key(&config, provider);
-	let read_url_enabled = read_read_url_flag(&config);
+	let configured_providers = ["tavily", "exa"]
+		.into_iter()
+		.filter(|name| read_provider_key(&config, name).is_some())
+		.map(str::to_string)
+		.collect();
 	let key_hint = key.as_ref().map(|value| {
 		let tail: String = value.chars().rev().take(4).collect::<Vec<_>>().into_iter().rev().collect();
 		format!("…{tail}")
@@ -204,7 +207,7 @@ fn read_web_search_status() -> (WebSearchStatus, Option<String>) {
 		key_hint,
 		extension_installed,
 		enabled,
-		read_url_enabled,
+		configured_providers,
 		validated: None,
 		validation_message: None,
 	};
@@ -273,17 +276,6 @@ pub fn set_web_search_provider(provider: String) -> Result<(), String> {
 	write_json(&path, &config)
 }
 
-/// Switches the `read_url` tool on or off; both engines have a read endpoint,
-/// so the flag applies to whichever engine is active.
-#[tauri::command]
-pub fn set_web_search_read_url(enabled: bool) -> Result<(), String> {
-	let dir = super::get_pi_agent_dir().ok_or("无法确定 pi 配置目录")?;
-	let path = dir.join(KEY_FILE);
-	let mut config = read_json(&path);
-	config["readUrlEnabled"] = json!(enabled);
-	write_json(&path, &config)
-}
-
 /// Clears the active engine's stored key; the engine selection is kept.
 #[tauri::command]
 pub fn clear_web_search_key() -> Result<(), String> {
@@ -300,9 +292,9 @@ pub fn clear_web_search_key() -> Result<(), String> {
 /// the file actually changed, which means a running pi session needs a restart.
 fn write_extension(dir: &Path) -> Result<bool, String> {
 	let path = dir.join("extensions").join(EXTENSION_NAME);
-	if let Some(parent) = path.parent() { fs::create_dir_all(parent).map_err(|e| format!("无法创建扩展目录：{e}"))?; }
+	if let Some(parent) = path.parent() { fs::create_dir_all(parent).map_err(|e| format!("无法创建扩展目录 {}：{e}", parent.display()))?; }
 	if fs::read_to_string(&path).map(|text| text == EXTENSION_SOURCE).unwrap_or(false) { return Ok(false); }
-	fs::write(&path, EXTENSION_SOURCE).map_err(|e| format!("写入扩展文件失败：{e}"))?;
+	fs::write(&path, EXTENSION_SOURCE).map_err(|e| format!("写入扩展文件失败 {}：{e}", path.display()))?;
 	Ok(true)
 }
 
@@ -359,14 +351,6 @@ mod tests {
 		assert!(read_enabled_flag(&json!({ "enabled": true })));
 		assert!(!read_enabled_flag(&json!({ "enabled": false })));
 		assert!(!read_enabled_flag(&json!({ "enabled": "true" })));
-	}
-
-	#[test]
-	fn read_url_flag_defaults_to_off_and_ignores_junk() {
-		assert!(!read_read_url_flag(&json!({})));
-		assert!(!read_read_url_flag(&json!({ "readUrlEnabled": "true" })));
-		assert!(read_read_url_flag(&json!({ "readUrlEnabled": true })));
-		assert!(!read_read_url_flag(&json!({ "readUrlEnabled": false })));
 	}
 
 	#[test]

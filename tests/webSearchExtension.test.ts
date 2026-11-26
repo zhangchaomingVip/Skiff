@@ -31,16 +31,35 @@ interface WebSearchTool {
 }
 
 /** 写入 skiff-web-search.json 并把 PI_CODING_AGENT_DIR 指过去，隔离真实配置。 */
-function configure(config: Record<string, unknown>) {
+function configure(config: Record<string, unknown>, state?: Record<string, unknown>) {
 	const dir = fs.mkdtempSync(path.join(root, `case-${Date.now()}-`));
 	fs.writeFileSync(path.join(dir, "skiff-web-search.json"), JSON.stringify(config), "utf8");
+	if (state) fs.writeFileSync(path.join(dir, "skiff-web-search-state.json"), JSON.stringify(state), "utf8");
 	process.env.PI_CODING_AGENT_DIR = dir;
+}
+
+/** 依次返回给定响应，用来模拟「引擎失败 → 本地直连」两次请求。 */
+function stubSequence(responses: { ok?: boolean; status?: number; json?: unknown; text?: string; type?: string }[]): Captured[] {
+	const calls: Captured[] = [];
+	globalThis.fetch = (async (url: string, init: { body?: string }) => {
+		calls.push({ url: String(url), body: init?.body ? JSON.parse(init.body) : {} });
+		const next = responses[Math.min(calls.length - 1, responses.length - 1)];
+		return {
+			ok: next.ok ?? true,
+			status: next.status ?? 200,
+			url: String(url),
+			headers: { get: (name: string) => (name.toLowerCase() === "content-type" ? next.type ?? "application/json" : null) },
+			json: async () => next.json,
+			text: async () => next.text ?? "",
+		};
+	}) as unknown as typeof fetch;
+	return calls;
 }
 
 function stubFetch(payload: unknown): Captured[] {
 	const calls: Captured[] = [];
 	globalThis.fetch = (async (url: string, init: { body: string }) => {
-		calls.push({ url: String(url), body: JSON.parse(init.body) });
+		calls.push({ url: String(url), body: init?.body ? JSON.parse(init.body) : {} });
 		return {
 			ok: true,
 			status: 200,
@@ -376,21 +395,61 @@ test("read_url rejects non-http urls and credential-bearing links without a requ
 	assert.equal(calls.length, 0);
 });
 
-test("read_url follows the settings switch on both engines", () => {
-	configure({ provider: "exa", exaApiKey: "exa-test", readUrlEnabled: true });
+test("read_url has no switch of its own and follows web search", () => {
+	configure({ provider: "exa", exaApiKey: "exa-test" }, { enabled: true });
 	const ext = loadExtension();
 	ext.hooks.before_agent_start();
-	assert.deepEqual(ext.active, ["read", "read_url"]);
+	assert.deepEqual(ext.active, ["read", "web_search", "read_url"]);
 
-	configure({ provider: "tavily", tavilyApiKey: "tvly-test", readUrlEnabled: true });
+	configure({ provider: "tavily", tavilyApiKey: "tvly-test", readUrlEnabled: false }, { enabled: true });
 	ext.hooks.before_agent_start();
-	assert.deepEqual(ext.active, ["read", "read_url"], "tavily has its own read endpoint");
+	assert.deepEqual(ext.active, ["read", "web_search", "read_url"], "a legacy readUrlEnabled=false is ignored");
 
-	configure({ provider: "tavily", tavilyApiKey: "tvly-test", readUrlEnabled: false });
+	configure({ provider: "exa", exaApiKey: "exa-test" }, { enabled: false });
 	ext.hooks.before_agent_start();
-	assert.deepEqual(ext.active, ["read"]);
+	assert.deepEqual(ext.active, ["read"], "turning web search off also removes read_url");
+});
 
-	configure({ provider: "exa", readUrlEnabled: true });
-	ext.hooks.before_agent_start();
-	assert.deepEqual(ext.active, ["read"], "no key for the active engine means no read_url");
+test("read_url falls back to a local fetch when the engine fails", async () => {
+	configure({ provider: "exa", exaApiKey: "exa-test" });
+	const calls = stubSequence([
+		{ json: { results: [], statuses: [{ status: "error", error: { tag: "CRAWL_UNKNOWN_ERROR" } }] } },
+		{ type: "text/html; charset=utf-8", text: "<html><head><title>本地 &amp; 页面</title><script>x()</script></head><body><nav>菜单</nav><article><h2>小节</h2><p>第一段</p><ul><li>条目</li></ul></article></body></html>" },
+	]);
+	const output = await loadExtension().tools.read_url.execute("read-6", { url: "https://docs.example.com/a" });
+	assert.equal(calls.length, 2);
+	assert.equal(calls[0].url, "https://api.exa.ai/contents");
+	assert.equal(calls[1].url, "https://docs.example.com/a");
+	assert.equal(output.details.source, "local");
+	assert.match(String(output.details.fallback), /^页面无法访问/);
+	const text = output.content[0].text;
+	assert.match(text, /^### 本地 & 页面\n/);
+	assert.match(text, /已改用本地直连抓取/);
+	assert.match(text, /##### 小节/);
+	assert.match(text, /第一段/);
+	assert.match(text, /- 条目/);
+	assert.doesNotMatch(text, /菜单|x\(\)/, "scripts and navigation are dropped");
+});
+
+test("read_url reads locally without spending credits when no key is configured", async () => {
+	configure({ provider: "tavily" });
+	const calls = stubSequence([{ type: "text/plain", text: "纯文本正文" }]);
+	const output = await loadExtension().tools.read_url.execute("read-7", { url: "https://example.com/a.txt" });
+	assert.equal(calls.length, 1);
+	assert.equal(calls[0].url, "https://example.com/a.txt");
+	assert.equal(output.details.source, "local");
+	assert.equal(output.details.fallback, "", "no engine was tried, so there is nothing to report");
+	assert.match(output.content[0].text, /纯文本正文/);
+});
+
+test("read_url reports both reasons when engine and local fetch fail", async () => {
+	configure({ provider: "tavily", tavilyApiKey: "tvly-test" });
+	stubSequence([
+		{ json: { results: [], failed_results: [{ url: "https://bad.example", error: "Failed to fetch url" }] } },
+		{ ok: false, status: 403, type: "text/html" },
+	]);
+	await assert.rejects(
+		() => loadExtension().tools.read_url.execute("read-8", { url: "https://bad.example" }),
+		/页面无法访问.*本地直连也失败：本地直连返回 HTTP 403/,
+	);
 });
