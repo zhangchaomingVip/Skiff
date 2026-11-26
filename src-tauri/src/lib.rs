@@ -520,23 +520,109 @@ struct SystemPromptSection {
 	text: String,
 }
 
+#[derive(serde::Serialize)]
+struct SystemPromptSnapshot {
+	content: String,
+	sections: Vec<SystemPromptSection>,
+}
+
+struct SystemPromptPatch(Vec<(String, serde_json::Value)>);
+
+impl<'de> Deserialize<'de> for SystemPromptPatch {
+	fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+		struct OrderedSections;
+		impl<'de> serde::de::Visitor<'de> for OrderedSections {
+			type Value = SystemPromptPatch;
+
+			fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+				formatter.write_str("a map of system prompt sections")
+			}
+
+			fn visit_map<A: serde::de::MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
+				// pi assembles sections in insertion order. Value's default map sorts keys.
+				let mut sections = Vec::new();
+				while let Some(entry) = map.next_entry()? { sections.push(entry); }
+				Ok(SystemPromptPatch(sections))
+			}
+		}
+		deserializer.deserialize_map(OrderedSections)
+	}
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SystemPromptEntry {
+	#[serde(rename = "type")]
+	kind: Option<String>,
+	id: Option<String>,
+	parent_id: Option<String>,
+	message: Option<SystemPromptMessage>,
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "role")]
+enum SystemPromptMessage {
+	#[serde(rename = "system")]
+	System { content: Option<serde_json::Value>, sections: Option<SystemPromptPatch> },
+	#[serde(other)]
+	Other,
+}
+
 /// Read the newest system-prompt snapshot from a pi session file (`.jsonl`).
-/// pi stores the assembled prompt as `message.sections`; this is read-only.
+/// Replay pi's section patches along the latest persisted branch.
 #[tauri::command]
-fn read_system_prompt(session_path: String) -> Result<Vec<SystemPromptSection>, String> {
-	let text = std::fs::read_to_string(&session_path).map_err(|e| format!("读取会话文件失败：{e}"))?;
-	for line in text.lines().rev() {
-		let Ok(value) = serde_json::from_str::<serde_json::Value>(line) else { continue };
-		let Some(message) = value.get("message") else { continue };
-		if message.get("role").and_then(|role| role.as_str()) != Some("system") { continue; }
-		if let Some(sections) = message.get("sections").and_then(|sections| sections.as_object()) {
-			return Ok(sections
-				.iter()
-				.filter_map(|(name, value)| value.as_str().map(|prompt| SystemPromptSection { name: name.clone(), text: prompt.to_string() }))
-				.collect());
+async fn read_system_prompt(session_path: String) -> Result<SystemPromptSnapshot, String> {
+	tauri::async_runtime::spawn_blocking(move || read_system_prompt_snapshot(&session_path))
+		.await.map_err(|_| "无法读取系统提示词快照".to_string())?
+}
+
+fn read_system_prompt_snapshot(session_path: &str) -> Result<SystemPromptSnapshot, String> {
+	let text = std::fs::read_to_string(session_path).map_err(|e| format!("读取会话文件失败：{e}"))?;
+	let entries: Vec<_> = text.lines().filter_map(|line| serde_json::from_str::<SystemPromptEntry>(line).ok())
+		.filter(|entry| entry.kind.as_deref() != Some("session")).collect();
+	let index: HashMap<_, _> = entries.iter().enumerate().filter_map(|(i, entry)| Some((entry.id.as_deref()?, i))).collect();
+	let branch = if let Some(mut cursor) = entries.iter().rposition(|entry| entry.id.is_some()) {
+		let mut branch = Vec::new();
+		loop {
+			let entry = &entries[cursor];
+			branch.push(entry);
+			let Some(&parent) = entry.parent_id.as_deref().and_then(|id| index.get(id)).filter(|&&parent| parent < cursor) else { break };
+			cursor = parent;
+		}
+		branch.reverse();
+		branch
+	} else {
+		entries.iter().collect()
+	};
+	let mut found = false;
+	let mut content_parts = Vec::new();
+	let mut sections: Vec<SystemPromptSection> = Vec::new();
+	for entry in branch {
+		let Some(SystemPromptMessage::System { content, sections: patch }) = &entry.message else { continue };
+		let content = match content {
+			Some(serde_json::Value::String(text)) => text.clone(),
+			Some(serde_json::Value::Array(blocks)) => blocks.iter()
+				.filter(|block| block.get("type").and_then(|kind| kind.as_str()) == Some("text"))
+				.filter_map(|block| block.get("text").and_then(|text| text.as_str()))
+				.collect::<Vec<_>>().join("\n"),
+			_ => String::new(),
+		};
+		if !content.is_empty() { found = true; content_parts.push(content); }
+		if let Some(SystemPromptPatch(patch)) = patch {
+			found = true;
+			for (name, value) in patch {
+				let position = sections.iter().position(|section| &section.name == name);
+				match (position, value) {
+					(Some(i), serde_json::Value::Null) => { sections.remove(i); }
+					(Some(i), serde_json::Value::String(text)) => sections[i].text.clone_from(text),
+					(None, serde_json::Value::String(text)) => sections.push(SystemPromptSection { name: name.clone(), text: text.clone() }),
+					_ => {}
+				}
+			}
 		}
 	}
-	Err("该会话还没有系统提示词快照".to_string())
+	if !found { return Err("该会话还没有系统提示词快照".to_string()); }
+	Ok(SystemPromptSnapshot { content: content_parts.join("\n\n"), sections })
 }
 
 /// Opens a http(s) link in the system browser, for vendor consoles linked
@@ -668,12 +754,33 @@ mod tests {
 			serde_json::json!({"message": {"role": "system", "sections": {"preamble": "second", "cwd": "D:/x"}}}).to_string(),
 		];
 		std::fs::write(&path, lines.join("\n")).unwrap();
-		let sections = read_system_prompt(path.to_string_lossy().into()).unwrap();
-		let map: std::collections::HashMap<_, _> = sections.into_iter().map(|s| (s.name, s.text)).collect();
+		let snapshot = read_system_prompt_snapshot(&path.to_string_lossy()).unwrap();
+		let map: std::collections::HashMap<_, _> = snapshot.sections.into_iter().map(|s| (s.name, s.text)).collect();
 		assert_eq!(map.get("preamble").map(String::as_str), Some("second"));
 		assert_eq!(map.get("cwd").map(String::as_str), Some("D:/x"));
-		assert!(read_system_prompt(path.with_extension("missing").to_string_lossy().into()).is_err());
+		assert!(read_system_prompt_snapshot(&path.with_extension("missing").to_string_lossy()).is_err());
 		let _ = std::fs::remove_file(&path);
+	}
+
+	#[test]
+	fn replays_system_prompt_patches_in_pi_order_on_the_latest_branch() {
+		let path = std::env::temp_dir().join(format!("skiff-system-prompt-branch-{}.jsonl", std::process::id()));
+		let lines = [
+			r#"{"type":"session","id":"header"}"#,
+			r#"{"id":"a","parentId":null,"message":{"role":"system","content":"original","sections":{"preamble":"role","tools":"initial","addendum":"extra","project_context":"project","cwd":"old path"}}}"#,
+			r#"{"id":"b","parentId":"a","message":{"role":"system","content":"other branch","sections":{"preamble":"wrong"}}}"#,
+			r#"{"id":"c","parentId":"a","message":{"role":"system","content":[{"type":"text","text":"line 1"},{"type":"text","text":"line 2"}],"sections":{"tools":"updated","cwd":null,"extra_section":"custom"}}}"#,
+			r#"{"id":"d","parentId":"c","message":{"role":"system","content":"","toolsAdded":[]}}"#,
+			r#"{"id":"e","parentId":"d","message":{"role":"user","content":"hello"}}"#,
+			r#"{"id":"incomplete""#,
+		];
+		std::fs::write(&path, lines.join("\n")).unwrap();
+		let snapshot = read_system_prompt_snapshot(&path.to_string_lossy()).unwrap();
+		let _ = std::fs::remove_file(&path);
+		assert_eq!(snapshot.content, "original\n\nline 1\nline 2");
+		assert_eq!(snapshot.sections.iter().map(|s| (s.name.as_str(), s.text.as_str())).collect::<Vec<_>>(), [
+			("preamble", "role"), ("tools", "updated"), ("addendum", "extra"), ("project_context", "project"), ("extra_section", "custom")
+		]);
 	}
 
 	#[test]

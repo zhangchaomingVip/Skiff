@@ -140,11 +140,11 @@ export function SettingsWorkspace({ initialCategory, restrictions, prompt, provi
 					<FontSettings />
 				</section>}
 				{category === "websearch" && <section className="settings-page" aria-labelledby="websearch-title"><h2 id="websearch-title">联网搜索</h2><WebSearchSettings search={search} /></section>}
-				{category === "chat" && <section className="settings-page" aria-labelledby="chat-settings-title"><h2 id="chat-settings-title">对话</h2><TitleModelSettings onManage={() => setCategory("providers")} /><fieldset className="settings-config" disabled={!!restrictions.prompt}><PromptSettings {...prompt} /></fieldset>{restrictions.prompt && <p className="settings-restriction">{restrictions.prompt}</p>}</section>}
+				{category === "chat" && <section className="settings-page" aria-labelledby="chat-settings-title"><h2 id="chat-settings-title">对话</h2><TitleModelSettings onManage={() => setCategory("providers")} /><PromptSettings {...prompt} editRestricted={restrictions.prompt} /></section>}
 				{category === "providers" && <><fieldset className="settings-config" disabled={!!restrictions.providers}><ProvidersSettingsContent {...providers} ref={editor} onLockChange={updateInteraction} /></fieldset>{providers.configError && !locked && <Button disabled={!!restrictions.providers} onClick={onRetryModels}>重新读取配置</Button>}</>}
 				{category === "about" && <AboutSettings />}
 				{category === "archives" && <section className="settings-page" aria-labelledby="archives-title"><h2 id="archives-title">已归档对话</h2><ArchivedSessions {...archives} busy={archives.busy || !!restrictions.archives} /></section>}
-				{Object.entries(restrictions).map(([id, reason]) => reason && <p className="settings-restriction" key={id}>{id === "prompt" ? "系统提示词" : settingsCategories.find((item) => item.id === id)?.label}：{reason}</p>)}
+				{Object.entries(restrictions).map(([id, reason]) => reason && <p className="settings-restriction" key={id}>{id === "prompt" ? "自定义附加指令" : settingsCategories.find((item) => item.id === id)?.label}：{reason}</p>)}
 			</div>
 		</div>
 		{switchTarget && <Dialog className="project-dialog" aria-labelledby="settings-discard-title" initialFocus={switchCancel} onClose={() => setSwitchTarget(undefined)}>

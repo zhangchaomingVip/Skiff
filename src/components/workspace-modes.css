@@ -84,7 +84,7 @@
 }
 @layer components {
 /* Conversation rows: a small cover from the latest work, no counts. */
-	.design-canvas-row-main > .design-conversation-thumb { display: grid; place-items: center; flex: none; width: 22px; height: 22px; overflow: hidden; border-radius: var(--radius-sm, 6px); background: var(--subtle); color: var(--muted); }
+	.design-canvas-row-main > .design-conversation-thumb { display: grid; place-items: center; flex: none; width: 22px; height: 22px; overflow: hidden; border-radius: var(--radius-sm); background: var(--subtle); color: var(--muted); }
 	.design-conversation-thumb > img { display: block; width: 100%; height: 100%; object-fit: cover; }
 	.design-canvas-more { align-self: flex-start; margin: 0; padding: var(--space-1) var(--space-2); border: 0; background: transparent; color: var(--muted); font-size: var(--font-size-xs); cursor: pointer; }
 	.design-canvas-more:hover { color: var(--text); }

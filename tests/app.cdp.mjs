@@ -357,8 +357,13 @@ try {
 	// identity and user-authored multiline text must reach the next provider request.
 	await page.keyboard.press("Control+Comma");
 	const settings = page.locator(".settings-workspace");
-	await page.getByRole("button", { name: "系统提示词", exact: true }).click();
-	const editor = settings.getByRole("textbox", { name: "附加指令" });
+	await page.getByRole("navigation", { name: "设置分类" }).getByRole("button", { name: "对话", exact: true }).click();
+	await settings.getByRole("button", { name: "查看完整指令", exact: true }).click();
+	const promptReader = page.getByRole("dialog", { name: "系统内置指令 · 完整提示词" });
+	assert.equal(await promptReader.locator(".prompt-reader-content").textContent() === requests[0].systemText, true, "The reader reconstructs the real provider prompt");
+	await page.keyboard.press("Escape");
+	await promptReader.waitFor({ state: "detached" });
+	const editor = settings.getByRole("textbox", { name: "自定义附加指令" });
 	assert.equal(await editor.inputValue(), "", "The editor must not contain built-in instructions");
 	const customPrompt = "自定义验证指令：用简洁中文回答。\n保留用户的第二行指令。";
 	await editor.fill(customPrompt);

@@ -369,10 +369,9 @@
 	/* One line at rest: the box is exactly its text plus a little air, and grows from there. */
 	.design-composer[data-variant=hero] .generation-controls .generation-field-prompt .ui-textarea { height: auto; min-height: 0; max-height: 168px; overflow-y: auto; resize: none; padding: var(--space-2) var(--space-6) var(--space-1) var(--space-2); font-size: var(--font-size-md); line-height: var(--line-height-normal, 1.5); }
 	.design-composer[data-variant=hero] .generation-settings > .generation-field.generation-ratios { display: none; }
-	.design-composer[data-variant=hero] .generation-submit > .ui-button { height: var(--control-primary); padding-inline: var(--space-4); }
 	/* Hero submit sits on the toolbar row as a round send button, so the composer stays two rows tall. */
 	.design-composer[data-variant=hero] .generation-submit { margin-left: auto; }
-	.design-composer[data-variant=hero] .generation-submit > .ui-button { width: var(--control-primary); min-width: var(--control-primary); padding-inline: 0; border-radius: var(--radius-full); }
+	.design-composer[data-variant=hero] .generation-submit > .ui-button { width: var(--control-primary); min-width: var(--control-primary); height: var(--control-primary); padding-inline: 0; border-radius: var(--radius-full); }
 	.design-composer[data-variant=hero] .generation-submit-label { position: absolute; width: 1px; height: 1px; margin: 0; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 	.design-composer[data-variant=hero] .generation-dropzone { border-radius: var(--radius-2xl); }
 	.design-composer:has(.generation-dropzone) { border-color: var(--accent); box-shadow: var(--shadow-elevation-2), 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent); }
@@ -515,7 +514,7 @@
 @layer components {
 	.asset-library .asset-timeline-grid[data-masonry] { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(200px, 100%), 1fr)); grid-auto-rows: 4px; row-gap: 0; column-gap: var(--space-3); align-items: start; }
 	.asset-library .asset-timeline-grid[data-masonry] > .asset-thumb { aspect-ratio: auto; min-height: 96px; }
-	.design-thread-feed { --fade-top: 0px; --fade-bottom: 0px; mask-image: linear-gradient(to bottom, transparent 0, #000 var(--fade-top), #000 calc(100% - var(--fade-bottom)), transparent 100%); }
+	.design-thread-feed { --fade-top: 0px; --fade-bottom: 0px; mask-image: linear-gradient(to bottom, transparent 0, var(--text) var(--fade-top), var(--text) calc(100% - var(--fade-bottom)), transparent 100%); }
 	.design-thread-feed[data-fade-top] { --fade-top: 32px; }
 	.design-thread-feed[data-fade-bottom] { --fade-bottom: 56px; }
 	.design-composer .generation-settings .generation-field-model .generation-picker { max-width: 300px; }
