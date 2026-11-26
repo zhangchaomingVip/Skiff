@@ -185,7 +185,7 @@ Codex 之所以是「文字 + 工具 + 文字 + 工具」，是因为它的模�
 - Skiff 现在会在启动 pi 时追加一段系统提示词，要求模型调用工具前先说一句简短旁白，从而得到 Codex 式的「文字 + 工具」。实现方式是 pi 的 `--append-system-prompt`：`RpcStartOptions` 新增 `appendSystemPrompt`，Rust 在 `rpc_start` 里把它作为启动参数传给 pi（本地校验过 `pi --mode rpc --append-system-prompt` 可用）。
 - 该提示词可被用户编辑：新增 `src/chat/prompt.ts` 保存默认旁白指令（`DEFAULT_APPEND_PROMPT`）与用户在 `localStorage` 的编辑（`skiff.prompt.append`）；默认值会在顶栏的「系统提示词」弹窗（`PromptDialog`）里预填。保存后调用 `session.reconnect()` 重启会话使其生效。
 - 未保存过时使用默认旁白指令；保存默认文本会清除覆盖，回到内置默认。
-- 弹窗内新增只读的「查看 pi 当前系统提示词」：Rust 新增 `read_system_prompt`，从会话 `.jsonl` 最后一条 `role: "system"` 的 `sections` 读取并按 `preamble / tools / rules / docs / project_context / skills / cwd / addendum` 排序展示，每条可展开。pid 不自带 `get/set system prompt` RPC，所以走会话文件快照。
+- 「设置 → 对话 → 系统内置指令」通过 `read_system_prompt` 读取 pi 会话快照。分段比例条显示各段占总字数的比例，明细中的进度条以最长段为满格。「按大小」与「按顺序」同时切换比例条和明细，后者沿用快照中的拼接顺序并显示序号。悬停会联动高亮，点击段落打开只读弹窗。「查看完整指令」直接打开全文。
 
 ### 底部用量条的闪动修正
 

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { assembleSystemPrompt, describePromptSections, layoutPromptTreemap, measurePrompt } from "../src/chat/systemPrompt";
+import { assembleSystemPrompt, describePromptSections, measurePrompt } from "../src/chat/systemPrompt";
 
 test("estimates mixed-script tokens and counts Unicode characters", () => {
 	assert.deepEqual(measurePrompt(""), { characters: 0, tokens: 0 });
@@ -35,33 +35,12 @@ test("describes known and future section names and computes exact proportions", 
 		{ name: "cwd", text: "" },
 	]);
 	assert.equal(known.label, "行为规则");
+	assert.equal(known.tone, "rules");
 	assert.equal(known.share, 2 / 14);
 	assert.equal(unknown.label, "constructor");
 	assert.equal(unknown.tone, "neutral");
 	assert.equal(empty.share, 0);
+	assert.equal(empty.label, "工作目录");
+	assert.equal(empty.tone, "neutral");
 	assert.equal(describePromptSections([{ name: "cwd", text: "" }])[0].share, 0);
-});
-
-test("treemap lays out descending, proportional, disjoint tiles at different widths", () => {
-	const sections = [33, 980, 190, 1, 17, 0, 6].map((characters) => ({ characters }));
-	const total = 1227;
-	const epsilon = 1e-7;
-	for (const width of [160, 360, 800]) {
-		const height = 128;
-		const tiles = layoutPromptTreemap(sections, width, height);
-		assert.deepEqual(tiles.map(({ section }) => section.characters), [980, 190, 33, 17, 6, 1]);
-		assert.equal(tiles[0].rect.x, 0);
-		for (const [index, { section, rect }] of tiles.entries()) {
-			assert.ok(rect.x >= 0 && rect.y >= 0 && rect.width > 0 && rect.height > 0);
-			assert.ok(rect.x + rect.width <= width + epsilon && rect.y + rect.height <= height + epsilon);
-			assert.ok(Math.abs(rect.width * rect.height - width * height * section.characters / total) < epsilon);
-			for (const { rect: other } of tiles.slice(index + 1)) {
-				assert.ok(rect.x + rect.width <= other.x + epsilon || other.x + other.width <= rect.x + epsilon
-					|| rect.y + rect.height <= other.y + epsilon || other.y + other.height <= rect.y + epsilon);
-			}
-		}
-	}
-	assert.deepEqual(layoutPromptTreemap([{ characters: 0 }], 100, 128), []);
-	assert.deepEqual(layoutPromptTreemap(sections, 0, 128), []);
-	assert.deepEqual(layoutPromptTreemap([{ characters: 8 }], 500, 128)[0].rect, { x: 0, y: 0, width: 500, height: 128 });
 });

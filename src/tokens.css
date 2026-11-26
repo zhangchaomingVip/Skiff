@@ -180,9 +180,6 @@
 		--prompt-skills: #78c5ad;
 		--prompt-docs: #85bbe1;
 		--prompt-project: #e3b280;
-		--prompt-tools: #e79c91;
-		--prompt-preamble: #a0aee9;
-		--prompt-addendum: #baabc9;
 		--prompt-neutral: #a8b1bf;
 		--secondary: var(--color-text-secondary);
 		--accent: var(--color-accent);
@@ -283,9 +280,6 @@
 		--prompt-skills: #287d67;
 		--prompt-docs: #316d9a;
 		--prompt-project: #98612b;
-		--prompt-tools: #a75547;
-		--prompt-preamble: #4f61a6;
-		--prompt-addendum: #7b638c;
 		--prompt-neutral: #606d7c;
 		--chat-meta: #8b95a5;
 		--chat-action-hover: color-mix(in srgb, var(--text) 6%, transparent);

@@ -22,6 +22,12 @@ const overview = dialog.locator(".prompt-system");
 const reader = page.locator("dialog.prompt-reader");
 const body = reader.locator(".prompt-reader-content");
 const openReader = overview.getByRole("button", { name: "查看完整指令" });
+const shareBar = overview.getByRole("group", { name: "系统提示词分段比例" });
+const segments = shareBar.getByRole("button");
+const rows = overview.locator(".prompt-breakdown-row");
+const sorting = overview.getByRole("group", { name: "段落排序" });
+const sectionNames = (items) => items.evaluateAll((nodes) => nodes.map((node) => node.dataset.section));
+const modelFields = dialog.locator(".title-model-actions");
 const snapshot = {
 	content: "",
 	sections: [
@@ -38,7 +44,7 @@ const snapshot = {
 		{ name: "project_context", text: "Project-specific instructions and guidelines:\n\n<project_instructions path=\"AGENTS.md\">\n" + "Use the shared style tokens and test both themes.\n".repeat(6) + "</project_instructions>" },
 		{ name: "skills", text: "<available_skills>\n" + ["accessibility", "ui-review", "test-runner", "workspace-search"].map((name) => `<skill>\n  <name>${name}</name>\n  <description>Review workspace changes and summarize the result.</description>\n</skill>`).join("\n") + "\n</available_skills>" },
 		{ name: "cwd", text: "D:/workspace/Skiff" },
-		{ name: "extension_note", text: "Preview." },
+		{ name: "extension_note", text: "." },
 	],
 };
 const open = async () => {
@@ -63,6 +69,7 @@ try {
 		await page.evaluate((snapshot) => {
 			window.promptStarts = [];
 			window.promptSnapshot = snapshot;
+			localStorage.setItem("skiff.titleModel.v1", JSON.stringify({ primary: { provider: "skiff-relay-r1", id: "deepseek-chat" } }));
 			const invoke = window.__TAURI_INTERNALS__.invoke;
 			window.__TAURI_INTERNALS__.invoke = async (command, args, ...rest) => {
 				if (command === "rpc_start") window.promptStarts.push(args.options.appendSystemPrompt);
@@ -77,23 +84,55 @@ try {
 		await open();
 		assert.equal(await editor.inputValue(), "");
 		assert.match(await dialog.locator(".prompt-hint").innerText(), /清空仅移除自定义指令/);
-		await openReader.waitFor();
-		await page.waitForFunction(() => document.querySelectorAll(".prompt-map-tile").length === 9);
+		await segments.last().waitFor();
+		assert.equal(await segments.count(), snapshot.sections.length);
 		assert.match(await overview.locator(".prompt-card-title").innerText(), /共 9 段 · [\d,]+ 字 · 约 [\d.]+K? token/);
-		assert.equal(await overview.locator(".prompt-breakdown-row").first().getAttribute("data-section"), "rules");
-		assert.equal(await overview.locator(".prompt-map").evaluate((node) => node.clientHeight), 128);
+		assert.equal(await rows.first().getAttribute("data-section"), "rules");
+		assert.deepEqual(await sectionNames(segments), await sectionNames(rows));
+		assert.equal(await shareBar.evaluate((node) => node.clientHeight), 8);
+		assert.equal(await segments.last().evaluate((node) => node.offsetWidth), 4);
+		assert.equal(await rows.first().locator(".prompt-share-track > span").evaluate((node) => node.style.width), "100%");
+		assert.equal(await rows.last().locator(".prompt-share-track > span").evaluate((node) => node.offsetWidth), 2);
+		assert.match(await rows.first().innerText(), /\d+\.\d%/);
+		assert.match(await rows.last().innerText(), /<0\.1%/);
+		const modelBoxes = await modelFields.evaluateAll((fields) => fields.map(({ offsetLeft, offsetWidth }) => [offsetLeft, offsetWidth]));
+		assert.deepEqual(modelBoxes[0], modelBoxes[1]);
+		assert.equal(modelBoxes[0][1], 240);
+		const modelName = modelFields.first().locator(".title-model-name");
+		assert.match(await modelName.textContent(), /Skiff Long Model Alias/);
+		assert.equal(await modelName.evaluate((node) => node.scrollWidth > node.clientWidth && getComputedStyle(node).textOverflow === "ellipsis"), true);
 		await page.screenshot({ path: join(output, `prompt-${theme}.png`), animations: "disabled" });
+		console.log(`${theme}: prompt card height ${(await overview.boundingBox()).height.toFixed(1)}px at 1100 × 750`);
 		const customHeading = await dialog.getByRole("heading", { name: "自定义附加指令" }).boundingBox();
 		assert.ok(customHeading.y + customHeading.height < 750, `The custom prompt heading stays in the first viewport (${customHeading.y}px)`);
 
-		const ruleTile = overview.locator('.prompt-map-tile[data-section="rules"]');
-		const ruleRow = overview.locator('.prompt-breakdown-row[data-section="rules"]');
-		await ruleTile.hover();
+		const ruleSegment = shareBar.getByRole("button", { name: /行为规则 \(rules\) · [\d,]+ 字 · \d+\.\d%/ });
+		const ruleRow = rows.filter({ hasText: "行为规则" });
+		const smallSegment = segments.last();
+		await ruleSegment.hover();
 		assert.equal(await ruleRow.getAttribute("data-highlighted"), "true");
+		assert.equal(await ruleSegment.getAttribute("data-dimmed"), null);
+		assert.equal(await smallSegment.getAttribute("data-dimmed"), "true");
+		assert.deepEqual(await ruleRow.evaluate((node) => [
+			getComputedStyle(node.querySelector(".prompt-dot")).backgroundColor,
+			getComputedStyle(node.querySelector(".prompt-share-track > span")).backgroundColor,
+		]), Array(2).fill(await ruleSegment.evaluate((node) => getComputedStyle(node).backgroundColor)));
 		await ruleRow.hover();
-		assert.equal(await ruleTile.getAttribute("data-highlighted"), "true");
-		assert.equal(await overview.locator('.prompt-map-tile[data-section="extension_note"]').textContent(), "");
-		await ruleTile.click();
+		assert.equal(await ruleSegment.getAttribute("data-dimmed"), null);
+		assert.equal(await smallSegment.getAttribute("data-dimmed"), "true");
+		await sorting.getByRole("button", { name: "按顺序" }).click();
+		const originalOrder = snapshot.sections.map(({ name }) => name);
+		assert.deepEqual(await sectionNames(segments), originalOrder);
+		assert.deepEqual(await sectionNames(rows), originalOrder);
+		assert.equal(await rows.first().locator(".prompt-breakdown-number").innerText(), "1.");
+		assert.equal(await rows.last().locator(".prompt-breakdown-number").innerText(), "9.");
+		await sorting.getByRole("button", { name: "按顺序" }).press("ArrowLeft");
+		assert.equal(await rows.first().getAttribute("data-section"), "rules");
+		assert.deepEqual(await sectionNames(segments), await sectionNames(rows));
+		assert.equal(await rows.locator(".prompt-breakdown-number").count(), 0);
+		await ruleSegment.focus();
+		assert.equal(await ruleRow.getAttribute("data-highlighted"), "true");
+		await ruleSegment.click();
 		assert.equal(await reader.getByRole("button", { name: "行为规则", exact: true }).getAttribute("aria-pressed"), "true");
 		assert.equal(await body.textContent(), snapshot.sections.find(({ name }) => name === "rules").text);
 		await reader.getByRole("button", { name: "复制行为规则" }).click();
@@ -109,7 +148,7 @@ try {
 		await page.screenshot({ path: join(output, `prompt-reader-${theme}.png`), animations: "disabled" });
 		await page.keyboard.press("Escape");
 		await reader.waitFor({ state: "detached" });
-		await page.waitForFunction(() => document.activeElement?.matches('.prompt-map-tile[data-section="rules"]'));
+		await page.waitForFunction(() => document.activeElement?.matches('.prompt-share-segment[data-section="rules"]'));
 		await ruleRow.click();
 		assert.equal(await reader.getByRole("button", { name: "行为规则", exact: true }).getAttribute("aria-pressed"), "true");
 		await reader.getByRole("button", { name: "关闭" }).click();
@@ -142,6 +181,12 @@ try {
 			await overview.getByRole("button", { name: "重新读取" }).click();
 			await overview.getByText("当前会话没有可显示的系统提示词段落。").waitFor();
 			assert.equal(await openReader.isDisabled(), true);
+			assert.equal(await shareBar.count(), 0);
+			await page.evaluate(() => { window.promptSnapshot = { content: "", sections: [{ name: "cwd", text: "" }] }; });
+			await overview.getByRole("button", { name: "重新读取" }).click();
+			await rows.getByText("0.0%", { exact: true }).waitFor();
+			assert.equal(await shareBar.count(), 0);
+			assert.equal(await rows.locator(".prompt-share-track > span").count(), 0);
 			await page.evaluate(() => { window.promptSnapshot = { content: "完整的原文\n下一行", sections: [] }; });
 			await overview.getByRole("button", { name: "重新读取" }).click();
 			await openReader.click();
@@ -157,6 +202,7 @@ try {
 		await dialog.getByRole("button", { name: "清空", exact: true }).click();
 		assert.equal(await editor.inputValue(), "");
 		await page.setViewportSize({ width: 600, height: 400 });
+		assert.equal(await rows.evaluateAll(([first, second]) => first.getBoundingClientRect().left === second.getBoundingClientRect().left), true);
 		await openReader.click();
 		assert.equal(await reader.evaluate((node) => node.scrollWidth > node.clientWidth), false);
 		assert.equal(await reader.locator(".prompt-reader-filters").evaluate((node) => node.scrollWidth > node.clientWidth), false);
@@ -172,7 +218,7 @@ try {
 		assert.equal(await page.evaluate(() => localStorage.getItem("skiff.prompt.append")), "");
 	}
 	assert.deepEqual(errors, []);
-	console.log("PASS: prompt treemap, linked highlights, reader, copy, state handling, restricted editing, save/restart, light/dark and 600x400 layout.");
+	console.log("PASS: segmented prompt bar, sorting, linked highlights, reader, copy, model field alignment, state handling, save/restart, light/dark and 600x400 layout.");
 } finally {
 	await browser.close();
 }

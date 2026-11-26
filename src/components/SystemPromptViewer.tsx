@@ -1,49 +1,39 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { assembleSystemPrompt, describePromptSections, layoutPromptTreemap, measurePrompt, type SystemPromptSnapshot } from "../chat/systemPrompt";
+import { assembleSystemPrompt, describePromptSections, measurePrompt, type SystemPromptSnapshot } from "../chat/systemPrompt";
 import { CopyButton } from "./CopyButton";
 import { Icon } from "./Icon";
-import { Button, Dialog, ListRow } from "./ui";
+import { Button, Dialog, ListRow, SegmentedControl } from "./ui";
 
 type PromptSection = ReturnType<typeof describePromptSections>[number];
+type SectionSort = "size" | "order";
+const sortOptions: { value: SectionSort; label: string }[] = [
+	{ value: "size", label: "按大小" },
+	{ value: "order", label: "按顺序" },
+];
 const integer = new Intl.NumberFormat("zh-CN");
 const decimal = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 1 });
-const percent = new Intl.NumberFormat("zh-CN", { style: "percent", maximumFractionDigits: 1 });
+const percent = new Intl.NumberFormat("zh-CN", { style: "percent", minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const formatShare = (share: number) => share > 0 && share < 0.001 ? "<0.1%" : percent.format(share);
 const formatSize = ({ characters, tokens }: ReturnType<typeof measurePrompt>) =>
 	`${integer.format(characters)} 字 · 约 ${tokens >= 1000 ? `${decimal.format(tokens / 1000)}K` : integer.format(tokens)} token`;
 
-function PromptTreemap({ sections, active, onHover, onFocus, onOpen }: {
+function PromptShareBar({ sections, active, onHover, onFocus, onOpen }: {
 	sections: PromptSection[];
 	active: string | undefined;
 	onHover: (name: string | undefined) => void;
 	onFocus: (name: string | undefined) => void;
 	onOpen: (name: string) => void;
 }) {
-	const canvas = useRef<HTMLDivElement>(null);
-	const [{ width, height }, setSize] = useState({ width: 0, height: 0 });
-	useEffect(() => {
-		const observer = new ResizeObserver(([{ contentRect }]) => setSize({ width: contentRect.width, height: contentRect.height }));
-		if (canvas.current) observer.observe(canvas.current);
-		return () => observer.disconnect();
-	}, []);
-	const tiles = useMemo(() => layoutPromptTreemap(sections, width, height), [sections, width, height]);
-
-	return <div ref={canvas} className="prompt-map" role="group" aria-label="系统提示词组成图">
-		{tiles.map(({ section, rect }) => {
-			const size = `${integer.format(section.characters)} 字 · ${formatShare(section.share)}`;
-			const title = `${section.label}${section.label === section.name ? "" : ` (${section.name})`} · ${size}`;
-			const label = rect.width >= (section.label.length > 4 ? 84 : 72) ? section.label : section.shortLabel;
-			const style: CSSProperties = { left: rect.x / width * 100 + "%", top: rect.y / height * 100 + "%", width: rect.width / width * 100 + "%", height: rect.height / height * 100 + "%" };
-			return <div key={section.name} className="prompt-map-cell" style={style}>
-				<button type="button" className="prompt-map-tile" data-section={section.name} data-tone={section.tone}
-					data-highlighted={active === section.name || undefined} title={title} aria-label={title} aria-haspopup="dialog"
-					onMouseEnter={() => onHover(section.name)} onMouseLeave={() => onHover(undefined)}
-					onFocus={() => onFocus(section.name)} onBlur={() => onFocus(undefined)} onClick={() => onOpen(section.name)}>
-					{rect.width >= 46 && rect.height >= 27 && label && <strong>{label}</strong>}
-					{rect.width >= 108 && rect.height >= 46 && <span>{size}</span>}
-				</button>
-			</div>;
+	return <div className="prompt-share-bar" role="group" aria-label="系统提示词分段比例">
+		{sections.filter(({ characters }) => characters > 0).map((section) => {
+			const name = section.label === section.name ? section.name : `${section.label} (${section.name})`;
+			const title = `${name} · ${integer.format(section.characters)} 字 · ${formatShare(section.share)}`;
+			return <button key={section.name} type="button" className="prompt-share-segment" data-section={section.name} data-tone={section.tone}
+				data-dimmed={active !== undefined && active !== section.name || undefined} style={{ flexGrow: section.characters }}
+				title={title} aria-label={title} aria-haspopup="dialog"
+				onMouseEnter={() => onHover(section.name)} onMouseLeave={() => onHover(undefined)}
+				onFocus={() => onFocus(section.name)} onBlur={() => onFocus(undefined)} onClick={() => onOpen(section.name)} />;
 		})}
 	</div>;
 }
@@ -93,6 +83,7 @@ export function SystemPromptViewer({ sessionPath }: { sessionPath?: string }) {
 	const [hovered, setHovered] = useState<string>();
 	const [focused, setFocused] = useState<string>();
 	const [reader, setReader] = useState<string | null>();
+	const [sort, setSort] = useState<SectionSort>("size");
 	useEffect(() => {
 		if (!sessionPath) return;
 		let cancelled = false;
@@ -113,6 +104,8 @@ export function SystemPromptViewer({ sessionPath }: { sessionPath?: string }) {
 	};
 	const sections = useMemo(() => describePromptSections(snapshot?.sections ?? []), [snapshot]);
 	const ranked = useMemo(() => [...sections].sort((a, b) => b.characters - a.characters), [sections]);
+	const shown = sort === "size" ? ranked : sections;
+	const maxCharacters = ranked[0]?.characters ?? 0;
 	const fullText = useMemo(() => snapshot ? assembleSystemPrompt(snapshot) : "", [snapshot]);
 	const stats = useMemo(() => measurePrompt(fullText), [fullText]);
 	const active = hovered ?? focused;
@@ -129,28 +122,38 @@ export function SystemPromptViewer({ sessionPath }: { sessionPath?: string }) {
 				{canRead && <span>共 {integer.format(sections.length)} 段 · {formatSize(stats)}</span>}
 			</div>
 			<div className="prompt-card-actions">
-				<Button className="prompt-open-reader" size="compact" variant="primary" aria-haspopup="dialog" disabled={!canRead} onClick={() => setReader(null)}><Icon name="expand" size={16} />查看完整指令</Button>
 				<Button variant="ghost" size="compact" loading={loading} disabled={!sessionPath} onClick={reload}>
 					{loading ? "正在读取…" : <><Icon name="refresh" size={16} />重新读取</>}
 				</Button>
+				<Button className="prompt-open-reader" size="compact" variant="secondary" aria-haspopup="dialog" disabled={!canRead} onClick={() => setReader(null)}><Icon name="eye" size={16} />查看完整指令</Button>
 			</div>
 		</div>
 		{error && <p className="form-error" role="alert">{error}</p>}
 		{!error && !sections.length && <p className="prompt-state" role="status">{message}</p>}
-		{ranked.some(({ characters }) => characters > 0) && <PromptTreemap sections={ranked} active={active} onHover={setHovered} onFocus={setFocused} onOpen={setReader} />}
-		{ranked.length > 0 && <ul className="prompt-breakdown" aria-label="系统提示词段落明细">
-			{ranked.map((section) => <li key={section.name}>
-				<ListRow className="prompt-breakdown-row" data-section={section.name} data-tone={section.tone}
-					data-highlighted={active === section.name || undefined} aria-haspopup="dialog"
-					onMouseEnter={() => setHovered(section.name)} onMouseLeave={() => setHovered(undefined)}
-					onFocus={() => setFocused(section.name)} onBlur={() => setFocused(undefined)} onClick={() => setReader(section.name)}>
-					<span className="prompt-breakdown-label"><span className="prompt-dot" aria-hidden="true" /><span title={section.label}>{section.label}</span>{section.label !== section.name && <code title={section.name}>{section.name}</code>}</span>
-					<span className="prompt-share-track" aria-hidden="true"><span style={{ width: `${section.share * 100}%` }} /></span>
-					<span>{formatShare(section.share)}</span>
-					<span>{integer.format(section.characters)} 字</span>
-				</ListRow>
-			</li>)}
-		</ul>}
+		{shown.length > 0 && <>
+			<div className="prompt-breakdown-toolbar">
+				{maxCharacters > 0 && <PromptShareBar sections={shown} active={active} onHover={setHovered} onFocus={setFocused} onOpen={setReader} />}
+				<SegmentedControl label="段落排序" value={sort} options={sortOptions} onChange={setSort} />
+			</div>
+			<ul className="prompt-breakdown" aria-label="系统提示词段落明细" data-sort={sort}>
+				{shown.map((section, index) => <li key={section.name}>
+					<ListRow className="prompt-breakdown-row" data-section={section.name} data-tone={section.tone}
+						data-highlighted={active === section.name || undefined} aria-haspopup="dialog"
+						onMouseEnter={() => setHovered(section.name)} onMouseLeave={() => setHovered(undefined)}
+						onFocus={() => setFocused(section.name)} onBlur={() => setFocused(undefined)} onClick={() => setReader(section.name)}>
+						{sort === "order" && <span className="prompt-breakdown-number">{index + 1}.</span>}
+						<span className="prompt-dot" aria-hidden="true" />
+						<span className="prompt-breakdown-name" title={section.label}>{section.label}</span>
+						<code className="prompt-breakdown-key" title={section.label === section.name ? undefined : section.name}>{section.label === section.name ? "" : section.name}</code>
+						<span className="prompt-share-track" aria-hidden="true">
+							{section.characters > 0 && <span style={{ width: `${section.characters / maxCharacters * 100}%` }} />}
+						</span>
+						<span>{formatShare(section.share)}</span>
+						<span>{integer.format(section.characters)} 字</span>
+					</ListRow>
+				</li>)}
+			</ul>
+		</>}
 		{reader !== undefined && canRead && <PromptReader initialSection={reader} sections={sections} fullText={fullText} onClose={() => setReader(undefined)} />}
 	</section>;
 }

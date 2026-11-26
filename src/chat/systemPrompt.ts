@@ -9,15 +9,16 @@ export interface SystemPromptSnapshot {
 }
 
 const SECTION_LABELS = new Map([
-	["preamble", { label: "角色定位", shortLabel: "角色" }],
-	["tools", { label: "可用工具", shortLabel: "工具" }],
-	["rules", { label: "行为规则", shortLabel: "规则" }],
-	["docs", { label: "帮助文档", shortLabel: "文档" }],
-	["addendum", { label: "附加说明", shortLabel: "附加" }],
-	["project_context", { label: "项目上下文", shortLabel: "项目" }],
-	["skills", { label: "技能清单", shortLabel: "技能" }],
-	["cwd", { label: "工作目录", shortLabel: "目录" }],
+	["preamble", "角色定位"],
+	["tools", "可用工具"],
+	["rules", "行为规则"],
+	["docs", "帮助文档"],
+	["addendum", "附加说明"],
+	["project_context", "项目上下文"],
+	["skills", "技能清单"],
+	["cwd", "工作目录"],
 ]);
+const COLORED_SECTIONS = new Set(["project_context", "rules", "skills", "docs"]);
 
 export function assembleSystemPrompt({ content, sections }: SystemPromptSnapshot): string {
 	const visible = sections.filter(({ text }) => text.length > 0);
@@ -44,54 +45,12 @@ export function measurePrompt(text: string) {
 }
 
 export function describePromptSections(sections: SystemPromptSection[]) {
-	const measured = sections.map((section) => {
-		const labels = SECTION_LABELS.get(section.name);
-		return { ...section, ...measurePrompt(section.text), label: labels?.label ?? section.name, shortLabel: labels?.shortLabel, tone: labels ? section.name : "neutral" };
-	});
+	const measured = sections.map((section) => ({
+		...section,
+		...measurePrompt(section.text),
+		label: SECTION_LABELS.get(section.name) ?? section.name,
+		tone: COLORED_SECTIONS.has(section.name) ? section.name : "neutral",
+	}));
 	const total = measured.reduce((sum, section) => sum + section.characters, 0);
 	return measured.map((section) => ({ ...section, share: total > 0 ? section.characters / total : 0 }));
-}
-
-interface TreemapRect { x: number; y: number; width: number; height: number }
-
-/** Groups descending weights into strips while adding a tile improves their aspect ratios. */
-export function layoutPromptTreemap<T extends { characters: number }>(sections: T[], width: number, height: number) {
-	const tiles: { section: T; rect: TreemapRect }[] = [];
-	const sorted = sections.filter(({ characters }) => characters > 0).sort((a, b) => b.characters - a.characters);
-	const total = sorted.reduce((sum, { characters }) => sum + characters, 0);
-	if (width <= 0 || height <= 0 || total === 0) return tiles;
-
-	const areaPerCharacter = width * height / total;
-	const remaining = { x: 0, y: 0, width, height };
-	for (let start = 0; start < sorted.length;) {
-		const column = remaining.width >= remaining.height;
-		const side = column ? remaining.height : remaining.width;
-		const largest = sorted[start].characters * areaPerCharacter;
-		let area = largest;
-		let worst = Math.max(largest / side ** 2, side ** 2 / largest);
-		let end = start + 1;
-		for (; end < sorted.length; end++) {
-			const smallest = sorted[end].characters * areaPerCharacter;
-			const nextArea = area + smallest;
-			const nextWorst = Math.max(side ** 2 * largest / nextArea ** 2, nextArea ** 2 / (side ** 2 * smallest));
-			if (nextWorst > worst) break;
-			area = nextArea;
-			worst = nextWorst;
-		}
-
-		const breadth = area / side;
-		let offset = 0;
-		for (const section of sorted.slice(start, end)) {
-			const length = section.characters * areaPerCharacter / breadth;
-			const rect = column
-				? { x: remaining.x, y: remaining.y + offset, width: breadth, height: length }
-				: { x: remaining.x + offset, y: remaining.y, width: length, height: breadth };
-			tiles.push({ section, rect });
-			offset += length;
-		}
-		if (column) { remaining.x += breadth; remaining.width -= breadth; }
-		else { remaining.y += breadth; remaining.height -= breadth; }
-		start = end;
-	}
-	return tiles;
 }
