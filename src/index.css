@@ -1167,6 +1167,10 @@ body.scrollbar-frozen .messages:hover::-webkit-scrollbar-thumb:hover { backgroun
 .about-path { font-family: var(--font-family-mono); overflow-wrap: anywhere; }
 .about-license { margin: var(--space-4) 0 0; color: var(--muted); font-size: var(--font-size-sm); }
 .settings-restriction:empty { display: none; }
+/* Deferred notes: the page stays editable while a run is active, so the hint is
+   gentler than a lock and marks the edit as applying on the next session. */
+.settings-deferred { color: var(--accent); font-size: var(--font-size-sm); margin-block: var(--space-3); }
+.settings-deferred:empty { display: none; }
 /* Provider and route settings editors. Both swap the body for a form, so the
    action row stays reachable and the two pages share their width handling. */
 .settings-editor { min-width: 0; }

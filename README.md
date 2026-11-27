@@ -54,19 +54,21 @@ Skiff 内置独立的 Design 工作区：图片生成（文生图、参考图生
 
 ```powershell
 npm ci
-npm run tauri -- dev
+npm run dev:desktop
 ```
 
 可通过 `SKIFF_PI_PATH` 或 `PI_CLI_PATH` 指定 pi 启动器。应用跟随系统明暗主题；点击项目区的 `+` 输入已有文件夹的绝对路径，pi 即在该目录下运行。模型选择只使用 pi 返回的可用模型，已有 pi 配置可直接使用。
+
+开发桌面版以 `Skiff Dev` 身份运行，使用独立的 WebView2、Skiff 应用数据和 `%LOCALAPPDATA%/Skiff Dev/pi-agent` pi 配置目录；不会读取或改写正式版工作区与凭据。`npm run tauri -- dev` 同样会自动切换到开发身份。
 
 ## 构建与发布
 
 ```powershell
 npm run build      # TypeScript 检查 + 前端构建
-npm run release    # tauri build，产出独立 exe 并归档到 releases/
+npm run release    # 构建 NSIS 安装器 exe，并归档到 releases/
 ```
 
-发布产物为 Windows 独立可执行文件，按 `Skiff-v{version}-{时间戳}.exe` 归档——每次发布都是一份源码快照。
+发布产物为 Windows NSIS 安装器，按 `Skiff-Setup-v{version}-{时间戳}.exe` 归档。正式版继续使用 `com.skiff.desktop` 身份，因此升级会沿用现有正式数据；首次从原开发版转为安装版时，需通过 `scripts/profile-storage.mjs` 将开发 origin 的工作区与草稿存储导入安装版 origin。
 
 ## 检查与预览
 

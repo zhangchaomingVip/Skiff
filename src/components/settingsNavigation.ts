@@ -15,6 +15,8 @@ export const settingsCategories = [
 ] as const;
 
 export type SettingsRestrictions = Partial<Record<SettingsCategory | "prompt", string>>;
+/** Deferred edits stay editable while a conversation runs; the note only hints that changes apply on the next session. */
+export type SettingsDeferred = Partial<Record<SettingsCategory | "prompt", string>>;
 export const isMacPlatform = () => /Mac|iPhone|iPad/.test(navigator.platform);
 
 /** Precise, in-dialog destination; never persisted as a routing preference. */

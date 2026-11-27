@@ -206,9 +206,10 @@ fn authenticate(
 	if headers.contains_key("origin") {
 		return Err(StatusCode::FORBIDDEN);
 	}
-	if !service.settings.lock().unwrap().enabled {
-		return Err(StatusCode::FORBIDDEN);
-	}
+	// A permit only exists for sessions granted while the browser was enabled.
+	// Disabling the switch defers to the next session, so an already-issued
+	// lease keeps working until its chat ends, is archived, or the app shuts
+	// down; the enabled flag is enforced at grant time instead.
 	let token = headers
 		.get("authorization")
 		.and_then(|value| value.to_str().ok())
@@ -553,7 +554,21 @@ mod tests {
 		let mut settings = service.settings.lock().unwrap().clone();
 		settings.enabled = false;
 		service.configure(settings).await.unwrap();
-		assert!(lease.permit.revoked.load(Ordering::SeqCst));
+		// Disabling the browser defers to the next session: the already-issued
+		// lease keeps working (authenticate and context still admit it) while a
+		// brand-new grant is refused and the setting is persisted.
+		assert!(!lease.permit.revoked.load(Ordering::SeqCst));
+		assert_eq!(
+			client
+				.get(format!("{url}/context"))
+				.bearer_auth(&lease.token)
+				.send()
+				.await
+				.unwrap()
+				.status(),
+			200
+		);
+		assert!(service.grant_agent("chat".into()).unwrap().is_none());
 		assert!(
 			!serde_json::from_slice::<Settings>(
 				&std::fs::read(root.join("settings.json")).unwrap()

@@ -1,0 +1,16 @@
+{
+	"productName": "Skiff Dev",
+	"identifier": "com.skiff.desktop.dev",
+	"app": {
+		"windows": [{
+			"label": "main",
+			"title": "Skiff Dev",
+			"decorations": false,
+			"width": 1100,
+			"height": 750,
+			"minWidth": 600,
+			"minHeight": 400,
+			"center": true
+		}]
+	}
+}

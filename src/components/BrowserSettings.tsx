@@ -103,7 +103,7 @@ export function BrowserSettings({ onSaved }: { onSaved: () => void }) {
 			<div className="settings-row">
 				<div className="settings-row-text">
 					<label className="settings-row-title" htmlFor="browser-enabled">启用 AI 浏览器</label>
-					<span id="browser-enabled-hint" className="settings-row-hint">保存后重新连接当前对话；其他已有对话在下次重新连接时生效。关闭后立即拒绝所有对话的新浏览器操作。</span>
+					<span id="browser-enabled-hint" className="settings-row-hint">开启或关闭后，当前对话沿用原有能力，下次会话（或重新连接当前对话）时生效。</span>
 				</div>
 				<label className="switch" title={status?.enabled ? "关闭 AI 浏览器" : "启用 AI 浏览器"}>
 					<input id="browser-enabled" type="checkbox" checked={status?.enabled ?? false} disabled={!status || pending} aria-describedby="browser-enabled-hint" onChange={(event) => void toggle(event.target.checked)} />

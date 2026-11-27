@@ -321,9 +321,10 @@ impl Service {
 		}
 		crate::providers::atomic_write(&self.root.join("settings.json"), &json!(settings))?;
 		*self.settings.lock().unwrap() = settings;
-		if !self.settings.lock().unwrap().enabled {
-			self.revoke_agents();
-		}
+		// Disabling the browser defers to the next session: an already-issued
+		// agent lease keeps working until its chat ends or is archived. New
+		// sessions are refused at `grant_agent`, and retire/shutdown still
+		// revoke leases eagerly.
 		Ok(self.dependencies().await)
 	}
 	pub async fn start(&self, chat_id: String) -> Result<BrowserStatus> {

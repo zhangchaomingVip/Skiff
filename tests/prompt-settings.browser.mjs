@@ -160,7 +160,10 @@ try {
 			const [instance] = window.skiffPreview.processes.keys();
 			window.skiffPreview.emit(instance, { type: "agent_start" });
 		});
-		await page.waitForFunction(() => document.querySelector("#append-prompt")?.matches(":disabled"));
+		// A running conversation keeps prompt editing open; the edit only applies
+		// on the next session, surfaced as a deferred note instead of a lock.
+		await page.waitForFunction(() => !document.querySelector("#append-prompt")?.matches(":disabled"));
+		await page.waitForFunction(() => document.querySelectorAll(".settings-deferred").length === 3);
 		await openReader.click();
 		await reader.getByRole("button", { name: "关闭" }).click();
 		await page.evaluate(() => {
@@ -168,7 +171,7 @@ try {
 			window.skiffPreview.emit(instance, { type: "agent_end" });
 			window.skiffPreview.emit(instance, { type: "agent_settled" });
 		});
-		await page.waitForFunction(() => !document.querySelector("#append-prompt")?.matches(":disabled"));
+		await page.waitForFunction(() => document.querySelectorAll(".settings-deferred").length === 0);
 
 		if (theme === "light") {
 			await page.evaluate(() => { window.deferPrompt = true; window.promptSnapshot = undefined; });

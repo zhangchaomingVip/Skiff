@@ -30,7 +30,7 @@ import { useProjectGitActivity, useProjectGitPolling, useProjectGitStatus } from
 import type { ImageAttachment } from "./chat/types";
 import { SettingsWorkspace } from "./components/SettingsDialog";
 import { TitleBarNav } from "./components/TitleBarNav";
-import { isMacPlatform, type SettingsCategory, type SettingsRestrictions } from "./components/settingsNavigation";
+import { isMacPlatform, type SettingsCategory, type SettingsDeferred, type SettingsRestrictions } from "./components/settingsNavigation";
 import { ResizeSeparator } from "./components/ResizeSeparator";
 import { useWebSearch } from "./chat/webSearch";
 import { loadRecentOffers, normalizeRecentOfferIds, rememberOffer, saveRecentOffers } from "./chat/recentOffers";
@@ -170,12 +170,20 @@ export default function App() {
 	useEffect(() => { void showVoyageIcon(pool.runningIds.size > 0).catch(() => undefined); }, [pool.runningIds.size > 0]);
 	const navigationDisabled = lifecyclePending || search.busy || !library.workspace;
 	const locked = navigationDisabled || session.loading;
+	// A running conversation must not change its model, prompt or browser tooling.
+	// Those three pages stay editable, but their edits only apply on the next
+	// session, so a busy run is a deferred note rather than a hard lock.
 	const settingsRestrictions = useMemo<SettingsRestrictions>(() => ({
-		browser: busy ? "当前对话运行中，请等待完成后修改浏览器能力" : locked ? "正在加载对话，请稍后再试" : undefined,
-		prompt: busy ? "当前对话运行中，请等待完成后修改系统提示词" : locked ? "正在加载对话，请稍后再试" : undefined,
-		providers: busy ? "当前对话运行中，请等待完成后修改供应商配置" : locked || modelFamilies.loading ? "正在加载对话或更新配置，请稍后再试" : undefined,
+		browser: locked ? "正在加载对话，请稍后再试" : undefined,
+		prompt: locked ? "正在加载对话，请稍后再试" : undefined,
+		providers: locked || modelFamilies.loading ? "正在加载对话或更新配置，请稍后再试" : undefined,
 		archives: locked ? "正在加载对话或切换工作区，请稍后再试" : undefined,
-	}), [busy, locked, modelFamilies.loading]);
+	}), [locked, modelFamilies.loading]);
+	const settingsDeferred = useMemo<SettingsDeferred>(() => ({
+		browser: busy ? "当前对话运行中，修改将在下次会话生效" : undefined,
+		prompt: busy ? "当前对话运行中，修改将在下次会话生效" : undefined,
+		providers: busy ? "当前对话运行中，修改将在下次会话生效" : undefined,
+	}), [busy]);
 	// Opening from the footer resumes the tab last used, like a desktop preferences window.
 	const lastSettingsCategory = useRef<SettingsCategory>("appearance");
 	const rememberSettingsCategory = useCallback((category: SettingsCategory) => { lastSettingsCategory.current = category; }, []);
@@ -445,7 +453,7 @@ export default function App() {
 	</>;
 
 	// Code and Design mount settings in different shells; both render this one element.
-	const settingsWorkspace = settingsCategory && <SettingsWorkspace onRetryModels={() => void modelFamilies.refresh()} initialCategory={settingsCategory} images={generationStudio.images} videos={generationStudio.videos} prompt={{ sessionPath: session.sessionFile, onSaved: () => { setSettingsCategory(undefined); session.reconnect(); } }} restrictions={settingsRestrictions} providers={{ configError: modelFamilies.error, relays: modelFamilies.relays, families: modelFamilies.families, usdCnyRate: modelFamilies.usdCnyRate, onPreviewBatch: modelFamilies.previewRelayBatch, onBatch: modelFamilies.batchRelays, onSaveRelay: modelFamilies.saveRelay, onDeleteRelay: modelFamilies.deleteRelay, onSetRelayEnabled: modelFamilies.setRelayEnabled, onTest: modelFamilies.test, onCancelTest: modelFamilies.cancelTest, onDiscover: modelFamilies.discover, onCreateFamily: modelFamilies.createFamily }} statistics={{ chats: allChats, projects: library.workspace?.projects ?? [], offers: modelFamilies.offers, workspaceMode }} archives={{ chats: archivedChats, projects: library.workspace?.projects ?? [], busy: locked, canClose: pool.canClose, onRestore: restoreArchivedChat, onDelete: deleteArchivedChat }} search={search} onCategoryChange={rememberSettingsCategory} onClose={() => setSettingsCategory(undefined)} />;
+	const settingsWorkspace = settingsCategory && <SettingsWorkspace onRetryModels={() => void modelFamilies.refresh()} initialCategory={settingsCategory} images={generationStudio.images} videos={generationStudio.videos} prompt={{ sessionPath: session.sessionFile, onSaved: () => { setSettingsCategory(undefined); session.reconnect(); } }} restrictions={settingsRestrictions} deferred={settingsDeferred} providers={{ configError: modelFamilies.error, relays: modelFamilies.relays, families: modelFamilies.families, usdCnyRate: modelFamilies.usdCnyRate, onPreviewBatch: modelFamilies.previewRelayBatch, onBatch: modelFamilies.batchRelays, onSaveRelay: modelFamilies.saveRelay, onDeleteRelay: modelFamilies.deleteRelay, onSetRelayEnabled: modelFamilies.setRelayEnabled, onTest: modelFamilies.test, onCancelTest: modelFamilies.cancelTest, onDiscover: modelFamilies.discover, onCreateFamily: modelFamilies.createFamily }} statistics={{ chats: allChats, projects: library.workspace?.projects ?? [], offers: modelFamilies.offers, workspaceMode }} archives={{ chats: archivedChats, projects: library.workspace?.projects ?? [], busy: locked, canClose: pool.canClose, onRestore: restoreArchivedChat, onDelete: deleteArchivedChat }} search={search} onCategoryChange={rememberSettingsCategory} onClose={() => setSettingsCategory(undefined)} />;
 
 	return (
 		<ModelFamilyContext.Provider value={familyContext}>

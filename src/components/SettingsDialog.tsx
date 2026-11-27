@@ -9,7 +9,7 @@ import { PromptSettings } from "./PromptSettings";
 import { TitleModelSettings } from "./TitleModelSettings";
 import { ProvidersSettingsContent, type ProvidersSettingsProps } from "./ProvidersSettings";
 import { Button, Dialog, SegmentedControl } from "./ui";
-import { settingsCategories, type SettingsCategory, type SettingsRestrictions } from "./settingsNavigation";
+import { settingsCategories, type SettingsCategory, type SettingsDeferred, type SettingsRestrictions } from "./settingsNavigation";
 import type { SettingsEditorHandle } from "./settingsEditor";
 import type { WebSearchControls } from "../chat/webSearch";
 import { WebSearchSettings } from "./WebSearchSettings";
@@ -20,9 +20,10 @@ import { VideoGenerationSettings } from "./VideoGenerationSettings";
 import { AboutSettings } from "./AboutSettings";
 import type { GenerationStudio } from "../workbench/useGenerationStudio";
 
-export function SettingsWorkspace({ initialCategory, restrictions, prompt, providers, archives, statistics, search, images, videos, onRetryModels, onClose, onCategoryChange }: {
+export function SettingsWorkspace({ initialCategory, restrictions, deferred, prompt, providers, archives, statistics, search, images, videos, onRetryModels, onClose, onCategoryChange }: {
 	initialCategory: SettingsCategory;
 	restrictions: SettingsRestrictions;
+	deferred: SettingsDeferred;
 	prompt: ComponentProps<typeof PromptSettings>;
 	providers: Omit<ProvidersSettingsProps, "onLockChange" | "focusLocation">;
 	archives: ComponentProps<typeof ArchivedSessions>;
@@ -94,6 +95,7 @@ export function SettingsWorkspace({ initialCategory, restrictions, prompt, provi
 			queueMicrotask(() => document.querySelector<HTMLElement>(".settings-trigger")?.focus());
 		};
 	}, []);
+	const noteLabel = (id: string) => id === "prompt" ? "自定义附加指令" : settingsCategories.find((item) => item.id === id)?.label;
 	const navigation = <nav className="settings-nav" aria-label="设置分类"><Button className="settings-back" variant="ghost" onClick={close} disabled={pending}><Icon name="arrowLeft" size={16} />返回工作区</Button><h1 className="settings-nav-title" id="settings-title">设置</h1>{([
 				["通用", ["appearance", "chat"]],
 				["模型与能力", ["providers", "websearch", "browser", "images", "videos"]],
@@ -144,7 +146,8 @@ export function SettingsWorkspace({ initialCategory, restrictions, prompt, provi
 				{category === "providers" && <><fieldset className="settings-config" disabled={!!restrictions.providers}><ProvidersSettingsContent {...providers} ref={editor} onLockChange={updateInteraction} /></fieldset>{providers.configError && !locked && <Button disabled={!!restrictions.providers} onClick={onRetryModels}>重新读取配置</Button>}</>}
 				{category === "about" && <AboutSettings />}
 				{category === "archives" && <section className="settings-page" aria-labelledby="archives-title"><h2 id="archives-title">已归档对话</h2><ArchivedSessions {...archives} busy={archives.busy || !!restrictions.archives} /></section>}
-				{Object.entries(restrictions).map(([id, reason]) => reason && <p className="settings-restriction" key={id}>{id === "prompt" ? "自定义附加指令" : settingsCategories.find((item) => item.id === id)?.label}：{reason}</p>)}
+				{Object.entries(restrictions).map(([id, reason]) => reason && <p className="settings-restriction" key={id}>{noteLabel(id)}：{reason}</p>)}
+				{Object.entries(deferred).map(([id, reason]) => reason && !(restrictions as Record<string, string | undefined>)[id] && <p className="settings-deferred" key={id}>{noteLabel(id)}：{reason}</p>)}
 			</div>
 		</div>
 		{switchTarget && <Dialog className="project-dialog" aria-labelledby="settings-discard-title" initialFocus={switchCancel} onClose={() => setSwitchTarget(undefined)}>

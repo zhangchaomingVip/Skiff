@@ -13,7 +13,9 @@
 		"test:styles": "node scripts/check-styles.mjs",
 		"check:ui": "tsc --project tests/tsconfig.ui.json",
 		"preview": "vite preview",
-		"tauri": "tauri",
+		"dev:desktop": "npm run tauri -- dev",
+		"tauri": "node scripts/tauri.mjs",
+		"tauri:cli": "tauri",
 		"release": "node scripts/release.mjs"
 	},
 	"dependencies": {

@@ -11,16 +11,18 @@ const version = conf.version ?? "0.0.0";
 
 console.log(`\n=== Skiff release v${version} ===\n`);
 console.log("正在构建（release 编译较慢，首次可能需要几分钟）…\n");
-execSync("npm run tauri -- build", { stdio: "inherit", cwd: root });
+const buildEnv = { ...process.env };
+delete buildEnv.SKIFF_PROFILE;
+delete buildEnv.SKIFF_DEV_DATA_DIR;
+execSync("npm run tauri:cli -- build", { stdio: "inherit", cwd: root, env: buildEnv });
 
-// Tauri 2 的原始 cargo 产物名来自 Cargo 包名；打包器会再复制一份 productName 命名的 exe。
-const candidates = ["skiff-desktop.exe", "Skiff.exe", "skiff.exe"];
-const targetDir = join(root, "src-tauri", "target", "release");
-const built = candidates.map((name) => join(targetDir, name)).find((path) => existsSync(path));
-if (!built) {
-	console.error(`构建完成，但在 ${targetDir} 下没有找到可执行文件（${candidates.join(" / ")}）。`);
+const bundleDir = join(root, "src-tauri", "target", "release", "bundle", "nsis");
+const installers = existsSync(bundleDir) ? readdirSync(bundleDir).filter((name) => name.toLowerCase().endsWith(".exe")) : [];
+if (installers.length !== 1) {
+	console.error(`构建完成，但在 ${bundleDir} 下预期找到一个 NSIS 安装器，实际找到 ${installers.length} 个。`);
 	process.exit(1);
 }
+const built = join(bundleDir, installers[0]);
 
 if (process.argv.includes("--no-archive")) {
 	console.log(`\n完成：${built}`);
@@ -28,7 +30,7 @@ if (process.argv.includes("--no-archive")) {
 	const stamp = new Date().toISOString().replace(/[-:]/g, "").replace("T", "-").slice(0, 13);
 	const archiveDir = join(root, "releases");
 	mkdirSync(archiveDir, { recursive: true });
-	const archived = join(archiveDir, `Skiff-v${version}-${stamp}.exe`);
+	const archived = join(archiveDir, `Skiff-Setup-v${version}-${stamp}.exe`);
 	copyFileSync(built, archived);
 	const sizeMb = (statSync(archived).size / 1024 / 1024).toFixed(1);
 	console.log(`\n已归档：${archived}（${sizeMb} MB）`);
